@@ -1,0 +1,14 @@
+# mazak-vcn-600 bed: the base under the saddle; from the floor (estimate) to the saddle ways.
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared x0 = -650
+shared y0 = -700
+shared z0 = -700
+shared L = 1300
+shared W = 1810
+shared H = 300
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (L, W))
+}
+body = extrude(plan, H)

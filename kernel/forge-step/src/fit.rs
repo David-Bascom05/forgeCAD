@@ -110,6 +110,9 @@ pub fn fit_pcurve(c: &Curve, anchors: &[(f64, Point2)], s: &Surface, tol: f64) -
             p.1 = base + dir * p.0;
         }
     }
+    // at a pole one parameter is free: the loop may draw it anywhere (the seam's other side, a
+    // whole turn away), and a span to it then sweeps round the axis. It takes its neighbour's.
+    free_at_poles(&mut pts, s);
     // the drawing's samples are many where few spans do: refinement adds back what is needed
     if pts.len() > 9 {
         let step = (pts.len() - 1) / 8;
@@ -181,6 +184,41 @@ pub fn fit_pcurve(c: &Curve, anchors: &[(f64, Point2)], s: &Surface, tol: f64) -
         mults: mults(pts.len()),
         knots: pts.iter().map(|x| x.0).collect(),
         error,
+    }
+}
+
+/// Which parameter a point of `s` leaves free: where the surface's rate along it vanishes (a
+/// revolved curve on its axis, a cone's apex, a sphere's pole). 0 for u, 1 for v.
+fn free_param(s: &Surface, uv: Point2) -> Option<usize> {
+    let d = s.deriv(uv);
+    let (lu, lv) = (d.du.length(), d.dv.length());
+    let big = lu.max(lv);
+    if big.is_nan() || big <= 0.0 {
+        return None;
+    }
+    if lu <= 1e-9 * big {
+        Some(0)
+    } else if lv <= 1e-9 * big {
+        Some(1)
+    } else {
+        None
+    }
+}
+
+/// Each anchor at a pole takes its free parameter from the nearest anchor that is not at one.
+fn free_at_poles(pts: &mut [(f64, Point2)], s: &Surface) {
+    let free: Vec<Option<usize>> = pts.iter().map(|p| free_param(s, p.1)).collect();
+    for k in 0..pts.len() {
+        let Some(axis) = free[k] else { continue };
+        let from = (0..k).rev().chain(k + 1..pts.len()).find(|&j| free[j].is_none());
+        if let Some(j) = from {
+            let x = if axis == 0 { pts[j].1.x } else { pts[j].1.y };
+            if axis == 0 {
+                pts[k].1.x = x;
+            } else {
+                pts[k].1.y = x;
+            }
+        }
     }
 }
 

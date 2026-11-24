@@ -78,6 +78,13 @@ pub enum Fault {
     EdgeTooFine,
     CrossingsTooFine,
     FaceTooFine,
+    OnHull,
+    InsertedTwice,
+    OffHull,
+    FaceTooLong,
+    Subnormal,
+    FarFromOrigin,
+    StaircaseOffNodes,
 }
 
 impl Fault {
@@ -98,6 +105,13 @@ impl Fault {
             Fault::EdgeTooFine => "an edge would take too many points",
             Fault::CrossingsTooFine => "crossing chords would take too many points",
             Fault::FaceTooFine => "a face would take too many points",
+            Fault::OnHull => "a point on the hull",
+            Fault::InsertedTwice => "a point inserted twice",
+            Fault::OffHull => "a constraint runs off the hull",
+            Fault::FaceTooLong => "the face would take too long",
+            Fault::Subnormal => "a point's coordinate is subnormal",
+            Fault::FarFromOrigin => "points too far from the origin for their spread",
+            Fault::StaircaseOffNodes => "a grid's staircase off its placed nodes",
         }
     }
 }
@@ -141,6 +155,9 @@ struct Mesh {
     stack: Vec<(u32, usize)>,
     /// The constraint the last `insert_constraint` to fail ran into.
     hit: (u32, u32),
+    /// Triangles `locate` has stepped through and edges `legalize` has looked at, for the reading
+    /// of a file's budget.
+    walked: u64,
 }
 
 enum Location {
@@ -260,6 +277,7 @@ impl Mesh {
         let mut step = 0;
         let mut found = false;
         while !found && step < limit {
+            self.walked += 1;
             let tri = self.tris[t as usize];
             let mut next = NONE;
             let mut k = 0;
@@ -280,6 +298,7 @@ impl Mesh {
         }
         // The visibility walk can cycle in a constrained triangulation; fall back to a scan.
         if !found {
+            self.walked += self.tris.len() as u64;
             t = 0;
             while !found && (t as usize) < self.tris.len() {
                 let tri = self.tris[t as usize];
@@ -314,12 +333,17 @@ impl Mesh {
         }
     }
 
-    fn insert(&mut self, v: u32, loc: Location) {
+    fn insert(&mut self, v: u32, loc: Location) -> Result<(), CdtError> {
         match loc {
             Location::Inside(t) => self.split_inside(t, v),
+            // on the super triangle's own side: only where rounding left no room round the points
+            Location::OnEdge(t, i) if self.tris[t as usize].n[i] == NONE => {
+                return Err(CdtError::Internal(Fault::OnHull));
+            }
             Location::OnEdge(t, i) => self.split_edge(t, i, v),
-            Location::Vertex(_) => unreachable!("caller rejects duplicates"),
+            Location::Vertex(_) => return Err(CdtError::Internal(Fault::InsertedTwice)),
         }
+        Ok(())
     }
 
     fn split_inside(&mut self, t: u32, p: u32) {
@@ -464,6 +488,8 @@ impl Mesh {
         stack.clear();
         stack.extend_from_slice(start);
         while let Some((t, i)) = stack.pop() {
+            // the flips are counted with the walks: in a file's sliver of a face they cascade
+            self.walked += 1;
             let tt = self.tris[t as usize];
             let u = tt.n[i];
             if u == NONE || tt.c[i] {
@@ -593,34 +619,47 @@ impl Mesh {
         // the edges it crosses, in order from a
         let mut crossed: Vec<(u32, u32)> = Vec::new();
         let mut walking = true;
+        let mut steps: u64 = 0;
         while walking && err.is_none() {
-            match self.find_edge(right, left) {
-                None => err = Some(CdtError::Internal(Fault::WalkLostEdge)),
-                Some((tc, ic)) => {
-                    debug_assert_eq!(tc, t);
-                    if self.tris[tc as usize].c[ic] {
-                        self.hit = (left, right);
-                        err = Some(crossing(a, b, shift));
-                    } else {
-                        crossed.push((left, right));
-                        let u = self.tris[tc as usize].n[ic];
-                        let uu = self.tris[u as usize];
-                        match slot(uu.n, tc) {
-                            None => err = Some(CdtError::Internal(Fault::BrokenLink)),
-                            Some(j) => {
-                                let q = uu.v[j];
-                                if q == b {
-                                    walking = false;
-                                } else {
-                                    let oq = orient2d(pa, pb, self.p(q));
-                                    if oq == 0.0 {
-                                        err = Some(through(a, b, q, shift));
-                                    } else if oq > 0.0 {
-                                        left = q;
-                                    } else {
-                                        right = q;
+            // a file's tangled fan can make one walk cross the mesh many times over
+            steps += 1;
+            if steps % 64 == 0 && forge_geom::budget::over() {
+                err = Some(CdtError::Internal(Fault::BoundaryTooLong));
+            } else {
+                match self.find_edge(right, left) {
+                    None => err = Some(CdtError::Internal(Fault::WalkLostEdge)),
+                    Some((tc, ic)) => {
+                        debug_assert_eq!(tc, t);
+                        if self.tris[tc as usize].c[ic] {
+                            self.hit = (left, right);
+                            err = Some(crossing(a, b, shift));
+                        } else {
+                            crossed.push((left, right));
+                            let u = self.tris[tc as usize].n[ic];
+                            // past the hull: only where the boundary's own points lie outside it
+                            // (a file's)
+                            if u == NONE {
+                                err = Some(CdtError::Internal(Fault::OffHull));
+                            } else {
+                                let uu = self.tris[u as usize];
+                                match slot(uu.n, tc) {
+                                    None => err = Some(CdtError::Internal(Fault::BrokenLink)),
+                                    Some(j) => {
+                                        let q = uu.v[j];
+                                        if q == b {
+                                            walking = false;
+                                        } else {
+                                            let oq = orient2d(pa, pb, self.p(q));
+                                            if oq == 0.0 {
+                                                err = Some(through(a, b, q, shift));
+                                            } else if oq > 0.0 {
+                                                left = q;
+                                            } else {
+                                                right = q;
+                                            }
+                                            t = u;
+                                        }
                                     }
-                                    t = u;
                                 }
                             }
                         }
@@ -652,8 +691,10 @@ impl Mesh {
                 err = Some(CdtError::Internal(Fault::RecoveryStuck));
             } else {
                 budget -= 1;
-                if budget % 1024 == 0 {
-                    forge_geom::budget::spend_many(16 * 1024);
+                // (each a search round a vertex, thousands of steps in a file's tangled fan:
+                // looked at every 64, not 1024)
+                if budget % 64 == 0 {
+                    forge_geom::budget::spend_many(16 * 64);
                     if forge_geom::budget::over() {
                         err = Some(CdtError::Internal(Fault::BoundaryTooLong));
                     }
@@ -711,35 +752,43 @@ impl Mesh {
         // restore the Delaunay property around the new edges
         let mut changed = true;
         let mut rounds = 0;
-        while changed && rounds < 64 {
-            changed = false;
-            rounds += 1;
-            let mut e = 0;
-            while e < fresh.len() {
-                let (p, q) = fresh[e];
-                if let Some((t, i)) = self.has_edge(p, q) {
-                    let tt = self.tris[t as usize];
-                    if !tt.c[i] {
-                        let u = tt.n[i];
-                        let uu = self.tris[u as usize];
-                        if let Some(j) = slot(uu.n, t) {
-                            let r = uu.v[j];
-                            if certainly_in_circle(
-                                self.p(tt.v[0]),
-                                self.p(tt.v[1]),
-                                self.p(tt.v[2]),
-                                self.p(r),
-                            ) {
-                                let o = tt.v[i];
-                                self.flip(t, i);
-                                fresh[e] = (o, r);
-                                changed = true;
+        while changed && rounds < 64 && err.is_none() {
+            // a file's sliver of a face can cascade flips round after round
+            if forge_geom::budget::over() {
+                err = Some(CdtError::Internal(Fault::BoundaryTooLong));
+            } else {
+                changed = false;
+                rounds += 1;
+                let mut e = 0;
+                while e < fresh.len() {
+                    let (p, q) = fresh[e];
+                    if let Some((t, i)) = self.has_edge(p, q) {
+                        let tt = self.tris[t as usize];
+                        if !tt.c[i] {
+                            let u = tt.n[i];
+                            let uu = self.tris[u as usize];
+                            if let Some(j) = slot(uu.n, t) {
+                                let r = uu.v[j];
+                                if certainly_in_circle(
+                                    self.p(tt.v[0]),
+                                    self.p(tt.v[1]),
+                                    self.p(tt.v[2]),
+                                    self.p(r),
+                                ) {
+                                    let o = tt.v[i];
+                                    self.flip(t, i);
+                                    fresh[e] = (o, r);
+                                    changed = true;
+                                }
                             }
                         }
                     }
+                    e += 1;
                 }
-                e += 1;
             }
+        }
+        if let Some(e) = err {
+            return Err(e);
         }
         // each a search round a vertex: a constraint across thousands of triangles is the dear part
         let work = fresh.len() * rounds;
@@ -849,7 +898,7 @@ impl Mesh {
                 let w = self.pts.len() as u32;
                 self.pts.push(x);
                 self.vtri.push(0);
-                self.insert(w, loc);
+                self.insert(w, loc)?;
                 w
             }
         };
@@ -870,6 +919,17 @@ impl Mesh {
     /// existing points by `eps`; elsewhere it is skipped.
     fn insert_interior(&mut self, p: Point2, eps: f64) -> Result<(), CdtError> {
         let loc = self.locate(p).ok_or(CdtError::Internal(Fault::LocationFailed))?;
+        // each point's walk is counted: on a file's face whose edges are far from its surface the
+        // walks grow with the mesh, and such a face took minutes. A step is some 5 ns against a
+        // spline evaluation's 200 to 500, the budget's unit: sixteen to one
+        if self.walked > 65536 {
+            let w = self.walked;
+            self.walked = 0;
+            forge_geom::budget::spend_many(w / 16);
+            if forge_geom::budget::over() {
+                return Err(CdtError::Internal(Fault::FaceTooLong));
+            }
+        }
         let skip = match &loc {
             Location::Vertex(_) => true,
             Location::Inside(t) => {
@@ -878,7 +938,9 @@ impl Mesh {
             Location::OnEdge(t, i) => {
                 let tt = self.tris[*t as usize];
                 let u = tt.n[*i];
-                tt.c[*i]
+                // on the super triangle's own side (no neighbour): skipped
+                u == NONE
+                    || tt.c[*i]
                     || !self.inside[*t as usize]
                     || self.near_constraint(*t, p, eps)
                     || self.near_constraint(u, p, eps)
@@ -890,7 +952,7 @@ impl Mesh {
             let v = self.pts.len() as u32;
             self.pts.push(p);
             self.vtri.push(0);
-            self.insert(v, loc);
+            self.insert(v, loc)?;
         }
         Ok(())
     }
@@ -1355,6 +1417,17 @@ fn within<R: Refine + ?Sized>(
     if let Some(e) = bad_input(points, loops, tangled) {
         return Err(e);
     }
+    // a coordinate below the smallest normal number (a file's face laid out over a span of
+    // 1e-308): every predicate on it runs on subnormals, a hundred times slower, for minutes
+    let mut k = 0;
+    let mut tiny = false;
+    while !tiny && k < points.len() {
+        tiny = subnormal(points[k].x) || subnormal(points[k].y);
+        k += 1;
+    }
+    if tiny {
+        return Err(CdtError::Internal(Fault::Subnormal));
+    }
     if points.is_empty() {
         return Ok((
             Triangulation {
@@ -1377,12 +1450,33 @@ fn within<R: Refine + ?Sized>(
     let eps = 1e-12 * size;
     let c = Point2::new(0.5 * (lo.x + hi.x), 0.5 * (lo.y + hi.y));
     let m = 100.0 * size;
+    // the super triangle must hold every point with room to spare: a box far from the origin
+    // against its size (a file's number) rounds that room away, and its corners to infinity;
+    // and its corners must lie within the predicates' RANGE (a line's edge from 1e308 put one
+    // at 6e291). Its corners are (s0, s2), (s1, s2) and (c.x, s3), c.x between s0 and s1.
+    let (s0, s1) = (c.x - m, c.x + m);
+    let (s2, s3) = (c.y - m, c.y + m);
+    if !(s0.is_finite() && s1.is_finite() && s2.is_finite() && s3.is_finite())
+        || !(s0 < lo.x - size && s1 > hi.x + size && s2 < lo.y - size && s3 > hi.y + size)
+        || most(c.x.abs(), c.y.abs()) > 1e12 * size
+        || most(most(s0.abs(), s1.abs()), most(s2.abs(), s3.abs())) > RANGE
+    {
+        return Err(CdtError::Internal(Fault::FarFromOrigin));
+    }
 
     let mut kept: Vec<Point2> = Vec::new();
     let mut k = 0;
     while k < interior.len() {
         let p = interior[k];
-        if p.x.is_finite() && p.y.is_finite() && p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y {
+        if p.x.is_finite()
+            && p.y.is_finite()
+            && !subnormal(p.x)
+            && !subnormal(p.y)
+            && p.x >= lo.x
+            && p.x <= hi.x
+            && p.y >= lo.y
+            && p.y <= hi.y
+        {
             kept.push(p);
         }
         k += 1;
@@ -1408,6 +1502,7 @@ fn within<R: Refine + ?Sized>(
         inside: Vec::new(),
         stack: Vec::new(),
         hit: (NONE, NONE),
+        walked: 0,
     };
     mesh.pts.extend_from_slice(points);
     mesh.vtri.resize(mesh.pts.len(), 0);
@@ -1523,6 +1618,11 @@ fn bad_input(points: &[Point2], loops: &[Vec<u32>], tangled: bool) -> Option<Cdt
     err
 }
 
+/// Whether x is subnormal (`f64::is_subnormal`, in what the float bridge has).
+fn subnormal(x: f64) -> bool {
+    x != 0.0 && x.abs() < f64::MIN_POSITIVE
+}
+
 /// The point a tangled boundary's second point in one place stands for: the first
 /// (`same_as`, sorted: each a point above, the one it stands for below).
 fn one(same_as: &[u64], v: u32) -> u32 {
@@ -1581,7 +1681,11 @@ impl Mesh {
                         });
                     }
                 }
-                Some(loc) => self.insert(v, loc),
+                Some(loc) => {
+                    if let Err(e) = self.insert(v, loc) {
+                        err = Some(e);
+                    }
+                }
             }
             k += 1;
         }

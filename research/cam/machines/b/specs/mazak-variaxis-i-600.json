@@ -1,0 +1,156 @@
+{
+ "vendor": "Mazak",
+ "model": "VARIAXIS i-600 NEO",
+ "family": "VARIAXIS i NEO",
+ "source": [
+  "https://www.mazak.com/us-en/detail/japan/5axis/vri600nn/",
+  "https://www.mazak.com/us-en/products/variaxis-i-neo/"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "table-table",
+ "architecture": "5-axis trunnion table (A tilt -120..+30 deg, C rotary table). Which unit carries X/Y/Z is not published on the pages read.",
+ "control": {
+  "standard": "MAZATROL SmoothAi",
+  "options": []
+ },
+ "travel_mm": {
+  "X": 508.0,
+  "Y": 914.4,
+  "Z": 508.0
+ },
+ "rotary": {
+  "A": {
+   "range_deg": [
+    -120,
+    30
+   ],
+   "rapid_rpm": null,
+   "indexing_or_full": "full (simultaneous 5-axis machine)"
+  },
+  "B": null,
+  "C": {
+   "range_deg": null,
+   "rapid_rpm": null,
+   "indexing_or_full": null
+  }
+ },
+ "spindle_nose_to_table_mm": [
+  76.2,
+  584.2
+ ],
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": [
+  599.9,
+  500.1
+ ],
+ "table_load_kg": 499.9,
+ "rotary_table_dia_mm": 599.9,
+ "pallet": {
+  "count": 1,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 18000,
+  "rpm_min": null,
+  "taper_or_interface": "CAT40",
+  "power_kw": {
+   "cont": 26,
+   "30min": null,
+   "peak/other": "30 kW (40% ED)"
+  },
+  "torque_nm": {
+   "cont": 103.0,
+   "max": 120.0
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 60.0,
+  "Y": 60.0,
+  "Z": 56.0,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 30,
+  "options": [
+   "40",
+   "80",
+   "120",
+   "265 (multiple drum magazine)"
+  ],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": 101.6,
+  "max_tool_dia_empty_adjacent_mm": 127.0,
+  "max_tool_len_mm": 304.8,
+  "max_tool_kg": 8.2
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": 2235.2,
+  "D": 4445.0,
+  "H": 3225.8
+ },
+ "weight_kg": 13000.0,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.chip_to_chip_s",
+  "changer.tool_to_tool_s",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "spindle.power_kw.30min",
+  "spindle.rpm_min",
+  "spindle_nose_type",
+  "table_height_from_floor_mm"
+ ],
+ "options": [
+  "2-pallet changer",
+  "tool magazine 40/80/120, multiple drum 265",
+  "high-speed and high-torque spindle options (no numbers published)"
+ ],
+ "notes": "US product page summary says standard shank BT40, 12000 min-1; the US spec page says CAT No.40, 18000 rpm, 30/26 kW. Fields use the spec page. Table given as Φ dia x second dimension (likely table height/width); table_mm holds both numbers as printed. C-axis range, A/C speeds, tool change times not published. Single table standard per product page (2-pallet changer optional, 4 hydraulic ports inside / 8 on setup station).",
+ "orig": {
+  "table": "Φ23.62\" x 19.69\" (table dia x height?)",
+  "max_workpiece": "Φ27.56\" x 17.72\"",
+  "travel": "X 20\" Y 36\" Z 20\"",
+  "nose_to_table": "3\" to 23\" (table horizontal)",
+  "load": "1102 lbs",
+  "torque": "88.5 ft-lbs (40% ED) / 76 ft-lbs cont",
+  "rapid": "X 2362, Y 2362, Z 2205 IPM",
+  "tool": "Φ4\" / Φ5\" w/o adjacent / 12\" from gauge line / 18 lbs",
+  "size": "88\" x 175\" (W x L, SmoothAi), H 127\"",
+  "weight": "28660 lbs",
+  "max_workpiece_mm": [
+   700.0,
+   450.1
+  ]
+ }
+}

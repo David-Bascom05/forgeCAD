@@ -155,14 +155,14 @@ axiom alloc.vec.Vec.Insts.CoreDefaultDefault.default
   (T : Type _) : Result (alloc.vec.Vec T)
 
 /-- [forge_geom::budget::spend_many]:
-    Source: 'kernel/forge-geom/src/budget.rs', lines 42:0-42:25
+    Source: 'kernel/forge-geom/src/budget.rs', lines 55:0-55:25
     Name pattern: [forge_geom::budget::spend_many]
     Visibility: public -/
 @[rust_fun "forge_geom::budget::spend_many"]
 axiom forge_geom.budget.spend_many : Std.U64 → Result Unit
 
 /-- [forge_geom::budget::over]:
-    Source: 'kernel/forge-geom/src/budget.rs', lines 47:0-47:21
+    Source: 'kernel/forge-geom/src/budget.rs', lines 60:0-60:21
     Name pattern: [forge_geom::budget::over]
     Visibility: public -/
 @[rust_fun "forge_geom::budget::over"]
@@ -179,7 +179,7 @@ axiom forge_math.predicates.orient2d
     Result F64
 
 /-- [forge_mesh::cdt::triangulate]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1166:0-1172:1
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1228:0-1234:1
     Visibility: public -/
 axiom cdt.triangulate
   :

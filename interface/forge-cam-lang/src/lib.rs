@@ -25,6 +25,7 @@
 //! check, where, and a fix. The reply is `forgecad.cam/1`.
 use forge_lang::syntax::{self, Arg, Expr, ExprKind, StmtKind};
 pub mod holes;
+pub mod sim;
 
 use forge_agent::json::Json;
 use forge_cam::ops::{self, CheckOut, Heights, OpPath, PMove, Phase, Stock, ToolUse};
@@ -34,6 +35,17 @@ use forge_post::{CycleKind, Rec};
 use forge_tooling::{Kind, Library, feeds};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+
+/// Builds the staged stock even where the checks against it cannot fail (tests/stock_skip.rs,
+/// the skip's differential test). Off by default.
+#[doc(hidden)]
+pub static FULL_STOCK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The peck retract and chip-break lift (mm) the posted cycles are read with: the controls'
+/// usual values by default; tests/peck.rs sets others to show the verdicts do not depend on them.
+#[doc(hidden)]
+pub static CYCLE_PARAMS: std::sync::Mutex<(f64, f64)> =
+    std::sync::Mutex::new((forge_post::PECK_CLEAR, forge_post::CHIP_LIFT));
 
 /// Whether a source is a machining document.
 pub fn is_machining(src: &str) -> bool {
@@ -76,8 +88,12 @@ struct ViseSpec {
 
 #[derive(Clone, Debug)]
 enum StockSpec {
-    Margin([f64; 3]),
-    Box { min: [f64; 3], max: [f64; 3] },
+    /// Margins x, y, above, and below the part.
+    Margin([f64; 3], f64),
+    Box {
+        min: [f64; 3],
+        max: [f64; 3],
+    },
 }
 
 struct PartIn {
@@ -142,6 +158,9 @@ pub struct OpOut {
     target: Option<Vec<Face>>,
     /// Declared removals (Δ): what each is and where.
     pub removals: Vec<String>,
+    /// The paths as the posted text means them (read back from the program, in the part's
+    /// frame), one per path once a program posts the op: what the checks' `move_index` counts.
+    pub posted: Vec<OpPath>,
     /// The stock this op starts from (G2, G3 are checked against it).
     stock_before: Option<forge_cam::stock::InProcess>,
     /// What the op provably clears: (region, or the whole box; its final floor).
@@ -303,7 +322,13 @@ impl Cam {
                 if fname == "box" {
                     let named = self.named(args, env)?;
                     if let Some(m) = named.get("margin").and_then(tuple3) {
-                        return Ok(V::Stock(StockSpec::Margin(m)));
+                        // `below:`: stock under the part too (it rests on that much)
+                        let below = match named.get("below") {
+                            None => 0.0,
+                            Some(V::Num(b)) if *b >= 0.0 => *b,
+                            Some(_) => return Err("box: below: a length ≥ 0".into()),
+                        };
+                        return Ok(V::Stock(StockSpec::Margin(m, below)));
                     }
                     if let (Some(lo), Some(hi)) = (
                         named.get("min").and_then(tuple3),
@@ -422,14 +447,14 @@ pub fn run(src: &str, dir: &Path) -> Cam {
     }
     // a project library beside the document
     let proj = dir.join("cam");
-    if let Ok(rd) = std::fs::read_dir(&proj) {
+    if let Ok(rd) = forge_dirs::fs::read_dir(&proj) {
         let mut files: Vec<PathBuf> = rd
             .filter_map(|e| e.ok().map(|e| e.path()))
             .filter(|p| p.extension().is_some_and(|x| x == "toml"))
             .collect();
         files.sort();
         for f in files {
-            if let Ok(s) = std::fs::read_to_string(&f)
+            if let Ok(s) = forge_dirs::fs::read_to_string(&f)
                 && let Err(e) = cam.lib.add(&f.display().to_string(), &s)
             {
                 cam.errors.push(e.to_string());
@@ -447,12 +472,8 @@ pub fn run(src: &str, dir: &Path) -> Cam {
                     env.insert(name.clone(), v);
                 }
                 StmtKind::Param { owner, name, value } => {
-                    let o = owner
-                        .iter()
-                        .map(|s| format!("{s:?}"))
-                        .collect::<Vec<_>>()
-                        .join(".");
-                    let o = o.trim_matches('"').to_string();
+                    // the owner's id as text (`a.b`, `a[0]`): a statement's id is its name
+                    let o = forge_lang::error::path_text(owner);
                     params.entry(o).or_default().insert(name.clone(), value.clone());
                 }
                 StmtKind::Assign { name, value } => {
@@ -466,18 +487,18 @@ pub fn run(src: &str, dir: &Path) -> Cam {
                     };
                     // the statement's own params, by their short names
                     let mut local = env.clone();
-                    for (owner, ps) in &params {
-                        if owner.ends_with(name.as_str()) {
-                            for (k, e) in ps {
-                                let v = cam.eval(e, &env)?;
-                                local.insert(k.clone(), v);
-                            }
+                    // (its id exactly: `param xop1.d` is not `op1`'s)
+                    if let Some(ps) = params.get(name.as_str()) {
+                        for (k, e) in ps {
+                            let v = cam.eval(e, &env)?;
+                            local.insert(k.clone(), v);
                         }
                     }
                     let a = cam.named(args, &local)?;
-                    let t0 = std::time::Instant::now();
+                    // the kernel's clock: std's Instant panics in a browser
+                    let t0 = std::env::var("FORGE_CAM_TIME").is_ok().then(forge_math::clock::Instant::now);
                     let v = cam.call(name, fname, &a, dir)?;
-                    if std::env::var("FORGE_CAM_TIME").is_ok() {
+                    if let Some(t0) = t0 {
                         eprintln!("{name}: {:?}", t0.elapsed());
                     }
                     env.insert(name.clone(), v);
@@ -746,7 +767,7 @@ impl Cam {
             "part" => {
                 let file = get_str(a, "#0", None)?;
                 let path = dir.join(&file);
-                let src = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+                let src = forge_dirs::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
                 let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
                 let holes = holes::hole_view(&src, forge_lang::Options::default());
                 if !run.ok() {
@@ -839,8 +860,8 @@ impl Cam {
                             max: ip.max,
                         }
                     }
-                    Some(V::Stock(StockSpec::Margin(m))) => Stock {
-                        min: [plo[0] - m[0], plo[1] - m[1], plo[2]],
+                    Some(V::Stock(StockSpec::Margin(m, below))) => Stock {
+                        min: [plo[0] - m[0], plo[1] - m[1], plo[2] - below],
                         max: [phi[0] + m[0], phi[1] + m[1], phi[2] + m[2]],
                     },
                     Some(V::Stock(StockSpec::Box { min, max })) => Stock { min: *min, max: *max },
@@ -2081,6 +2102,7 @@ impl Cam {
             leave: get_num(a, "leave", Some(0.0))?,
             target: None,
             removals: vec![],
+            posted: vec![],
             stock_before: Some(s.ip.clone()),
             voids: vec![],
             deepest: f64::INFINITY,
@@ -2814,6 +2836,49 @@ fn opening(rg: &Region, r: f64) -> Option<Region> {
     out
 }
 
+/// The support under the stock when no workholding is declared: the plane of the stock's
+/// bottom, over the stock's box grown by 1 m each way (a path that leaves that square is far
+/// outside any table this phase models; G5 bounds it by the travel when the setup is placed).
+fn support_face(st: &Stock) -> Face {
+    use forge_cam_geom::check::{Surf, TSeg, Trim};
+    use forge_cam_geom::ival::Ival;
+    let g = 1000.0;
+    let (x0, y0) = (st.min[0] - g, st.min[1] - g);
+    let (w, h) = (st.max[0] - st.min[0] + 2.0 * g, st.max[1] - st.min[1] + 2.0 * g);
+    let rect = Trim {
+        segs: vec![
+            TSeg::Line {
+                a: [0.0, 0.0],
+                b: [w, 0.0],
+            },
+            TSeg::Line {
+                a: [w, 0.0],
+                b: [w, h],
+            },
+            TSeg::Line {
+                a: [w, h],
+                b: [0.0, h],
+            },
+            TSeg::Line {
+                a: [0.0, h],
+                b: [0.0, 0.0],
+            },
+        ],
+    };
+    Face::new(
+        Surf::Plane {
+            o: [x0, y0, st.min[2]],
+            u: [1.0, 0.0, 0.0],
+            v: [0.0, 1.0, 0.0],
+        },
+        Ival::new(0.0, w),
+        Ival::new(0.0, h),
+        Some(rect),
+        1e-9,
+        3000,
+    )
+}
+
 /// Each hole of a section as a pocket region: the hole's loop reversed (its inside on the
 /// left), with the islands standing in it, the loops it directly holds, reversed as holes. The
 /// section is validated (closed loops whose pieces meet only at shared ends), so one point
@@ -3070,6 +3135,8 @@ impl Cam {
         };
         let mut recs = vec![];
         let mut current_tool: Option<u32> = None;
+        // where the last path left the tool, in the part's frame
+        let mut last: Option<(usize, [f64; 3])> = None;
         // each op's records, and which records are whose
         let mut spans: Vec<(usize, usize, usize, usize)> = vec![];
         let op_ids: Vec<usize> = (0..self.ops.len())
@@ -3089,9 +3156,28 @@ impl Cam {
                 let start = recs.len();
                 let t = &self.tools[p.tool];
                 if current_tool != Some(t.t) {
+                    // GRBL changes tools by hand (M0) and has no machine-safe Z to go to: Z up to
+                    // the setup's clearance height in the work coordinates first (known in the
+                    // WCS without homing), and the operator told to set Z for the new tool
+                    if post == "grbl"
+                        && current_tool.is_some()
+                        && let Some((ls, l)) = last
+                        && ls == op.setup
+                    {
+                        recs.push(Rec::Rapid(w([l[0], l[1], s.heights.clear])));
+                    }
+                    if post == "grbl" && current_tool.is_some() {
+                        recs.push(Rec::Comment("set Z zero for the new tool before resuming".into()));
+                    }
                     if current_tool.is_some() {
                         recs.push(Rec::SpindleStop);
                         recs.push(Rec::Coolant(forge_post::Coolant::Off));
+                    }
+                    // Z to the machine's safe position first (the dialect's retract_home: G91 G28 Z0,
+                    // G53 G0 Z0): an M06 need not move Z, and a longer tool would come down
+                    // into the stock where the last one stood (GRBL has none: above)
+                    if post != "grbl" {
+                        recs.push(Rec::Home);
                     }
                     recs.push(Rec::ToolChange {
                         t: t.t,
@@ -3139,6 +3225,15 @@ impl Cam {
                         },
                     });
                 }
+                // where this path leaves the tool (the part's frame)
+                let mut at = p.start;
+                for m in &p.moves {
+                    match *m {
+                        PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => at = to,
+                        PMove::Cycle { holes, clear, .. } => at = [holes[0], holes[1], clear],
+                    }
+                }
+                last = Some((op.setup, at));
                 spans.push((oi, pi, start, recs.len()));
             }
         }
@@ -3196,7 +3291,10 @@ impl Cam {
                 decimals: d.decimals,
                 feed_decimals: d.feed_decimals,
             };
-            let ms = forge_post::motions(&sub);
+            // the control's peck retract and chip-break lift: the posted program does not fix
+            // them; the path is certified so that any value in [0, the depth already drilled]
+            // gives the same verdicts (CYCLE_PARAMS: tests/peck.rs)
+            let ms = forge_post::motions_with(&sub, *CYCLE_PARAMS.lock().unwrap_or_else(|e| e.into_inner()));
             // G5's runtime half: what the text commands the spindle and the feed, as read back
             let runtime = self.runtime_limits(oi, &ms, d.feed_decimals);
             let back = |p: [i64; 3]| {
@@ -3210,6 +3308,7 @@ impl Cam {
             let mut moves = vec![];
             let mut start: Option<[f64; 3]> = None;
             let (mut lc, mut lr, mut time) = (0.0, 0.0, 0.0);
+            let mut column: Option<([f64; 2], f64, f64)> = None;
             let mut at = [0.0; 3];
             for m in &ms {
                 let (to, ph, f) = match m {
@@ -3248,6 +3347,7 @@ impl Cam {
                             f: *f as f64 / fscale,
                         });
                         at = t;
+                        column = None;
                         continue;
                     }
                     _ => continue,
@@ -3287,6 +3387,35 @@ impl Cam {
                 } else {
                     ph
                 };
+                // a rapid straight down within the span of this column the tool has already
+                // been through at this xy (a peck cycle's re-entry): it passes only where it has
+                // been, each such place checked already (by a rapid's stricter limits, or swept
+                // by the cutter), so it is a link, checked as the feed there is (the same limits).
+                // So the verdicts are the same for any peck retract or chip-break lift in [0, the
+                // depth drilled]
+                let ph = if ph == Phase::Rapid
+                    && to[0] == at[0]
+                    && to[1] == at[1]
+                    && to[2] < at[2]
+                    && column
+                        .is_some_and(|(xy, low, high)| xy == [to[0], to[1]] && to[2] >= low && at[2] <= high)
+                {
+                    Phase::Link
+                } else {
+                    ph
+                };
+                // the span of the column through the current xy the tool has passed (reset when
+                // the xy changes: the move arriving there gives its end only)
+                column = if to[0] == at[0] && to[1] == at[1] {
+                    match column {
+                        Some((xy, l, h)) if xy == [to[0], to[1]] => {
+                            Some((xy, l.min(to[2]).min(at[2]), h.max(to[2]).max(at[2])))
+                        }
+                        _ => Some(([to[0], to[1]], to[2].min(at[2]), to[2].max(at[2]))),
+                    }
+                } else {
+                    Some(([to[0], to[1]], to[2], to[2]))
+                };
                 moves.push(if ph == Phase::Rapid {
                     PMove::Rapid { to }
                 } else {
@@ -3318,9 +3447,11 @@ impl Cam {
                 .clone()
                 .unwrap_or_else(|| forge_cam::stock::InProcess::new(s.stock.min, s.stock.max));
             let faces_of = |ip: &forge_cam::stock::InProcess| {
-                let t0 = std::time::Instant::now();
+                let t0 = std::env::var("FORGE_CAM_DEBUG")
+                    .is_ok()
+                    .then(forge_math::clock::Instant::now);
                 let r = ip.faces();
-                if std::env::var("FORGE_CAM_DEBUG").is_ok() {
+                if let Some(t0) = t0 {
                     eprintln!(
                         "{}: stock faces {:?} in {:?} (voids {}, under {})",
                         s.name,
@@ -3337,7 +3468,40 @@ impl Cam {
                     s.stock.faces()
                 })
             };
-            let mut stages = vec![(0usize, faces_of(&base))];
+            // the stock is checked against the tool's non-cutting bodies, and against every body
+            // on a rapid. Where each such body stays, through each move, at least the
+            // clearance (and the stock faces' μ, with room) above the stock's top, no stock point
+            // comes within the limit (the stock lies under its top; the limit is at most the
+            // clearance): those checks cannot fail, and the staged stock is not built
+            // (Heights.lean `setDist_of_heights`). Else it is, as before.
+            let top = base.max[2];
+            let stock_needed = {
+                use forge_cam_geom::ival::Ival;
+                // the least a checked body's lowest point may be: top + clearance + room
+                let need = Ival::pt(top)
+                    .add(Ival::pt(s.clearance.max(0.0)))
+                    .add(Ival::pt(1e-3))
+                    .hi;
+                ops::checker_moves(&posted).iter().any(|(m, ph, _)| {
+                    let tip = m.at(Ival::new(0.0, 1.0))[2].lo;
+                    tool.shape.bodies.iter().any(|b| {
+                        let low = Ival::pt(tip).add(Ival::pt(b.z0)).lo;
+                        // above it (a NaN is not)
+                        let above = matches!(
+                            low.partial_cmp(&need),
+                            Some(std::cmp::Ordering::Greater | std::cmp::Ordering::Equal)
+                        );
+                        (b.part == forge_cam_geom::tool::Part::NonCutting || *ph == Phase::Rapid) && !above
+                    })
+                })
+            };
+            // FULL_STOCK: build it anyway (the differential test of the skip)
+            let stock_needed = stock_needed || FULL_STOCK.load(std::sync::atomic::Ordering::Relaxed);
+            let mut stages = if stock_needed {
+                vec![(0usize, faces_of(&base))]
+            } else {
+                vec![(0usize, vec![])]
+            };
             let mut deepest = f64::INFINITY;
             let mut cut_z: Option<f64> = None;
             for (i, m) in posted.moves.iter().enumerate() {
@@ -3354,6 +3518,7 @@ impl Cam {
                     }
                     | PMove::Rapid { .. } => {
                         if let Some(z) = cut_z.take()
+                            && stock_needed
                             && z < deepest
                             && !self.ops[oi].voids.is_empty()
                         {
@@ -3395,9 +3560,11 @@ impl Cam {
                     stages.iter().map(|s| (s.0, s.1.len())).collect::<Vec<_>>()
                 );
             }
+            // with no workholding declared, whatever holds the stock is under it: the plane of the
+            // stock's bottom is the support, and no body of the tool may reach it (G2)
             let (ffaces, fclear) = match &s.fixture {
                 Some(f) => (f.faces(), f.clearance),
-                None => (vec![], 0.0),
+                None => (vec![support_face(&s.stock)], 0.0),
             };
             let target = self.ops[oi].target.as_ref().unwrap_or(&part.faces);
             let mut sum = ops::certify_fixtured(
@@ -3417,6 +3584,12 @@ impl Cam {
                         && let Some(p) = f.piece_of(id)
                     {
                         c.other = format!("{} ({p})", c.other);
+                    }
+                }
+            } else {
+                for c in &mut sum.checks {
+                    if c.rule == "fixture_collision" {
+                        c.other = "the support under the stock (no workholding declared)".into();
                     }
                 }
             }
@@ -3450,6 +3623,10 @@ impl Cam {
                 .filter_map(|c| Some(ends.get(c.move_index)?[2].min(ends.get(c.move_index + 1)?[2])))
                 .fold(f64::INFINITY, f64::min);
             let op = &mut self.ops[oi];
+            if op.posted.len() <= pi {
+                op.posted.resize(pi + 1, posted.clone());
+            }
+            op.posted[pi] = posted.clone();
             op.deepest = op.deepest.min(low);
             op.moves += posted.moves.len();
             op.pairs += sum.pairs;
@@ -3469,6 +3646,10 @@ impl Cam {
                 op.fix = Some(match c.rule {
                     "machine_limit" => "a tool or feeds the machine can run (its spindle range and feed limit are in the machine's record), or another machine".into(),
                     "axis_limit" => "SetArg at: a work offset that keeps the program within travel, or the part placed elsewhere on the table (or a shorter tool for Z)".into(),
+                    "fixture_collision" if s.fixture.is_none() => format!(
+                        "the path reaches below the stock's bottom (z = {:.2}), where whatever holds it is: cut no lower than the stock, or SetArg stock: a box whose bottom is below the cut (the rest left to a second setup), or declare the workholding (SetArg fixture)",
+                        s.stock.min[2]
+                    ),
                     "fixture_collision" => {
                         let f = s.fixture.as_ref().expect("a fixture check has a fixture");
                         let seat = s.stock.min[2];
