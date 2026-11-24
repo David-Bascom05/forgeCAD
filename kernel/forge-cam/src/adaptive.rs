@@ -197,9 +197,27 @@ struct Field {
     prof: Profile,
     r: f64,
     eps: f64,
+    /// The box (xmin, ymin, xmax, ymax) of every sweep since the start cache last looked: the
+    /// only cells changed (or restored, by a crumb taken back) since then.
+    dirty: [f64; 4],
 }
 
+/// No box.
+const NO_BOX: [f64; 4] = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+
 impl Field {
+    /// The map swept along a → b, the box of what changed noted.
+    fn sweep(&mut self, a: [f64; 3], b: [f64; 3]) -> f64 {
+        self.dirty = [
+            self.dirty[0].min(a[0]).min(b[0]),
+            self.dirty[1].min(a[1]).min(b[1]),
+            self.dirty[2].max(a[0]).max(b[0]),
+            self.dirty[3].max(a[1]).max(b[1]),
+        ];
+        let prof = self.prof;
+        self.map.sweep(a, b, &prof)
+    }
+
     fn ok(&self, x: f64, y: f64) -> bool {
         inside(&self.allowed, x, y)
     }
@@ -421,6 +439,7 @@ pub fn adaptive(
         prof,
         r: 0.5 * tool.tool.dc,
         eps: 1e-3,
+        dirty: NO_BOX,
     };
     let cap = prm.phi_max.clamp(5.0, 180.0).to_radians();
     let mut sweep_dir: [f64; 2];
@@ -511,19 +530,33 @@ pub fn adaptive(
             let (sn, cs) = dmath::sin_cos(prm.sweep.to_radians());
             [cs, sn]
         };
+        // each point's distance from the region's edge and whether it is allowed, worked out
+        // once a level (they do not change; the material does), in the scan's own order
+        let edge_cache: std::cell::RefCell<Vec<(f64, bool)>> = std::cell::RefCell::new(Vec::new());
         let left_area = |f: &Field, d: f64| -> f64 {
             let (lo, hi) = (ip.min, ip.max);
             let h = f.map.h;
             let mut a = 0.0;
+            let mut cache = edge_cache.borrow_mut();
+            let mut k = 0usize;
             let mut y = lo[1];
             while y <= hi[1] {
                 let mut x = lo[0];
                 while x <= hi[0] {
                     // (material within a radius of the region's edge is the rings' and the wall
                     // pass's to take)
-                    if f.material(x, y, z) && edge_dist(&f.allowed, x, y) > d && f.ok(x, y) {
-                        a += h * h;
+                    if f.material(x, y, z) {
+                        while cache.len() <= k {
+                            cache.push((f64::NAN, false));
+                        }
+                        if cache[k].0.is_nan() {
+                            cache[k] = (edge_dist(&f.allowed, x, y), f.ok(x, y));
+                        }
+                        if cache[k].0 > d && cache[k].1 {
+                            a += h * h;
+                        }
                     }
+                    k += 1;
                     x += h;
                 }
                 y += h;
@@ -574,6 +607,12 @@ pub fn adaptive(
                 }
             }};
         }
+        // whether each candidate's disk holds material, as last tested: a value stands until a
+        // sweep (or a crumb taken back) comes within its reach (the disk test reads cells within
+        // r + h of the centre, a sweep changes cells within r of its path: 2r + 3h covers both
+        // and the cells' rounding)
+        let mut disk_cache: std::collections::HashMap<(u64, u64), bool> = std::collections::HashMap::new();
+        f.dirty = NO_BOX;
         loop {
             guard += 1;
             if guard > 10_000 {
@@ -587,9 +626,27 @@ pub fn adaptive(
                 .unwrap_or([0.5 * (lo[0] + hi[0]), 0.5 * (lo[1] + hi[1])]);
             let mut best: Option<([f64; 2], f64, f64)> = None;
             let mut order: Vec<([f64; 2], f64, f64)> = Vec::new();
+            if f.dirty[0] <= f.dirty[2] {
+                let m = 2.0 * f.r + 3.0 * f.map.h;
+                let b = [f.dirty[0] - m, f.dirty[1] - m, f.dirty[2] + m, f.dirty[3] + m];
+                disk_cache.retain(|&(x, y), _| {
+                    let (x, y) = (f64::from_bits(x), f64::from_bits(y));
+                    x < b[0] || y < b[1] || x > b[2] || y > b[3]
+                });
+                f.dirty = NO_BOX;
+            }
             if entered || open_try {
                 for &p in &cands {
-                    if f.disk_has_material(p[0], p[1], z) {
+                    let key = (p[0].to_bits(), p[1].to_bits());
+                    let has = match disk_cache.get(&key) {
+                        Some(&v) => v,
+                        None => {
+                            let v = f.disk_has_material(p[0], p[1], z);
+                            disk_cache.insert(key, v);
+                            v
+                        }
+                    };
+                    if has {
                         continue;
                     }
                     // material just beyond the disk, ahead along the sweep (sign +1) or, two-way,
@@ -751,7 +808,7 @@ pub fn adaptive(
                                         .0,
                                 cur[2] + (zk - cur[2]) * (q - 1) as f64 / 4.0,
                             ];
-                            f.map.sweep(a, b, &f.prof.clone());
+                            f.sweep(a, b);
                             moves_at_level.push((a, b));
                         }
                         mv.push(PMove::Arc {
@@ -777,7 +834,7 @@ pub fn adaptive(
                             let (s2, c2) = dmath::sin_cos(a0 + std::f64::consts::FRAC_PI_2 * q as f64 / 4.0);
                             let a = [p[0] + rh * c1, p[1] + rh * s1, z];
                             let b = [p[0] + rh * c2, p[1] + rh * s2, z];
-                            f.map.sweep(a, b, &f.prof.clone());
+                            f.sweep(a, b);
                             moves_at_level.push((a, b));
                         }
                         mv.push(PMove::Arc {
@@ -790,7 +847,7 @@ pub fn adaptive(
                     cur = [p[0] + rh, p[1], z];
                 } else {
                     let b = [cur[0], cur[1], z];
-                    f.map.sweep(cur, b, &f.prof.clone());
+                    f.sweep(cur, b);
                     mv.push(PMove::Line {
                         to: b,
                         f: feed.1,
@@ -1035,7 +1092,7 @@ pub fn adaptive(
                     break;
                 }
                 let Some((phi, w, q)) = found else { break };
-                let got = f.map.sweep(pos, q, &f.prof.clone());
+                let got = f.sweep(pos, q);
                 removed += got;
                 // a step that removes less than a 0.01 mm strip counts as air: a pass grazing
                 // slivers would otherwise orbit
@@ -1245,7 +1302,7 @@ pub fn adaptive(
                                     .collect();
                             let first = mv.len();
                             for w in pts.windows(2) {
-                                f.map.sweep(w[0], w[1], &f.prof.clone());
+                                f.sweep(w[0], w[1]);
                                 moves_at_level.push((w[0], w[1]));
                             }
                             fit_pass(&pts, f.r, feed.0, &mut mv);
@@ -1340,7 +1397,7 @@ pub fn adaptive(
                         let pts = polygon(std::slice::from_ref(sg), 0.01);
                         for p in pts.iter().skip(1).chain(std::iter::once(&(b[0], b[1]))) {
                             let q = [p.0, p.1, z];
-                            f.map.sweep(a, q, &f.prof.clone());
+                            f.sweep(a, q);
                             moves_at_level.push((a, q));
                             a = q;
                         }
