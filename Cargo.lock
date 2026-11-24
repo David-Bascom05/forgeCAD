@@ -117,6 +117,7 @@ version = "0.1.0"
 dependencies = [
  "forge-agent",
  "forge-cam",
+ "forge-cam-3d",
  "forge-cam-geom",
  "forge-dirs",
  "forge-lang",
