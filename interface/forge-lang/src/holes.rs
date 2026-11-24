@@ -34,6 +34,12 @@ const HOLE_ARGS: &[&str] = &[
     "bodies",
 ];
 
+/// The ISO 286 hole classes `fit:` takes on a hole of its own diameter.
+pub const HOLE_CLASSES: &[&str] = &[
+    "H6", "H7", "H8", "H9", "H10", "H11", "G6", "G7", "F7", "F8", "E8", "E9", "D9", "D10", "C11", "JS6",
+    "JS7", "K6", "K7", "M6", "M7", "N6", "N7", "P6", "P7", "R7", "S7",
+];
+
 pub fn hole(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     not_in_sketch(ev, "hole", span)?;
     let id = ev.take_id("hole", span)?;
@@ -49,9 +55,20 @@ pub fn hole(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         conflict(&a, func, k, "seat")?;
     }
     let screw = a.opt("screw").is_some();
-    for k in ["fit", "seat", "convention"] {
+    for k in ["seat", "convention"] {
         only_with(&a, func, k, screw, Because::NoScrew)?;
     }
+    // with a screw, `fit:` picks its clearance (close, normal, loose) or tap drill; on a hole of
+    // its own diameter, an ISO 286 hole class it is made to (what CAM reams to)
+    // (a screw's fit word without the screw stays NotApplicable)
+    let screw_fit =
+        matches!(a.opt("fit"), Some(Value::Str(w)) if ["close", "normal", "loose", "tap"].contains(&&*w));
+    only_with(&a, func, "fit", screw || !screw_fit, Because::NoScrew)?;
+    let class = if screw {
+        None
+    } else {
+        word(&a, "fit", HOLE_CLASSES)?
+    };
     // where: sketch points (one sketch), or points on a plane
     let pts: Vec<Value> = crate::wired::items(a.req("at")?);
     if pts.is_empty() {
@@ -249,6 +266,9 @@ pub fn hole(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     };
     let f = crate::bodies::wrap_in(ev, &a, Feature::Hole(Box::new(h)))?;
     let (idx, hid) = ev.push_feature(&id, "hole", f, span, dims)?;
+    if let Some(c) = class {
+        ev.hole_fits.push((id.clone(), c));
+    }
     Ok(feat(id, "hole", idx, hid, Some((at[0], z))))
 }
 

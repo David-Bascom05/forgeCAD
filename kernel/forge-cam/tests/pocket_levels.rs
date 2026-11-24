@@ -18,6 +18,7 @@ fn tool(id: &str) -> ToolUse {
         holder: Some("bt40-er32".into()),
         stickout: 0.0,
         shape,
+        probe: false,
     }
 }
 

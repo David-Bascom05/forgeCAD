@@ -136,6 +136,19 @@ fn build(file: PathBuf, a: String, b: String, single: bool) -> Result<Ready, Str
 }
 
 impl Gui {
+    /// A file this app wrote that the page's storage did not keep (`app_store_failed`): the
+    /// status says so, and a file of the history (`.git`, `.gitignore`) makes Versions say the
+    /// history isn't kept, whatever it said before ("History is on" from the page's own copy).
+    #[cfg(target_arch = "wasm32")]
+    pub fn store_failed(&mut self, path: &str, why: &str) {
+        let rel = path.strip_prefix("/project/").unwrap_or(path);
+        self.shell.status = format!("Not kept: {rel}: {why}");
+        if rel == ".gitignore" || rel.starts_with(".git/") || rel.contains("/.git/") {
+            self.shell.versions.lost =
+                format!("History isn't being kept where this project is stored: {rel}: {why}");
+        }
+    }
+
     /// The document the tab shows: the one picked, else the open one.
     fn vers_doc(&self) -> Option<PathBuf> {
         self.shell
@@ -187,6 +200,7 @@ impl Gui {
             return;
         };
         v.off = false;
+        v.unsigned = h.who().is_none();
         let Ok(rel) = h.rel(&file) else {
             v.nodes.clear();
             return;
@@ -265,10 +279,28 @@ impl Gui {
                 match History::turn_on(&dir) {
                     Ok(_) => {
                         forge_lang::pins::forget();
-                        let _ = forge_lang::vtools::save(&f, "saved", None);
-                        self.shell.status = "History is on: every save is kept".into();
+                        // the file as it is now, the history's first save: said if it failed,
+                        // never "every save is kept" over it
+                        match forge_lang::vtools::save(&f, "saved", None) {
+                            Ok(_) => self.shell.status = "History is on: every save is kept".into(),
+                            Err(e) => {
+                                self.shell.status = format!("History is on, but this save wasn't kept: {e}");
+                                self.shell.versions.note = self.shell.status.clone();
+                            }
+                        }
                     }
                     Err(e) => self.shell.versions.note = e.to_string(),
+                }
+                self.vers_load();
+            }
+            VersionsAct::Identity { name: who, email } => {
+                let Some(f) = file else { return };
+                let set = History::open(&f)
+                    .ok_or_else(|| "no history here".to_string())
+                    .and_then(|mut h| h.set_identity(&who, &email).map_err(|e| e.to_string()));
+                match set.and_then(|()| forge_lang::vtools::save(&f, "saved", None)) {
+                    Ok(_) => self.shell.status = format!("Saves are signed by {who}: every save is kept"),
+                    Err(e) => self.shell.versions.note = e,
                 }
                 self.vers_load();
             }

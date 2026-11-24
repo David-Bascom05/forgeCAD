@@ -415,6 +415,9 @@ fn turn(
                 } else {
                     tools::call(&name, &args, &cfg.file)
                 };
+                // the sketches the tool's runs kept: freed between tool calls (this thread lives as
+                // long as the conversation)
+                crate::plat::release_sketches();
                 for c in watch.check() {
                     out.send(c);
                 }

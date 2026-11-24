@@ -58,6 +58,18 @@ axiom core.iter.traits.iterator.Iterator.any.default
   Clause0_Item Bool) :
   Self → F → Result (Bool × Self)
 
+/-- [core::iter::traits::iterator::Iterator::all]:
+    Source: '/rustc/library/core/src/iter/traits/iterator.rs', lines 2840:4-2843:64
+    Name pattern: [core::iter::traits::iterator::Iterator::all]
+    Visibility: public -/
+@[trait_default, rust_fun "core::iter::traits::iterator::Iterator::all"]
+axiom core.iter.traits.iterator.Iterator.all.default
+  {Self : Type _} {F : Type _} {Clause0_Item : Type _} (IteratorInst :
+  core.iter.traits.iterator.Iterator Self Clause0_Item)
+  (opsfunctionFnMutFTupleClause0_ItemBoolInst : core.ops.function.FnMut F
+  Clause0_Item Bool) :
+  Self → F → Result (Bool × Self)
+
 /-- [core::f64::{f64}::MIN_POSITIVE]
     Source: '/rustc/library/core/src/num/f64.rs', lines 456:4-456:31
     Name pattern: [core::f64::{f64}::MIN_POSITIVE]
@@ -92,6 +104,17 @@ axiom core.f64.F64.max : F64 → F64 → Result F64
 @[rust_fun
   "core::slice::iter::{core::iter::traits::iterator::Iterator<core::slice::iter::Iter<'a, @T>, &'a @T>}::any"]
 axiom core.slice.iter.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.any
+  {T : Type _} {F : Type _} (opsfunctionFnMutFTupleSharedATBoolInst :
+  core.ops.function.FnMut F T Bool) :
+  core.slice.iter.Iter T → F → Result (Bool × (core.slice.iter.Iter T))
+
+/-- [core::slice::iter::{impl core::iter::traits::iterator::Iterator<&'a T> for core::slice::iter::Iter<'a, T>}::all]:
+    Source: '/rustc/library/core/src/slice/iter/macros.rs', lines 304:12-307:45; this code is generated from a macro invocation at: '/rustc/library/core/src/slice/iter.rs', lines 140:0-148:2
+    Name pattern: [core::slice::iter::{core::iter::traits::iterator::Iterator<core::slice::iter::Iter<'a, @T>, &'a @T>}::all]
+    Visibility: public -/
+@[rust_fun
+  "core::slice::iter::{core::iter::traits::iterator::Iterator<core::slice::iter::Iter<'a, @T>, &'a @T>}::all"]
+axiom core.slice.iter.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.all
   {T : Type _} {F : Type _} (opsfunctionFnMutFTupleSharedATBoolInst :
   core.ops.function.FnMut F T Bool) :
   core.slice.iter.Iter T → F → Result (Bool × (core.slice.iter.Iter T))
