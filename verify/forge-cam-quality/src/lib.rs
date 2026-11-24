@@ -894,8 +894,14 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                 pq.t_stop = tl.t_stop;
                 // the lookahead estimate: the timeline's (grbl defaults), or re-planned with the
                 // settings asked for
+                let mut prof: Vec<forge_machine::lookahead::BlockProfile> = Vec::new();
                 let (seg_la, t_la) = match (&cfg.scurve, &cfg.lookahead, mlib.get(&mname)) {
-                    (Some(sc), _, Ok(def)) => forge_machine::lookahead::plan_scurve(def, &tl, sc),
+                    (Some(sc), _, Ok(def)) => {
+                        forge_machine::lookahead::PROFILE.with(|p| *p.borrow_mut() = Some(Vec::new()));
+                        let r = forge_machine::lookahead::plan_scurve(def, &tl, sc);
+                        prof = forge_machine::lookahead::PROFILE.with(|p| p.borrow_mut().take()).unwrap_or_default();
+                        r
+                    }
                     (None, Some(la), Ok(def)) => forge_machine::lookahead::plan(def, &tl, la),
                     _ => (tl.seg_la.clone(), tl.t_la),
                 };
@@ -917,6 +923,69 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                         cur = Some(*k);
                     }
                     op_of[i + 1] = cur;
+                }
+                // FORGE_QUALITY_STATS=OP: that op's program (blocks, bytes, F words, mean move) and,
+                // under --scurve, the share of its feed-move time at >= 90 % of the programmed
+                // feed (each block's profile estimated at constant acceleration from the planner's
+                // entry and exit speeds)
+                if let Ok(want) = std::env::var("FORGE_QUALITY_STATS") {
+                    let mut lines = 0usize;
+                    let mut bytes = 0usize;
+                    let mut fwords = 0usize;
+                    for (i, line) in text.lines().enumerate() {
+                        if let Some(Some(k)) = op_of.get(i + 1)
+                            && job.ops[*k].name == want
+                        {
+                            lines += 1;
+                            bytes += line.len() + 1;
+                            if line.split_whitespace().any(|w| w.starts_with('F')) {
+                                fwords += 1;
+                            }
+                        }
+                    }
+                    let mut len_all = 0.0;
+                    let mut nseg = 0usize;
+                    let (mut t_feed, mut t_90) = (0.0f64, 0.0f64);
+                    let in_op = |si: usize| {
+                        matches!(op_of.get(tl.segments[si].line), Some(Some(k)) if job.ops[*k].name == want)
+                    };
+                    for (si, sg) in tl.segments.iter().enumerate() {
+                        if !in_op(si) {
+                            continue;
+                        }
+                        nseg += 1;
+                        let d: f64 = sg.q0.iter().zip(&sg.q1).take(3).map(|(a, b)| (b - a).powi(2)).sum::<f64>().sqrt();
+                        len_all += d;
+                    }
+                    for b in &prof {
+                        if !in_op(b.seg) || matches!(tl.segments[b.seg].kind, forge_machine::sim::SegKind::Rapid) {
+                            continue;
+                        }
+                        let sg = &tl.segments[b.seg];
+                        if sg.t_min <= 0.0 || b.len <= 0.0 || b.acc <= 0.0 {
+                            continue;
+                        }
+                        // the programmed speed, mm/s (t_min is the block at it)
+                        let vf = b.len / sg.t_min;
+                        let vt = 0.9 * vf;
+                        let a = b.acc;
+                        let vp = b.v_nom.min(((2.0 * a * b.len + b.v0 * b.v0 + b.v1 * b.v1) / 2.0).sqrt());
+                        let d_up = ((vp * vp - b.v0 * b.v0) / (2.0 * a)).max(0.0);
+                        let d_dn = ((vp * vp - b.v1 * b.v1) / (2.0 * a)).max(0.0);
+                        let cruise = (b.len - d_up - d_dn).max(0.0);
+                        let t_up = ((vp - b.v0) / a).max(0.0);
+                        let t_dn = ((vp - b.v1) / a).max(0.0);
+                        let t_blk = t_up + t_dn + if vp > 0.0 { cruise / vp } else { 0.0 };
+                        t_feed += t_blk;
+                        if vp >= vt {
+                            t_90 += ((vp - b.v0.max(vt)) / a).max(0.0) + ((vp - b.v1.max(vt)) / a).max(0.0) + cruise / vp;
+                        }
+                    }
+                    eprintln!(
+                        "stats {want} blocks {lines} bytes {bytes} fwords {fwords} moves {nseg} mean_mm {:.2} at90 {:.1}%",
+                        len_all / nseg.max(1) as f64,
+                        if t_feed > 0.0 { 100.0 * t_90 / t_feed } else { f64::NAN }
+                    );
                 }
                 // FORGE_QUALITY_BREAKDOWN=OP: where that op's time goes, by kind of move
                 if let Ok(want) = std::env::var("FORGE_QUALITY_BREAKDOWN") {

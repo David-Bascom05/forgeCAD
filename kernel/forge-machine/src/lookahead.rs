@@ -441,6 +441,23 @@ pub fn plan_scurve(def: &MachineDef, tl: &Timeline, p: &SCurve) -> (Vec<f64>, f6
     (per, total)
 }
 
+/// One planned block of `plan_scurve`, for analysis: its segment, length (mm), entry and exit
+/// speeds, nominal speed (mm/s) and acceleration (mm/s²).
+#[derive(Clone, Copy, Debug)]
+pub struct BlockProfile {
+    pub seg: usize,
+    pub len: f64,
+    pub v0: f64,
+    pub v1: f64,
+    pub v_nom: f64,
+    pub acc: f64,
+}
+
+thread_local! {
+    /// When Some, `plan_scurve` appends every block it plans (analysis only).
+    pub static PROFILE: std::cell::RefCell<Option<Vec<BlockProfile>>> = const { std::cell::RefCell::new(None) };
+}
+
 /// One run from rest to rest: reverse and forward passes over all of it, S-curve blocks.
 fn scurve_run(run: &[SBlk], p: &SCurve, acc: &[f64], jrk: &[f64]) -> Vec<f64> {
     let m = run.len();
@@ -480,6 +497,21 @@ fn scurve_run(run: &[SBlk], p: &SCurve, acc: &[f64], jrk: &[f64]) -> Vec<f64> {
         let reach = sc_reach(x[k], run[k].len, run[k].acc, run[k].jerk);
         x[k + 1] = if k + 1 == m { 0.0 } else { e[k + 1].min(reach) };
     }
+    PROFILE.with(|pr| {
+        if let Some(v) = pr.borrow_mut().as_mut() {
+            for k in 0..m {
+                let b = &run[k];
+                v.push(BlockProfile {
+                    seg: b.seg,
+                    len: b.len,
+                    v0: x[k],
+                    v1: x[k + 1],
+                    v_nom: b.v_nom,
+                    acc: b.acc,
+                });
+            }
+        }
+    });
     (0..m)
         .map(|k| {
             let b = &run[k];

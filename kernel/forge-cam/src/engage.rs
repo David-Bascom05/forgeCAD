@@ -535,7 +535,7 @@ pub fn schedule(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &Sched) -
             let (end, mut f) = (samples[i].end, feed[i]);
             // (contact narrower than a cell of the model is its rounding: a link along a wall it
             // just cut touches it at exactly r)
-            if samples[i].engage.is_none_or(|e| e.ae < s.cell) && own > f {
+            if samples[i].engage.is_none() && own > f {
                 f = own.min(s.f_max.max(s.f_min));
             }
             out.push(match *mv {
