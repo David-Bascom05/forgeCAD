@@ -27,7 +27,7 @@ fn every_builtin_record_round_trips_byte_stable() {
 }
 
 fn tmp(t: &str) -> std::path::PathBuf {
-    let d = std::env::temp_dir().join(format!("fmtb-{t}-{}", std::process::id()));
+    let d = forge_dirs::temp_dir().join(format!("fmtb-{t}-{}", forge_dirs::process_id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
     d
