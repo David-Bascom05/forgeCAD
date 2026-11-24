@@ -72,7 +72,7 @@ theorem keptFacets_sub_frontier : KeptFacets a k ⊆ frontier (Res a.G keepR) :=
   have hbd : Bd a.G keepR (a.gf f) := (hK.1 (a.gf f) ⟨y, hy⟩).mpr ⟨f, hf, rfl, hk⟩
   exact frontier_of_bd (sideLocal_of_data ha.data keepR) hbd hy
 
-/-- The result's faces lie on the frontier (`BoundsFaces.faces_sub`, without the zones). -/
+/-- The result's faces lie on the frontier (`BoundsFaces.faces_sub`, zones included). -/
 theorem faces_sub_frontier {Rs : BodyModel E} (hw : WritesKept a k Rs) :
     Faces Rs ⊆ frontier (Res a.G keepR) := by
   rw [hw.faces_eq]
@@ -140,8 +140,8 @@ regions (`WritesKept`) and thin edges (`Thin`), the result's faces satisfy `Boun
 theorem boundsFaces_boundary {Aex Bex Rs : BodyModel E} {a : Arr E} (ha : ArrOK Aex Bex a)
     (ht : Thin a) {k keepR : Nat → Bool} (hK : KeptIsBd a k keepR) (hw : WritesKept a k Rs) :
     a.FacesG ∩ frontier (Res a.G keepR) ⊆ Faces Rs ∧
-      Faces Rs \ Zones Rs ⊆ frontier (Res a.G keepR) := by
-  refine ⟨fun x hx => ?_, fun x hx => faces_sub_frontier ha hK hw hx.1⟩
+      Faces Rs ⊆ frontier (Res a.G keepR) := by
+  refine ⟨fun x hx => ?_, faces_sub_frontier ha hK hw⟩
   rw [hw.faces_eq]
   exact closure_mono (sheet_sub_keptFacets ha hK) (frontier_sub_closure_sheet ha ht keepR hx.2)
 

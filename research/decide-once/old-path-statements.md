@@ -128,6 +128,24 @@ The parts:
     incident carriers, `x ∈ ⟦b⟧ ↔ Φ_u.den (exact carriers) x`. So the exact test near a vertex is
     "evaluate Φ_u at x's exact signs".
   - A point on an incident carrier inside a zone is the residual per-decision refusal.
+  **Statement change, D5.zone (coordinator's ruling Z2, 2026-11-24).** `ValidSolid` is stronger:
+  - `Bounds.faces_sub` is now `Faces b ⊆ frontier S`, inside the vertex zones too. It was
+    `Faces b \ Zones b ⊆ frontier S`.
+  - Why: the boolean's D5 contract (`ArrOK.on_frontier`) needs every facet on a body's faces to be
+    on that solid's frontier. Inside a zone the weak form didn't give it, and as a contract it was
+    believed false: `regionMeet` keeps every carrier-zero component within δ of the stored region,
+    so inside a zone it can keep micro-face pieces off the frontier.
+  - So `exactOf` meets it: its face regions are now `regionExact`, the meet off the zones plus,
+    inside them, only its frontier part `zoneFr` (points that, inside u's zone and off u's incident
+    carriers, are limits both of points where Φ_u holds and of points where it fails). The zones
+    are now the open δ-balls (they were the closed ones).
+  - Proven: `bounds_of_weak`. For a body `exactOf` builds, `Bounds` as first stated (`BoundsW`)
+    gives the strong one, so `validSolid_of_weak`: the old validity of the counterpart gives the
+    new `ValidSolid`. No code change, and no new obligation on the code.
+  - `Refines.face` now compares regions up to the zones: a stored face point is within δ of the
+    exact region or of a zone. `exactOf_refines` still takes `hface` against `regionMeet`.
+  - The boolean preserves the strong form: the result's faces are the closure of the kept facets,
+    so they lie on the frontier, zones or not (`Assembly.faces_sub_frontier`).
   - Named hypothesis on aeneas's abstraction function: **`FormulaOfTopology abs`**. The Φ_u that `abs`
     reads off a stored body's topology equals the stored local cone at u.
   Done in BodyModel.lean, b66293ec (`exactOf`, `exactOf_refines`, `denote_spec`, `denote_refines`).

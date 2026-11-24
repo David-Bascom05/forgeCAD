@@ -107,11 +107,11 @@ theorem whereR_outside_iff {S : Set E} (hS : IsClosed S) {p : E} :
       exact hf this
 
 /-- A point of a face's region, off the vertex-cluster zones, is on the solid's frontier. (Inside a
-zone the micro-faces of near-concurrent carriers need not be: ledger D5.zone.) -/
+zone too since D5.zone's ruling Z2: `Bounds.faces_sub` covers the zones; `hz` is no longer needed.) -/
 theorem on_of_region {b : BodyModel E} {S : Set E} (h : Bounds b S) {f : FaceModel E}
     (hf : f ∈ b.faces) {p : E} (hp : p ∈ f.region) (hz : p ∉ Zones b) : whereR S p = .on := by
   rw [whereR_on_iff]
-  exact h.faces_sub ⟨Set.mem_iUnion₂.mpr ⟨f, hf, hp⟩, hz⟩
+  exact h.faces_sub (Set.mem_iUnion₂.mpr ⟨f, hf, hp⟩)
 
 /-- And so is a point of its closure that is clear of the zones' closure: the frontier is closed. -/
 theorem on_of_closure_region {b : BodyModel E} {S : Set E} (h : Bounds b S) {f : FaceModel E}
@@ -126,7 +126,7 @@ theorem on_of_closure_region {b : BodyModel E} {S : Set E} (h : Bounds b S) {f :
     obtain ⟨y, hyo, hyr⟩ := hp (o ∩ (closure (Zones b))ᶜ) (ho.inter hU) ⟨hpo, hz⟩
     exact ⟨y, hyo.1, hyr, fun hy => hyo.2 (subset_closure hy)⟩
   have hsub : f.region \ Zones b ⊆ frontier S :=
-    fun y hy => h.faces_sub ⟨Set.mem_iUnion₂.mpr ⟨f, hf, hy.1⟩, hy.2⟩
+    fun y hy => h.faces_sub (Set.mem_iUnion₂.mpr ⟨f, hf, hy.1⟩)
   exact (isClosed_frontier.closure_subset_iff.mpr hsub) hp'
 
 /-- **The converse the loop needs**: an exact `On` lies on some face's region. -/
