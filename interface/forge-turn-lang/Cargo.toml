@@ -11,6 +11,7 @@ forge-lang = { path = "../forge-lang" }
 forge-agent = { path = "../forge-agent" }
 forge-turn = { path = "../../kernel/forge-turn" }
 forge-cam-geom = { path = "../../kernel/forge-cam-geom" }
+forge-dirs = { path = "../../kernel/forge-dirs" }
 
 [lints]
 workspace = true
