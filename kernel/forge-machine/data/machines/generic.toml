@@ -1,6 +1,6 @@
 # forgecad's generic machines: our own placeholder numbers in plausible ranges, not any maker's
 # model. Geometry is in the base frame, every joint at 0 (the home pose), mm and degrees.
-# Format: docs/cam-machine.md. Each body's real part is parts/<machine>/<body>.fg; its boxes and
+# Format: docs/cam-machine.md. Each body's real part is parts/<vendor>/<machine>/<body>.fg; its boxes and
 # cylinders are the collision envelope (tests/parts.rs checks the part lies inside them).
 
 # ---------------------------------------------------------------------------------------------
@@ -84,7 +84,7 @@ xdir = [1, 0, 0]
 [[machine.body]]
 name = "bed"
 link = "base"
-part = "parts/generic-vmc3/bed.fg"
+part = "parts/generic/generic-vmc3/bed.fg"
 ignore = ["saddle", "column"]
 [[machine.body.box]]
 min = [-500, -450, -400]
@@ -93,7 +93,7 @@ max = [500, 450, -250]
 [[machine.body]]
 name = "column"
 link = "base"
-part = "parts/generic-vmc3/column.fg"
+part = "parts/generic/generic-vmc3/column.fg"
 ignore = ["bed", "head"]
 [[machine.body.box]]
 min = [-300, 450, -400]
@@ -102,7 +102,7 @@ max = [300, 750, 900]
 [[machine.body]]
 name = "saddle"
 link = "Y"
-part = "parts/generic-vmc3/saddle.fg"
+part = "parts/generic/generic-vmc3/saddle.fg"
 ignore = ["bed", "table"]
 [[machine.body.box]]
 min = [-350, -200, -250]
@@ -111,7 +111,7 @@ max = [350, 200, -150]
 [[machine.body]]
 name = "table"
 link = "X"
-part = "parts/generic-vmc3/table.fg"
+part = "parts/generic/generic-vmc3/table.fg"
 ignore = ["saddle"]
 [[machine.body.box]]
 min = [-400, -200, -150]
@@ -120,7 +120,7 @@ max = [400, 200, 0]
 [[machine.body]]
 name = "head"
 link = "Z"
-part = "parts/generic-vmc3/head.fg"
+part = "parts/generic/generic-vmc3/head.fg"
 ignore = ["column"]
 [[machine.body.box]]
 min = [-110, -110, 620]
@@ -241,7 +241,7 @@ xdir = [1, 0, 0]
 [[machine.body]]
 name = "bed"
 link = "base"
-part = "parts/generic-trunnion-bc/bed.fg"
+part = "parts/generic/generic-trunnion-bc/bed.fg"
 ignore = ["support-l", "support-r"]
 [[machine.body.box]]
 min = [-500, -450, -500]
@@ -250,7 +250,7 @@ max = [500, 450, -300]
 [[machine.body]]
 name = "support-l"
 link = "base"
-part = "parts/generic-trunnion-bc/support-l.fg"
+part = "parts/generic/generic-trunnion-bc/support-l.fg"
 ignore = ["bed"]
 [[machine.body.box]]
 min = [-120, -330, -300]
@@ -259,7 +259,7 @@ max = [120, -250, 0]
 [[machine.body]]
 name = "support-r"
 link = "base"
-part = "parts/generic-trunnion-bc/support-r.fg"
+part = "parts/generic/generic-trunnion-bc/support-r.fg"
 ignore = ["bed"]
 [[machine.body.box]]
 min = [-120, 250, -300]
@@ -268,7 +268,7 @@ max = [120, 330, 0]
 [[machine.body]]
 name = "cradle"
 link = "B"
-part = "parts/generic-trunnion-bc/cradle.fg"
+part = "parts/generic/generic-trunnion-bc/cradle.fg"
 ignore = ["rotary"]
 [[machine.body.box]]
 min = [-200, -240, -150]
@@ -277,7 +277,7 @@ max = [200, 240, -40]
 [[machine.body]]
 name = "rotary"
 link = "C"
-part = "parts/generic-trunnion-bc/rotary.fg"
+part = "parts/generic/generic-trunnion-bc/rotary.fg"
 ignore = ["cradle"]
 [[machine.body.cyl]]
 base = [0, 0, -40]
@@ -288,7 +288,7 @@ h = 40
 [[machine.body]]
 name = "head"
 link = "Z"
-part = "parts/generic-trunnion-bc/head.fg"
+part = "parts/generic/generic-trunnion-bc/head.fg"
 [[machine.body.cyl]]
 base = [0, 0, 400]
 axis = [0, 0, 1]
@@ -374,7 +374,7 @@ xdir = [1, 0, 0]
 [[machine.body]]
 name = "headstock"
 link = "base"
-part = "parts/generic-lathe/headstock.fg"
+part = "parts/generic/generic-lathe/headstock.fg"
 ignore = ["chuck"]
 [[machine.body.box]]
 min = [-200, -200, -400]
@@ -383,7 +383,7 @@ max = [200, 200, -80]
 [[machine.body]]
 name = "chuck"
 link = "base"
-part = "parts/generic-lathe/chuck.fg"
+part = "parts/generic/generic-lathe/chuck.fg"
 ignore = ["headstock"]
 [[machine.body.cyl]]
 base = [0, 0, -80]
@@ -394,7 +394,7 @@ h = 80
 [[machine.body]]
 name = "turret"
 link = "X"
-part = "parts/generic-lathe/turret.fg"
+part = "parts/generic/generic-lathe/turret.fg"
 [[machine.body.cyl]]
 base = [270, 0, -40]
 axis = [0, 0, 1]
@@ -567,7 +567,7 @@ xdir = [1, 0, 0]
 [[machine.body]]
 name = "headstock"
 link = "base"
-part = "parts/generic-mill-turn/headstock.fg"
+part = "parts/generic/generic-mill-turn/headstock.fg"
 ignore = ["chuck"]
 [[machine.body.box]]
 min = [-220, -220, -450]
@@ -576,7 +576,7 @@ max = [220, 220, -90]
 [[machine.body]]
 name = "chuck"
 link = "C"
-part = "parts/generic-mill-turn/chuck.fg"
+part = "parts/generic/generic-mill-turn/chuck.fg"
 ignore = ["headstock"]
 [[machine.body.cyl]]
 base = [0, 0, -90]
@@ -587,7 +587,7 @@ h = 90
 [[machine.body]]
 name = "subchuck"
 link = "C2"
-part = "parts/generic-mill-turn/subchuck.fg"
+part = "parts/generic/generic-mill-turn/subchuck.fg"
 ignore = ["subhead"]
 [[machine.body.cyl]]
 base = [0, 0, 900]
@@ -598,7 +598,7 @@ h = 70
 [[machine.body]]
 name = "subhead"
 link = "Z2"
-part = "parts/generic-mill-turn/subhead.fg"
+part = "parts/generic/generic-mill-turn/subhead.fg"
 ignore = ["subchuck"]
 [[machine.body.box]]
 min = [-180, -180, 970]
@@ -607,7 +607,7 @@ max = [180, 180, 1250]
 [[machine.body]]
 name = "bhead"
 link = "B"
-part = "parts/generic-mill-turn/bhead.fg"
+part = "parts/generic/generic-mill-turn/bhead.fg"
 [[machine.body.cyl]]
 base = [150, 0, 0]
 axis = [1, 0, 0]

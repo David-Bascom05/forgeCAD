@@ -1,0 +1,20 @@
+[package]
+name = "forge-machine-builder"
+description = "Make and keep your own machine tools: the machine-definition writer (round-trips byte-stable), the project/user/built-in levels with shadowing, templates and clones, and `forgecad machine check` (validation, self-collision through travel, envelopes, provenance)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-dirs = { path = "../../kernel/forge-dirs" }
+forge-library = { path = "../forge-library" }
+forge-machine = { path = "../../kernel/forge-machine" }
+forge-math = { path = "../../kernel/forge-math" }
+forge-tooling = { path = "../../kernel/forge-tooling" }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+forge-machine-lang = { path = "../forge-machine-lang" }
