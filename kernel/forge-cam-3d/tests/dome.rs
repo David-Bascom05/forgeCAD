@@ -188,3 +188,121 @@ fn dome_draped_passes_are_certified() {
         .collect();
     assert!(sum.clear, "{bad:?}");
 }
+
+/// Small samples of the other strategies, through the same certifier: pencil in the concave
+/// corner at the dome's foot, a few spiral turns on the cap, one ramp turn, scallop rings on the
+/// cap. Each sample is cut down to a few dozen moves to keep the certifier's time reasonable.
+#[test]
+fn other_strategies_certify_on_the_dome() {
+    use forge_cam_3d::contain::Containment;
+    use forge_cam_3d::drape::Drape;
+    use forge_cam_3d::{geodesic, pencil, ramp, strategy};
+    let dc = Analytic {
+        r: 3.0,
+        planes: vec![(0.0, [-50.0, -50.0], [50.0, 50.0])],
+        spheres: vec![([0.0, 0.0, -10.0], 30.0)],
+    };
+    let d = Drape {
+        step: 2.0,
+        slack: 0.002,
+        leave: 0.01,
+        zmin: 0.0,
+    };
+    // a quarter of the work area, x > 0, y > 0, keeps every sample small
+    let quarter = Containment {
+        boundary: Some(vec![[0.0, 0.0], [12.0, 0.0], [12.0, 12.0], [0.0, 12.0]]),
+        ..Default::default()
+    };
+    let mut ps: Vec<Vec<[f64; 3]>> = Vec::new();
+    // pencil: the foot crease, one arc of it
+    let foot = Containment {
+        boundary: Some(vec![[20.0, 0.0], [34.0, 0.0], [34.0, 8.0], [20.0, 8.0]]),
+        ..Default::default()
+    };
+    let pp = pencil::pencil(
+        &dc,
+        pencil::Params {
+            grid: 0.5,
+            kink: 1.0,
+            min_len: 2.0,
+        },
+        d,
+        &foot,
+    )
+    .unwrap();
+    assert!(!pp.is_empty(), "pencil found nothing");
+    ps.extend(pp);
+    // spiral: two turns on the cap, clipped to the quarter
+    ps.extend(strategy::spiral(&dc, [0.0, 0.0], 0.0, 6.0, 3.0, false, d, &quarter).unwrap());
+    // ramp: from the level at 19 to the level at 18.5 (a small ring on the cap)
+    let lv: Vec<_> = [19.0, 18.5]
+        .iter()
+        .map(|&z| {
+            waterline::level(
+                &dc,
+                z,
+                Params {
+                    grid: 1.0,
+                    tol_xy: 0.01,
+                },
+            )
+            .unwrap()
+        })
+        .collect();
+    let rp = ramp::ramps(&dc, &lv, d).unwrap();
+    ps.extend(quarter.clip(rp, None));
+    // scallop rings on the cap inside a small square
+    let cap = Containment {
+        boundary: Some(vec![[0.0, 0.0], [6.0, 0.0], [6.0, 6.0], [0.0, 6.0]]),
+        ..Default::default()
+    };
+    ps.extend(
+        geodesic::scallop(
+            &dc,
+            geodesic::Params {
+                grid: 0.5,
+                stepover: 2.0,
+                tan_wall: f64::INFINITY,
+            },
+            d,
+            &cap,
+        )
+        .unwrap(),
+    );
+    let e = Emit {
+        tool: 0,
+        h: Heights {
+            clear: 40.0,
+            retract: 25.0,
+        },
+        feed: (1500.0, 500.0),
+        rpm: 12000.0,
+        coolant: forge_post::Coolant::Flood,
+    };
+    let ps = link::order(vec![ps], [0.0, 0.0, 40.0], true);
+    let (p, count) = link::path(
+        &dc,
+        &ps,
+        link::Rules {
+            max_stay: 1.0,
+            lift: 0.5,
+        },
+        e,
+    );
+    let t0 = std::time::Instant::now();
+    let sum = ops::certify(&p, &ball6(), &dome_faces(), &[], 0.01, 1.0);
+    eprintln!(
+        "others: passes {} moves {} links {count:?} cells {} secs {:.1}",
+        ps.len(),
+        p.moves.len(),
+        sum.cells,
+        t0.elapsed().as_secs_f64()
+    );
+    let bad: Vec<_> = sum
+        .checks
+        .iter()
+        .filter(|c| c.verdict != "clear")
+        .take(5)
+        .collect();
+    assert!(sum.clear, "{bad:?}");
+}
