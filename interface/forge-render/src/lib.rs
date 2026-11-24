@@ -21,6 +21,7 @@ pub mod overlay;
 pub mod palette;
 pub mod parity;
 pub mod plat;
+pub mod record;
 pub mod render;
 pub mod scene;
 pub mod shell;

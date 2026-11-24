@@ -33,12 +33,12 @@ extern "C" {
     /// The page's: File > Open (the project's files, or one from the computer).
     #[wasm_bindgen(js_namespace = window, js_name = forge_pick)]
     fn page_pick();
+    /// The page's: a file handed to the person as a download (a photo, a recording).
+    #[wasm_bindgen(js_namespace = window, js_name = forge_download)]
+    fn page_download(name: &str, bytes: Uint8Array);
     /// The page's: File > Save As, a name asked for.
     #[wasm_bindgen(js_namespace = window, js_name = forge_save_as)]
     fn page_save_as(name: &str);
-    /// The page's: a file handed to the browser to save (its downloads).
-    #[wasm_bindgen(js_namespace = window, js_name = forge_download)]
-    fn page_download(name: &str, bytes: Uint8Array);
     /// The page's: save files the app exports (NC programs): its save picker, else a download;
     /// several in one zip. `json`: {name, files: [{path, text}]}.
     #[wasm_bindgen(js_namespace = window, js_name = forge_export)]
@@ -86,6 +86,8 @@ enum Ask {
     Cam(String),
     /// A Machine Builder command (`Gui::machine_command`).
     Machine(String),
+    /// `Gui::capture_command`'s words: a photo or a recording, as Capture's settings say.
+    Capture(String),
 }
 
 thread_local! {
@@ -536,6 +538,11 @@ impl Host {
                 Ask::Machine(c) => {
                     let _ = self.gui.machine_command(&c);
                 }
+                Ask::Capture(c) => {
+                    if let Err(e) = self.gui.capture_command(&c) {
+                        self.gui.shell.status = e;
+                    }
+                }
                 Ask::Rebuild => self.gui.rebuild_open(),
                 Ask::Apply(op) => {
                     if let Err(e) = self.gui.fg_apply(op) {
@@ -870,6 +877,22 @@ fn state_json(g: &Gui, canvas: Json) -> String {
         ("build_ms", doc.map_or(Json::Null, |s| num(s.build_ms))),
         ("built", built.unwrap_or(Json::Null)),
         ("camsim", g.camsim_state().unwrap_or(Json::Null)),
+        // a photo or recording under way, and what the last one said
+        (
+            "capture",
+            Json::obj(vec![
+                ("busy", g.capture_busy().into()),
+                ("stage", g.capture_stage().into()),
+                (
+                    "frame",
+                    g.shell
+                        .capture
+                        .recording
+                        .map_or(Json::Null, |(k, n)| Json::Arr(vec![num(k as f64), num(n as f64)])),
+                ),
+                ("last", g.shell.capture.last.clone().into()),
+            ]),
+        ),
         ("cam", cam_json(g)),
         ("robot", robot_json(g)),
         // a pick of the view in flight (the host draws on until it is answered)
@@ -958,6 +981,27 @@ fn cam_words(g: &mut Gui, words: &str) -> Result<(), String> {
         "set" => {
             let (k, v) = rest.split_once(' ').unwrap_or((rest, ""));
             w.op_dlg.as_mut().ok_or("no op dialog")?.set(k, v.into());
+        }
+        // the tool library: narrowed, a tool shown, a new one derived from it or made
+        "tools-find" => w.tools_find.text = rest.into(),
+        "tools-kind" => {
+            w.tools_find.kind = crate::shell::cam::toollib::KIND_CHIPS.iter().position(|c| c.0.eq_ignore_ascii_case(rest))
+        }
+        "tools-pick" => {
+            w.tools_form = None;
+            w.tools_sel = Some(rest.into());
+        }
+        "tools-derive" => {
+            let x = w.tools_sel.as_ref().and_then(|id| w.lib.tools.iter().find(|x| &x.id == id)).ok_or("no tool shown")?;
+            w.tools_form = Some(crate::shell::cam::toollib::ToolForm::derived(&w.lib, x));
+        }
+        "tools-new" => w.tools_form = Some(crate::shell::cam::toollib::ToolForm::blank(&w.lib, forge_tooling::Kind::Flat)),
+        "earlier" => w.command(Cmd::Move(rest.into(), true)),
+        "suppress" => w.command(Cmd::Suppress(rest.into())),
+        "ok" => {
+            // the op dialog's OK
+            let d = w.op_dlg.take().ok_or("no op dialog")?;
+            w.op_ok(&d)?;
         }
         "post" => w.command(Cmd::PostProcess),
         "tools" => w.command(Cmd::ToolLibrary),
@@ -1272,6 +1316,14 @@ pub fn app_store_failed(path: String, why: String) {
     ask(Ask::StoreFailed(path, why));
 }
 
+/// How many sketches this thread keeps (`forge_keep::kept`): none between frames, as each frame
+/// frees what its runs made (in the single-threaded page, every build's). What the page's tests
+/// hold bounded.
+#[wasm_bindgen]
+pub fn app_sketches_kept() -> usize {
+    forge_keep::kept()
+}
+
 /// Says `text` in the app's status line: what the page refused (a link's file outside the
 /// project, a name to save as that isn't a project path).
 #[wasm_bindgen]
@@ -1290,6 +1342,13 @@ pub fn app_pixels(then: js_sys::Function) {
 #[wasm_bindgen]
 pub fn app_machine(cmd: String) {
     ask(Ask::Machine(cmd));
+}
+
+/// A photo or a recording of the view (`Gui::capture_command`: `photo`, `record 320x200 fps=10
+/// seconds=1 frames`); it is handed over as a download, `capture` in the state says when.
+#[wasm_bindgen]
+pub fn app_capture(words: String) {
+    ask(Ask::Capture(words));
 }
 
 /// The app's state as JSON: see `state_json`.
@@ -1398,4 +1457,9 @@ pub fn bench_load(dir: &str) -> js_sys::Array {
             name.ends_with(".fg").then(|| JsValue::from_str(&p))
         })
         .collect()
+}
+
+/// A file the browser offers the person to save (a photo, a recording), named `name`.
+pub(crate) fn download(name: &str, bytes: &[u8]) {
+    page_download(name, Uint8Array::from(bytes));
 }

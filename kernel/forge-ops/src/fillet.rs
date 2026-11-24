@@ -7429,7 +7429,7 @@ fn meet(a: &Surface, b: &Surface, p: Point3, q: Point3) -> Option<(Curve, f64, f
                 if (tq - tp).rem_euclid(dmath::TAU) > dmath::PI {
                     let z = (-k.frame.z().get()).normalize()?;
                     let f = Frame::from_zx(k.frame.origin, z, k.frame.x().get())?;
-                    Curve::Ellipse(forge_geom::Ellipse { frame: f, ..k })
+                    Curve::Ellipse(forge_geom::Ellipse::new(f, k.major, k.minor))
                 } else {
                     Curve::Ellipse(k)
                 }
@@ -8118,11 +8118,7 @@ mod tests {
 
     #[test]
     fn lengths_along_curves() {
-        let e = Curve::Ellipse(forge_geom::curve::Ellipse {
-            frame: Frame::WORLD,
-            major: 2.0,
-            minor: 1.0,
-        });
+        let e = Curve::Ellipse(forge_geom::curve::Ellipse::new(Frame::WORLD, 2.0, 1.0));
         // a quarter of the ellipse: 2 E(sqrt(3)/2)
         let q = 2.422112055136919;
         assert!((arc_length(&e, 0.0, dmath::FRAC_PI_2) - q).abs() < 1e-12);

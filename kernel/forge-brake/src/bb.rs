@@ -181,12 +181,18 @@ fn search<P: Problem>(
             break;
         }
         *spent += 1;
-        // measuring past a proven pass gets a tenth of the budget
+        // measuring past a proven pass gets a tenth of the budget; a pass only as every exit
+        // has it, each leaf settled to within the resolution (else a leaf no witness decided
+        // would be called clear)
         if measure && lb >= limit && *spent > budget / 10 {
-            return Verdict::Clear {
-                lower: lower.min(lb),
-                upper: upper.max(lower.min(lb)),
-            };
+            let lower = lower.min(lb);
+            if lower >= limit - res {
+                return Verdict::Clear {
+                    lower,
+                    upper: upper.max(lower),
+                };
+            }
+            return Verdict::Undecided { lower };
         }
         if *spent > budget {
             lower = lower.min(lb);
@@ -371,6 +377,31 @@ mod tests {
         // far enough, it still clears
         assert!(matches!(
             certify(&Blind, &[root(0.3)], 0.5, 1e-3, 1_000_000, false),
+            Verdict::Clear { .. }
+        ));
+    }
+
+    #[test]
+    fn measuring_past_a_pass_clears_nothing_left_unproven() {
+        // one point 0.1 from the ball, a leaf at once, that nothing can prove (no witness); then
+        // the segment far from it, whose bound is past the limit: measuring it out of budget
+        // must not call the first clear
+        let near = Cell {
+            p: [
+                Interval::point(1.0),
+                Interval::point(0.0),
+                Interval::point(0.0),
+                Interval::point(0.9),
+            ],
+            tag: 0,
+        };
+        match certify(&Blind, &[near, root(0.0)], 0.5, 0.01, 5, true) {
+            Verdict::Undecided { lower } => assert!(lower < 0.5 - 0.01, "{lower}"),
+            v => panic!("{v:?}"),
+        }
+        // the far one alone, measured: still a pass
+        assert!(matches!(
+            certify(&Blind, &[root(0.0)], 0.5, 0.01, 5, true),
             Verdict::Clear { .. }
         ));
     }

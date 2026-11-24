@@ -3,7 +3,7 @@ machining
 # with a 90° chamfer mill (a declared removal: the part is modelled with sharp edges).
 shared tol = 0.01
 
-f    = part("plate_break.fg", group: "N")
+f    = part("plate_break.fg", material: "6061-T6")
 m    = machine("generic-vmc3")
 t1   = tool("flat-6", t: 1, stickout: 30, holder: "bt40-er32")
 t7   = tool("chamfer-10-90", t: 7, stickout: 25, holder: "bt40-er32")

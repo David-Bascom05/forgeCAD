@@ -203,3 +203,47 @@ fn a_corner_arc_about_the_walls_end_is_cleared_in_few_cells() {
         "{v:?} in {n} cells"
     );
 }
+
+/// Mutation (REMOVED-CHECKS): the hull must hold the whole face. A hull cut to half the wall's
+/// section (x from 40 to 80 only) "clears" a pass that gouges the true face in the other half,
+/// where the branch and bound finds the gouge; the true hull does not clear it. So a hull that
+/// lost part of the face would be caught by the sampling test above, and is caught here.
+#[test]
+fn a_hull_missing_part_of_the_face_would_clear_a_gouge() {
+    use forge_cam_geom::slab::{self, Sec};
+    let body = flat();
+    let f = l_wall();
+    // the cutter's side 0.05 into the wall (y = 50), along x from 10 to 30, low on the wall
+    let mv = Move::Line {
+        a: [10.0, 45.05, 5.0],
+        b: [30.0, 45.05, 5.0],
+    };
+    let pl = mv.planar().unwrap();
+    let (vb, _) = certify_bb(&body, &f, &mv, -0.01, 0.01 / 4.0, 200_000);
+    assert!(
+        matches!(vb, Verdict::Hit { .. }),
+        "the true face is gouged: {vb:?}"
+    );
+    let half = Prism::Wall {
+        sec: Sec::Seg {
+            a: [80.0, 50.0],
+            b: [40.0, 50.0],
+        },
+        z0: 0.0,
+        z1: 20.0,
+        gap: 0.0,
+    };
+    let (vh, _) = slab::certify_shared(&body, &f, &half, &pl, -0.01, 0.01 / 4.0, 200_000, &mut None, 0.0);
+    assert!(
+        matches!(vh, Verdict::Clear { .. }),
+        "the broken hull clears it: {vh:?}"
+    );
+    let hull = Prism::hull_wall(&f).unwrap();
+    let (vt, _) = slab::certify_shared(&body, &f, &hull, &pl, -0.01, 0.01 / 4.0, 200_000, &mut None, 0.0);
+    assert!(
+        !matches!(vt, Verdict::Clear { .. }),
+        "the true hull must not clear it: {vt:?}"
+    );
+    let (vs, _) = certify_shared(&body, &f, &mv, -0.01, 0.01 / 4.0, 200_000, &mut None);
+    assert!(matches!(vs, Verdict::Hit { .. }), "the check refuses it: {vs:?}");
+}

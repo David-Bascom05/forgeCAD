@@ -226,15 +226,17 @@ fn nodes(ta: (Spine, f64), tb: (Spine, f64)) -> Vec<Node> {
     out
 }
 
-/// Traced curves of surfaces `a` and `b` (forge-bool `ssi::search`'s), mended at their tangent nodes (see the
-/// module's note); as they came wherever that does not apply.
+/// Traced curves of surfaces `a` and `b` (forge-bool `ssi::search`'s), mended at their tangent nodes
+/// where one surface is procedural (two analytic ones' touches are forge-bool's `touch_params`'s);
+/// as they came wherever that does not apply.
 #[cold]
 #[inline(never)]
 pub fn mend(a: &Surface, b: &Surface, curves: Vec<IntCurve>) -> Vec<IntCurve> {
-    let (Some(ta), Some(tb)) = (tube(a), tube(b)) else {
+    let (Some(ta), Some(tb), false) = (tube(a), tube(b), cfg!(feature = "node-mend-off")) else {
         return curves;
     };
-    if !one_plane_fits(ta, tb) {
+    if !one_plane_fits(ta, tb) || !matches!((a, b), (Surface::Procedural(_), _) | (_, Surface::Procedural(_)))
+    {
         return curves;
     }
     let found = nodes(ta, tb);
@@ -430,5 +432,30 @@ mod tests {
             11.0,
         );
         assert!(spring(tilted, o, Vec3::Z).is_none());
+    }
+
+    /// Two analytic tubes touching where their springs cross (perpendicular cylinders, one inside
+    /// the other, tangent: mesh_valid's cylinder_cylinder/perpendicular_tangent_inside) are left as
+    /// traced: forge-bool's `touch_params` splits analytic pairs' curves at their touches already,
+    /// and a mend there too made a face's sample land Outside where it is On.
+    #[test]
+    fn two_analytic_tubes_are_left_as_traced() {
+        use crate::surface::Cylinder;
+        use forge_math::{Box3, Frame, UnitVec3};
+        let a = Surface::Cylinder(Cylinder {
+            frame: Frame::from_z(Point3::ORIGIN, UnitVec3::X),
+            radius: 10.0,
+        });
+        let b = Surface::Cylinder(Cylinder {
+            frame: Frame::from_z(Point3::new(0.0, 0.0, -6.0), UnitVec3::Y),
+            radius: 4.0,
+        });
+        // one plane (z = -10) a radius under both spines: the nodes would apply but for the scope
+        assert!(one_plane_fits(tube(&a).unwrap(), tube(&b).unwrap()));
+        let region = Box3::from_points([Point3::new(-12.0, -12.0, -12.0), Point3::new(12.0, 12.0, 12.0)]);
+        let traced = crate::intcurve::trace(&a, &b, region).unwrap();
+        assert!(!traced.is_empty());
+        let after = mend(&a, &b, traced.clone());
+        assert_eq!(after, traced);
     }
 }

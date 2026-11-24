@@ -1204,7 +1204,11 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
     let mut lower = f64::INFINITY;
     let mut spent = 0usize;
     let mut undecided = false;
-    let show_cells = std::env::var("FORGE_CAM_CELLS").is_ok();
+    // a print switch, read once per process (an env read per call was measurable here)
+    let show_cells = {
+        static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        *ON.get_or_init(|| std::env::var_os("FORGE_CAM_CELLS").is_some())
+    };
     while let Some((key, c, sd0)) = heap.pop() {
         if key >= lim_clear {
             // the least bound left clears: so does every other cell
@@ -1253,11 +1257,7 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
                     pg,
                 );
                 let img = f.surf.eval(c.p, c.q);
-                let mvd = if line_or_arc {
-                    0.0
-                } else {
-                    diam(&mv.enclose(c.s))
-                };
+                let mvd = if line_or_arc { 0.0 } else { diam(&mv.enclose(c.s)) };
                 let lip = Ival::pt(w.lo).sub(Ival::pt(diam(&img))).sub(Ival::pt(mvd)).lo;
                 if lip > sd.lo {
                     sd = Ival { lo: lip, hi: sd.hi };

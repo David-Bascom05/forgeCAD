@@ -2,7 +2,7 @@ machining
 # Benchmark (verify/forge-cam-quality): clear round the boss, then profile it, with a 10 mm end mill.
 shared tol = 0.01
 
-f    = part("boss.fg", group: "N")
+f    = part("boss.fg", material: "6061-T6")
 m    = machine("generic-vmc3")
 t1   = tool("flat-10", t: 1, stickout: 32, holder: "bt40-er32")
 op1  = setup(f, machine: m, stock: box(margin: (3, 3, 1)), origin: "top-corner", tol: tol)

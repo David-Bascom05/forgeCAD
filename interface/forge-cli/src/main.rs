@@ -37,6 +37,9 @@ fn usage() -> ExitCode {
         "usage: forgecad [open [FILE | APP_ARGS...]]   (open the native app)\n       \
          forgecad agent list | send WINDOW MESSAGE | status WINDOW REQUEST\n       \
          forgecad update [INSTALL_ROOT]   (install latest main)\n       \
+         forgecad photo F [--env E] [--out F.png] [--size WxH]   (the app's view as a PNG, no window)\n       \
+         forgecad record F [--env E] [--out F.mp4|DIR] [--fps N] [--size WxH] [--seconds S] [--frames]\n       \
+           (the environment's timeline, or a turntable, to MP4 by ffmpeg or PNG frames; no window)\n       \
          forgecad build|check|query|measure|render|export FILE.fg [ARGS] [--json] [--labels SEL] [--px N] [--at FEAT] [-o OUT]\n       \
          forgecad edit FILE.fg 'OP'.. [--base VERSION]   (typed ops, as a part's fixes give them; export F.fg stl|3mf|obj|urdf|dxf [SHEET])\n       \
          forgecad cam FILE.fg [sheet] [--json] [-o OUT]   (a machining document: certified toolpaths, the program or setup sheet)\n       \
@@ -146,6 +149,46 @@ fn open_app(args: &[String]) -> ExitCode {
     run_installed("forge-app", args)
 }
 
+/// `forgecad photo|record F ..`: forge-app's headless Capture (`--photo`, `--record`), the output
+/// `<stem>-<env or view>.png|mp4` here unless `--out` names it (research/render/record.md).
+fn capture(cmd: &str, args: &[String]) -> ExitCode {
+    let mut file = None;
+    let (mut env, mut out, mut pass) = (None, None, Vec::new());
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--frames" if cmd == "record" => pass.push(a.clone()),
+            f if !f.starts_with("--") && file.is_none() => file = Some(f.to_string()),
+            "--env" | "--out" | "--size" | "--fps" | "--seconds" => {
+                let Some(v) = it.next().cloned() else {
+                    return usage();
+                };
+                match a.as_str() {
+                    "--env" => env = Some(v),
+                    "--out" => out = Some(v),
+                    "--size" => pass.extend(["--out-size".to_string(), v]),
+                    _ if cmd == "record" => pass.extend([a.clone(), v]),
+                    _ => return usage(),
+                }
+            }
+            _ => return usage(),
+        }
+    }
+    let Some(file) = file else { return usage() };
+    let stem = std::path::Path::new(&file)
+        .file_stem()
+        .map_or("forgecad".into(), |s| s.to_string_lossy().into_owned());
+    let ext = if cmd == "photo" { "png" } else { "mp4" };
+    let out = out.unwrap_or_else(|| format!("{stem}-{}.{ext}", env.as_deref().unwrap_or("view")));
+    let mut app = vec![file];
+    if let Some(e) = env {
+        app.extend(["--env".into(), e]);
+    }
+    app.extend([format!("--{cmd}"), out]);
+    app.extend(pass);
+    run_installed("forge-app", &app)
+}
+
 /// `forgecad update`: the updater installed beside this program (a shell script, or on
 /// Windows a PowerShell one).
 fn update(args: &[String]) -> ExitCode {
@@ -202,6 +245,7 @@ fn main() -> ExitCode {
         Some("open") => open_app(&args[2..]),
         Some("agent") => agent_bridge(&args[2..]),
         Some("update") => update(&args[2..]),
+        Some(c @ ("photo" | "record")) => capture(c, &args[2..]),
         Some(
             t @ ("versions" | "history" | "create_version" | "restore" | "compare" | "release" | "releases"
             | "regenerate_release"),

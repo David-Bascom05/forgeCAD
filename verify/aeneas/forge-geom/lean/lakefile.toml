@@ -9,3 +9,8 @@ path = "../../forge-math/lean"
 
 [[lean_lib]]
 name = "ForgeGeom"
+
+# The spline's binary64 bounds (research/spline-loops/fp), carried to the translation in Refine.lean.
+[[require]]
+name = "splinefp"
+path = "../../../../research/spline-loops/fp"

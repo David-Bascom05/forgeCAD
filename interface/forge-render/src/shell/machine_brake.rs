@@ -370,8 +370,28 @@ impl BrakeUi {
     /// segments, with its section and dimensions for the inset; a press's bed, ram and
     /// housings; what the record does not give as ghosts.
     pub fn library_preview(&self) -> Option<crate::library_mesh::Preview> {
+        preview_of(self.cur.as_ref()?)
+    }
+}
+
+/// A record's thumbnail: a press as its preview; a punch or die a short length of its section
+/// (its full length would be a sliver at 48 px).
+pub fn thumb_preview_of(r: &Rec) -> Option<crate::library_mesh::Preview> {
+    if r.kind == "press" {
+        return preview_of(r);
+    }
+    let secs = forge_brake_builder::preview(r).ok()?;
+    let h = match get(&r.table, "height") {
+        Some(Item::Num(x)) if *x > 0.0 => *x,
+        _ => 100.0,
+    };
+    Some(crate::library_mesh::brake_tool(&secs, &[(h * 1.2, 1)]))
+}
+
+/// A record's preview (the view's): a press as a press, a punch or die along its segments.
+pub fn preview_of(r: &Rec) -> Option<crate::library_mesh::Preview> {
+    {
         use crate::library_mesh as lm;
-        let r = self.cur.as_ref()?;
         if r.kind == "press" {
             return Some(lm::press(&r.table));
         }
@@ -442,7 +462,9 @@ impl BrakeUi {
             }
         }
     }
+}
 
+impl BrakeUi {
     /// When the record's working geometry is not all known: its section drawn from the values
     /// it holds and the template's stand-ins for the rest (to be shown as a ghost), and the
     /// values stood in.
@@ -548,16 +570,21 @@ pub fn library(
     places.push(("brake:search".into(), r.rect));
     let want = st.filter.trim().to_lowercase();
     let mut chosen = None;
-    // the thumbnails, worked out once per record
-    let all: Vec<Rec> = st.entries.iter().map(|e| e.def.clone()).collect();
-    let thumbs: std::collections::HashMap<String, Vec<Vec<[f64; 2]>>> =
-        all.iter().map(|r| (r.id.clone(), st.thumb(r))).collect();
     egui::ScrollArea::vertical()
         .id_salt(("brake:list", st.word))
         .max_height((ui.available_height() - 220.0).max(80.0))
         .show(ui, |ui| {
+            let shown = super::lib_form::level_filter(
+                ui,
+                t,
+                st.word,
+                super::lib_form::level_counts(st.entries.iter().map(|e| e.level)),
+            );
             super::lib_form::empty_levels(ui, t, st.entries.iter().any(|e| e.level != Level::Builtin));
             for lv in [Level::Project, Level::User, Level::Builtin] {
+                if !super::lib_form::level_shown(shown, lv) {
+                    continue;
+                }
                 let here: Vec<&Entry<Rec>> = st
                     .entries
                     .iter()
@@ -597,20 +624,59 @@ pub fn library(
                         for e in inner {
                             let on = st.cur.as_ref().is_some_and(|c| c.id == e.def.id)
                                 && st.origin.as_ref().is_some_and(|(l, _)| *l == e.level);
-                            let mut txt = e.def.id.clone();
+                            let w = |k: &str| match get(&e.def.table, k) {
+                                Some(Item::Str(s)) => s.clone(),
+                                _ => String::new(),
+                            };
+                            let n = |k: &str| match get(&e.def.table, k) {
+                                Some(Item::Num(x)) => Some(*x),
+                                _ => None,
+                            };
+                            let model = if w("model").is_empty() {
+                                w("name")
+                            } else {
+                                w("model")
+                            };
+                            let mut txt = super::lib_form::product_name(&w("maker"), &model)
+                                .unwrap_or_else(|| e.def.id.clone());
                             if !matches!(e.def.table.get("real"), Some(Item::Bool(true))) {
                                 txt.push_str("  · stand-in");
                             }
                             if !e.hides.is_empty() {
-                                txt.push_str("  (hides)");
+                                txt.push_str("  (hides another)");
                             }
-                            let polys = thumbs.get(&e.def.id).cloned().unwrap_or_default();
-                            let r = ui
-                                .horizontal(|ui| {
-                                    super::lib_form::thumb(ui, t, &polys, 26.0);
-                                    ui.selectable_label(on, RichText::new(txt).font(sans(12.0)))
-                                })
-                                .inner;
+                            // the secondary line: what it is picked by
+                            let lt = super::lib_form::len_text;
+                            let mut sub: Vec<String> = match e.def.kind {
+                                "press" => [
+                                    n("force").map(|f| format!("{} kN", forge_units::trim(f))),
+                                    n("bed_length").map(lt),
+                                ]
+                                .into_iter()
+                                .flatten()
+                                .collect(),
+                                "die" => [
+                                    n("v").map(|v| format!("V {}", lt(v))),
+                                    n("angle").map(|a| format!("{}°", forge_units::trim(a))),
+                                ]
+                                .into_iter()
+                                .flatten()
+                                .collect(),
+                                _ => [
+                                    n("height").map(lt),
+                                    n("tip_angle").map(|a| format!("{}°", forge_units::trim(a))),
+                                ]
+                                .into_iter()
+                                .flatten()
+                                .collect(),
+                            };
+                            sub.push(e.def.id.clone());
+                            let key =
+                                super::lib_form::row_key(&[st.word, &e.def.id, &e.file, e.level.name()]);
+                            let r =
+                                super::lib_form::record_row(ui, t, key, on, &txt, &sub.join(" · "), || {
+                                    thumb_preview_of(&e.def)
+                                });
                             places.push((format!("brake:pick:{}", e.def.id), r.rect));
                             if r.clicked() {
                                 chosen = Some((*e).clone());
@@ -729,6 +795,71 @@ fn cell(ui: &mut Ui, t: &Theme, f: &Field, v: Option<&Item>) -> Option<Item> {
             });
             ch.then_some(Item::Arr(a2))
         }
+        // a die's or punch's segments: a small table, Length and Count, a row each
+        (Ty::Points(cols), Some(Item::Arr(rows))) if rows.iter().all(|r| matches!(r, Item::Table(_))) => {
+            let mut rows = rows.clone();
+            let mut ch = false;
+            let mut del = None;
+            let mut add = false;
+            let head = |c: &str, u: &forge_library::schema::Unit| {
+                let w = super::lib_form::humanize(c);
+                match u.suffix().trim() {
+                    "" => w,
+                    "mm" => format!("{w} · {}", super::lib_form::doc_units()),
+                    s => format!("{w} · {s}"),
+                }
+            };
+            ui.vertical(|ui| {
+                egui::Grid::new(("brake:table", &f.path))
+                    .num_columns(cols.len() + 1)
+                    .spacing(vec2(6.0, 2.0))
+                    .show(ui, |ui| {
+                        for (c, u) in cols.iter() {
+                            ui.label(RichText::new(head(c, u)).font(semi(10.5)).color(t.ink2));
+                        }
+                        ui.label("");
+                        ui.end_row();
+                        for (i, row) in rows.iter_mut().enumerate() {
+                            if let Item::Table(tb) = row {
+                                for (c, u) in cols.iter() {
+                                    match tb.get(c) {
+                                        Some(Item::Num(x)) => {
+                                            let mut x = *x;
+                                            let edited = if *u == forge_library::schema::Unit::None {
+                                                super::lib_form::int_edit(ui, &mut x)
+                                            } else {
+                                                num_cell(ui, &mut x, u.suffix())
+                                            };
+                                            if edited {
+                                                tb.set(c, Item::Num(x));
+                                                ch = true;
+                                            }
+                                        }
+                                        _ => {
+                                            ui.label("");
+                                        }
+                                    }
+                                }
+                            }
+                            if super::ux::icon_button(ui, t, "delete", "Remove this row", false).clicked() {
+                                del = Some(i);
+                            }
+                            ui.end_row();
+                        }
+                    });
+                let what = if f.path == "segments" { "segment" } else { "row" };
+                add = !rows.is_empty() && ui.button(format!("+ Add {what}")).clicked();
+            });
+            if let Some(i) = del {
+                rows.remove(i);
+                ch = true;
+            }
+            if add && let Some(last) = rows.last().cloned() {
+                rows.push(last);
+                ch = true;
+            }
+            ch.then_some(Item::Arr(rows))
+        }
         (Ty::Points(cols), Some(Item::Arr(rows))) => {
             let mut rows = rows.clone();
             let mut ch = false;
@@ -794,7 +925,7 @@ fn cell(ui: &mut Ui, t: &Theme, f: &Field, v: Option<&Item>) -> Option<Item> {
                                 }
                                 _ => {}
                             }
-                            if ui.small_button("x").clicked() {
+                            if super::ux::icon_button(ui, t, "delete", "Remove this point", false).clicked() {
                                 del = Some(i);
                             }
                         });
@@ -804,7 +935,7 @@ fn cell(ui: &mut Ui, t: &Theme, f: &Field, v: Option<&Item>) -> Option<Item> {
                         ch = true;
                     }
                     if let Some(last) = rows.last().cloned()
-                        && ui.small_button("+").clicked()
+                        && ui.button("+ Add point").clicked()
                     {
                         rows.push(last);
                         ch = true;
@@ -893,11 +1024,17 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut BrakeUi) {
         .iter()
         .find(|(w, _)| *w == st.word)
         .map_or(st.word, |(_, t)| *t);
-    ui.horizontal(|ui| {
-        ui.label(RichText::new(&cur.id).font(semi(14.0)).color(t.ink));
-        ui.add_space(8.0);
-        ui.label(RichText::new(title).font(sans(11.0)).color(t.ink2));
-    });
+    let word = |k: &str| match get(&st.table, k) {
+        Some(Item::Str(s)) => s.clone(),
+        _ => String::new(),
+    };
+    // a press: maker and model; a punch or die: maker and its catalogue name
+    let model = match word("model") {
+        m if m.is_empty() => word("name"),
+        m => m,
+    };
+    let name = lf::product_name(&word("maker"), &model);
+    lf::title(ui, t, name.as_deref(), &cur.id, title);
     let from = match &st.origin {
         Some((l, f)) => format!("{} level · {f}", l.name()),
         None => "not saved yet".into(),
@@ -929,6 +1066,12 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut BrakeUi) {
     ui.separator();
     let real = matches!(st.table.get("real"), Some(Item::Bool(true)));
     let fields = forge_brake_builder::fields(st.word);
+    // what the view draws that the record does not publish: the sheet shows the same values
+    let drawn = if st.word == "press" {
+        crate::library_mesh::press_drawn(&st.table)
+    } else {
+        Vec::new()
+    };
     let mut change: Option<Change> = None;
     egui::ScrollArea::vertical().id_salt("brake:form").show(ui, |ui| {
         for sec in SECTIONS {
@@ -944,6 +1087,9 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut BrakeUi) {
                 continue;
             }
             lf::section(ui, t, sec);
+            // a table field (a die's segments): its row holds a summary and the chip; the table
+            // itself goes full width under the section, so the chip column never moves
+            let mut tables: Vec<Field> = Vec::new();
             egui::Grid::new(("brake:grid", *sec))
                 .num_columns(3)
                 .spacing(vec2(8.0, 4.0))
@@ -953,31 +1099,75 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut BrakeUi) {
                         lf::name(ui, t, &label, &f.path, f.help, 118.0);
                         let v = get(&st.table, &f.path);
                         match v {
+                            Some(Item::Arr(rows))
+                                if matches!(f.ty, Ty::Points(_))
+                                    && !rows.is_empty()
+                                    && rows.iter().all(|r| matches!(r, Item::Table(_))) =>
+                            {
+                                let total: f64 = rows
+                                    .iter()
+                                    .filter_map(|r| match r {
+                                        Item::Table(tb) => match (tb.get("length"), tb.get("count")) {
+                                            (Some(Item::Num(l)), Some(Item::Num(c))) => Some(l * c),
+                                            (Some(Item::Num(l)), None) => Some(*l),
+                                            _ => None,
+                                        },
+                                        _ => None,
+                                    })
+                                    .sum();
+                                let line = if total > 0.0 {
+                                    format!("{} · {}", rows.len(), lf::len_text(total))
+                                } else {
+                                    rows.len().to_string()
+                                };
+                                ui.label(RichText::new(line).font(sans(12.0)).color(t.ink))
+                                    .on_hover_text("how many, and their length together: the table is below");
+                                tables.push(f.clone());
+                            }
                             Some(v) => {
                                 if let Some(nv) = cell(ui, t, f, Some(v)) {
                                     change = Some(Change::Set(f.clone(), nv));
                                 }
                             }
-                            None if f.cited => {
-                                if lf::unknown_slot(ui, t, 140.0) {
-                                    change = Some(Change::Set(f.clone(), first_value(st.word, f)));
+                            None if f.cited => match drawn.iter().find(|d| d.key == f.path) {
+                                Some(d) => {
+                                    if lf::drawn_cell(ui, t, d, f.unit.suffix(), 140.0) {
+                                        change = Some(Change::Set(f.clone(), Item::Num(d.value)));
+                                    }
                                 }
-                            }
-                            None => {
-                                if ui
-                                    .add(
-                                        egui::Button::new(
-                                            RichText::new("not given · add").font(sans(11.0)).color(t.ink2),
+                                None => {
+                                    if lf::unknown_slot(ui, t, 140.0) {
+                                        change = Some(Change::Set(f.clone(), first_value(st.word, f)));
+                                    }
+                                }
+                            },
+                            None => match drawn.iter().find(|d| d.key == f.path) {
+                                Some(d) => {
+                                    if lf::drawn_cell(ui, t, d, f.unit.suffix(), 140.0) {
+                                        change = Some(Change::Set(f.clone(), Item::Num(d.value)));
+                                    }
+                                }
+                                None => {
+                                    if ui
+                                        .add(
+                                            egui::Button::new(
+                                                RichText::new("not given · add")
+                                                    .font(sans(11.0))
+                                                    .color(t.ink2),
+                                            )
+                                            .min_size(vec2(140.0, 18.0)),
                                         )
-                                        .min_size(vec2(140.0, 18.0)),
-                                    )
-                                    .clicked()
-                                {
-                                    change = Some(Change::Set(f.clone(), first_value(st.word, f)));
+                                        .clicked()
+                                    {
+                                        change = Some(Change::Set(f.clone(), first_value(st.word, f)));
+                                    }
                                 }
-                            }
+                            },
                         }
-                        if f.cited {
+                        let shown = drawn.iter().find(|d| v.is_none() && d.key == f.path);
+                        if let Some(d) = shown {
+                            lf::chip(ui, t, Prov::Estimate, &d.why, false);
+                        } else if f.cited {
                             let p = match status_of(&st.table, &f.path) {
                                 None if v.is_none() => Prov::Unknown,
                                 None if !real => Prov::StandIn,
@@ -992,6 +1182,14 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut BrakeUi) {
                         ui.end_row();
                     }
                 });
+            for f in &tables {
+                ui.add_space(2.0);
+                ui.indent(("brake:table-indent", &f.path), |ui| {
+                    if let Some(nv) = cell(ui, t, f, get(&st.table, &f.path)) {
+                        change = Some(Change::Set(f.clone(), nv));
+                    }
+                });
+            }
         }
         if st.checked {
             ui.separator();
@@ -1004,15 +1202,19 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut BrakeUi) {
                 );
             }
             for f in &st.findings {
-                let (tag, col) = if f.not_checked {
-                    ("NOT CHECKED", t.warn)
+                // in words: which value, then what to do; the record's own words on hover
+                let field = lf::brake_label(&f.path, "").0;
+                let (line, col) = if f.not_checked {
+                    (format!("Not checked: {field} is unknown"), t.warn)
                 } else {
-                    ("PROBLEM", t.error)
+                    (format!("{field}: {}", f.what), t.error)
                 };
+                ui.label(RichText::new(line).font(sans(11.0)).color(col))
+                    .on_hover_text(format!("{}: {}", f.path, f.what));
                 ui.label(
-                    RichText::new(format!("{tag} {}: {} — {}", f.path, f.what, f.fix))
-                        .font(sans(11.0))
-                        .color(col),
+                    RichText::new(format!("  {}", f.fix))
+                        .font(sans(10.5))
+                        .color(t.ink2),
                 );
             }
         }
