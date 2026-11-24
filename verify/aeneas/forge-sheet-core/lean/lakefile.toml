@@ -21,3 +21,9 @@ name = "ForgeSheetCore"
 [[require]]
 name = "forgemath"
 path = "../../forge-math/lean"
+
+# forge-num's translation: the error-free transformations (two_sum, split, two_product) this
+# crate's code calls are forge-num's
+[[require]]
+name = "forgenum"
+path = "../../forge-num/lean"

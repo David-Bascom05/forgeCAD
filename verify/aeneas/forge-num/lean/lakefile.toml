@@ -1,0 +1,11 @@
+name = "forgenum"
+version = "0.1.0"
+defaultTargets = ["ForgeNum"]
+
+# The float bridge: Aeneas's library, verify/ieee754, and f64 as binary64 (Dy, Ival).
+[[require]]
+name = "aeneasf64"
+path = "../../bridge"
+
+[[lean_lib]]
+name = "ForgeNum"
