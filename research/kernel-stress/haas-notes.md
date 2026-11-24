@@ -42,7 +42,7 @@ refusals for time, 2 EdgeOffFace wrong Oks; after: 0, 1 and 0.
 | boolean refused: NoClosedForm, SplitCrossed, InconsistentClassification, SplitThroughSingular, ZeroThickness, UntouchedOnOther | FALLBACK | refusals: the fallback path's work |
 | section wrong (open loops; outline and holes swapped) | forge-agent `features::section` (mesh-based) | the mesh is watertight and consistently oriented, the loops come out signed wrong |
 | mesh not watertight on a valid solid | forge-mesh | a crack at one chord (0.01) and not at 0.05 or 0.002, near a NURBS face's near-singular point |
-| import: FaceWrongSide, LoopsCross, "loops draw no region", whole closed spline with no edges | forge-step (KERNEL-STRESS, next) | zero-area sliver faces (a file defect to heal), a torus face whose loop wraps nearly a turn, an O-ring as one closed NURBS face |
+| import: FaceWrongSide, LoopsCross, "loops draw no region", whole closed spline with no edges | forge-step (KERNEL-STRESS, next) | a zero-area sliver sphere face (a file defect to heal); a torus face whose loop wraps nearly a turn; a three-sided NURBS corner patch whose fourth side is collapsed to a pole, its loop crossing itself in parameters; a sphere face of four arcs that draws no region in parameters; an O-ring as one closed NURBS face with no edges (only spheres are read whole) |
 | import: entity missing or of another kind (Cobot) | none: a file defect | an EDGE_LOOP lists an EDGE_CURVE, an EDGE_CURVE's vertex is an ORIENTED_EDGE; refusing is right |
 
 ## Parasolid (.x_t)
