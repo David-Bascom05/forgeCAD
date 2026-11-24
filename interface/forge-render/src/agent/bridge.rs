@@ -75,7 +75,7 @@ pub const NO_BRIDGE: &str = "In the browser, the agent is your own Claude Code o
 pub const NO_BRIDGE_FIX: &str = "forgecad web . --agent";
 
 #[cfg(target_arch = "wasm32")]
-pub use page::{Bridge, Unbridged, ready};
+pub use page::{Bridge, Unbridged, device, ready, remember, take_said};
 
 #[cfg(target_arch = "wasm32")]
 mod page {
@@ -96,6 +96,36 @@ mod page {
         fn page_events(from: f64, on_line: &Closure<dyn FnMut(String)>);
         #[wasm_bindgen(js_namespace = window, js_name = forge_agent_adopt)]
         fn page_adopt(rel: &str, etag: &str);
+        #[wasm_bindgen(js_namespace = window, js_name = forge_agent_device)]
+        fn page_device() -> f64;
+        #[wasm_bindgen(js_namespace = window, js_name = forge_agent_remember)]
+        fn page_remember(on: bool) -> js_sys::Promise;
+    }
+
+    /// This page's pairing: None with no bridge, Some(0) by the link, else Some(when the
+    /// remembered device lapses, in seconds since the epoch).
+    pub fn device() -> Option<u64> {
+        let d = page_device();
+        (d >= 0.0).then_some(d as u64)
+    }
+
+    /// What remembering or forgetting this device came to, said once.
+    static SAID: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+    /// Remember this device (7 days, a device token kept in the page) or forget it.
+    pub fn remember(on: bool) {
+        wasm_bindgen_futures::spawn_local(async move {
+            let said = wasm_bindgen_futures::JsFuture::from(page_remember(on))
+                .await
+                .ok()
+                .and_then(|v| v.as_string())
+                .unwrap_or_else(|| "Couldn't reach the page's pairing".into());
+            *crate::plat::lock(&SAID) = Some(said);
+        });
+    }
+
+    pub fn take_said() -> Option<String> {
+        crate::plat::lock(&SAID).take()
     }
 
     /// The page was opened from `forgecad web --agent`'s link (it holds the agent's token).

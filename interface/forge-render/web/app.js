@@ -7,8 +7,10 @@
 //   ?token=T         `forgecad web`'s token, when it was started with one (kept for the tab)
 //   #agent=T         `forgecad web --agent`'s agent token: held in memory only, taken off the
 //                    address bar; a reload pairs again from the link forgecad web printed
+//                    ("Remember this device", opt in, keeps a 7-day device token here)
 //   #bridge=URL      a page hosted elsewhere (case 2): `forgecad web DIR --agent --allow-origin
 //                    ORIGIN` on this machine, at http://127.0.0.1:PORT, has the files and agent
+//                    (127.0.0.1 or localhost: a CSP can't name [::1])
 //   ?storage=memory  nothing kept (tests)
 //   ?offscreen=WxH  frames drawn to a texture, not the canvas (a headless browser's software
 //                    WebGPU can't show a canvas); forgecad.pixels() reads them
@@ -20,6 +22,7 @@ import { zip, unzip } from "./zip.js";
 
 const q = new URLSearchParams(location.search);
 const MOUNT = "/project";
+const DEVICE_KEY = "forgecad-agent-device";
 
 // The agent's pairing, from the link forgecad web printed: its token (held here only, never
 // stored) and, for a page hosted elsewhere, where the bridge is (loopback only). Both taken off
@@ -28,10 +31,24 @@ const pairing = (() => {
   const h = new URLSearchParams(location.hash.slice(1));
   const agent = /^[0-9a-f]{32}$/.test(h.get("agent") ?? "") ? h.get("agent") : null;
   const b = h.get("bridge") ?? "";
-  const bridge = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d{1,5}$/.test(b) ? b : null;
+  const bridge = /^http:\/\/(127\.0\.0\.1|localhost):\d{1,5}$/.test(b) ? b : null;
   if (h.has("agent") || h.has("bridge")) history.replaceState(null, "", location.pathname + location.search);
-  return { agent, bridge: agent ? bridge : null };
+  if (agent) return { agent, bridge, remembered: 0 };
+  // no link: this device, if the person had it remembered and it's still in date
+  const kept = rememberedDevice();
+  return kept ? { agent: kept.token, bridge: kept.bridge, remembered: kept.expires } : { agent: null, bridge: null, remembered: 0 };
 })();
+
+/// The device remembered on this browser for this page (opt-in, "Remember this device"): its
+/// token, bridge and lapse; forgotten here once it lapses.
+function rememberedDevice() {
+  try {
+    const d = JSON.parse(localStorage.getItem(DEVICE_KEY) ?? "null");
+    if (d && /^[0-9a-f]{32}$/.test(d.token) && d.expires * 1000 > Date.now()) return d;
+    localStorage.removeItem(DEVICE_KEY);
+  } catch {}
+  return null;
+}
 /// Where the API is: this page's own server, or the paired bridge.
 const apiBase = pairing.bridge ?? "";
 const say = (s) => console.log(`forge-app: ${s}`);
@@ -339,7 +356,8 @@ const loaded = (async () => {
 // The agent: the person's own Claude Code on the machine serving this page (`forgecad web DIR
 // --agent`, interface/forge-cli/src/agent_bridge.rs). Its token is held here only, never stored;
 // the page's id (which page owns the session) lasts the tab, so a reload keeps it.
-const agentToken = pairing.agent;
+let agentToken = pairing.agent;
+let remembered = pairing.remembered;
 let agentClient = sessionStorage.getItem("forgecad-agent-client");
 if (!agentClient) {
   agentClient = crypto.randomUUID();
@@ -348,6 +366,40 @@ if (!agentClient) {
 let agentStream = null;
 const agentHeaders = () => ({ Authorization: `Bearer ${agentToken}`, "X-Forge-Client": agentClient });
 window.forge_agent_ready = () => agentToken !== null;
+/// This page's pairing: -1 none, 0 by the link, else the remembered device's lapse (seconds).
+window.forge_agent_device = () => (agentToken === null ? -1 : remembered);
+/// Remember this device (a device token kept here, 7 days) or forget it (at the bridge too):
+/// what to say of it, as text.
+window.forge_agent_remember = async (on) => {
+  const call = async (name) => JSON.parse(await window.forge_agent_call(name, "{}"));
+  if (on) {
+    const r = await call("remember");
+    if (r.status !== 200) return `Couldn't remember this device: ${JSON.parse(r.body || "{}").error ?? `HTTP ${r.status}`}`;
+    const j = JSON.parse(r.body);
+    try {
+      localStorage.setItem(DEVICE_KEY, JSON.stringify({ token: j.token, expires: j.expires, bridge: pairing.bridge }));
+    } catch {
+      return "Couldn't remember this device: this browser keeps nothing for this page";
+    }
+    remembered = j.expires;
+    return `This device is remembered until ${new Date(j.expires * 1000).toLocaleDateString()}: a reload pairs again by itself`;
+  }
+  const kept = rememberedDevice();
+  try {
+    localStorage.removeItem(DEVICE_KEY);
+  } catch {}
+  if (kept) {
+    // forgotten at the bridge with its own token; this tab keeps the link's, if it has one
+    const t = agentToken;
+    agentToken = kept.token;
+    await call("forget");
+    agentToken = t === kept.token ? null : t;
+  }
+  remembered = 0;
+  return agentToken === null
+    ? "This device is forgotten: open the link forgecad web printed to pair again"
+    : "This device is forgotten: a reload asks to pair again";
+};
 /// A call: its status and body, as JSON text (status 0: it didn't reach the server).
 window.forge_agent_call = async (name, body) => {
   try {
@@ -356,6 +408,13 @@ window.forge_agent_call = async (name, body) => {
       headers: { ...agentHeaders(), "Content-Type": "application/json" },
       body,
     });
+    // a remembered device the bridge no longer knows (forgotten there, or restarted): forget it
+    if (r.status === 401 && remembered) {
+      try {
+        localStorage.removeItem(DEVICE_KEY);
+      } catch {}
+      remembered = 0;
+    }
     return JSON.stringify({ status: r.status, body: await r.text() });
   } catch (e) {
     return JSON.stringify({ status: 0, body: JSON.stringify({ error: String(e) }) });

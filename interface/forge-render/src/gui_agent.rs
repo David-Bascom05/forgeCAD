@@ -236,6 +236,17 @@ impl Gui {
         }
         self.take_followups();
         self.take_bridge_requests();
+        // the page's pairing, for the agent menu's row; what remembering came to, said
+        #[cfg(target_arch = "wasm32")]
+        {
+            if self.shell.agent.switcher {
+                self.shell.agent.device = crate::agent::bridge::device();
+            }
+            if let Some(text) = crate::agent::bridge::take_said() {
+                self.shell.agent.device = crate::agent::bridge::device();
+                self.shell.agent.take(Event::Note { text, error: false });
+            }
+        }
     }
 
     /// The tab's view of the queue: how many, and each one's words.
@@ -989,6 +1000,10 @@ impl Gui {
                     }
                 }
                 AgentAct::Unqueue { index, edit } => self.unqueue(index, edit),
+                #[cfg(target_arch = "wasm32")]
+                AgentAct::RememberDevice(on) => crate::agent::bridge::remember(on),
+                #[cfg(not(target_arch = "wasm32"))]
+                AgentAct::RememberDevice(_) => {}
                 AgentAct::ListConversations => self.agent_list_conversations(),
                 AgentAct::ResumeConversation(id) => self.agent_resume_conversation(&id),
                 AgentAct::NewChat => {

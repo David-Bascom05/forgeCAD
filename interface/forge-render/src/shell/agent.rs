@@ -251,6 +251,8 @@ pub enum AgentAct {
     },
     /// A sent message's marks shown again: its entry, the camera they were drawn over put back.
     ShowMarkup(usize),
+    /// Remember this device with the bridge for a week (true), or forget it.
+    RememberDevice(bool),
     /// A queued message: dropped, or (`edit`) taken back into the box.
     Unqueue {
         index: usize,
@@ -355,6 +357,9 @@ pub struct AgentTab {
     pub started_new: bool,
     /// A picture of the view goes with the next message (the input's view button).
     pub attach_view: bool,
+    /// In a page paired with a bridge: Some(0) by the link, else Some(when this remembered
+    /// device lapses). None elsewhere (no row for it).
+    pub device: Option<u64>,
     /// Pictures pasted or dropped for the next message, in order.
     pub pictures: Vec<crate::agent::Picture>,
     /// The chat's entries' heights as last drawn, and the width they were drawn at.
@@ -2072,6 +2077,22 @@ impl Shell {
                             self.agent.out.push(AgentAct::Settings(SettingsAct::Changed));
                         }
                         ui.separator();
+                        // a paired page: keep the pairing on this device for a week (opt in)
+                        if let Some(d) = self.agent.device {
+                            let mut on = d > 0;
+                            let c = ui
+                                .checkbox(&mut on, "Remember this device for 7 days")
+                                .on_hover_text(
+                                    "A reload pairs again by itself. The token is kept in this browser for this \
+                                     page: any script from this page's site can read it. Untick, or type \
+                                     `forget` where forgecad web runs, to forget it.",
+                                );
+                            rows.push(("agent:switch:remember", c.rect));
+                            if c.changed() {
+                                self.agent.out.push(AgentAct::RememberDevice(on));
+                                close = true;
+                            }
+                        }
                         let b = ui.add(
                             egui::Button::new(egui::RichText::new("Agent settings…").color(t.ink))
                                 .frame(false),

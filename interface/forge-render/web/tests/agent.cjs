@@ -150,8 +150,38 @@ const agentState = (s) => s.agent ?? { entries: [] };
     assert.equal(blocks[0].source.data, png.toString("base64"), "the picture as pasted");
     console.log("ok - a picture pasted on the page goes to Claude Code with the message");
 
+    // "Remember this device": opted in, a device token kept here, and a reload with no link
+    // pairs by itself; unticked, it's forgotten here and at the bridge
+    await click(p, "agent:switch");
+    await click(p, "agent:switch:remember");
+    st = await t.until(p, (s) => agentState(s).entries.some((e) => e.kind === "note" && /remembered until/.test(e.text)), "remembered");
+    const device = await p.evaluate(() => JSON.parse(localStorage.getItem("forgecad-agent-device")));
+    assert.match(device.token, /^[0-9a-f]{32}$/);
+    assert.notEqual(device.token, frag.slice(6), "a device token of its own, not the link's");
+    await p.goto(`${base}?open=plate.fg&offscreen=1280x800`);
+    await p.waitForFunction(() => window.forgecad?.loaded, null, { timeout: 600000 });
+    await t.loaded(p);
+    assert.ok(await p.evaluate(() => window.forge_agent_ready() && window.forge_agent_device() > 0), "paired again by itself");
+    await click(p, "side:tab:Agent");
+    await click(p, "agent:input");
+    await p.evaluate(() => window.forgecad.fc.app_type("again", true));
+    await settle(p);
+    // the turn runs on the device's token: Claude Code's reply comes back to the page
+    await t.until(p, (s) => {
+      const e = agentState(s).entries;
+      const k = e.findIndex((x) => x.kind === "user" && x.text === "again");
+      return k >= 0 && e.slice(k).some((x) => x.kind === "agent") && !agentState(s).running;
+    }, "a reply after the reload");
+    await click(p, "agent:switch");
+    await click(p, "agent:switch:remember");
+    await t.until(p, (s) => agentState(s).entries.some((e) => e.kind === "note" && /forgotten/.test(e.text)), "forgotten");
+    assert.equal(await p.evaluate(() => localStorage.getItem("forgecad-agent-device")), null, "nothing kept");
+    const gone = await fetch(`${base.replace(/\/$/, "")}/api/agent/start`, { method: "POST", headers: { Authorization: `Bearer ${device.token}`, "Content-Type": "application/json" }, body: "{}" });
+    assert.equal(gone.status, 401, "and forgotten at the bridge");
+    console.log("ok - a remembered device pairs again by itself after a reload, until it's forgotten");
+
     assert.deepEqual(elsewhere, [], "no request left for another host");
-    assert.deepEqual(csp, [], "nothing the page needs is refused by its CSP");
+    assert.deepEqual(csp, [], `nothing the page needs is refused by its CSP: ${csp.join(" | ")}`);
     t.check(p);
     console.log("ok - the page asked nothing of any host but its own; its CSP refused nothing it needs");
 

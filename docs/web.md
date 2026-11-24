@@ -76,6 +76,11 @@ Deny), and each turn's edits show as diffs you can undo. Claude Code gets ForgeC
 
 The URL it prints ends `#agent=TOKEN`: open that link. The page keeps the token in memory only
 (it takes it off the address bar and stores it nowhere), so after a reload, open the link again.
+Or tick **Remember this device for 7 days** in the Agent tab's Claude Code menu: the bridge
+gives this browser a token of its own, kept for this page for a week, and a reload pairs again
+by itself. Untick it to forget it (here and at the bridge), or type `forget` in the terminal
+where `forgecad web` runs to forget every remembered device. They're held in memory only, so
+restarting `forgecad web` forgets them too.
 Every agent call needs the token, a localhost Host and the page's own origin; `--agent` is
 served on loopback only (from another machine, use an SSH tunnel). The page never names a
 program, argument, folder or prompt: only messages, answers, a mode (Ask first, Accept edits,
@@ -96,7 +101,7 @@ second link, `https://forge.example/#bridge=http://127.0.0.1:PORT&agent=TOKEN`: 
 - From that origin every call, the files' as well as the agent's, needs the token.
 - If your Claude settings bypass permissions, a page on another origin runs that way only if
   you also give `--allow-bypass`. Without it the session ends and the page says why.
-- The page's own Content-Security-Policy lets it reach loopback (127.0.0.1, localhost, [::1])
+- The page's own Content-Security-Policy lets it reach loopback (127.0.0.1 and localhost)
   and nothing else. Chrome may ask you to allow a public page to reach this machine; that's
   the browser's own check, kept.
 

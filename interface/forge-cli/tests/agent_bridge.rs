@@ -82,6 +82,7 @@ fn serve_with(dir: &Path, claude: &Path, extra: &[&str]) -> Server {
         .env("CLAUDECODE", "1")
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
+        .stdin(Stdio::piped())
         .spawn()
         .unwrap();
     let mut line = String::new();
@@ -708,5 +709,84 @@ fn allow_origin_takes_an_origin_and_comes_with_the_agent() {
         let err = String::from_utf8_lossy(&out.stderr);
         assert!(err.contains(says), "{args:?}: {err}");
     }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+fn with_token(srv: &Server, token: &str, method: &str, path: &str, body: &str) -> Reply {
+    let auth = format!("Bearer {token}");
+    request(
+        srv.port,
+        method,
+        path,
+        &[
+            ("Authorization", &auth),
+            ("Content-Type", "application/json"),
+            ("X-Forge-Client", "p"),
+        ],
+        body,
+    )
+}
+
+#[test]
+fn a_remembered_device_pairs_for_a_week_until_forgotten() {
+    let dir = scratch("remember");
+    std::fs::write(dir.join("proj/plate.fg"), PART).unwrap();
+    let mut srv = serve(&dir, &fake(&dir, "default", false));
+    // asked with the link's token: a device token of its own, and when it lapses
+    let r = post(&srv, "remember", "{}", "p");
+    assert_eq!(r.status, 200, "{}", r.body);
+    let j = Json::parse(&r.body).unwrap();
+    let device = j.get("token").and_then(Json::str).unwrap().to_string();
+    assert_eq!(device.len(), 32);
+    assert_ne!(device, srv.token);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as f64;
+    let expires = j.get("expires").and_then(Json::num).unwrap();
+    assert!(
+        (expires - now - 7.0 * 86400.0).abs() < 60.0,
+        "a week: {expires} vs {now}"
+    );
+    // it does what the link's token does
+    assert_eq!(
+        with_token(&srv, &device, "POST", "/api/agent/start", "{}").status,
+        200
+    );
+    // but makes no more of itself
+    assert_eq!(
+        with_token(&srv, &device, "POST", "/api/agent/remember", "{}").status,
+        403
+    );
+    // forgotten by its page: no longer paired
+    let f = with_token(&srv, &device, "POST", "/api/agent/forget", "{}");
+    assert_eq!(
+        (f.status, f.body.contains("\"forgotten\":1")),
+        (200, true),
+        "{}",
+        f.body
+    );
+    assert_eq!(
+        with_token(&srv, &device, "POST", "/api/agent/start", "{}").status,
+        401
+    );
+    // forgotten at the bridge: `forget` typed in its terminal forgets every one
+    let a = Json::parse(&post(&srv, "remember", "{}", "p").body).unwrap();
+    let b = Json::parse(&post(&srv, "remember", "{}", "p").body).unwrap();
+    let (a, b) = (
+        a.get("token").and_then(Json::str).unwrap().to_string(),
+        b.get("token").and_then(Json::str).unwrap().to_string(),
+    );
+    assert_eq!(with_token(&srv, &a, "POST", "/api/agent/start", "{}").status, 200);
+    writeln!(srv.child.stdin.as_mut().unwrap(), "forget").unwrap();
+    let t = Instant::now();
+    while with_token(&srv, &b, "POST", "/api/agent/start", "{}").status != 401 {
+        assert!(t.elapsed() < Duration::from_secs(10), "never forgotten");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(with_token(&srv, &a, "POST", "/api/agent/start", "{}").status, 401);
+    // the link's token itself is the bridge's, not a device's: it stays
+    assert_eq!(post(&srv, "start", "{}", "p").status, 200);
+    drop(srv);
     let _ = std::fs::remove_dir_all(dir);
 }

@@ -178,7 +178,7 @@ fn default_app() -> Option<PathBuf> {
 }
 
 /// 128 bits from the OS's randomness (std seeds each `RandomState` from it), as hex.
-fn random_token() -> String {
+pub(crate) fn random_token() -> String {
     let mut s = String::new();
     for i in 0..2u64 {
         let mut h = RandomState::new().build_hasher();
@@ -206,11 +206,21 @@ pub fn serve(c: Config, ready: impl FnOnce(&Path, &str)) -> Result<(), String> {
     if let Some(a) = &c.agent {
         url.push_str(&format!("#agent={}", a.token));
 
-        let a = a.clone();
+        let a2 = a.clone();
         std::thread::spawn(move || {
             loop {
                 std::thread::sleep(std::time::Duration::from_secs(30));
-                a.reap();
+                a2.reap();
+            }
+        });
+        // `forget`, typed here: every remembered device is forgotten (their pages pair again)
+        let a3 = a.clone();
+        std::thread::spawn(move || {
+            for l in std::io::stdin().lines().map_while(Result::ok) {
+                if l.trim() == "forget" {
+                    let n = a3.forget(None);
+                    eprintln!("forgecad web: forgot {n} remembered device(s)");
+                }
             }
         });
     }
@@ -436,7 +446,7 @@ fn agent_gate(q: &Request, c: &Config, a: &crate::agent_bridge::Agent) -> Result
         return Err(error(403, "a request from another origin"));
     }
     let given = q.header("authorization").and_then(|v| v.strip_prefix("Bearer "));
-    if !given.is_some_and(|g| same(g, &a.token)) {
+    if !given.is_some_and(|g| a.who(g) != crate::agent_bridge::Who::Nobody) {
         return Err(error(
             401,
             "the agent's token is needed (Authorization: Bearer T, from the URL forgecad web printed)",
@@ -601,7 +611,7 @@ fn answer_inner(q: &Request, c: &Config, lock: &Mutex<()>) -> Response {
             return error(403, "a request from another origin");
         };
         let given = q.header("authorization").and_then(|v| v.strip_prefix("Bearer "));
-        if !given.is_some_and(|g| same(g, &a.token)) {
+        if !given.is_some_and(|g| a.who(g) != crate::agent_bridge::Who::Nobody) {
             return error(
                 401,
                 "the agent's token is needed (Authorization: Bearer T, from the link forgecad web printed)",
@@ -617,6 +627,35 @@ fn answer_inner(q: &Request, c: &Config, lock: &Mutex<()>) -> Response {
             Ok(c) => c,
             Err(e) => return e,
         };
+        let given = q
+            .header("authorization")
+            .and_then(|v| v.strip_prefix("Bearer "))
+            .unwrap_or_default();
+        // a remembered device: made only with the pairing's token; forgotten by its own
+        match name {
+            "remember" if a.who(given) != crate::agent_bridge::Who::Pairing => {
+                return error(
+                    403,
+                    "a device is remembered from the link forgecad web printed, not from another remembered device",
+                );
+            }
+            "remember" => {
+                let days = crate::agent_bridge::DEVICE_DAYS;
+                let (token, until) = a.remember(std::time::Duration::from_secs(days * 86400));
+                eprintln!(
+                    "forgecad web: a page asked to remember this device for {days} days (type `forget` here to forget every one)"
+                );
+                return json(
+                    200,
+                    Json::obj(vec![("token", token.into()), ("expires", (until as f64).into())]),
+                );
+            }
+            "forget" => {
+                let n = a.forget(Some(given));
+                return json(200, Json::obj(vec![("forgotten", (n as f64).into())]));
+            }
+            _ => {}
+        }
         let (status, j) = a.call(name, &q.body, &client);
         return json(status, j);
     }

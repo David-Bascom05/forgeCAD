@@ -11,6 +11,9 @@
 //!   POST /api/agent/answer  {"id", "answer"}             a permission: allow | always | deny
 //!   POST /api/agent/mode    {"mode"}                     default | acceptEdits | plan
 //!   POST /api/agent/stop    {}                           interrupt the turn
+//!   POST /api/agent/remember {}                          a device token for this browser, 7 days
+//!                                                       (with the link's token only)
+//!   POST /api/agent/forget   {}                          that device forgotten (its own token)
 //!
 //! Every call needs the agent's token (`Authorization: Bearer T`), made at start and printed in
 //! the URL once; it's never on disk and never a cookie. Writes are JSON only, and fields other than
@@ -53,6 +56,9 @@ pub struct Agent {
     /// A page on another origin (case 2) may run a session in a bypass mode only with this.
     pub allow_bypass: bool,
     pub cross_origin: bool,
+    /// Devices a page asked to be remembered on: their tokens and when each lapses. In memory
+    /// only: never on disk, gone with the bridge.
+    devices: Mutex<Vec<(String, SystemTime)>>,
     s: Mutex<Session>,
     cv: Condvar,
 }
@@ -81,6 +87,24 @@ struct Session {
 
 /// A call's answer: its status and JSON.
 pub type Answer = (u16, Json);
+
+/// How long a remembered device stays paired.
+pub const DEVICE_DAYS: u64 = 7;
+
+/// Who an agent call comes from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Who {
+    /// The token in the link printed at start.
+    Pairing,
+    /// A remembered device's, in date.
+    Device,
+    Nobody,
+}
+
+/// Equal without saying where they differ.
+fn same(a: &str, b: &str) -> bool {
+    a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0u8, |d, (x, y)| d | (x ^ y)) == 0
+}
 
 fn err(status: u16, e: &str) -> Answer {
     (status, Json::obj(vec![("error", e.into())]))
@@ -149,9 +173,52 @@ impl Agent {
             forgecad: std::env::current_exe().unwrap_or_else(|_| PathBuf::from("forgecad")),
             allow_bypass,
             cross_origin,
+            devices: Mutex::new(Vec::new()),
             s: Mutex::new(Session::default()),
             cv: Condvar::new(),
         }
+    }
+
+    /// Who a token is: the pairing (the link printed at start), a remembered device still in
+    /// date, or no one.
+    pub fn who(&self, given: &str) -> Who {
+        if same(given, &self.token) {
+            return Who::Pairing;
+        }
+        let now = SystemTime::now();
+        let mut d = self.devices.lock().unwrap_or_else(|e| e.into_inner());
+        d.retain(|(_, until)| *until > now);
+        if d.iter().any(|(t, _)| same(given, t)) {
+            Who::Device
+        } else {
+            Who::Nobody
+        }
+    }
+
+    /// A device token for a page that asked to be remembered, good for `for_` (`DEVICE_DAYS`):
+    /// the token and when it lapses (seconds since the epoch). Only the pairing may ask.
+    pub fn remember(&self, for_: Duration) -> (String, u64) {
+        let until = SystemTime::now() + for_;
+        let t = crate::web::random_token();
+        self.devices
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push((t.clone(), until));
+        let secs = until
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        (t, secs)
+    }
+
+    /// One device forgotten (its own token), or all of them: how many went.
+    pub fn forget(&self, which: Option<&str>) -> usize {
+        let mut d = self.devices.lock().unwrap_or_else(|e| e.into_inner());
+        let before = d.len();
+        match which {
+            Some(t) => d.retain(|(x, _)| !same(x, t)),
+            None => d.clear(),
+        }
+        before - d.len()
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Session> {
@@ -743,4 +810,24 @@ fn system_prompt(root: &Path) -> String {
          short sentences unless asked for more: what you changed, and any new error or warning.",
         root.display()
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_device_lapses_when_its_time_is_up() {
+        let a = Agent::new(PathBuf::from("/nowhere"), "p".repeat(32), false, false);
+        assert_eq!(a.who(&"p".repeat(32)), Who::Pairing);
+        let (week, _) = a.remember(Duration::from_secs(7 * 86400));
+        let (brief, _) = a.remember(Duration::from_millis(30));
+        assert_eq!(a.who(&week), Who::Device);
+        assert_eq!(a.who(&brief), Who::Device);
+        std::thread::sleep(Duration::from_millis(60));
+        assert_eq!(a.who(&brief), Who::Nobody, "lapsed");
+        assert_eq!(a.who(&week), Who::Device);
+        assert_eq!(a.who("x"), Who::Nobody);
+        assert_eq!(a.forget(None), 1, "the lapsed one already gone");
+    }
 }

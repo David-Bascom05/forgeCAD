@@ -91,14 +91,16 @@ const agentState = (s) => s.agent ?? { entries: [] };
   const bridgeOrigin = `http://127.0.0.1:${bridge.port}`;
   const b = await t.browser();
   try {
-    const p = await t.page(b, `${origin}/?open=plate.fg&offscreen=1280x800&threads=0#bridge=${bridgeOrigin}&agent=${token}`);
+    // listened to from the start: a CSP the browser refuses as it loads says so then
+    const csp = [];
+    const p = await t.page(b, `${origin}/?open=plate.fg&offscreen=1280x800&threads=0#bridge=${bridgeOrigin}&agent=${token}`, (pg) =>
+      pg.on("console", (m) => /Content Security Policy/.test(m.text()) && csp.push(m.text())),
+    );
     const elsewhere = [];
     p.on("request", (r) => {
       const u = r.url();
       if (![origin, bridgeOrigin, "data:", "blob:"].some((o) => u.startsWith(o))) elsewhere.push(u);
     });
-    const csp = [];
-    p.on("console", (m) => /Content Security Policy/.test(m.text()) && csp.push(m.text()));
     await p.waitForFunction(() => window.forgecad?.loaded, null, { timeout: 600000 });
     await t.loaded(p);
     const kept = await p.evaluate(() => ({ hash: location.hash, local: JSON.stringify({ ...localStorage }), session: JSON.stringify({ ...sessionStorage }) }));
@@ -120,7 +122,7 @@ const agentState = (s) => s.agent ?? { entries: [] };
     console.log("ok - its agent is the machine's Claude Code: asked, allowed, the edit made there and shown here");
 
     assert.deepEqual(elsewhere, [], "no request but to its host and the bridge");
-    assert.deepEqual(csp, [], "its CSP refused nothing it needs");
+    assert.deepEqual(csp, [], `its CSP refused nothing it needs: ${csp.join(" | ")}`);
     t.check(p);
     console.log("ok - it asked nothing of any other host; its CSP refused nothing it needs");
   } finally {
