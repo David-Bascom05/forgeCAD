@@ -299,10 +299,16 @@ pub fn label(name: &str, ribbon: bool, class_opens_dialog: bool) -> Vec<Finding>
         out.push(f("label", false, format!("\"{name}\": three dots for \"…\"")));
     }
     if name.ends_with('…') && !class_opens_dialog {
-        out.push(f("label", false, format!("\"{name}\": \"…\" but no dialog follows")));
+        out.push(f(
+            "label",
+            false,
+            format!("\"{name}\": \"…\" but no dialog follows"),
+        ));
     }
     if ribbon {
-        const SMALL: &[&str] = &["of", "to", "and", "or", "the", "a", "an", "in", "on", "for", "from", "by", "as", "at", "into"];
+        const SMALL: &[&str] = &[
+            "of", "to", "and", "or", "the", "a", "an", "in", "on", "for", "from", "by", "as", "at", "into",
+        ];
         let lower: Vec<&str> = name
             .split(|c: char| c.is_whitespace() || c == '/')
             .skip(1)
@@ -310,7 +316,11 @@ pub fn label(name: &str, ribbon: bool, class_opens_dialog: bool) -> Vec<Finding>
             .filter(|w| w.chars().next().is_some_and(|c| c.is_ascii_lowercase()))
             .collect();
         if !lower.is_empty() {
-            out.push(f("label", false, format!("\"{name}\": not Title Case ({})", lower.join(", "))));
+            out.push(f(
+                "label",
+                false,
+                format!("\"{name}\": not Title Case ({})", lower.join(", ")),
+            ));
         }
     }
     out
