@@ -1108,4 +1108,212 @@ theorem table_spec (R : FanReads FI t b corners) (H : Sound b) (W : b.WF) (hC : 
 
 end table
 
+/-! ## The guard -/
+
+section guard
+variable {T : Type} (FI : topo_fans.FanTopo T) (t : T) {b : Body} {corners : Nat → Nat → List (Nat × Nat)}
+
+theorem used_spec (R : FanReads FI t b corners) (a e nu : Usize) (he : e.val < b.edges.size)
+    (hnu : nu.val = (b.ed e.val).uses.length) :
+    topo_fans.n_fans_loop1_loop0 FI t a e false nu 0#usize ⦃ r => r = decide (a.val ∈ (b.ed e.val).uses) ⦄ := by
+  set U := (b.ed e.val).uses
+  unfold topo_fans.n_fans_loop1_loop0
+  apply loop.spec_decr_nat (fun (y : Bool × Usize) => nu.val - y.2.val)
+    (fun y => y.2.val ≤ nu.val ∧ y.1 = decide (a.val ∈ U.take y.2.val))
+  · rintro ⟨u, j⟩ ⟨hle, hu⟩
+    simp only at hle hu ⊢
+    unfold topo_fans.n_fans_loop1_loop0.body
+    split
+    · rename_i hlt
+      have hlt' : j.val < nu.val := by scalar_tac
+      have hjU : j.val < U.length := by omega
+      step with R.base.edge_use e j he hjU as ⟨o, ho⟩
+      have hov : o.val = U[j.val] := by rw [ho, getElem!_pos U j.val hjU]
+      have htk : U.take (j.val + 1) = U.take j.val ++ [U[j.val]] := List.take_succ_eq_append_getElem hjU
+      apply WP.spec_bind (Pₘ := fun u1 : Bool => u1 = decide (a.val ∈ U.take (j.val + 1)))
+      · split
+        · rename_i hoa; simp only [WP.spec_ok]; rw [htk, ← hov, hoa]; simp
+        · rename_i hoa; simp only [WP.spec_ok]; rw [hu, htk, ← hov]
+          have : a.val ≠ o.val := fun h => hoa (UScalar.eq_of_val_eq h).symm
+          simp [this]
+      · intro u1 hu1
+        step with usize_add_wspec j 1#usize (succ_le_max j nu hlt') as ⟨j1, hj1⟩
+        have hj1v : j1.val = j.val + 1 := by rw [hj1]; exact succ_val j nu hlt'
+        rw [hj1v]; exact ⟨by omega, hu1, by omega⟩
+    · rename_i hlt
+      have hj : j.val = nu.val := by scalar_tac
+      simp only [WP.spec_ok]
+      rw [hu, hj, hnu, List.take_length]
+  · have h0 : (0#usize).val = 0 := rfl
+    simp [h0]
+
+/-- The guard's test of one coedge. -/
+def guardP (b : Body) (bef : Nat → Nat) (v c : Nat) : Bool :=
+  bef c < b.coedges.size && b.stop (bef c) == v && (b.co (bef c)).edge < b.edges.size &&
+    (b.ed (b.co (bef c)).edge).uses.contains (bef c)
+
+theorem closesOk_eq (b : Body) (bef : Nat → Nat) (frm : List Nat) :
+    b.closesOk bef frm = (frm.all (guardP b bef (b.start (frm.headD 0))) && decide (frm.map bef).Nodup) := by
+  unfold Body.closesOk guardP; rfl
+
+set_option hygiene false in
+/-- The guard loop's step to the next coedge, from what this one gave (`hT`, `hF`). -/
+macro "guard_next" : tactic => `(tactic| (
+  step with usize_add_wspec i 1#usize (succ_le_max i hi hlt') as ⟨i2, hi2⟩
+  have hi2v : i2.val = i.val + 1 := by rw [hi2]; exact succ_val i hi hlt'
+  rw [hi2v]
+  refine ⟨by omega, by omega, fun h => ?_, fun h => ?_, ?_⟩
+  rotate_left 2
+  · have h1 := hi2v; have h2 := hlt'; (try rw [hok]); split <;> simp <;> omega
+  · obtain ⟨hg, hnm, hi1⟩ := hT (by simpa using h)
+    refine ⟨by rw [hpre, List.all_append, hall]; simp [hg], ?_, by rw [hpre, List.map_append, hi1]; simp⟩
+    rw [hpre, List.map_append]
+    refine List.nodup_append.2 ⟨hnd, by simp, ?_⟩
+    intro x hx y hy hxy; simp at hy; subst hy; subst hxy; exact hnm hx
+  · rcases hF (by simpa using h) with hg | hm
+    · simp only [Bool.and_eq_false_iff]; left
+      apply hwhole _ _ (i.val + 1 - lo.val); rw [hpre, List.all_append]; simp [hg]
+    · simp only [Bool.and_eq_false_iff]; right; simp only [decide_eq_false_iff_not]
+      apply hwnd frm (i.val + 1 - lo.val); rw [hpre, List.map_append]
+      intro hn; exact (List.nodup_append.1 hn).2.2 _ hm _ (by simp) rfl))
+
+theorem guard_spec (R : FanReads FI t b corners) (H : Sound b) (W : b.WF)
+    (closes : topo_fans.Closes) (bef : Nat → Nat) (hB : BefSpec FI t (b := b) closes true bef)
+    (items : Slice Usize) (lo hi : Usize) (hlo : lo.val ≤ hi.val) (hhi : hi.val ≤ items.val.length)
+    (hfrm : ∀ x ∈ frmOf items lo.val hi.val, Use b x) (vtx nc ne : Usize)
+    (hnc : nc.val = b.coedges.size) (hne : ne.val = b.edges.size) :
+    topo_fans.n_fans_loop1 FI t items hi closes.cf closes.cl closes.cs vtx nc ne
+      (alloc.vec.Vec.new Usize) true lo ⦃ r =>
+      r = ((frmOf items lo.val hi.val).all (guardP b bef vtx.val) && decide ((frmOf items lo.val hi.val).map bef).Nodup) ⦄ := by
+  set frm := frmOf items lo.val hi.val with hfrmdef
+  have hfl : frm.length = hi.val - lo.val := by simp [hfrmdef, frmOf]; omega
+  have hncx := le_max nc
+  unfold topo_fans.n_fans_loop1
+  apply loop.spec_decr_nat
+    (fun (y : alloc.vec.Vec Usize × Bool × Usize) => hi.val - y.2.2.val + (if y.2.1 then 1 else 0))
+    (fun y => lo.val ≤ y.2.2.val ∧ y.2.2.val ≤ hi.val ∧
+      (y.2.1 = true → (frm.take (y.2.2.val - lo.val)).all (guardP b bef vtx.val) ∧
+          ((frm.take (y.2.2.val - lo.val)).map bef).Nodup ∧
+          y.1.val.map (·.val) = (frm.take (y.2.2.val - lo.val)).map bef) ∧
+      (y.2.1 = false → ((frm.all (guardP b bef vtx.val) && decide (frm.map bef).Nodup) = false)))
+  · rintro ⟨into, ok1, i⟩ ⟨hlo', hle, htrue, hfalse⟩
+    simp only at hlo' hle htrue hfalse ⊢
+    unfold topo_fans.n_fans_loop1.body
+    have hwhole : ∀ (P : Nat → Bool) (L : List Nat) (k : Nat), (L.take k).all P = false → L.all P = false := by
+      intro P L k h; rw [← List.take_append_drop k L, List.all_append, h]; rfl
+    have hwnd : ∀ (L : List Nat) (k : Nat), ¬ ((L.take k).map bef).Nodup → ¬ (L.map bef).Nodup := by
+      intro L k h hn; apply h; rw [List.map_take]; exact hn.sublist (List.take_sublist _ _)
+    split
+    · rename_i hok
+      obtain ⟨hall, hnd, hinto⟩ := htrue hok
+      split
+      · rename_i hlt
+        have hlt' : i.val < hi.val := by scalar_tac
+        have hix : i.val < items.length := by have : items.length = items.val.length := rfl; omega
+        step with Slice.index_usize_spec items i hix as ⟨c, hc⟩
+        have hc' : c = items.val[i.val]! := by rw [hc, getElem!_pos]
+        have hpre := frmOf_succ items lo.val i.val hi.val hlo' hlt' hhi
+        rw [← hfrmdef, ← hc'] at hpre
+        have hcu : Use b c.val := hfrm _ (by
+          have : c.val ∈ frm.take (i.val + 1 - lo.val) := by rw [hpre]; simp
+          exact List.mem_of_mem_take this)
+        step with hB c hcu as ⟨a, ha⟩
+        have h1 : (1#usize).val = 1 := rfl
+        split
+        · rename_i hge
+          have hT : false = true → guardP b bef vtx.val c.val = true ∧ bef c.val ∉ (frm.take (i.val - lo.val)).map bef ∧
+              into.val.map (·.val) = (frm.take (i.val - lo.val)).map bef ++ [bef c.val] := fun h => absurd h (by simp)
+          have hF : false = false → (guardP b bef vtx.val c.val = false ∨ bef c.val ∈ (frm.take (i.val - lo.val)).map bef) := by
+            intro _; left; unfold guardP; rw [← ha]; simp; intro h; scalar_tac
+          guard_next
+        · rename_i hge
+          have hav : a.val < b.coedges.size := by rw [← hnc]; scalar_tac
+          step with R.base.coedge_edge a hav as ⟨e, hev⟩
+          split
+          · rename_i hge2
+            have hT : false = true → guardP b bef vtx.val c.val = true ∧ bef c.val ∉ (frm.take (i.val - lo.val)).map bef ∧
+                into.val.map (·.val) = (frm.take (i.val - lo.val)).map bef ++ [bef c.val] := fun h => absurd h (by simp)
+            have hF : false = false → (guardP b bef vtx.val c.val = false ∨ bef c.val ∈ (frm.take (i.val - lo.val)).map bef) := by
+              intro _; left; unfold guardP; rw [← ha, ← hev]; simp; intro _ _ h; scalar_tac
+            guard_next
+          · rename_i hge2
+            have hen : e.val < b.edges.size := by rw [← hne]; scalar_tac
+            step with stop_spec FI t R a hav (by rw [← hev]; exact hen) as ⟨st, hst⟩
+            split
+            · rename_i hsv
+              have hT : false = true → guardP b bef vtx.val c.val = true ∧ bef c.val ∉ (frm.take (i.val - lo.val)).map bef ∧
+                  into.val.map (·.val) = (frm.take (i.val - lo.val)).map bef ++ [bef c.val] := fun h => absurd h (by simp)
+              have hF : false = false → (guardP b bef vtx.val c.val = false ∨ bef c.val ∈ (frm.take (i.val - lo.val)).map bef) := by
+                intro _; left; unfold guardP; rw [← ha, ← hst]
+                have hsv2 : st ≠ vtx := by simpa using hsv
+                have : st.val ≠ vtx.val := fun h => hsv2 (UScalar.eq_of_val_eq h)
+                simp [this]
+              guard_next
+            · rename_i hsv
+              have hsv' : st.val = vtx.val := by simpa using hsv
+              step with R.base.edge_n_uses e hen as ⟨nu, hnu⟩
+              step with used_spec FI t R a e nu hen hnu as ⟨used, hused⟩
+              have hgP : guardP b bef vtx.val c.val = decide (a.val ∈ (b.ed e.val).uses) := by
+                unfold guardP; rw [← ha, ← hst, hsv', ← hev]; simp [hav, hen]
+              apply WP.spec_bind (Pₘ := fun (r : alloc.vec.Vec Usize × Bool) =>
+                (r.2 = true → guardP b bef vtx.val c.val = true ∧ bef c.val ∉ (frm.take (i.val - lo.val)).map bef ∧
+                  r.1.val.map (·.val) = (frm.take (i.val - lo.val)).map bef ++ [bef c.val]) ∧
+                (r.2 = false → (guardP b bef vtx.val c.val = false ∨ bef c.val ∈ (frm.take (i.val - lo.val)).map bef)))
+              · split
+                · rename_i hu
+                  have hderef : (alloc.vec.Vec.deref into).val = into.val := by simp [alloc.vec.Vec.deref]
+                  step with contains_spec (alloc.vec.Vec.deref into) (alloc.vec.Vec.len into) a (by rw [hderef]; simp) as ⟨isin, hisin⟩
+                  rw [hderef] at hisin
+                  have hmemI : a ∈ into.val.take (alloc.vec.Vec.len into).val ↔ bef c.val ∈ (frm.take (i.val - lo.val)).map bef := by
+                    rw [show (alloc.vec.Vec.len into).val = into.val.length by simp, List.take_length, ← ha, ← hinto]
+                    constructor
+                    · intro h; exact List.mem_map_of_mem h
+                    · intro h; obtain ⟨g, hg, hgv⟩ := List.mem_map.1 h; rwa [← UScalar.eq_of_val_eq hgv]
+                  split
+                  · rename_i hin
+                    simp only [WP.spec_ok]
+                    exact ⟨fun h => absurd h (by simp), fun _ => Or.inr (hmemI.1 (by simpa [hisin] using hin))⟩
+                  · rename_i hin
+                    have hil : into.val.length < Usize.max := by
+                      have := congrArg List.length hinto; simp at this
+                      have hin2 : bef c.val ∉ (frm.take (i.val - lo.val)).map bef :=
+                        fun h => hin (by simpa [hisin] using hmemI.2 h)
+                      have hnd2 : ((frm.take (i.val - lo.val)).map bef ++ [bef c.val]).Nodup := by
+                        refine List.nodup_append.2 ⟨hnd, by simp, ?_⟩
+                        intro x hx y hy hxy; simp at hy; subst hy; subst hxy; exact hin2 hx
+                      have hlt2 : ∀ x ∈ (frm.take (i.val - lo.val)).map bef ++ [bef c.val], x < b.coedges.size := by
+                        intro x hx
+                        rcases List.mem_append.1 hx with hx | hx
+                        · obtain ⟨y, hy, rfl⟩ := List.mem_map.1 hx
+                          have := List.all_eq_true.1 hall y hy
+                          unfold guardP at this; simp only [Bool.and_eq_true, decide_eq_true_eq] at this; exact this.1.1.1
+                        · simp at hx; rw [hx, ← ha]; exact hav
+                      have := (hnd2.subperm fun x hx => List.mem_range.2 (hlt2 x hx)).length_le
+                      simp at this
+                      have hncb := le_max nc
+                      omega
+                    step with alloc.vec.Vec.push_spec into a hil as ⟨into2, hinto2⟩
+                    refine ⟨fun _ => ⟨by rw [hgP]; simpa [hused] using hu, fun h => hin (by simpa [hisin] using hmemI.2 h),
+                      by rw [hinto2, List.map_append, hinto]; simp [ha]⟩, fun h => absurd h (by simp [hok])⟩
+                · rename_i hu
+                  simp only [WP.spec_ok]
+                  exact ⟨fun h => absurd h (by simp), fun _ => Or.inl (by rw [hgP]; simpa [hused] using hu)⟩
+              · rintro ⟨into, ok2⟩ ⟨hT, hF⟩
+                guard_next
+      · rename_i hlt
+        have hi : i.val = hi.val := by scalar_tac
+        simp only [WP.spec_ok]
+        have htk : frm.take (i.val - lo.val) = frm := by rw [hi]; exact List.take_of_length_le (by omega)
+        rw [htk] at hall hnd
+        rw [hok, hall, decide_eq_true hnd]; rfl
+    · rename_i hok
+      simp only [WP.spec_ok]
+      have hok' : ok1 = false := by simpa using hok
+      rw [hok', hfalse hok']
+  · have h0 : lo.val - lo.val = 0 := by omega
+    simp only [h0, List.take_zero]
+    exact ⟨le_refl _, hlo, fun _ => ⟨by simp, by simp, by simp⟩, fun h => absurd h (by simp)⟩
+
+end guard
+
 end forge_topo
