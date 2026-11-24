@@ -12,3 +12,6 @@ forge-probe = { path = "../../kernel/forge-probe" }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+forge-machine = { path = "../../kernel/forge-machine" }

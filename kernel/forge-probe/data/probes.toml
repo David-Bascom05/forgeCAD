@@ -303,3 +303,145 @@ basis = "the height A (67.8 or 92.5 mm by battery) cannot be tied to the stylus 
 path = "body"
 status = "unknown"
 basis = "the drawing's dimensions cannot be tied to the body's extents from the text; the machine record's [[machine.body]] gives the installed envelope"
+
+[[probe]]
+id = "tormach-passive-probe"
+kind = "work-probe"
+vendor = "Tormach"
+product = "Passive Probe, PN 50355"
+note = "Measuring direction ±X, ±Y, +Z; normally closed; Renishaw M4 stylus family, stainless steel tip; 10 mm shank (holder not included); 5 pin DIN connector, 3 m cord. Not compatible with the 1500MX or a 770MX sold after 1 December 2025."
+real = true
+sensing = "contact"
+transmission = "wired"
+repeat = 0.015
+overtravel = [15, 5]
+[[probe.cite]]
+path = "transmission"
+status = "published"
+source = "https://tormach.com/passive-probe-probe-only-50355.html (Tormach, Passive Probe with 5 pin DIN connector, PN 50355, product page: Specifications)"
+taken = "2026-11-24"
+value = "interfaces with the mill using a 5 pin DIN connector; 3 meter cord"
+[[probe.cite]]
+path = "repeat"
+status = "estimate"
+source = "https://tormach.com/passive-probe-probe-only-50355.html (Tormach, Passive Probe with 5 pin DIN connector, PN 50355, product page: Specifications)"
+taken = "2026-11-24"
+value = "repeatability 0.00059 in. (0.015 mm)"
+basis = "the page does not say which statistic 0.015 mm is; recorded as the 2σ value (if it is 1σ the 2σ is twice it, so this may err low)"
+[[probe.cite]]
+path = "overtravel"
+status = "published"
+source = "https://tormach.com/passive-probe-probe-only-50355.html (Tormach, Passive Probe with 5 pin DIN connector, PN 50355, product page: Specifications)"
+taken = "2026-11-24"
+value = "maximum over-travel in +Z 0.1968 in. (5.0 mm); maximum angular displacement ±15° radial (X-Y)"
+[[probe.cite]]
+path = "max_feed"
+status = "unknown"
+basis = "the page states no probing feed"
+[[probe.cite]]
+path = "stylus"
+status = "unknown"
+basis = "Renishaw M4 stylus family; no ball size or length stated: the setup gives the stylus"
+[[probe.cite]]
+path = "body"
+status = "unknown"
+basis = "the page gives no body dimensions"
+[[probe.offer]]
+machines = ["tormach-pcnc-440", "tormach-770m", "tormach-770mx", "tormach-1100m", "tormach-1100mx"]
+status = "option"
+source = "https://tormach.com/passive-probe-probe-only-50355.html (Tormach, Passive Probe with 5 pin DIN connector, PN 50355, product page: Specifications)"
+taken = "2026-11-24"
+note = "compatibility: PCNC 440, PCNC 770, 770M, 770M+, 770MX sold before 1 December 2025 with serial number beginning MF or MH, PCNC 1100, 1100M, 1100M+, 1100MX; sold separately ($649.00 on the page)"
+
+[[probe]]
+id = "tormach-wireless-probe"
+kind = "work-probe"
+vendor = "Tormach"
+product = "Wireless Probe and Tool Setter Kit PN 54582: probe"
+note = "Stylus sensing direction ±X, ±Y, +Z; trigger force Z 591-1000 g, X-Y 51-92 g; optical sending/receiving distance up to 6 m; 2 x ½AA lithium thionyl chloride batteries."
+real = true
+sensing = "contact"
+transmission = "optical"
+repeat = 0.001
+overtravel = [12, 6]
+[[probe.cite]]
+path = "transmission"
+status = "published"
+source = "https://tormach.com/wireless-probe-and-tool-setter-kit-54582.html (Tormach, Wireless Probe and Tool Setter Kit, PN 54582, product page: Specifications)"
+taken = "2026-11-24"
+value = "optical signal receiving/sending distance: ≤ 6 m"
+[[probe.cite]]
+path = "repeat"
+status = "published"
+source = "https://tormach.com/wireless-probe-and-tool-setter-kit-54582.html (Tormach, Wireless Probe and Tool Setter Kit, PN 54582, product page: Specifications)"
+taken = "2026-11-24"
+value = "unidirectional repeatability (2σ): ≤ 1 µm (the bound recorded)"
+[[probe.cite]]
+path = "overtravel"
+status = "published"
+source = "https://tormach.com/wireless-probe-and-tool-setter-kit-54582.html (Tormach, Wireless Probe and Tool Setter Kit, PN 54582, product page: Specifications)"
+taken = "2026-11-24"
+value = "stylus sensing over-travel: X-Y ±12°, Z +6 mm"
+[[probe.cite]]
+path = "max_feed"
+status = "unknown"
+basis = "the page states no probing feed"
+[[probe.cite]]
+path = "stylus"
+status = "unknown"
+basis = "the page states no stylus: the setup gives it"
+[[probe.cite]]
+path = "body"
+status = "unknown"
+basis = "the page gives no body dimensions"
+[[probe.offer]]
+machines = ["tormach-1500mx", "tormach-770mx"]
+status = "option"
+source = "https://tormach.com/wireless-probe-and-tool-setter-kit-54582.html (Tormach, Wireless Probe and Tool Setter Kit, PN 54582, product page: Specifications)"
+taken = "2026-11-24"
+note = "the kit (probe, tool setter, optical receiver) is compatible with the 1500MX and the 770MX with ML serial numbers, sold after 1 December 2025; sold separately ($6,645.00 on the page)"
+
+[[probe]]
+id = "tormach-wireless-tool-setter"
+kind = "tool-setter"
+vendor = "Tormach"
+product = "Wireless Probe and Tool Setter Kit PN 54582: tool setter"
+note = "Stylus sensing direction ±X, ±Y, +Z; over-travel X-Y ±12°, Z 6 mm; optical sending distance 3.5-6 m; IP68."
+real = true
+sensing = "contact"
+transmission = "optical"
+repeat = 0.001
+[[probe.cite]]
+path = "transmission"
+status = "published"
+source = "https://tormach.com/wireless-probe-and-tool-setter-kit-54582.html (Tormach, Wireless Probe and Tool Setter Kit, PN 54582, product page: Specifications)"
+taken = "2026-11-24"
+value = "toolsetter: optical signal sending distance 3.5-6 m"
+[[probe.cite]]
+path = "repeat"
+status = "published"
+source = "https://tormach.com/wireless-probe-and-tool-setter-kit-54582.html (Tormach, Wireless Probe and Tool Setter Kit, PN 54582, product page: Specifications)"
+taken = "2026-11-24"
+value = "toolsetter: repeatability (2σ) ≤ 1 µm (the bound recorded)"
+[[probe.cite]]
+path = "max_feed"
+status = "unknown"
+basis = "the page states no probing feed"
+[[probe.cite]]
+path = "trigger"
+status = "unknown"
+basis = "the page gives no dimensions; the machine record's setter `at` gives the trigger point as installed"
+[[probe.cite]]
+path = "disc_d"
+status = "unknown"
+basis = "the page does not state the stylus size"
+[[probe.cite]]
+path = "body"
+status = "unknown"
+basis = "the page gives no dimensions; the machine record's [[machine.body]] gives the installed envelope"
+[[probe.offer]]
+machines = ["tormach-1500mx", "tormach-770mx"]
+status = "option"
+source = "https://tormach.com/wireless-probe-and-tool-setter-kit-54582.html (Tormach, Wireless Probe and Tool Setter Kit, PN 54582, product page: Specifications)"
+taken = "2026-11-24"
+note = "part of the kit: 1500MX, and 770MX with ML serial numbers sold after 1 December 2025"
