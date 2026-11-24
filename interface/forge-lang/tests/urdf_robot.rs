@@ -401,3 +401,50 @@ fn the_example_robot_document_exports() {
     assert!(gap(&run, &robot, &e) < 1e-9);
     let _ = Path::new("");
 }
+
+/// The largest gap (mm, and axis × 1000) between the view's placement of each occurrence and
+/// `run`'s solve.
+fn view_gap(run: &Run, placed: &[(String, forge_math::Frame)]) -> f64 {
+    let asm = run.asm.as_ref().expect("an assembly");
+    let mut worst = 0.0f64;
+    let mut seen = 0;
+    for (path, f) in placed {
+        let Some((_, _, pose)) = asm.occurrences.iter().find(|o| o.0 == *path) else {
+            continue;
+        };
+        seen += 1;
+        worst = worst
+            .max((f.origin - pose.origin).length())
+            .max((f.x().get() - pose.x().get()).length() * 1000.0)
+            .max((f.z().get() - pose.z().get()).length() * 1000.0);
+    }
+    assert!(seen > 0, "no occurrence placed");
+    worst
+}
+
+#[test]
+fn the_view_drives_the_robot_as_the_assembly_moves() {
+    let (run, e) = export("");
+    let v = e.expect("plain").view;
+    assert_eq!(v.root, "base");
+    // at the export pose: where the solve put every part
+    let at = v.place(&std::collections::BTreeMap::new());
+    assert!(view_gap(&run, &v.occurrences(&at)) < 1e-9);
+    // the elbow at 20deg and the finger slid 7 mm: as the assembly solves those values
+    let q = std::collections::BTreeMap::from([
+        ("elbow".to_string(), 20f64.to_radians()),
+        ("grip".to_string(), 0.007),
+    ]);
+    let (moved, _) = arm_run(&|s| {
+        s.replace("param elbow.turn = -60deg", "param elbow.turn = 20deg")
+            .replace("param grip.along = 0", "param grip.along = 7")
+    });
+    let placed = v.occurrences(&v.place(&q));
+    assert!(view_gap(&moved, &placed) < 1e-9, "{}", view_gap(&moved, &placed));
+    // held within limits
+    let elbow = v.joints.iter().find(|j| j.name == "elbow").expect("elbow");
+    assert_eq!(elbow.clamp(10.0), 135f64.to_radians());
+    // a centre of mass in mm, a mass in kg
+    let up = v.links.iter().find(|l| l.name == "upper").expect("upper");
+    assert!((up.com[0] - 60.0).abs() < 1e-9 && up.mass.is_some());
+}

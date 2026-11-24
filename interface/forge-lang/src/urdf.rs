@@ -484,6 +484,8 @@ pub struct Exported {
     /// the override's), as the document writes them; the source's is empty where the field has
     /// none to link to (effort, a robot-made geometry).
     pub overrides: Vec<(usize, String, String, String, String)>,
+    /// The robot as an editor draws and drives it.
+    pub view: RobotView,
 }
 
 impl Exported {
@@ -823,6 +825,8 @@ struct Visual {
     name: String,
     /// The source body (top-level instance) it draws; empty for one a robot document added.
     body: String,
+    /// The occurrence it draws, its path as the assembly names it; empty if none.
+    occ: String,
     geo: Geo,
     /// In the link frame.
     at: Frame,
@@ -973,6 +977,7 @@ impl Exported {
             residual: 0.0,
             watertight: true,
             overrides: vec![],
+            view: RobotView::default(),
         }
     }
 }
@@ -995,8 +1000,10 @@ fn complete(
         links,
         joints,
         transmissions,
+        root,
         ..
     } = model;
+    ex.view = view_of(&links, &joints, &root);
     let missing: Vec<String> = joints
         .iter()
         .filter(|j| has_limit(j) && (actuation(o, j).0.is_none() || actuation(o, j).1.is_none()))
@@ -1105,6 +1112,7 @@ fn part(
     let v = Visual {
         name: ident(name),
         body: name.to_string(),
+        occ: name.to_string(),
         geo: Geo::Mesh {
             file: mesh_name.clone(),
             scale: [0.001; 3],
@@ -1474,6 +1482,7 @@ fn assembly(run: &Run, asm: &crate::asm::AsmOut, o: &Options, ex: &mut Exported)
             visuals[g].push(Visual {
                 name: vnames.take(path),
                 body: kin.bodies[*b].name.clone(),
+                occ: path.clone(),
                 geo: Geo::Mesh {
                     file,
                     scale: [0.001; 3],
@@ -2277,6 +2286,7 @@ fn apply(m: &mut Model, r: &Robot, o: &mut Options, ex: &mut Exported) -> Result
         let base = |geo: Geo, at: Frame| Visual {
             name: format!("{lname}_{}", if g.collision { "collision" } else { "visual" }),
             body: String::new(),
+            occ: String::new(),
             geo,
             at,
             material: None,
@@ -2403,6 +2413,7 @@ fn apply(m: &mut Model, r: &Robot, o: &mut Options, ex: &mut Exported) -> Result
                 l.collisions = vec![Visual {
                     name: format!("{}_hull", l.name),
                     body: String::new(),
+                    occ: String::new(),
                     geo: Geo::Hull,
                     at: Frame::WORLD,
                     material: None,
@@ -3029,6 +3040,217 @@ fn hull(pts: &[Point3]) -> Option<(Vec<Point3>, Vec<[u32; 3]>)> {
         triangles.push(t);
     }
     Some((positions, triangles))
+}
+
+// ---- the robot as an editor draws and drives it -----------------------------------------------
+
+/// The robot as an editor draws and drives it: every link with its geometry and centre of mass,
+/// every joint with its origin, axis, limits, value at the export pose and mimic. Lengths mm
+/// (positions and limits in URDF units: m or rad, as the joint's kind).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RobotView {
+    pub root: String,
+    pub links: Vec<ViewLink>,
+    pub joints: Vec<ViewJoint>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ViewLink {
+    pub name: String,
+    /// The source instances it holds.
+    pub bodies: Vec<String>,
+    pub mass: Option<f64>,
+    /// mm, link frame.
+    pub com: [f64; 3],
+    pub visuals: Vec<ViewGeo>,
+    pub collisions: Vec<ViewGeo>,
+    /// A chain's massless link (or a frame a robot added).
+    pub dummy: bool,
+}
+
+/// One visual or collision: for a source part's own mesh, `name` is its occurrence's path.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ViewGeo {
+    pub name: String,
+    pub shape: Shape,
+    /// mm, link frame.
+    pub at: Frame,
+}
+
+/// A geometry's shape, mm (a mesh's file in its own units, `scale` to metres).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Shape {
+    Mesh { file: String, scale: [f64; 3] },
+    Box([f64; 3]),
+    Cylinder { r: f64, len: f64 },
+    Sphere(f64),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ViewJoint {
+    pub name: String,
+    pub kind: &'static str,
+    /// The source joint it carries (or its own name).
+    pub of: String,
+    pub parent: String,
+    pub child: String,
+    /// mm, the parent link's frame.
+    pub origin: Frame,
+    pub axis: Option<[f64; 3]>,
+    pub limit: Option<(f64, f64)>,
+    pub position: Vec<f64>,
+    /// (leader, multiplier, offset), URDF units.
+    pub mimic: Option<(String, f64, f64)>,
+}
+
+/// A turn by `t` about the unit axis `u` (Rodrigues), as a frame at the origin.
+fn turn(u: [f64; 3], t: f64) -> Frame {
+    let (s, c) = dmath::sin_cos(t);
+    let k = 1.0 - c;
+    let (x, y, z) = (u[0], u[1], u[2]);
+    let col = |a: [f64; 3]| Vec3::new(a[0], a[1], a[2]);
+    let ex = col([c + x * x * k, y * x * k + z * s, z * x * k - y * s]);
+    let ez = col([x * z * k + y * s, y * z * k - x * s, c + z * z * k]);
+    let ez = ez.normalize().unwrap_or(forge_math::UnitVec3::Z);
+    Frame::from_zx(Point3::ORIGIN, ez, ex).unwrap_or(Frame::WORLD)
+}
+
+impl ViewJoint {
+    /// Its motion at these values (URDF units), mm.
+    pub fn motion(&self, q: &[f64]) -> Frame {
+        let v = |i: usize| q.get(i).copied().unwrap_or(0.0);
+        let a = self.axis.unwrap_or([1.0, 0.0, 0.0]);
+        match self.kind {
+            "revolute" | "continuous" => turn(a, v(0)),
+            "prismatic" => Frame::WORLD.with_origin(Point3::new(
+                a[0] * v(0) * 1000.0,
+                a[1] * v(0) * 1000.0,
+                a[2] * v(0) * 1000.0,
+            )),
+            "planar" => Frame::WORLD
+                .with_origin(Point3::new(v(0) * 1000.0, v(1) * 1000.0, 0.0))
+                .compose(&turn([0.0, 0.0, 1.0], v(2))),
+            _ => Frame::WORLD,
+        }
+    }
+
+    /// A value held within the joint's limits.
+    pub fn clamp(&self, v: f64) -> f64 {
+        match self.limit {
+            Some((lo, hi)) => v.clamp(lo, hi),
+            None => v,
+        }
+    }
+}
+
+impl RobotView {
+    /// Each link's frame in the robot's (mm) with these joint values (URDF units; a joint not
+    /// given keeps its export position); a mimic follows its leader.
+    pub fn place(&self, q: &BTreeMap<String, f64>) -> BTreeMap<String, Frame> {
+        let value = |j: &ViewJoint| -> Vec<f64> {
+            if let Some((leader, m, off)) = &j.mimic {
+                let l = self.joints.iter().find(|x| x.name == *leader);
+                let lv = q
+                    .get(leader)
+                    .copied()
+                    .or_else(|| l.and_then(|l| l.position.first().copied()))
+                    .unwrap_or(0.0);
+                return vec![m * lv + off];
+            }
+            match q.get(&j.name) {
+                Some(v) => vec![*v],
+                None => j.position.clone(),
+            }
+        };
+        let mut at = BTreeMap::from([(self.root.clone(), Frame::WORLD)]);
+        let mut grew = true;
+        while grew {
+            grew = false;
+            for j in &self.joints {
+                if at.contains_key(&j.child) {
+                    continue;
+                }
+                if let Some(p) = at.get(&j.parent).copied() {
+                    at.insert(
+                        j.child.clone(),
+                        p.compose(&j.origin).compose(&j.motion(&value(j))),
+                    );
+                    grew = true;
+                }
+            }
+        }
+        at
+    }
+
+    /// Every visual of a source part, by its occurrence's path, where these link frames put it.
+    pub fn occurrences(&self, frames: &BTreeMap<String, Frame>) -> Vec<(String, Frame)> {
+        let mut out = vec![];
+        for l in &self.links {
+            let Some(f) = frames.get(&l.name) else { continue };
+            for v in &l.visuals {
+                out.push((v.name.clone(), f.compose(&v.at)));
+            }
+        }
+        out
+    }
+}
+
+fn view_geo(v: &Visual) -> Option<ViewGeo> {
+    let shape = match &v.geo {
+        Geo::Mesh { file, scale, .. } => Shape::Mesh {
+            file: file.clone(),
+            scale: *scale,
+        },
+        Geo::Box(b) => Shape::Box(*b),
+        Geo::Cylinder { r, len } => Shape::Cylinder { r: *r, len: *len },
+        Geo::Sphere(r) => Shape::Sphere(*r),
+        Geo::Hull => return None,
+    };
+    Some(ViewGeo {
+        name: if v.occ.is_empty() {
+            v.name.clone()
+        } else {
+            v.occ.clone()
+        },
+        shape,
+        at: v.at,
+    })
+}
+
+fn view_of(links: &[Wl], joints: &[Wj], root: &str) -> RobotView {
+    RobotView {
+        root: root.to_string(),
+        links: links
+            .iter()
+            .map(|l| ViewLink {
+                name: l.name.clone(),
+                bodies: l.bodies.clone(),
+                mass: l.inertial.as_ref().map(|i| i.mass),
+                com: l
+                    .inertial
+                    .as_ref()
+                    .map_or([0.0; 3], |i| i.com.map(|x| x * 1000.0)),
+                visuals: l.visuals.iter().filter_map(view_geo).collect(),
+                collisions: l.collisions.iter().filter_map(view_geo).collect(),
+                dummy: l.dummy || l.bodies.is_empty(),
+            })
+            .collect(),
+        joints: joints
+            .iter()
+            .map(|j| ViewJoint {
+                name: j.name.clone(),
+                kind: j.kind,
+                of: j.of.clone(),
+                parent: j.parent.clone(),
+                child: j.child.clone(),
+                origin: j.origin,
+                axis: j.axis,
+                limit: j.limit,
+                position: j.position.clone(),
+                mimic: j.mimic.clone(),
+            })
+            .collect(),
+    }
 }
 
 #[cfg(test)]

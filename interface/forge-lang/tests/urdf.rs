@@ -660,3 +660,32 @@ fn effort_and_velocity_are_never_zero_unless_asked() {
         e.warnings
     );
 }
+
+#[test]
+fn the_view_moves_a_mimic_with_its_leader() {
+    let d = project("view-gear");
+    let src = "assembly
+
+param g.turn = 40deg
+base = part(\"base.fg\", ground: true)
+w1 = part(\"bar.fg\")
+w2 = part(\"crank.fg\")
+g = revolute(w1.a, base.o2, turn: turn)
+h = revolute(w2.a, base.o4)
+m = gear(g, h, ratio: 0.5)
+";
+    let (_, e) = export(&d, src, &["urdf"]);
+    let e = e.expect("the gear");
+    let v = &e.view;
+    let h = v.joints.iter().find(|j| j.name == "h").expect("h");
+    let (_, m, off) = h.mimic.clone().expect("a mimic");
+    let lead = std::collections::BTreeMap::from([("g".to_string(), 1.0)]);
+    let both = std::collections::BTreeMap::from([("g".to_string(), 1.0), ("h".to_string(), m + off)]);
+    let (a, b) = (v.place(&lead), v.place(&both));
+    let (fa, fb) = (a["w2"], b["w2"]);
+    assert!((fa.origin - fb.origin).length() < 1e-12);
+    assert!((fa.x().get() - fb.x().get()).length() < 1e-12);
+    // and it did move from the export pose
+    let rest = v.place(&std::collections::BTreeMap::new());
+    assert!((rest["w2"].x().get() - fa.x().get()).length() > 1e-3);
+}
