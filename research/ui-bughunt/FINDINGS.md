@@ -321,9 +321,10 @@ list on main: this branch's new strings add none).
 
 - `?open=../../../etc/passwd` (any path with `..`): app.js's `cleanPath` threw at the top level,
   before `start_app`, so the page stayed dead (`window.forgecad` never set, a page error). The
-  app now starts with nothing open, and its status says "Not opened: not a project path: …"
-  (`app_say`). File > Save As with such a name threw the same way and said nothing. Now it says
-  "Not saved: …".
+  app now starts with nothing open (its empty state: New part, Open…), and its status says
+  "Couldn't open ../x: it isn't in this project." (`app_say`; UX-LEAD's wording). File > Save As
+  with such a name threw the same way and said nothing. Now it says "Couldn't save as ../x: it
+  isn't in this project."
 - `?open=machined/flange_dwg.fg`: the page opens the linked file before the project's other
   files (they follow its first frame), then asks for a rebuild once they have come. That rebuild
   covered the part document and machining documents, not a drawing, so the sheet stayed empty

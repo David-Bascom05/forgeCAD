@@ -189,8 +189,9 @@ window.forge_save_as = (name) => {
   // a name outside the project is refused, and the app says so (it threw, and nothing said)
   try {
     fc.app_save_as(`${MOUNT}/${cleanPath(n)}`);
-  } catch (e) {
-    fc.app_say(`Not saved: ${e.message}`);
+  } catch {
+    // (cleanPath refuses only a path that climbs out with `..`)
+    fc.app_say(`Couldn't save as ${n}: it isn't in this project.`);
   }
 };
 // the link's file, when it is a path the project may hold; else the app starts with none and
@@ -200,8 +201,8 @@ let refused = null;
 if (q.get("open")) {
   try {
     asked = cleanPath(q.get("open"));
-  } catch (e) {
-    refused = `Not opened: ${e.message}`;
+  } catch {
+    refused = `Couldn't open ${q.get("open")}: it isn't in this project.`;
   }
 }
 // the app first, with the part asked for: the project's other files follow behind its first frame
