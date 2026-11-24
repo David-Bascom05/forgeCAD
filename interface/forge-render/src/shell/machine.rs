@@ -102,12 +102,6 @@ pub struct MachineUi {
     /// Hosted by the Machine Builder environment: the library is drawn in its browser
     /// (`Shell::machine_side`), not in a floating panel.
     pub in_env: bool,
-    /// Which library the workspace edits: "machine", or a tooling kind ("tool", "holder", ...).
-    pub lib: &'static str,
-    /// The tooling tab's state, while a tooling kind is chosen.
-    pub tooling: Option<super::machine_tooling::ToolingUi>,
-    /// The tooling record last shown (its text): the host is told when it changes.
-    tooling_seen: String,
 }
 
 fn today() -> String {
@@ -157,9 +151,6 @@ impl MachineUi {
             file_in: String::new(),
             filter: String::new(),
             in_env: false,
-            lib: "machine",
-            tooling: None,
-            tooling_seen: String::new(),
         };
         if let Some(e) = m.cat.entries.first() {
             let (d, l, f) = (e.def.clone(), e.level, e.file.clone());
@@ -831,25 +822,6 @@ impl Shell {
     /// The workspace's panels, while it is open.
     pub fn machine_ui(&mut self, ctx: &egui::Context) {
         let Some(mut st) = self.machine.take() else { return };
-        // the tooling record changed: the host draws it again
-        if let Some(tu) = &st.tooling {
-            let k = format!("{:?}", tu.cur.as_ref().map(|r| &r.typed));
-            if k != st.tooling_seen {
-                // another record (not an edit of this one): the view fits it
-                let id = |x: &str| {
-                    x.split("id: \"")
-                        .nth(1)
-                        .and_then(|r| r.split('"').next())
-                        .map(str::to_string)
-                };
-                if id(&k) != id(&st.tooling_seen) {
-                    st.fit += 1;
-                }
-                st.tooling_seen = k;
-                st.geom += 1;
-                st.pose += 1;
-            }
-        }
         if st.cat_gen != catalog::generation() {
             st.reload_catalog();
         }
@@ -879,12 +851,7 @@ impl Shell {
                         });
                     });
                     ui.add_space(4.0);
-                    lib_choice(ui, &mut st, &mut places);
-                    if st.lib == "machine" {
-                        library(ui, &t, &mut st, &mut places);
-                    } else {
-                        tooling_library(ui, &t, &mut st, &mut places);
-                    }
+                    library(ui, &t, &mut st, &mut places);
                 });
         }
         // the editor
@@ -896,13 +863,7 @@ impl Shell {
             .fixed_pos(pos2(v.right() - 438.0, v.top() + 8.0))
             .fixed_size(vec2(430.0, (v.height() - 140.0).max(200.0)))
             .frame(super::theme::panel_frame(&t))
-            .show(ctx, |ui| {
-                if st.lib == "machine" {
-                    editor(ui, &t, &mut st, &mut places)
-                } else if let Some(tu) = &mut st.tooling {
-                    super::machine_tooling::editor(ui, &t, tu)
-                }
-            });
+            .show(ctx, |ui| editor(ui, &t, &mut st, &mut places));
         // the jog bar
         egui::Window::new("Jog")
             .id(egui::Id::unique("machine:jog"))
@@ -912,13 +873,7 @@ impl Shell {
             .fixed_pos(pos2(v.left() + 8.0, v.bottom() - 124.0))
             .fixed_size(vec2((v.width() - 16.0).max(200.0), 108.0))
             .frame(super::theme::panel_frame(&t))
-            .show(ctx, |ui| {
-                if st.lib == "machine" {
-                    jog(ui, &t, &mut st, &mut places)
-                } else {
-                    tooling_bar(ui, &t, &mut st, &mut places)
-                }
-            });
+            .show(ctx, |ui| jog(ui, &t, &mut st, &mut places));
         self.places.extend(places);
         if close {
             self.status = "Machine Builder closed".into();
@@ -926,102 +881,6 @@ impl Shell {
             self.machine = Some(st);
         }
     }
-}
-
-/// The library the workspace edits: machines, or one of forge-tooling's kinds.
-fn lib_choice(ui: &mut Ui, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
-    let title = |w: &str| {
-        if w == "machine" {
-            "Machines"
-        } else {
-            forge_tooling_builder::KINDS
-                .iter()
-                .find(|(k, _, _)| *k == w)
-                .map_or("?", |(_, _, t)| *t)
-        }
-    };
-    let mut want = st.lib;
-    let r = egui::ComboBox::from_id_salt("machine:lib")
-        .selected_text(title(st.lib))
-        .width(ui.available_width() - 8.0)
-        .show_ui(ui, |ui| {
-            ui.selectable_value(&mut want, "machine", "Machines");
-            for (w, _, t) in forge_tooling_builder::KINDS {
-                ui.selectable_value(&mut want, *w, *t);
-            }
-        });
-    places.push(("machine:lib".into(), r.response.rect));
-    if want != st.lib {
-        st.set_lib(want);
-    }
-}
-
-impl MachineUi {
-    /// Switches the library edited: "machine" or a tooling kind.
-    pub fn set_lib(&mut self, word: &'static str) {
-        self.lib = word;
-        self.tooling = (word != "machine")
-            .then(|| super::machine_tooling::ToolingUi::new(word, self.project.as_deref()));
-        self.tooling_seen.clear();
-        self.geom += 1;
-        self.pose += 1;
-        self.fit += 1;
-    }
-}
-
-fn tooling_library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
-    let project = st.project.clone();
-    let Some(tu) = &mut st.tooling else { return };
-    super::machine_tooling::library(ui, t, tu, project.as_deref(), places);
-    ui.separator();
-    ui.horizontal(|ui| {
-        label_w(ui, t, "Save to");
-        ui.selectable_value(&mut st.level, Level::User, "User");
-        ui.add_enabled_ui(st.project.is_some(), |ui| {
-            ui.selectable_value(&mut st.level, Level::Project, "Project");
-        });
-    });
-    let Some(tu) = &mut st.tooling else { return };
-    let r = ui.add_enabled(
-        tu.cur.is_some(),
-        egui::Button::new(if tu.changed { "Save *" } else { "Save" }),
-    );
-    places.push(("tooling:save".into(), r.rect));
-    if r.clicked() {
-        tu.save(st.level, project.as_deref());
-    }
-    if !tu.message.is_empty() {
-        ui.label(RichText::new(&tu.message).font(sans(11.0)).color(t.ink2));
-    }
-}
-
-fn tooling_bar(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
-    let project = st.project.clone();
-    let Some(tu) = &mut st.tooling else { return };
-    ui.horizontal(|ui| {
-        ui.label(RichText::new("Checks").font(semi(12.0)).color(t.ink));
-        let r = ui.add_enabled(
-            tu.cur.is_some() && tu.problem.is_none(),
-            egui::Button::new("Check"),
-        );
-        places.push(("tooling:check".into(), r.rect));
-        if r.clicked() {
-            tu.check(project.as_deref());
-        }
-        let (txt, col) = match (&tu.problem, tu.findings.is_empty()) {
-            (Some(p), _) => (format!("refused: {p}"), t.error),
-            (None, false) => (
-                format!("{} problems (see the editor)", tu.findings.len()),
-                t.error,
-            ),
-            (None, true) => (tu.message.clone(), t.ink2),
-        };
-        ui.label(RichText::new(txt).font(sans(11.0)).color(col));
-    });
-    ui.label(small(
-        t,
-        "The preview is the record's turned outline about its axis (z from the tip or nose); inserts and turning holders have none yet.",
-    ));
 }
 
 /// An entry's group in the list: its vendor (`builtin/<vendor>.toml`) or its file's name.

@@ -164,13 +164,7 @@ impl Gui {
             self.mach.fit = 0;
             return;
         };
-        // a tooling record: its revolved outline is the scene (one body on the base)
-        let tooling = (m.lib != "machine").then(|| m.tooling.as_ref().and_then(|t| t.preview()));
-        let def = match (&tooling, m.def.clone()) {
-            (Some(_), _) => forge_machine::library::builtin().remove(0),
-            (None, Some(d)) => d,
-            (None, None) => return,
-        };
+        let Some(def) = m.def.clone() else { return };
         if m.geom != self.mach.geom {
             self.mach.geom = m.geom;
             self.mach.pose = 0;
@@ -181,32 +175,26 @@ impl Gui {
                 None => None,
             };
             let unsaved_parts = m.parts.clone();
-            let mut meshes: Vec<PartMesh> = if let Some(prev) = &tooling {
-                self.mach.bodies = vec![("preview".into(), "base".into())];
-                prev.iter().map(body_mesh).collect()
-            } else {
-                def.bodies
-                    .iter()
-                    .map(|b| {
-                        // a made machine's parts not saved yet: from the texts it carries
-                        if m.origin.is_none()
-                            && let Some(p) = &b.part
-                            && let Some((_, src)) = unsaved_parts.iter().find(|(r, _)| r == p)
-                            && let Ok(t) = crate::machine_mesh::part_tris(src, None)
-                        {
-                            return body_mesh(&t);
-                        }
-                        body_mesh(&crate::machine_mesh::body_tris(&def, b, dir.as_deref()))
-                    })
-                    .collect()
-            };
-            if tooling.is_none() {
-                self.mach.bodies = def
-                    .bodies
-                    .iter()
-                    .map(|b| (b.name.clone(), b.link.clone()))
-                    .collect();
-            }
+            let mut meshes: Vec<PartMesh> = def
+                .bodies
+                .iter()
+                .map(|b| {
+                    // a made machine's parts not saved yet: from the texts it carries
+                    if m.origin.is_none()
+                        && let Some(p) = &b.part
+                        && let Some((_, src)) = unsaved_parts.iter().find(|(r, _)| r == p)
+                        && let Ok(t) = crate::machine_mesh::part_tris(src, None)
+                    {
+                        return body_mesh(&t);
+                    }
+                    body_mesh(&crate::machine_mesh::body_tris(&def, b, dir.as_deref()))
+                })
+                .collect();
+            self.mach.bodies = def
+                .bodies
+                .iter()
+                .map(|b| (b.name.clone(), b.link.clone()))
+                .collect();
             if meshes.is_empty() {
                 // a scene needs a part: an empty mesh at the origin
                 meshes.push(body_mesh(&crate::machine_mesh::prims_tris(&[Prim::Box {
@@ -217,14 +205,10 @@ impl Gui {
             let info = crate::render::part_info(&meshes);
             let placements: Vec<Placement> = (0..meshes.len())
                 .map(|k| Placement {
-                    tint: if tooling.is_some() {
-                        let c = crate::palette::PASTEL[0];
-                        [c[0], c[1], c[2], 0.0]
-                    } else {
-                        def.bodies
-                            .get(k)
-                            .map_or(crate::palette::GREY, |b| link_tint(&def, &b.link))
-                    },
+                    tint: def
+                        .bodies
+                        .get(k)
+                        .map_or(crate::palette::GREY, |b| link_tint(&def, &b.link)),
                     ..Placement::at(k as u32, [0.0; 3])
                 })
                 .collect();
@@ -280,7 +264,7 @@ impl Gui {
             && let Some(v) = &mut self.view
         {
             self.mach.pose = m.pose;
-            let valid = m.problem.is_none() && tooling.is_none();
+            let valid = m.problem.is_none();
             let pose = if valid { kin::pose(&def, &m.q) } else { Vec::new() };
             for (i, (name, link)) in self.mach.bodies.iter().enumerate() {
                 if i >= v.scene.placements.len() {
