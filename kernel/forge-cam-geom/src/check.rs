@@ -1179,11 +1179,7 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
                     pg,
                 );
                 let img = f.surf.eval(c.p, c.q);
-                let mvd = if line_or_arc {
-                    0.0
-                } else {
-                    diam(&mv.at(c.s))
-                };
+                let mvd = if line_or_arc { 0.0 } else { diam(&mv.at(c.s)) };
                 let lip = Ival::pt(w.lo).sub(Ival::pt(diam(&img))).sub(Ival::pt(mvd)).lo;
                 if lip > sd.lo {
                     sd = Ival { lo: lip, hi: sd.hi };

@@ -1713,7 +1713,17 @@ pub fn zlevel_voids(
         Some(g) => traced_blocked(sf, g, &zs, h)?,
         None => Vec::new(),
     };
-    for (li, z) in zs.into_iter().enumerate() {
+    // each level on its own (its blocked region, free region, void and passes depend on no other
+    // level's): on all cores (forge_math::par), then taken in order as one pass would (the
+    // voids' merging of equal neighbours, the runs, and the first error in that order)
+    type Level = Option<(
+        Option<forge_cam_geom::region::Region>,
+        Vec<([f64; 3], Vec<PMove>)>,
+    )>;
+    let levels: Vec<Result<Level, OpError>> = forge_math::par::map(zs.len(), |li| {
+        let z = zs[li];
+        let mut lvoid: Option<forge_cam_geom::region::Region> = None;
+        let mut lruns: Vec<([f64; 3], Vec<PMove>)> = Vec::new();
         let mut blocked = match (&bands, &g) {
             (Some(b), _) => exact_blocked(b, z - sf.leave, sf.make.r)?,
             (None, Some(g)) => match &traced[li] {
@@ -1768,21 +1778,13 @@ pub fn zlevel_voids(
             }
         };
         if free.loops.is_empty() {
-            continue;
+            return Ok(None);
         }
         if rf > 0.0
             && stepover <= rf
             && let Ok((v, _)) = offset(&free, -rf)
         {
-            let v = region_of(&v);
-            // the same region as the level above's: it is cleared down to this level, which
-            // holds the higher one's void (V above z ⊇ V above the higher floor); the stock then
-            // takes one void, not a run of equal ones (equal boundaries are an exact boolean's
-            // costliest case)
-            match voids.last_mut() {
-                Some((last, f)) if *last == v && z <= *f => *f = z,
-                _ => voids.push((v, z)),
-            }
+            lvoid = Some(region_of(&v));
         }
         // passes: the free region's boundary, then its offsets inward by k·stepover
         let mut k = 0usize;
@@ -1819,13 +1821,31 @@ pub fn zlevel_voids(
                         }),
                     }
                 }
-                runs.push(([st.x, st.y, z], mv));
+                lruns.push(([st.x, st.y, z], mv));
             }
             k += 1;
             if k > 10_000 {
                 return Err(OpError::Region("too many passes".into()));
             }
         }
+        Ok(Some((lvoid, lruns)))
+    });
+    for (li, lv) in levels.into_iter().enumerate() {
+        let Some((v, lr)) = lv? else {
+            continue;
+        };
+        let z = zs[li];
+        if let Some(v) = v {
+            // the same region as the level above's: it is cleared down to this level, which
+            // holds the higher one's void (V above z ⊇ V above the higher floor); the stock then
+            // takes one void, not a run of equal ones (equal boundaries are an exact boolean's
+            // costliest case)
+            match voids.last_mut() {
+                Some((last, f)) if *last == v && z <= *f => *f = z,
+                _ => voids.push((v, z)),
+            }
+        }
+        runs.extend(lr);
     }
     if runs.is_empty() {
         return Err(OpError::ToolTooBig {
