@@ -610,7 +610,6 @@ version = "0.1.0"
 dependencies = [
  "forge-cam-geom",
  "forge-geom",
- "forge-machine",
  "forge-math",
  "forge-ops",
  "forge-post",
@@ -624,7 +623,6 @@ version = "0.1.0"
 dependencies = [
  "forge-agent",
  "forge-cam-geom",
- "forge-dirs",
  "forge-lang",
  "forge-turn",
 ]
