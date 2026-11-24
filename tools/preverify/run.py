@@ -45,7 +45,7 @@ if subprocess.run(["git", "merge-base", "--is-ancestor", base, head]).returncode
 if git("status", "--porcelain", "--untracked-files=no"):
     sys.exit("pre-verify: commit first (the record names a commit)")
 reads = os.path.join(cache, f"reads-{base}.json")
-sel_cmd = [sys.executable, "tools/preverify/affected.py", "--base", base, "--json"]
+sel_cmd = [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "affected.py"), "--base", base, "--json"]
 if os.path.exists(reads):
     sel_cmd += ["--reads", reads]
 sel = json.loads(subprocess.run(sel_cmd, capture_output=True, text=True, check=True).stdout)

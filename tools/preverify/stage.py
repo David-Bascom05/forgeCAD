@@ -53,7 +53,7 @@ with open(log, "w") as fh:
         # the train against main measured here: main is the commit's first parent
         base = subprocess.run(["git", "-C", repo, "rev-parse", f"{sha}^1"], capture_output=True,
                               text=True, check=True).stdout.strip()
-        r = subprocess.run([py, "tools/preverify/run.py", "--base", base, "--only", "gate", "--always-gate"],
+        r = subprocess.run([py, os.path.join(os.path.dirname(os.path.abspath(__file__)), "run.py"), "--base", base, "--only", "gate", "--always-gate"],
                            cwd=repo, env=env, stdout=fh, stderr=subprocess.STDOUT)
         code = r.returncode
     else:
