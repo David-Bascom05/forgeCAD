@@ -4,7 +4,7 @@
 //! where the grids fell, whether it ran the whole face or stalled at once, and a round box left
 //! half the clearing undone (verify/forge-cam-quality's equal-work guard caught it).
 //!
-//! Each case runs the deep_boss documents (adaptive one-way and two-way, both groups) with the
+//! Each case runs a deep_boss document (adaptive one-way or two-way) with the
 //! stock box swapped, then sweeps the posted facing and roughing paths through a fine model of
 //! the stock and measures what stands above the roughing floor away from the boss and the
 //! stock's edge, where every pass and ring reaches.
@@ -12,6 +12,28 @@ mod common;
 use forge_cam::engage::{HeightMap, Profile};
 use forge_cam::ops::PMove;
 use std::path::Path;
+
+/// Sweeps a → b in pieces of at most 2 mm: the model visits a segment's whole box, so a long
+/// diagonal link or rapid would visit most of it for nothing; the pieces sweep the same.
+fn sweep_short(map: &mut HeightMap, a: [f64; 3], b: [f64; 3], prof: &Profile) {
+    let l = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+    let n = (l / 2.0).ceil().max(1.0) as usize;
+    let mut p = a;
+    for k in 1..=n {
+        let s = k as f64 / n as f64;
+        let q = if k == n {
+            b
+        } else {
+            [
+                a[0] + s * (b[0] - a[0]),
+                a[1] + s * (b[1] - a[1]),
+                a[2] + s * (b[2] - a[2]),
+            ]
+        };
+        map.sweep(p, q, prof);
+        p = q;
+    }
+}
 
 const BOXES: [([f64; 3], [f64; 3]); 5] = [
     ([-3.0, -3.0, 0.0], [73.0, 73.0, 26.0]),
@@ -56,7 +78,7 @@ fn left_above(
             for m in &p.moves {
                 match *m {
                     PMove::Rapid { to } | PMove::Line { to, .. } => {
-                        map.sweep(at, to, &prof);
+                        sweep_short(&mut map, at, to, &prof);
                         at = to;
                     }
                     PMove::Arc { to, c, cw, .. } => {
@@ -87,7 +109,7 @@ fn left_above(
                                     at[2] + s * (to[2] - at[2]),
                                 ]
                             };
-                            map.sweep(prev, q, &prof);
+                            sweep_short(&mut map, prev, q, &prof);
                             prev = q;
                         }
                         at = to;
@@ -119,38 +141,44 @@ fn left_above(
     (left, notes)
 }
 
-/// Every box for one document: at most a cell-scale patch left (a 1 mm² patch through the whole
+/// One document and box: at most a cell-scale patch left (a 1 mm² patch through the whole
 /// 14.8 mm depth), and no "left uncut" report.
-fn every_box_cleared(doc: &str) {
+fn cleared(doc: &str, k: usize) {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../verify/forge-cam-quality/parts");
-    let mut bad = Vec::new();
-    for (min, max) in BOXES {
-        // the roughing floor 10.2; within 0.5 mm of the boss and the stock's edge is the wall
-        // passes' and the fine model's rounding
-        let (left, notes) = left_above(&dir, doc, min, max, 10.2, 0.5);
-        if left > 15.0 || !notes.is_empty() {
-            bad.push(format!("{doc} {min:?}: {left:.0} mm³ left; {notes:?}"));
-        }
-    }
-    assert!(bad.is_empty(), "{}", bad.join("\n"));
+    let (min, max) = BOXES[k];
+    // the roughing floor 10.2; within 0.5 mm of the boss and the stock's edge is the wall
+    // passes' and the fine model's rounding
+    let (left, notes) = left_above(&dir, doc, min, max, 10.2, 0.5);
+    assert!(
+        left <= 15.0 && notes.is_empty(),
+        "{doc} {min:?}: {left:.0} mm³ left; {notes:?}"
+    );
 }
 
-#[test]
-fn deep_boss_n_adaptive_round_and_nudged_boxes_cleared_alike() {
-    every_box_cleared("deep_boss_n_adaptive_cam.fg");
+// One test per case, so they run in parallel. The p-group documents plan the same paths as the
+// n-group ones (only their feeds differ): the round box, the case that failed, is run for both.
+macro_rules! cases {
+    ($($name:ident: $doc:literal, $k:literal;)*) => {
+        $(
+            #[test]
+            fn $name() {
+                cleared($doc, $k);
+            }
+        )*
+    };
 }
 
-#[test]
-fn deep_boss_n_zigzag_round_and_nudged_boxes_cleared_alike() {
-    every_box_cleared("deep_boss_n_zigzag_cam.fg");
-}
-
-#[test]
-fn deep_boss_p_adaptive_round_and_nudged_boxes_cleared_alike() {
-    every_box_cleared("deep_boss_p_adaptive_cam.fg");
-}
-
-#[test]
-fn deep_boss_p_zigzag_round_and_nudged_boxes_cleared_alike() {
-    every_box_cleared("deep_boss_p_zigzag_cam.fg");
+cases! {
+    n_adaptive_round: "deep_boss_n_adaptive_cam.fg", 0;
+    n_adaptive_under_a_thousandth: "deep_boss_n_adaptive_cam.fg", 1;
+    n_adaptive_over_a_thousandth: "deep_boss_n_adaptive_cam.fg", 2;
+    n_adaptive_under_a_half: "deep_boss_n_adaptive_cam.fg", 3;
+    n_adaptive_over_a_half: "deep_boss_n_adaptive_cam.fg", 4;
+    n_zigzag_round: "deep_boss_n_zigzag_cam.fg", 0;
+    n_zigzag_under_a_thousandth: "deep_boss_n_zigzag_cam.fg", 1;
+    n_zigzag_over_a_thousandth: "deep_boss_n_zigzag_cam.fg", 2;
+    n_zigzag_under_a_half: "deep_boss_n_zigzag_cam.fg", 3;
+    n_zigzag_over_a_half: "deep_boss_n_zigzag_cam.fg", 4;
+    p_adaptive_round: "deep_boss_p_adaptive_cam.fg", 0;
+    p_zigzag_round: "deep_boss_p_zigzag_cam.fg", 0;
 }
