@@ -6230,7 +6230,8 @@ fn plane_split(
             continue;
         }
         let w = std::mem::take(&mut walks[k]);
-        // a point of the hole: just off its longest piece on its material side (the left), or an
+        let mut across: Option<usize> = None;
+        // a point of the hole: on its longest piece, the region across it set aside, or an
         // untouched hole's own vertex, as it touches no new edge
         let probe = match kind(k) {
             Some(_) => piece_end(&pieces[w[0].0], w[0].1),
@@ -6252,10 +6253,17 @@ fn plane_split(
                 let pc = &pieces[h.0];
                 let d = pc.curve.deriv(pc.range.mid());
                 let along = if h.1 { d.d1 } else { -d.d1 };
-                let Some(left) = n.cross(along).normalize() else {
+                // (a piece with no way across it at its middle: the general split decides)
+                if n.cross(along).normalize().is_none() {
                     return Ok(None);
-                };
-                d.p + left * (1e-3 * size(&h))
+                }
+                // (the region across this piece is the one the hole bounds, never its host)
+                across = Some(h.0);
+                // a point of the piece itself: pieces meet only at their ends, so no other cycle
+                // passes it. A step off it, however short, can cross a strip narrower than itself
+                // into the region beyond (fuzz_keep 166: a thousandth of a 17 long floor, 2.3e-3
+                // over the region below the part)
+                d.p
             }
         };
         // the smallest outer cycle holding it; the untouched outer loop holds every hole
@@ -6267,6 +6275,7 @@ fn plane_split(
                     let (hull, each) =
                         &boxes.get_or_init(|| regions.iter().map(|g| walk_boxes(&g[0], pieces)).collect())[r];
                     hull.contains(probe)
+                        && !across.is_some_and(|p| regions[r][0].iter().any(|x| x.0 == p))
                         && match plane_inside(pl, probe, &regions[r][0], pieces, each) {
                             Some(b) => b,
                             None => return Ok(None),
