@@ -222,6 +222,13 @@ impl Gui {
             }
             self.bend.framed = true;
         }
+        // a failure located: the eye turned on its place, at its distance
+        if let Some(at) = self.shell.sheet.bend_sim.as_mut().and_then(|b| b.locate.take()) {
+            let mut cam = v.nav.camera;
+            cam.target = at.map(|x| x as f32);
+            cam.dist = cam.dist.min(400.0);
+            v.nav.jump_to(cam);
+        }
         self.bend.ours = Some(v.renderer.geometry());
         self.bend.shown = Some(key);
         v.dirty = true;

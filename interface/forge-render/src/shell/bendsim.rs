@@ -61,6 +61,8 @@ pub struct BendSimUi {
     /// The part's bending document (`<stem>_bend.fg`), when it has one: the program's source of
     /// truth, every edit an op on its text.
     pub doc: Option<DocState>,
+    /// A place the view is asked to look at (a failure located), taken by the view.
+    pub locate: Option<[f64; 3]>,
 }
 
 /// The bending document as last read.
@@ -155,6 +157,7 @@ impl BendSimUi {
             as_given,
             painted: None,
             doc: None,
+            locate: None,
         };
         if let Some(p) = b.choice.press.clone() {
             b.table_height = b.catalog().and_then(|c| c.press(&p)).and_then(|r| r.table_height);
@@ -204,6 +207,7 @@ impl BendSimUi {
                 stations: d.stations.iter().map(|s| s.id.clone()).collect(),
                 errors: run.errors,
             }),
+            locate: None,
         };
         if let Some(p) = b.choice.press.clone() {
             b.table_height = b.catalog().and_then(|c| c.press(&p)).and_then(|r| r.table_height);
@@ -991,8 +995,9 @@ fn doc_buttons(ui: &mut egui::Ui, st: &mut BendSimUi) {
 
 /// The step's results: tooling, gauge, force, springback and every check. Returns the bend's
 /// name when its "flat pattern" link is clicked.
-pub fn results_ui(ui: &mut egui::Ui, st: &BendSimUi) -> Option<String> {
+pub fn results_ui(ui: &mut egui::Ui, st: &mut BendSimUi) -> Option<String> {
     let mut flat = None;
+    let mut locate: Option<(f64, Option<[f64; 3]>)> = None;
     let sim = match &st.sim {
         Ok(s) => s,
         Err(e) => {
@@ -1076,7 +1081,24 @@ pub fn results_ui(ui: &mut egui::Ui, st: &BendSimUi) -> Option<String> {
                         v(c.limit)
                     )),
                 };
-                ui.label(c.tool.clone().unwrap_or_default());
+                ui.horizontal(|ui| {
+                    ui.label(c.tool.clone().unwrap_or_default());
+                    // a failure with a place: the timeline to its instant, the eye on it
+                    if !c.pass
+                        && c.unchecked.is_none()
+                        && (c.at.is_some() || c.phi.is_some())
+                        && ui.link("locate").clicked()
+                    {
+                        let phimax = s.angle + s.overbend;
+                        let t = match c.phase {
+                            Some(fb::Phase::Static) => 0.2,
+                            Some(fb::Phase::Approach) => 0.38,
+                            Some(fb::Phase::Return) => 0.84,
+                            _ => 0.4 + 0.35 * c.phi.map_or(1.0, |f| (f / phimax.max(1e-9)).clamp(0.0, 1.0)),
+                        };
+                        locate = Some((t, c.at));
+                    }
+                });
                 ui.end_row();
             }
         });
@@ -1094,6 +1116,23 @@ pub fn results_ui(ui: &mut egui::Ui, st: &BendSimUi) -> Option<String> {
                     .join(", ")
             ),
         );
+    }
+    if let Some((t, at)) = locate {
+        st.t = t;
+        st.playing = false;
+        st.locate = at.map(|a| {
+            let oy = st
+                .sim
+                .as_ref()
+                .ok()
+                .and_then(|s| s.plan.steps.get(st.step))
+                .and_then(|x| {
+                    let sim = st.sim.as_ref().ok()?;
+                    sim.tooling.station(x.setup.punch, x.setup.die).map(|k| k.y)
+                })
+                .unwrap_or(0.0);
+            [a[0], a[1] + oy, a[2]]
+        });
     }
     flat
 }

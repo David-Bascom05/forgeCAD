@@ -150,7 +150,7 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
             ui.separator();
             super::bendsim::sequence_ui(ui, &mut b);
             ui.separator();
-            flat = super::bendsim::results_ui(ui, &b);
+            flat = super::bendsim::results_ui(ui, &mut b);
         });
     s.places.push(("env:bendsim:browser".into(), r));
     s.sheet.bend_sim = Some(b);
