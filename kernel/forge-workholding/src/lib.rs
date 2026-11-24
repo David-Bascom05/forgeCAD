@@ -356,6 +356,18 @@ impl Role {
     }
 }
 
+/// Fields that may be 0 (a range from zero, a hole on the plate's corner); every other number
+/// is > 0.
+pub const ZERO_OK: &[&str] = &["range_min", "min_opening", "hole_offset", "grip_min"];
+
+fn value_ok(k: &str, x: f64) -> bool {
+    x.is_finite() && (x > 0.0 || (x == 0.0 && ZERO_OK.contains(&k)))
+}
+
+fn bound(k: &str) -> &'static str {
+    if ZERO_OK.contains(&k) { "≥ 0" } else { "> 0" }
+}
+
 /// What a body does (for the reply, the renderer's colours, and "held").
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Role {
@@ -437,15 +449,15 @@ impl Record {
             let known = need.contains(&k.as_str()) || may.contains(&k.as_str());
             match v {
                 Val::Num(x) if known => {
-                    if !(x.is_finite() && *x > 0.0) {
-                        return Err(bad(&rec, k, format!("must be > 0 (is {x})")));
+                    if !value_ok(k, *x) {
+                        return Err(bad(&rec, k, format!("must be {} (is {x})", bound(k))));
                     }
                     vals.insert(k.clone(), *x);
                 }
                 Val::Arr(_) if known => {
                     let xs = nums(t, k).ok_or_else(|| bad(&rec, k, "must be numbers"))?;
-                    if xs.is_empty() || xs.iter().any(|x| !(x.is_finite() && *x > 0.0)) {
-                        return Err(bad(&rec, k, "must be numbers > 0"));
+                    if xs.is_empty() || xs.iter().any(|x| !value_ok(k, *x)) {
+                        return Err(bad(&rec, k, format!("must be numbers {}", bound(k))));
                     }
                     lists.insert(k.clone(), xs);
                 }
@@ -669,8 +681,8 @@ impl Record {
                 format!("is not a field of a {}", self.kind.name()),
             ));
         }
-        if !(v.is_finite() && v > 0.0) {
-            return Err(bad(&self.label(), k, format!("must be > 0 (is {v})")));
+        if !value_ok(k, v) {
+            return Err(bad(&self.label(), k, format!("must be {} (is {v})", bound(k))));
         }
         let mut r = self.clone();
         r.unknown.retain(|u| u != k);
@@ -687,6 +699,58 @@ impl Record {
             taken: String::new(),
         });
         Ok(r)
+    }
+
+    /// The record with a list the user gives (a parallel set's heights), provenance user.
+    pub fn with_list(&self, k: &str, v: Vec<f64>) -> Result<Record, WhError> {
+        let (need, may) = self.kind.fields();
+        if !need.contains(&k) && !may.contains(&k) {
+            return Err(bad(
+                &self.label(),
+                k,
+                format!("is not a field of a {}", self.kind.name()),
+            ));
+        }
+        if v.is_empty() || v.iter().any(|x| !value_ok(k, *x)) {
+            return Err(bad(&self.label(), k, format!("must be numbers {}", bound(k))));
+        }
+        let mut r = self.clone();
+        r.unknown.retain(|u| u != k);
+        r.conflict.retain(|u| u != k);
+        r.vals.remove(k);
+        r.lists.insert(k.to_string(), v);
+        r.user_cite(k);
+        Ok(r)
+    }
+
+    /// The record with a word the user gives (a screw, a collet system).
+    pub fn with_word(&self, k: &str, v: &str) -> Result<Record, WhError> {
+        if !WORDS.contains(&k) {
+            return Err(bad(
+                &self.label(),
+                k,
+                format!("is not a word field ({})", WORDS.join(", ")),
+            ));
+        }
+        let mut r = self.clone();
+        if v.is_empty() {
+            r.words.remove(k);
+        } else {
+            r.words.insert(k.to_string(), v.to_string());
+        }
+        Ok(r)
+    }
+
+    fn user_cite(&mut self, k: &str) {
+        for c in &mut self.cites {
+            c.fields.retain(|f| f != k);
+        }
+        self.cites.retain(|c| !c.fields.is_empty());
+        self.cites.push(Cite {
+            fields: vec![k.to_string()],
+            source: "user".into(),
+            taken: String::new(),
+        });
     }
 
     /// The citation of a field (a stand-in's basis for a stand-in).
@@ -1140,6 +1204,19 @@ mod tests {
             matches!(&e, WhError::Bad { field, .. } if field == "jaw_width"),
             "{e:?}"
         );
+        // 0 only where it means something (a range from zero)
+        let z = p("[[workholding]]\nname = \"c\"\nkind = \"collet\"\nstandin = true\nbasis = \"s\"\nrange_min = 0\nrange_max = 9\nnose_d = 20\nnose_len = 10\n").unwrap();
+        assert_eq!(z[0].get("range_min"), Ok(0.0));
+        assert!(z[0].with("nose_d", 0.0).is_err());
+        let h = Library::builtin()
+            .get("standin-parallels")
+            .unwrap()
+            .with_list("heights", vec![12.7, 25.4])
+            .unwrap();
+        assert_eq!(h.list("heights").unwrap(), &[12.7, 25.4]);
+        assert!(h.cite("heights").is_some());
+        assert!(h.with_word("screw", "M8").unwrap().words["screw"] == "M8");
+        assert!(h.with_word("nope", "x").is_err());
         let e = p("[[workholding]]\nname = \"r\"\nkind = \"riser\"\nstandin = true\nbasis = \"s\"\nd = -5\nheight = 9\n").unwrap_err();
         assert!(matches!(&e, WhError::Bad { field, .. } if field == "d"), "{e:?}");
     }
