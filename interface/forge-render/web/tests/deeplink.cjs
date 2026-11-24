@@ -1,5 +1,5 @@
 // Links into the page (`?open=PATH`): one to a path outside the project starts the app with
-// nothing open and says why; one to a drawing draws its part, which comes after the drawing (the
+// nothing open (its empty state: New part, Open...) and says why; one to a drawing draws its part, which comes after the drawing (the
 // page opens the linked file first, then the project's other files, then builds what's open
 // again). Before: `?open=../x` threw before the app started (a dead page, `window.forgecad`
 // never set), and a linked drawing kept "flange.fg: no such file" with an empty sheet.
@@ -18,12 +18,12 @@ const t = require("./lib.cjs");
   try {
     // outside the project: the app runs, opens nothing, and says so
     let p = await t.page(b, `${url}?open=../../../etc/passwd&offscreen=1280x800`);
-    let s = await t.until(p, (s) => s.ready && /^Not opened: /.test(s.status), "the app, saying why", 60000);
+    let s = await t.until(p, (s) => s.ready && /^Couldn't open /.test(s.status), "the app, saying why", 60000);
     // every file in, and still nothing opened in its place
     await p.evaluate(() => window.forgecad.loaded);
     s = await p.evaluate(() => window.forgecad.state());
     assert.equal(s.path, null, `opened ${s.path}`);
-    assert.match(s.status, /^Not opened: not a project path: \.\.\/\.\.\/\.\.\/etc\/passwd$/, s.status);
+    assert.equal(s.status, "Couldn't open ../../../etc/passwd: it isn't in this project.");
     console.log(`ok - ?open=../../../etc/passwd: ${s.status}`);
     t.check(p);
     await p.close();
