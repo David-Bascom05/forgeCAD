@@ -49,14 +49,24 @@ below compares both against the unfitted op.
   drafted wall.
 - Arc radius 0.05 to 200 mm. The axis-limit check boxed an arc's whole circle, so a near-straight
   arc of radius ~1000 mm failed it. That check now boxes the arc's own sweep.
-- Curved xy patterns must be chorded well inside `fit`, or no arc fits their points:
-  - The spiral is chorded at `fit`/5 when fitting.
-  - Waterline contours (the steep part, ramping) have their vertices and outward sag held to
-    `fit`/5, with the proof slack left at the op's.
+- The spiral's xy pattern is chorded at `tol`/20 (and within `fit`/5) whether fitted or not, so
+  arcs fit its points and both runs cover the same area.
+- Waterline contours (steep_shallow's, ramping's) are traced at `tol − fit` (ramping's already at
+  `tol`/2), with the proof slack the op's. A contour held finer (`fit`/5) let more arcs fit but
+  doubled ramping's generation and made both paths longer; one held to `fit`/5 inward as well
+  (chords cutting a convex corner) tripled steep_shallow's points. Both were dropped.
 
-A contour held to `fit`/5 inward as well (chords cutting a convex corner) was tried and dropped.
-It tripled the points of steep_shallow (40,701), gave 432 arcs, and made the path longer than
-unfitted.
+## Proving arcs cheaply
+
+- **In the generator:** an arc is proven by its chords. The cutter's signed distance is
+  1-Lipschitz in its position, and a level arc is within its chords' sagitta s of them. So each
+  chord proven by the closed form at limit + s, or by the column grown by s (`Column::grow`, which
+  holds the cutter anywhere within s of the chord), proves the arc. Proving the checker's arc
+  pieces by search instead ran refusals to the budget: 175 s of CPU on one waterline.
+- **In the certifier:** `contact::clear_arc` clears a level arc by its chords' closed form
+  (sagitta ≤ 1e-4 mm), in `check::closed_form` and first on `certify_with`'s column route, prisms
+  included. A level arc against a vertical cylinder had cost the search about 1.8 s a pair.
+- **In the fitter:** the longest run is found by its geometry alone, then proven once.
 
 ## Measured on the mould core
 
@@ -72,64 +82,57 @@ The setup:
 
 To reproduce: `cargo run --release -p forge-cam-lang --example fit_report`.
 
-Three runs of each op: unfitted (`fit: 0`), fitted with the cusp budget (fit 0.0005 =
-0.05 × cusp, the earlier version), and fitted with the tolerance budget (fit 0.0025, as shipped).
+Each op unfitted (`fit: 0`) and fitted (default `fit` 0.0025), as shipped. Generation is the
+op's own time; release is the program's (post, read back, certified).
 
-| strategy | fit | blocks | mean move mm | NC bytes | t_scurve s | ≥90% F | stepover / step mm | fitted as | measured max dev mm |
+| strategy | fit | blocks | NC bytes | t_scurve s | generation s | release s | stepover / step | fitted as | measured max dev mm |
 |---|---|---|---|---|---|---|---|---|---|
-| steep_shallow | 0 | 13701 | 0.835 | 237455 | 760.9 | 79% | 0.3461 / 0.3461 | | |
-| steep_shallow | cusp 0.0005 | 6322 | 1.880 | 136802 | 792.2 | 77% | 0.3374 / 0.3374 | 13257 points as 5141 lines | 0.00000 |
-| steep_shallow | tol 0.0025 | 5711 | 2.003 | 124980 | 756.8 | 77% | 0.3461 / 0.3461 | 12903 points as 4423 lines and 143 arcs | 0.00247 |
-| spiral | 0 | 4956 | 0.176 | 108671 | 54.9 | 84% | 0.4895 | | |
-| spiral | cusp 0.0005 | 253 | 3.578 | 9263 | 55.2 | 87% | 0.4771 | 11284 points as 8 lines and 187 arcs | 0.00050 |
-| spiral | tol 0.0025 | 230 | 3.834 | 7434 | 53.9 | 87% | 0.4895 | 4900 points as 61 lines and 113 arcs | 0.00249 |
-| radial | 0 | 807 | 2.135 | 17817 | 108.9 | 34% | 0.4895 | | |
-| radial | cusp 0.0005 | 415 | 4.290 | 9292 | 111.9 | 71% | 0.4771 | 614 points as 198 lines | 0.00000 |
-| radial | tol 0.0025 | 407 | 4.244 | 9144 | 108.9 | 71% | 0.4895 | 593 points as 193 lines | 0.00000 |
-| scallop | 0 | 1539 | 0.507 | 22978 | 48.1 | 81% | 0.4895 | | |
-| scallop | cusp 0.0005 | 163 | 4.916 | 3032 | 48.5 | 91% | 0.4771 | 1544 points as 144 lines | 0.00000 |
-| scallop | tol 0.0025 | 159 | 4.968 | 2964 | 48.0 | 88% | 0.4895 | 1520 points as 140 lines | 0.00195 |
-| ramping | 0 | 6110 | 0.609 | 187068 | 225.8 | 92% | — / 0.2447 | | |
-| ramping | cusp 0.0005 | 4798 | 0.810 | 137972 | 234.3 | 93% | — / 0.2386 | 7040 points as 4631 lines | 0.00050 |
-| ramping | tol 0.0025 | 2220 | 1.687 | 86061 | 226.7 | 94% | — / 0.2447 | 6689 points as 1228 lines and 827 arcs | 0.00245 |
-| flat | 0 | 7877 | 0.385 | 122543 | 189.1 | 81% | 0.4895 | | |
-| flat | cusp 0.0005 | 351 | 8.676 | 6004 | 191.5 | 75% | 0.4885 | 7444 points as 168 lines | 0.00000 |
-| flat | tol 0.0025 | 351 | 8.695 | 5982 | 185.5 | 74% | 0.4895 | 7694 points as 168 lines | 0.00000 |
-| rest | 0 | 1971 | 0.588 | 47013 | 102.3 | 76% | 0.4895 | | |
-| rest | cusp 0.0005 | 1899 | 0.626 | 45580 | 107.7 | 76% | 0.4771 | 1670 points as 1662 lines | 0.00002 |
-| rest | tol 0.0025 | 1915 | 0.605 | 46149 | 102.3 | 75% | 0.4895 | 1734 points as 1678 lines | 0.00209 |
-| pencil | 0 | 317 | 0.686 | 5047 | 22.3 | 70% | — | | |
-| pencil | tol 0.0025 | 93 | 2.373 | 1721 | 22.3 | 70% | — | 304 points as 80 lines | 0.00000 |
+| steep_shallow | 0 | 13701 | 237455 | 760.9 | 12.0 | 0.56 | 0.3461 / 0.3461 | | |
+| steep_shallow | 0.0025 | 5656 | 123545 | 768.5 | 12.6 | 0.40 | 0.3461 / 0.3461 | 12630 points as 4379 lines and 135 arcs | 0.00247 |
+| spiral | 0 | 4956 | 108671 | 54.9 | 0.52 | 0.03 | 0.4895 | | |
+| spiral | 0.0025 | 230 | 7434 | 53.9 | 0.71 | 0.12 | 0.4895 | 4900 points as 61 lines and 113 arcs | 0.00249 |
+| radial | 0 | 807 | 17817 | 108.9 | 0.16 | 0.02 | 0.4895 | | |
+| radial | 0.0025 | 407 | 9144 | 108.9 | 0.17 | 0.02 | 0.4895 | 593 points as 193 lines | 0.00000 |
+| scallop | 0 | 1539 | 22978 | 48.1 | 0.10 | 0.02 | 0.4895 | | |
+| scallop | 0.0025 | 159 | 2964 | 48.0 | 0.12 | 0.01 | 0.4895 | 1520 points as 140 lines | 0.00195 |
+| ramping | 0 | 6110 | 187068 | 225.8 | 34.6 | 0.08 | — / 0.2447 | | |
+| ramping | 0.0025 | 3452 | 115168 | 225.7 | 34.4 | 0.17 | — / 0.2447 | 5933 points as 3027 lines and 248 arcs | 0.00250 |
+| flat | 0 | 7877 | 122543 | 189.1 | 1.97 | 0.10 | 0.4895 | | |
+| flat | 0.0025 | 351 | 5982 | 185.5 | 2.07 | 0.03 | 0.4895 | 7694 points as 168 lines | 0.00000 |
+| rest | 0 | 1971 | 47013 | 102.3 | 19.5 | 0.05 | 0.4895 | | |
+| rest | 0.0025 | 1915 | 46149 | 102.3 | 19.3 | 0.05 | 0.4895 | 1734 points as 1678 lines | 0.00209 |
+| pencil | 0 | 317 | 5047 | 22.3 | 0.84 | 0.02 | — | | |
+| pencil | 0.0025 | 93 | 1721 | 22.3 | 0.85 | 0.02 | — | 304 points as 80 lines | 0.00000 |
 
-The 2 ms block-cycle column moved by at most 1 s and is left out here (`fit_report` prints it).
+The earlier version that charged the fit to the cusp (stepover for `cusp − fit`, fit 0.0005) was
+0–6% slower to cut; it is superseded.
 
 ## Findings
 
-- **With the tolerance budget the stepover is the plain op's, and the fitted path is no slower,
-  like for like.** Times move from −2.0% to +0.4%.
-  - The spiral is chorded at `tol`/20 whether fitted or not. A coarse spiral, clipped to the area
-    chord by chord, loses its ends and covers less: 29 passes and 752 mm against 35 and 778 mm.
-    An earlier "+5.7%" was that difference in coverage, not the fitter.
-  - ramping's +0.4% is a longer path: its fitted contour follows the walls within `fit`/5, while
-    the plain contour cuts corners by up to `tol` (`t_min` 213.2 → 215.0 s). The planner's overhead
-    over `t_min` drops (12.6 → 11.6 s), so the fit itself makes it faster.
+- **Generation and release time are the plain op's,** within a few tenths of a second.
+- **Cutting time is the plain op's or less, except steep_shallow (+1.0%).** Its path is 1.2%
+  longer (`t_min` 682.3 → 690.6 s) because the fitted op's contour and drape are held to
+  `tol − fit` where the plain op's are held to `tol`. The planner's overhead over `t_min` falls
+  (78.7 → 77.9 s), so the fitting itself is faster. With the contour at `tol`, steep_shallow cut in
+  758.7 s (−0.3%), but a fitted piece could then lie `tol` + `fit` outside the contour.
 - **No arc the machine must slow for.** A control holds an arc of radius r to √(a r) (centripetal
   acceleration) and (j r²)^(1/3) (jerk). The fitter's smallest radius is 1.5 × the radius where
   those reach the op's feed (`arc_min_r`, with a and j from the machine record or the planner's
   default assumption set); below it, lines are kept, which the planner blends at the feed.
+- **The spiral is like for like.** It is chorded at `tol`/20 whether fitted or not. A coarse
+  spiral, clipped to the area chord by chord, loses its ends and covers less: 29 passes and 752 mm
+  against 35 and 778 mm. An earlier "+5.7%" was that difference in coverage, not the fitter.
 - **Blocks and program size fall sharply** wherever a pass is straight in xy or lies in one
   plane:
   - spiral: 21× fewer blocks, 15× smaller program;
   - flat: 22× fewer blocks, 20× smaller;
   - scallop: 9.7× fewer blocks, 7.8× smaller;
   - pencil: 3.4× fewer blocks;
-  - ramping: 2.8× fewer blocks, 2.2× smaller;
-  - steep_shallow: 2.4× fewer blocks, 1.9× smaller.
+  - steep_shallow: 2.4× fewer blocks, 1.9× smaller;
+  - radial: 2.0× fewer blocks;
+  - ramping: 1.8× fewer blocks, 1.6× smaller.
 - **Where they don't:** rest's short passes over concave fillets barely merge.
 - **Time does not drop much under this planner model.** At these feeds (about 6 to 16 mm/s) a
   0.4 mm block still lasts 25 ms or more, and the planner blends the shallow corners at full speed.
-  The gain in time would come from feeds high enough that block processing or corner blending
-  limits speed.
-- **"≥90% F" is a per-block average, so it penalises long blocks.** A long block that includes
-  its own acceleration ramps can average under 90% while cruising most of its length. Total time
-  is the better measure.
+- **"≥90% F" is a per-block average, so it penalises long blocks.** Total time is the better
+  measure.

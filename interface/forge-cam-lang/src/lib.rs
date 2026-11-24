@@ -5763,7 +5763,7 @@ impl Cam {
         // the fitter's chord tolerance (forge_cam::fit): each pass's points are fitted into
         // longer lines and arcs within it, each piece proven as a chord is (no gouge beyond the
         // slack). It is taken from the path's tolerance, not the cusp's: the passes are draped
-        // within tol − fit above the CL surface (their contours within fit/5), so a fitted piece
+        // within tol − fit above the CL surface (waterline contours within tol − fit), so a fitted piece
         // keeps the plain op's tol; the spacing, and so the cusp, is the plain op's. 0: none
         let fit_tol = get_num(a, "fit", Some(0.25 * tol))?;
         if !(fit_tol >= 0.0 && fit_tol.is_finite()) {
@@ -5775,10 +5775,13 @@ impl Cam {
         // no arc that the machine must slow down for (`arc_min_r`)
         let arc_min_r = arc_min_r(&s.machine, feed.0);
         // curved xy patterns chorded well within the fit's tolerance, so arcs fit their points
-        let pattern_sag = if fit_tol > 0.0 { 0.2 * fit_tol } else { tol };
         // the spiral's chords: fine whether fitted or not (a coarse spiral loses its ends to
-        // the area's edge, clipped by chord, and covers less), and within the default fit's fifth
-        let spiral_sag = pattern_sag.min(0.05 * tol);
+        // the area's edge, clipped by chord, and covers less), and within a fifth of the fit
+        let spiral_sag = if fit_tol > 0.0 {
+            (0.2 * fit_tol).min(0.05 * tol)
+        } else {
+            0.05 * tol
+        };
         // the spacing along the surface from the cusp, at the slope that bounds the op's passes
         let cusp_at = |deg: f64| -> Result<Option<(f64, f64, Ival, Ival)>, String> {
             match a.get("cusp") {
@@ -5843,7 +5846,9 @@ impl Cam {
                     grid,
                     tol,
                     leave: tol - fit_tol,
-                    contour: if fit_tol > 0.0 { pattern_sag } else { tol },
+                    // the contours within tol − fit, so a fitted piece keeps tol outward (as the
+                    // drape's leave); traced finer, they cost generation and gain no time
+                    contour: tol - fit_tol,
                     area: Some([[area[0], area[1]], [area[2], area[3]]]),
                 };
                 let (st, sh) = steep::steep_and_shallow(&dc, p).map_err(|x| e(format!("{x:?}")))?;
@@ -5916,11 +5921,8 @@ impl Cam {
                     &zs,
                     waterline::Params {
                         grid,
-                        tol_xy: if fit_tol > 0.0 {
-                            pattern_sag.min(0.5 * tol)
-                        } else {
-                            0.5 * tol
-                        },
+                        // (tol/2 + fit is within tol: the plain op's contour)
+                        tol_xy: 0.5 * tol,
                         slack: 0.25 * tol,
                     },
                 )

@@ -95,7 +95,7 @@ made. The ops from `pencil` to `flat` also take `fit:`, a chord tolerance in mm 
 fitted into the longest lines and arcs (G2/G3 in xy, level) that stay within it of the pass, both
 ways, and each piece is proven by the drop-cutter as a chord is before it is kept (forge-cam's
 `fit`, shared with adaptive). The fit comes out of the path's tolerance, not the cusp: the passes
-are draped within `tol` − `fit` above the surface (contours within `fit`/5), so a fitted path
+are draped within `tol` − `fit` above the surface (waterline contours within `tol` − `fit` too), so a fitted path
 keeps the plain op's `tol` and its spacing, and the cusp is the plain op's. The plan gives the
 pieces made and their measured largest distance from the passes.
 | `program(SETUP or [SETUPS], post:, number:, ops:)` | `fanuc`, `haas`, `linuxcnc`, `grbl` (default: the machine's control); `ops: OP` or `[OPS]` posts only those ops of its setups. Each op is certified on the stock every earlier op of its setup (and of the setup it continues) leaves, so those are posted first, by an earlier program or earlier in this one, or the program is refused with the fix; an op no program posts is not certified (`unposted`). `decimals:` and `feed_decimals:` set the program's number formats (the text is quantised, read back and certified at them), `coolant:` (`"flood"`, `"mist"`, `"through"`, `"off"`) every path's coolant, refused if the machine has none of it. `split: "setup"`: one program per setup, named `PROGRAM/SETUP` and numbered on from `number:` (the reply's program has its `setup`) |
