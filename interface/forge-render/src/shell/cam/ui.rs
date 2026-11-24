@@ -3041,7 +3041,11 @@ fn programs_window(
                     t.warn,
                 );
             }
+            // every program: a footer of their own, under a rule
             ui.add_space(6.0);
+            let (rr, _) = ui.allocate_exact_size(vec2(width, 1.0), Sense::hover());
+            ui.painter().hline(rr.x_range(), rr.center().y, Stroke::new(1.0, t.line));
+            heading(ui, t, "All programs", width);
             ui.horizontal(|ui| {
                 ui.add_space(14.0);
                 let r = ui.checkbox(&mut allow, "Allow uncertified").on_hover_text("Post a program that is not certified in full: its header says what was not checked");
@@ -3083,12 +3087,12 @@ fn programs_window(
             if let Some(s) = &w.said {
                 note(ui, s, width, t.ink2);
             }
-            note(
-                ui,
-                "Post writes a program's file beside the document (File, Folder, Ext.); Export… saves a copy where you choose (several in a folder, or a zip in the browser).",
-                width,
-                t.ink2,
-            );
+            // one line; the rest on hover
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                ui.label(egui::RichText::new("Post writes beside the document; Export\u{2026} saves a copy.").font(sans(12.0)).color(t.ink2))
+                    .on_hover_text("Post writes a program's file beside the document (its File, Folder and Extension); Export\u{2026} saves a copy where you choose (several in a folder, or a zip in the browser).");
+            });
             ui.add_space(8.0);
         });
     w.prog_field = field;
@@ -3258,78 +3262,62 @@ fn program_row(
     }
     // its file: name, folder, extension, header
     let ext_default = forge_cam_lang::export::ext_of(&p.arg_str("post").unwrap_or_default()).to_string();
-    ui.horizontal_wrapped(|ui| {
-        ui.add_space(14.0);
-        prog_field(ui, t, "File", 110.0, p, "file", &p.name, field, edits, places);
-        prog_field(ui, t, "Folder", 90.0, p, "out", "beside it", field, edits, places);
-        // the column's width: two fields a line
-        if width < 520.0 {
-            ui.end_row();
-            ui.add_space(14.0);
-        }
-        prog_field(ui, t, "Ext.", 44.0, p, "ext", &ext_default, field, edits, places);
-        prog_field(ui, t, "Comment", 140.0, p, "comment", "header line", field, edits, places);
-    });
-    // posting: one file per setup, decimals, coolant (forge-post's options, certified as posted)
-    ui.horizontal_wrapped(|ui| {
-        ui.add_space(14.0);
-        let had = p.arg_str("split").as_deref() == Some("setup");
-        let mut on = had;
-        let r = ui.checkbox(&mut on, "One file per setup");
-        places.push((format!("cam:programs:{}:split", p.name), r.rect));
-        if on != had {
-            edits.push(if on {
-                super::doc::Edit::Set { id: p.name.clone(), arg: "split".into(), text: "\"setup\"".into() }
-            } else {
-                super::doc::Edit::Unset { id: p.name.clone(), arg: "split".into() }
-            });
-        }
-        prog_field(ui, t, "Decimals", 34.0, p, "decimals", "", field, edits, places);
-        if width < 520.0 {
-            ui.end_row();
-            ui.add_space(14.0);
-        }
-        prog_field(ui, t, "Feed decimals", 34.0, p, "feed_decimals", "", field, edits, places);
-        ui.add_space(6.0);
-        ui.label(egui::RichText::new("Coolant").font(sans(12.0)).color(t.ink2));
-        let now = p.arg_str("coolant").unwrap_or_default();
-        let mut pick = now.clone();
+    // its file and posting, one field a row (UX-LEAD's sheet pattern)
+    prog_field(ui, t, "File", width, p, "file", &p.name, field, edits, places);
+    prog_field(ui, t, "Folder", width, p, "out", "beside the document", field, edits, places);
+    prog_field(ui, t, "Extension", width, p, "ext", &ext_default, field, edits, places);
+    prog_field(ui, t, "Comment", width, p, "comment", "a header line", field, edits, places);
+    prog_field(ui, t, "Decimals", width, p, "decimals", "the post's", field, edits, places);
+    prog_field(ui, t, "Feed decimals", width, p, "feed_decimals", "the post's", field, edits, places);
+    let now = p.arg_str("coolant").unwrap_or_default();
+    let mut pick = now.clone();
+    row(ui, t, "Coolant", width, 30.0, |ui| {
         let r = egui::ComboBox::from_id_salt(format!("cam-programs-{}-coolant", p.name))
-            .width(70.0)
-            .selected_text(if pick.is_empty() { "post's" } else { pick.as_str() })
+            .width(ui.available_width() - 6.0)
+            .selected_text(if pick.is_empty() { "the post's" } else { pick.as_str() })
             .show_ui(ui, |ui| {
                 for c in ["", "flood", "mist", "through", "off"] {
-                    ui.selectable_value(&mut pick, c.to_string(), if c.is_empty() { "post's" } else { c });
+                    ui.selectable_value(&mut pick, c.to_string(), if c.is_empty() { "the post's" } else { c });
                 }
             });
         places.push((format!("cam:programs:{}:coolant", p.name), r.response.rect));
-        if pick != now {
-            edits.push(if pick.is_empty() {
-                super::doc::Edit::Unset { id: p.name.clone(), arg: "coolant".into() }
-            } else {
-                super::doc::Edit::Set { id: p.name.clone(), arg: "coolant".into(), text: format!("\"{pick}\"") }
-            });
-        }
     });
-    ui.horizontal_wrapped(|ui| {
-        ui.add_space(14.0);
-        let had = p.arg_str("tools").as_deref() == Some("list");
+    if pick != now {
+        edits.push(if pick.is_empty() {
+            super::doc::Edit::Unset { id: p.name.clone(), arg: "coolant".into() }
+        } else {
+            super::doc::Edit::Set { id: p.name.clone(), arg: "coolant".into(), text: format!("\"{pick}\"") }
+        });
+    }
+    // the checks, a row each
+    for (arg, words, on_text) in [("split", "One file per setup", "\"setup\""), ("tools", "Tool list in the header", "\"list\"")] {
+        let had = match arg {
+            "split" => p.arg_str("split").as_deref() == Some("setup"),
+            _ => p.arg_str("tools").as_deref() == Some("list"),
+        };
         let mut on = had;
-        let r = ui.checkbox(&mut on, "Tool list in header");
-        places.push((format!("cam:programs:{}:tools", p.name), r.rect));
+        ui.horizontal(|ui| {
+            ui.add_space(14.0);
+            let r = ui.checkbox(&mut on, words);
+            places.push((format!("cam:programs:{}:{arg}", p.name), r.rect));
+        });
         if on != had {
             edits.push(if on {
-                super::doc::Edit::Set { id: p.name.clone(), arg: "tools".into(), text: "\"list\"".into() }
+                super::doc::Edit::Set { id: p.name.clone(), arg: arg.into(), text: on_text.into() }
             } else {
-                super::doc::Edit::Unset { id: p.name.clone(), arg: "tools".into() }
+                super::doc::Edit::Unset { id: p.name.clone(), arg: arg.into() }
             });
         }
-        ui.add_space(12.0);
+    }
+    // the program's own actions, together
+    ui.add_space(4.0);
+    ui.horizontal_wrapped(|ui| {
+        ui.add_space(14.0);
         let ok = res.as_ref().is_some_and(|r| r.text.is_some());
         if ok && button(ui, t, "Post", true, format!("cam:programs:{}:post", p.name), places) {
             cmds.push(Cmd::PostNc(Some(p.name.clone())));
         }
-        if ok && button(ui, t, "Export…", false, format!("cam:programs:{}:export", p.name), places) {
+        if ok && button(ui, t, "Export\u{2026}", false, format!("cam:programs:{}:export", p.name), places) {
             cmds.push(Cmd::ExportNc(Some(p.name.clone())));
         }
         if button(ui, t, "Post Process", false, format!("cam:programs:{}:open", p.name), places) {
@@ -3349,7 +3337,7 @@ fn prog_field(
     ui: &mut Ui,
     t: &Theme,
     label: &str,
-    wide: f32,
+    width: f32,
     p: &super::doc::Stmt,
     arg: &str,
     hint: &str,
@@ -3363,16 +3351,16 @@ fn prog_field(
         Some((k, b)) if *k == key => b.clone(),
         _ => now.clone(),
     };
-    ui.add_space(8.0);
-    ui.label(egui::RichText::new(label).font(sans(12.0)).color(t.ink2));
-    ui.add_space(4.0);
-    let r = ui.add(
-        egui::TextEdit::singleline(&mut v)
-            .font(sans(12.0))
-            .hint_text(hint)
-            .desired_width(wide)
-            .margin(vec2(5.0, 3.0)),
-    );
+    // a sheet row: the label in its column, the field filling the rest
+    let r = row(ui, t, label, width, 30.0, |ui| {
+        ui.add(
+            egui::TextEdit::singleline(&mut v)
+                .font(sans(13.0))
+                .hint_text(hint)
+                .desired_width(ui.available_width() - 6.0)
+                .margin(vec2(7.0, 5.0)),
+        )
+    });
     places.push((key.clone(), r.rect));
     if r.changed() {
         *field = Some((key.clone(), v.clone()));
@@ -3524,8 +3512,10 @@ fn quality_window(
                         q.p_avail > 0.0 && q.p_max > q.p_avail,
                     ];
                     let mut x = r.left() + 14.0;
-                    for ((c, (_, wd)), wn) in cells.iter().zip(cols).zip(warn) {
-                        ui.painter().text(pos2(x, r.center().y), Align2::LEFT_CENTER, c, mono(11.0), if wn { t.warn } else { t.ink });
+                    for (ci, ((c, (_, wd)), wn)) in cells.iter().zip(cols).zip(warn).enumerate() {
+                        // the op's name as the tree shows it; the numbers in mono
+                        let font = if ci == 0 { sans(12.0) } else { mono(11.0) };
+                        ui.painter().text(pos2(x, r.center().y), Align2::LEFT_CENTER, c, font, if wn { t.warn } else { t.ink });
                         x += wd;
                     }
                 }
@@ -3549,7 +3539,7 @@ fn quality_window(
             note(
                 ui,
                 &format!(
-                    "Measured on a height map of {} mm cells (forge-cam-quality): rubbing is a chip under half the feed per tooth, overloaded over 1.25 times it. Amber: worth a look.",
+                    "Measured on a {} mm height map: rubbing is a chip under half the feed per tooth, overloaded over 1.25 times it. Amber: worth a look.",
                     num(job.cell)
                 ),
                 width,
