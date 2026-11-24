@@ -264,6 +264,9 @@ fn the_tool_library_adds_a_tool_to_the_document() {
     assert!(h.click("tool:Tool Library"));
     h.step();
     shot(&mut h, "cam-tools");
+    assert!(h.click("cam:tools:search"));
+    h.text("flat-6");
+    h.step();
     let row = h
         .gui
         .shell
@@ -272,9 +275,64 @@ fn the_tool_library_adds_a_tool_to_the_document() {
         .map(|p| p.0.clone())
         .find(|n| n.starts_with("cam:tools:row:flat-6"))
         .expect("a 6 mm flat in the library");
+    // a row shows the tool (its cross-section); Add to document puts it in
     assert!(h.click(&row));
     h.step();
+    assert!(h.placed("cam:tools:profile").is_some());
+    shot(&mut h, "cam-tools-picked");
+    assert!(!text(&h).contains("flat-6"));
+    assert!(h.click("cam:tools:add"));
+    h.step();
     assert!(text(&h).contains("tool(\"flat-6\", t: 2"), "{}", text(&h));
+    h.step();
+    // the document's tools first, with their numbers; the one just added is recent
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert_eq!(w.tools_recent.first().map(String::as_str), Some("flat-6"));
+    // the type chip and the search narrow the list
+    h.gui.shell.cam.as_mut().unwrap().tools_find = Default::default();
+    h.step();
+    assert!(h.click("cam:tools:kind:ball"));
+    h.step();
+    let rows = |h: &mut Headless| -> Vec<String> {
+        h.step();
+        h.gui.shell.places.iter().filter_map(|p| p.0.strip_prefix("cam:tools:row:").map(str::to_string)).collect()
+    };
+    let kind_of = |h: &Headless, id: &str| h.gui.shell.cam.as_ref().unwrap().lib.tools.iter().find(|t| t.id == id).map(|t| t.kind);
+    let balls = rows(&mut h);
+    assert!(!balls.is_empty() && balls.iter().all(|id| kind_of(&h, id) == Some(forge_tooling::Kind::Ball)), "{balls:?}");
+    assert!(h.click("cam:tools:kind:all"));
+    assert!(h.click("cam:tools:search"));
+    h.text("chamfer");
+    let ch = rows(&mut h);
+    assert!(!ch.is_empty() && ch.iter().all(|id| kind_of(&h, id) == Some(forge_tooling::Kind::Chamfer)), "{ch:?}");
+    h.gui.shell.cam.as_mut().unwrap().tools_find = Default::default();
+    // in the document: its stick-out edited there
+    assert!(h.click("cam:tools:row:flat-10"));
+    h.step();
+    shot(&mut h, "cam-tools-instance");
+    assert!(h.click("cam:tools:inst:t1:stickout"));
+    h.key_with(egui::Key::A, egui::Modifiers::COMMAND);
+    h.text("40");
+    h.step();
+    assert!(h.click("cam:tools:inst:t1:apply"));
+    h.step();
+    assert!(text(&h).contains("stickout: 40"), "{}", text(&h));
+    // derived: a longer flute, saved to the project's cam/tools.toml and shown
+    assert!(h.click("cam:tools:derive"));
+    h.step();
+    shot(&mut h, "cam-tools-derive");
+    assert!(h.click("cam:tools:form:lcf"));
+    h.key_with(egui::Key::A, egui::Modifiers::COMMAND);
+    h.text("40");
+    h.step();
+    assert!(h.click("cam:tools:save"));
+    h.step();
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    let saved = std::fs::read_to_string(w.dir.join("cam/tools.toml")).expect("cam/tools.toml written");
+    assert!(saved.contains("id = \"flat-10-custom\"") && saved.contains("lcf = 40"), "{saved}");
+    assert!(w.lib.tools.iter().any(|t| t.id == "flat-10-custom" && t.lcf == 40.0));
+    assert_eq!(w.tools_sel.as_deref(), Some("flat-10-custom"));
+    let _ = std::fs::remove_file(w.dir.join("cam/tools.toml"));
 }
 
 /// The dialogs' parity arguments are the language's: a contour with axial stock, conventional

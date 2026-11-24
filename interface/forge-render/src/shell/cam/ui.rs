@@ -2065,7 +2065,8 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
 fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &mut Places) -> Option<Rect> {
     let mut close = false;
     // within the view (a side panel takes its right): its left, as the other windows open
-    let width = 560.0_f32.min(v.width() - 48.0).max(380.0);
+    // two panes (the list, the tool shown) where the view has room, else one over the other
+    let width = if w.turning() { 560.0_f32 } else { 860.0_f32 }.min(v.width() - 48.0).max(380.0);
     let mut add: Option<String> = None;
     let r = egui::Window::new("cam-tools")
         .id(egui::Id::unique("cam-tools-window"))
@@ -2079,6 +2080,10 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
         .constrain_to(below_chips(v))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_tools", "Tool Library", width, places, "cam:tools");
+            if !w.turning() {
+                mill_library(ui, t, v, w, width, &mut add, places);
+                return;
+            }
             let mut f = w.tools_filter.clone();
             row(ui, t, "Filter", width, 30.0, |ui| {
                 let r = ui.add(egui::TextEdit::singleline(&mut f).font(sans(13.0)).hint_text("type, id or diameter").desired_width(ui.available_width() - 6.0));
@@ -2092,88 +2097,6 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
                 ui.add_space(8.0);
                 return;
             }
-            heading(ui, t, "Cutters", width);
-            // the list gives way on a small view, so the window keeps inside it
-            let list_h = (v.height() - 330.0).clamp(120.0, 300.0);
-            let (r, _) = ui.allocate_exact_size(vec2(width, list_h), Sense::hover());
-            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r));
-            egui::ScrollArea::vertical().id_salt("cam-tools-list").auto_shrink([false, false]).show(&mut child, |ui| {
-                for tool in &w.lib.tools {
-                    // what a machinist reads: the id, the kind in words, Ø, flutes, flute length
-                    let parts = [
-                        tool.id.clone(),
-                        kind_words(tool.kind).to_string(),
-                        format!("Ø{} mm", num(tool.dc)),
-                        format!("{} flutes", tool.nof),
-                        format!("{} mm flute", num(tool.lcf)),
-                    ];
-                    // as much as fits before "Add" on a narrow window, the rest dropped from the end
-                    let room = width - 12.0 - 38.0 - 96.0;
-                    let mut k = parts.len();
-                    let mut line = parts.join("  ·  ");
-                    while k > 2 && ui.painter().layout_no_wrap(line.clone(), sans(12.0), t.ink).size().x > room {
-                        k -= 1;
-                        line = parts[..k].join("  ·  ");
-                    }
-                    let full = parts.join("  ·  ");
-                    if !f.is_empty() && !full.to_lowercase().contains(&f) {
-                        continue;
-                    }
-                    let (r, resp) = ui.allocate_exact_size(vec2(width - 12.0, 26.0), Sense::click());
-                    let resp = if k < parts.len() { resp.on_hover_text(&full) } else { resp };
-                    if resp.hovered() {
-                        ui.painter().rect_filled(r, 0.0, t.hover);
-                    }
-                    let inu = used.contains(&tool.id);
-                    tool_glyph(ui.painter(), Rect::from_center_size(pos2(r.left() + 22.0, r.center().y), vec2(12.0, 22.0)), tool.kind, t.ink2);
-                    ui.painter().text(pos2(r.left() + 38.0, r.center().y), Align2::LEFT_CENTER, &line, sans(12.0), t.ink);
-                    ui.painter().text(
-                        pos2(r.right() - 10.0, r.center().y),
-                        Align2::RIGHT_CENTER,
-                        if inu { "in document" } else { "Add" },
-                        sans(12.0),
-                        if inu { t.ink2 } else { t.accent },
-                    );
-                    places.push((format!("cam:tools:row:{}", tool.id), r));
-                    if resp.clicked() && !inu {
-                        add = Some(tool.id.clone());
-                    }
-                }
-            });
-            heading(ui, t, "Import a Fusion tool library", width);
-            let mut ip = w.import_path.clone();
-            let mut go = false;
-            row(ui, t, "JSON file", width, 30.0, |ui| {
-                let r = ui.add(
-                    egui::TextEdit::singleline(&mut ip)
-                        .font(sans(13.0))
-                        .hint_text("beside the document, e.g. shop.json")
-                        .desired_width(ui.available_width() - 80.0),
-                );
-                places.push(("cam:tools:import:path".into(), r.rect));
-                go = button(ui, t, "Import", true, "cam:tools:import".into(), places);
-            });
-            w.import_path = ip;
-            if go {
-                let f = w.import_path.clone();
-                w.said = Some(match w.import_fusion(&f) {
-                    Ok(m) => m,
-                    Err(e) => format!("import: {e}"),
-                });
-            }
-            if let Some(s) = &w.said {
-                note(ui, s, width, t.ink2);
-            }
-            heading(ui, t, "Holders", width);
-            for h in &w.lib.holders {
-                fact(ui, t, &h.id, &format!("{} · gauge {} mm · max {} rpm", h.interface, num(h.gauge_length), grouped(h.max_rpm)), width, t.ink);
-            }
-            // one line (a small view keeps it whole); the rest on hover
-            ui.horizontal(|ui| {
-                ui.add_space(14.0);
-                ui.label(egui::RichText::new("Built in: generic, our own numbers · verify with the vendor").font(sans(12.0)).color(t.ink2))
-                    .on_hover_text("Generic tools and conservative holders, our own numbers: verify with the vendor. A project adds its own in cam/*.toml beside the document.");
-            });
             ui.add_space(8.0);
         });
     if let Some(id) = add.clone().filter(|_| w.turning()) {
@@ -2196,6 +2119,7 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
         add = None;
     }
     if let Some(id) = add {
+        super::toollib::touch(&mut w.tools_recent, &id);
         let n = w.tools().len() + 1;
         let tn = (1..)
             .find(|k| !w.tools().iter().any(|s| s.arg("t") == Some(&k.to_string())))
@@ -2233,6 +2157,566 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
         w.tools_open = false;
     }
     r.map(|r| r.response.rect)
+}
+
+/// The milling tool library: find (words, type, diameter, material), the document's tools, the
+/// recent ones, then the library; the tool shown with its cross-section, added, edited in the
+/// document (number, stick-out, holder), or a new one made from it or from nothing.
+#[allow(clippy::too_many_arguments)]
+fn mill_library(
+    ui: &mut Ui,
+    t: &Theme,
+    v: Rect,
+    w: &mut CamWs,
+    width: f32,
+    add: &mut Option<String>,
+    places: &mut Places,
+) {
+    use super::toollib::{self, KIND_CHIPS};
+    let two = width >= 700.0;
+    let left_w = if two { 330.0 } else { width };
+    let right_w = if two { width - left_w - 8.0 } else { width };
+    // the search, and New tool
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        let r = ui.add(
+            egui::TextEdit::singleline(&mut w.tools_find.text)
+                .font(sans(13.0))
+                .hint_text("Search: id, type, \u{d8} or maker")
+                .desired_width(left_w - 130.0)
+                .margin(vec2(7.0, 5.0)),
+        );
+        places.push(("cam:tools:search".into(), r.rect));
+        places.push(("cam:tools:filter".into(), r.rect));
+        if button(ui, t, "New tool\u{2026}", false, "cam:tools:new".into(), places) {
+            w.tools_form = Some(toollib::ToolForm::blank(&w.lib, forge_tooling::Kind::Flat));
+        }
+    });
+    // the type chips
+    ui.add_space(4.0);
+    ui.horizontal_wrapped(|ui| {
+        ui.add_space(14.0);
+        ui.set_max_width(left_w - 14.0);
+        ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
+        let all = ui.selectable_label(w.tools_find.kind.is_none(), "All");
+        places.push(("cam:tools:kind:all".into(), all.rect));
+        if all.clicked() {
+            w.tools_find.kind = None;
+        }
+        for (k, (name, _)) in KIND_CHIPS.iter().enumerate() {
+            let on = w.tools_find.kind == Some(k);
+            let r = ui.selectable_label(on, *name);
+            places.push((format!("cam:tools:kind:{}", name.to_lowercase()), r.rect));
+            if r.clicked() {
+                w.tools_find.kind = if on { None } else { Some(k) };
+            }
+        }
+    });
+    // diameter and material
+    ui.add_space(2.0);
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        ui.label(egui::RichText::new("\u{d8}").font(sans(12.0)).color(t.ink2));
+        for (k, hint) in [("min", "from"), ("max", "to")] {
+            let s = if k == "min" { &mut w.tools_find.dmin } else { &mut w.tools_find.dmax };
+            let r = ui.add(egui::TextEdit::singleline(s).font(sans(12.0)).hint_text(hint).desired_width(44.0));
+            places.push((format!("cam:tools:d{k}"), r.rect));
+        }
+        ui.label(egui::RichText::new("mm").font(sans(12.0)).color(t.ink2));
+        ui.add_space(8.0);
+        let mats = toollib::materials(&w.lib);
+        let shown = if w.tools_find.material.is_empty() { "Any material".to_string() } else { w.tools_find.material.clone() };
+        let r = egui::ComboBox::from_id_salt("cam-tools-material").selected_text(shown).width(120.0).show_ui(ui, |ui| {
+            ui.selectable_value(&mut w.tools_find.material, String::new(), "Any material");
+            for m in mats {
+                ui.selectable_value(&mut w.tools_find.material, m.clone(), m);
+            }
+        });
+        places.push(("cam:tools:material".into(), r.response.rect));
+        if !w.tools_find.is_open() && ui.small_button("Clear").clicked() {
+            w.tools_find = toollib::Find::default();
+        }
+    });
+    ui.add_space(4.0);
+    // the document's tools: library id to its statement's number
+    let in_doc: Vec<(String, String, String)> = w
+        .tools()
+        .iter()
+        .filter_map(|s| Some((s.pos(0).map(super::doc::unquote)?, s.arg("t").unwrap_or("?").to_string(), s.name.clone())))
+        .collect();
+    if w.tools_sel.is_none() {
+        w.tools_sel = in_doc.first().map(|d| d.0.clone()).or_else(|| w.lib.tools.first().map(|x| x.id.clone()));
+    }
+    // one pane over the other on a small view: a short list, the tool under it
+    let list_h = if two { (v.height() - 330.0).clamp(180.0, 440.0) } else { (v.height() * 0.3).clamp(120.0, 200.0) };
+    let mut pick: Option<String> = None;
+    ui.horizontal_top(|ui| {
+        // the list
+        ui.allocate_ui_with_layout(vec2(left_w, list_h), egui::Layout::top_down(egui::Align::Min), |ui| {
+            let (r, _) = ui.allocate_exact_size(vec2(left_w, list_h), Sense::hover());
+            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r));
+            egui::ScrollArea::vertical().id_salt("cam-tools-list").auto_shrink([false, false]).show(&mut child, |ui| {
+                let shown: Vec<&forge_tooling::Tool> =
+                    toollib::sorted(&w.lib.tools).into_iter().filter(|x| toollib::matches(&w.tools_find, x)).collect();
+                let doc: Vec<&forge_tooling::Tool> =
+                    shown.iter().copied().filter(|x| in_doc.iter().any(|d| d.0 == x.id)).collect();
+                let recent: Vec<&forge_tooling::Tool> = w
+                    .tools_recent
+                    .iter()
+                    .filter_map(|id| shown.iter().copied().find(|x| &x.id == id))
+                    .filter(|x| !in_doc.iter().any(|d| d.0 == x.id))
+                    .collect();
+                let rest: Vec<&forge_tooling::Tool> = shown
+                    .iter()
+                    .copied()
+                    .filter(|x| !in_doc.iter().any(|d| d.0 == x.id) && !w.tools_recent.contains(&x.id))
+                    .collect();
+                if shown.is_empty() {
+                    note(ui, "No tool matches: clear the search, or make one with New tool\u{2026}", left_w, t.ink2);
+                }
+                for (title, list) in [("In this document", doc), ("Recent", recent), ("Library", rest)] {
+                    if list.is_empty() {
+                        continue;
+                    }
+                    heading(ui, t, &format!("{title} \u{b7} {}", list.len()), left_w - 12.0);
+                    for x in list {
+                        let badge = in_doc.iter().find(|d| d.0 == x.id).map(|d| format!("T{}", d.1));
+                        let sel = w.tools_sel.as_deref() == Some(x.id.as_str());
+                        let resp = tool_row(ui, t, x, left_w - 12.0, sel, badge.as_deref());
+                        places.push((format!("cam:tools:row:{}", x.id), resp.rect));
+                        if resp.clicked() {
+                            pick = Some(x.id.clone());
+                        }
+                        if resp.double_clicked() && badge.is_none() {
+                            *add = Some(x.id.clone());
+                        }
+                    }
+                }
+            });
+        });
+        if two {
+            ui.add_space(8.0);
+            ui.allocate_ui_with_layout(vec2(right_w - 1.0, list_h), egui::Layout::top_down(egui::Align::Min), |ui| {
+                egui::ScrollArea::vertical().id_salt("cam-tools-detail").auto_shrink([false, false]).max_height(list_h).show(ui, |ui| {
+                    tool_detail(ui, t, w, right_w - 12.0, &in_doc, add, places);
+                });
+            });
+        }
+    });
+    if let Some(id) = pick {
+        if w.tools_sel.as_deref() != Some(id.as_str()) {
+            w.tools_form = None;
+        }
+        w.tools_sel = Some(id);
+    }
+    if !two {
+        egui::ScrollArea::vertical()
+            .id_salt("cam-tools-detail")
+            .max_height((v.height() - list_h - 300.0).max(140.0))
+            .show(ui, |ui| tool_detail(ui, t, w, right_w - 12.0, &in_doc, add, places));
+    }
+            ui.add_space(4.0);
+    egui::CollapsingHeader::new(egui::RichText::new("Import a Fusion tool library").font(medium(13.0)).color(t.ink))
+        .id_salt("cam-tools-import")
+        .default_open(false)
+        .show(ui, |ui| {
+    let mut ip = w.import_path.clone();
+    let mut go = false;
+    row(ui, t, "JSON file", width, 30.0, |ui| {
+        let r = ui.add(
+            egui::TextEdit::singleline(&mut ip)
+                .font(sans(13.0))
+                .hint_text("beside the document, e.g. shop.json")
+                .desired_width(ui.available_width() - 80.0),
+        );
+        places.push(("cam:tools:import:path".into(), r.rect));
+        go = button(ui, t, "Import", true, "cam:tools:import".into(), places);
+    });
+    w.import_path = ip;
+    if go {
+        let f = w.import_path.clone();
+        w.said = Some(match w.import_fusion(&f) {
+            Ok(m) => m,
+            Err(e) => format!("import: {e}"),
+        });
+    }
+    if let Some(s) = &w.said {
+        note(ui, s, width, t.ink2);
+    }
+        });
+    egui::CollapsingHeader::new(egui::RichText::new(format!("Holders \u{b7} {}", w.lib.holders.len())).font(medium(13.0)).color(t.ink))
+        .id_salt("cam-tools-holders")
+        .default_open(false)
+        .show(ui, |ui| {
+    for h in &w.lib.holders {
+        fact(ui, t, &h.id, &format!("{} · gauge {} mm · max {} rpm", h.interface, num(h.gauge_length), grouped(h.max_rpm)), width, t.ink);
+    }
+        });
+    // one line (a small view keeps it whole); the rest on hover
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        ui.label(egui::RichText::new("Built in: generic, our own numbers · verify with the vendor").font(sans(12.0)).color(t.ink2))
+            .on_hover_text("Generic tools and conservative holders, our own numbers: verify with the vendor. A project adds its own in cam/*.toml beside the document.");
+    });
+    ui.add_space(8.0);
+}
+
+/// One tool in the list: its glyph, "Ø10 · Flat end mill", the id and what else matters under
+/// it, its number in the document on the right.
+fn tool_row(ui: &mut Ui, t: &Theme, x: &forge_tooling::Tool, w: f32, sel: bool, badge: Option<&str>) -> egui::Response {
+    let (r, resp) = ui.allocate_exact_size(vec2(w, 36.0), Sense::click());
+    let p = ui.painter();
+    if sel {
+        p.rect_filled(r, 4.0, t.on.gamma_multiply(0.35));
+    } else if resp.hovered() {
+        p.rect_filled(r, 4.0, t.hover);
+    }
+    tool_glyph(p, Rect::from_center_size(pos2(r.left() + 22.0, r.center().y), vec2(12.0, 24.0)), x.kind, t.ink2);
+    p.text(
+        pos2(r.left() + 40.0, r.top() + 10.0),
+        Align2::LEFT_CENTER,
+        format!("\u{d8}{} \u{b7} {}", num(x.dc), super::toollib::kind_words(x.kind)),
+        sans(13.0),
+        t.ink,
+    );
+    let mut more = vec![x.id.clone()];
+    if x.nof > 0 {
+        more.push(format!("{} fl", x.nof));
+    }
+    more.push(format!("{} mm flute", num(x.lcf)));
+    if !x.material.is_empty() {
+        more.push(x.material.clone());
+    }
+    p.text(pos2(r.left() + 40.0, r.top() + 26.0), Align2::LEFT_CENTER, more.join(" \u{b7} "), sans(11.0), t.ink2);
+    if let Some(b) = badge {
+        let g = p.layout_no_wrap(b.to_string(), medium(11.0), t.on_ink);
+        let br = Rect::from_center_size(pos2(r.right() - 10.0 - g.size().x / 2.0 - 5.0, r.center().y), g.size() + vec2(10.0, 4.0));
+        p.rect_filled(br, 4.0, t.on);
+        p.galley(br.min + vec2(5.0, 2.0), g, t.on_ink);
+    }
+    resp
+}
+
+/// The tool shown: its cross-section and facts, then what to do with it (add it, edit it in the
+/// document, derive a new one); or the new tool being made.
+#[allow(clippy::too_many_arguments)]
+fn tool_detail(
+    ui: &mut Ui,
+    t: &Theme,
+    w: &mut CamWs,
+    width: f32,
+    in_doc: &[(String, String, String)],
+    add: &mut Option<String>,
+    places: &mut Places,
+) {
+    if w.tools_form.is_some() {
+        return tool_form(ui, t, w, width, places);
+    }
+    let Some(x) = w.tools_sel.as_ref().and_then(|id| w.lib.tools.iter().find(|x| &x.id == id)).cloned() else {
+        note(ui, "Choose a tool on the left.", width, t.ink2);
+        return;
+    };
+    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        ui.label(egui::RichText::new(&x.id).font(medium(15.0)).color(t.ink));
+        ui.add_space(8.0);
+        ui.label(egui::RichText::new(super::toollib::kind_words(x.kind)).font(sans(13.0)).color(t.ink2));
+    });
+    let origin = if x.real {
+        format!("{} {} \u{b7} the maker's values, cited", x.vendor, x.product_id)
+    } else if x.source.starts_with("derived from") || x.source == "made in the tool library" {
+        format!("Project tool ({})", x.source)
+    } else {
+        "Built in \u{b7} generic numbers: verify with the tool's maker".to_string()
+    };
+    note(ui, &origin, width, t.ink2);
+    // what to do with it first, then what it is
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        match in_doc.iter().find(|d| d.0 == x.id) {
+            Some((_, n, name)) => {
+                ui.label(egui::RichText::new(format!("In this document as {name} (T{n})")).font(sans(13.0)).color(t.ink2));
+            }
+            None => {
+                if button(ui, t, "Add to document", true, "cam:tools:add".into(), places) {
+                    *add = Some(x.id.clone());
+                }
+            }
+        }
+        if button(ui, t, "Derive from this tool\u{2026}", false, "cam:tools:derive".into(), places) {
+            w.tools_form = Some(super::toollib::ToolForm::derived(&w.lib, &x));
+        }
+    });
+    // in the document: its number, stick-out and holder, edited there
+    if let Some((_, _, name)) = in_doc.iter().find(|d| d.0 == x.id) {
+        heading(ui, t, &format!("{name} in this document"), width);
+        tool_instance(ui, t, w, name, places);
+    }
+    let mut facts = vec![
+        ("Diameter", format!("{} mm", num(x.dc))),
+        ("Flutes", x.nof.to_string()),
+        ("Flute length", format!("{} mm", num(x.lcf))),
+        ("Shank", format!("\u{d8}{} mm", num(x.dcon))),
+        ("Overall length", format!("{} mm", num(x.oal))),
+    ];
+    use forge_tooling::Kind as K;
+    match x.kind {
+        K::Bull => facts.push(("Corner radius", format!("{} mm", num(x.re)))),
+        K::Drill => facts.push(("Point angle", format!("{}\u{b0}", num(x.angle)))),
+        K::Chamfer | K::Engrave | K::Spot | K::Countersink => {
+            facts.push(("Included angle", format!("{}\u{b0}", num(x.angle))));
+            if x.tip_d > 0.0 {
+                facts.push(("Tip diameter", format!("{} mm", num(x.tip_d))));
+            }
+        }
+        K::Tap | K::ThreadMill => facts.push(("Pitch", format!("{} mm", num(x.tp)))),
+        _ => {}
+    }
+    if !x.material.is_empty() {
+        facts.push(("Material", x.material.clone()));
+    }
+    // the cross-section to scale, its facts beside it
+    let pw = (width * 0.4).clamp(150.0, 220.0);
+    ui.horizontal_top(|ui| {
+        let (pr, _) = ui.allocate_exact_size(vec2(pw, 170.0), Sense::hover());
+        places.push(("cam:tools:profile".into(), pr));
+        tool_profile(ui.painter(), pr.shrink2(vec2(10.0, 6.0)), &x, t);
+        ui.vertical(|ui| {
+            for (k, val) in &facts {
+                fact(ui, t, k, val, width - pw - 8.0, t.ink);
+            }
+        });
+    });
+}
+
+/// A document tool's own words: its number, stick-out and holder, set in its statement.
+fn tool_instance(ui: &mut Ui, t: &Theme, w: &mut CamWs, name: &str, places: &mut Places) {
+    let Some(st) = w.stmt(name).cloned() else { return };
+    let id = egui::Id::unique(("cam-tool-inst", name.to_string()));
+    let now = (
+        st.arg("t").unwrap_or("").to_string(),
+        st.arg("stickout").unwrap_or("").to_string(),
+        st.arg("holder").map(super::doc::unquote).unwrap_or_default(),
+    );
+    let mut ed: (String, String, String) = ui.data_mut(|d| d.get_temp(id)).unwrap_or_else(|| now.clone());
+    arg_field(ui, t, "Tool number", &mut ed.0, "", "", &format!("cam:tools:inst:{name}:t"), places);
+    arg_field(ui, t, "Stick-out", &mut ed.1, "", "mm", &format!("cam:tools:inst:{name}:stickout"), places);
+    let holders: Vec<(String, String)> = std::iter::once((String::new(), "none".to_string()))
+        .chain(w.lib.holders.iter().map(|h| (h.id.clone(), format!("{} \u{b7} {}", h.id, h.interface))))
+        .collect();
+    arg_choice(ui, t, "Holder", &mut ed.2, &holders, &format!("cam:tools:inst:{name}:holder"), places);
+    let changed = ed != now;
+    ui.horizontal(|ui| {
+        ui.add_space(146.0);
+        if button(ui, t, "Apply", changed, format!("cam:tools:inst:{name}:apply"), places) && changed {
+            let mut edits = vec![];
+            for (arg, new, old, quote) in [("t", &ed.0, &now.0, false), ("stickout", &ed.1, &now.1, false), ("holder", &ed.2, &now.2, true)] {
+                if new == old {
+                    continue;
+                }
+                edits.push(if new.trim().is_empty() {
+                    super::doc::Edit::Unset { id: name.to_string(), arg: arg.into() }
+                } else {
+                    super::doc::Edit::Set {
+                        id: name.to_string(),
+                        arg: arg.into(),
+                        text: if quote { format!("\"{}\"", new.trim()) } else { new.trim().to_string() },
+                    }
+                });
+            }
+            if let Err(e) = w.edits(&edits) {
+                w.said = Some(e);
+            }
+        }
+    });
+    ui.data_mut(|d| {
+        if changed {
+            d.insert_temp(id, ed);
+        } else {
+            d.remove::<(String, String, String)>(id);
+        }
+    });
+}
+
+/// A new tool: from nothing (its type chosen) or derived (the source's type); saved to the
+/// project's library.
+fn tool_form(ui: &mut Ui, t: &Theme, w: &mut CamWs, width: f32, places: &mut Places) {
+    use super::toollib;
+    let Some(mut f) = w.tools_form.take() else { return };
+    ui.add_space(6.0);
+    let title = match &f.from {
+        Some(src) => format!("Derived from {src}"),
+        None => "New tool".to_string(),
+    };
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        ui.label(egui::RichText::new(title).font(medium(15.0)).color(t.ink));
+    });
+    if f.from.is_none() {
+        let kinds: Vec<(String, String)> = toollib::KIND_CHIPS
+            .iter()
+            .flat_map(|c| c.1.iter())
+            .map(|k| (k.name().to_string(), toollib::kind_words(*k).to_string()))
+            .collect();
+        let mut kn = f.kind.name().to_string();
+        arg_choice(ui, t, "Type", &mut kn, &kinds, "cam:tools:form:type", places);
+        if let Some(k) = forge_tooling::Kind::parse(&kn)
+            && k != f.kind
+        {
+            f.set_kind(k);
+        }
+    }
+    // saved or not first (the record as typed, read back), then its values
+    let preview = f.toml(&w.lib);
+    let mut keep = true;
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        if button(ui, t, "Save to project", preview.is_ok(), "cam:tools:save".into(), places) {
+            match &preview {
+                Ok(text) => match w.save_tool(text, f.id.trim()) {
+                    Ok(m) => {
+                        w.said = Some(m);
+                        w.tools_sel = Some(f.id.trim().to_string());
+                        keep = false;
+                    }
+                    Err(e) => w.said = Some(e),
+                },
+                Err(e) => w.said = Some(e.clone()),
+            }
+        }
+        if button(ui, t, "Cancel", false, "cam:tools:cancel".into(), places) {
+            keep = false;
+        }
+    });
+    if let Err(e) = &preview {
+        note(ui, e, width, t.warn);
+    }
+    let mut id = f.id.clone();
+    arg_field(ui, t, "Id", &mut id, "", "", "cam:tools:form:id", places);
+    f.id = id;
+    for (k, label, unit) in toollib::form_fields(f.kind) {
+        let mut val = f.get(k).to_string();
+        arg_field(ui, t, label, &mut val, "", unit, &format!("cam:tools:form:{k}"), places);
+        f.set(k, val);
+    }
+    // what it would be, drawn as typed (when it reads)
+    if let Ok(text) = &preview {
+        let mut l = w.lib.clone();
+        if l.add("preview", text).is_ok()
+            && let Some(x) = l.tools.iter().find(|x| x.id == f.id.trim())
+        {
+            let (pr, _) = ui.allocate_exact_size(vec2(width, 150.0), Sense::hover());
+            tool_profile(ui.painter(), pr.shrink2(vec2(14.0, 6.0)), x, t);
+        }
+    }
+    if keep {
+        w.tools_form = Some(f);
+    }
+}
+
+/// A tool's side view to scale: shank, flutes (helix lines), and its end as its type makes it
+/// (square, ball, corner radius, point or chamfer, thread), with its diameter, flute length and
+/// overall length marked.
+fn tool_profile(p: &egui::Painter, r: Rect, x: &forge_tooling::Tool, t: &Theme) {
+    use forge_tooling::Kind as K;
+    let oal = x.oal.max(x.lcf).max(1e-3);
+    let wmax = x.dc.max(x.dcon).max(1e-3);
+    // tip at the bottom; room on the right for the marks
+    let s = ((r.height() - 22.0) / oal as f32).min((r.width() * 0.3) / wmax as f32);
+    let cx = r.center().x;
+    let tip = r.bottom() - 14.0;
+    let y = |mm: f64| tip - mm as f32 * s;
+    let hw = |d: f64| d as f32 * s / 2.0;
+    let (rd, rs) = (hw(x.dc), hw(x.dcon));
+    let fill = t.ink2.gamma_multiply(0.18);
+    let st = Stroke::new(1.3, t.ink);
+    // the shank
+    let shank = Rect::from_min_max(pos2(cx - rs, y(oal)), pos2(cx + rs, y(x.lcf)));
+    p.rect_filled(shank, 0.0, fill);
+    p.rect_stroke(shank, 0.0, st, egui::StrokeKind::Middle);
+    // the end: its outline from the left at flute top, down round the tip, up the right
+    let lcf = y(x.lcf);
+    let mut pts = vec![pos2(cx - rd, lcf)];
+    let arc = |pts: &mut Vec<egui::Pos2>, c: egui::Pos2, rad: f32, a0: f32, a1: f32| {
+        for k in 0..=12 {
+            let a = a0 + (a1 - a0) * k as f32 / 12.0;
+            pts.push(pos2(c.x + rad * a.cos(), c.y + rad * a.sin()));
+        }
+    };
+    let point = |ang: f64, tip_half: f32| -> f32 {
+        // the height of a cone of this included angle from radius rd to tip_half
+        let half = (ang.max(1.0) / 2.0).to_radians() as f32;
+        (rd - tip_half).max(0.0) / half.tan()
+    };
+    match x.kind {
+        K::Ball => {
+            pts.push(pos2(cx - rd, tip - rd));
+            arc(&mut pts, pos2(cx, tip - rd), rd, std::f32::consts::PI, 0.0);
+            // egui y grows down: the arc above went the wrong way; mirror it below the centre
+            let n = pts.len();
+            for q in pts[n - 13..].iter_mut() {
+                q.y = 2.0 * (tip - rd) - q.y;
+            }
+        }
+        K::Bull => {
+            let re = (x.re as f32 * s).min(rd);
+            pts.push(pos2(cx - rd, tip - re));
+            let n0 = pts.len();
+            arc(&mut pts, pos2(cx - rd + re, tip - re), re, std::f32::consts::PI, std::f32::consts::FRAC_PI_2);
+            arc(&mut pts, pos2(cx + rd - re, tip - re), re, std::f32::consts::FRAC_PI_2, 0.0);
+            let _ = n0;
+        }
+        K::Drill | K::Spot | K::Countersink | K::Chamfer | K::Engrave => {
+            let th = if matches!(x.kind, K::Chamfer | K::Engrave) { hw(x.tip_d) } else { 0.0 };
+            let h = point(x.angle, th);
+            pts.push(pos2(cx - rd, tip - h));
+            pts.push(pos2(cx - th, tip));
+            pts.push(pos2(cx + th, tip));
+        }
+        _ => {
+            pts.push(pos2(cx - rd, tip));
+            pts.push(pos2(cx + rd, tip));
+        }
+    }
+    match x.kind {
+        K::Drill | K::Spot | K::Countersink | K::Chamfer | K::Engrave => {
+            let th = if matches!(x.kind, K::Chamfer | K::Engrave) { hw(x.tip_d) } else { 0.0 };
+            pts.push(pos2(cx + rd, tip - point(x.angle, th)));
+        }
+        K::Ball | K::Bull => pts.push(pos2(cx + rd, tip - if x.kind == K::Ball { rd } else { (x.re as f32 * s).min(rd) })),
+        _ => {}
+    }
+    pts.push(pos2(cx + rd, lcf));
+    p.add(egui::Shape::convex_polygon(pts.clone(), fill, Stroke::NONE));
+    p.add(egui::Shape::closed_line(pts, st));
+    // the flutes: helix lines across the fluted length (threads: teeth)
+    let lines = ((x.lcf as f32 * s) / 9.0).clamp(2.0, 14.0) as usize;
+    for k in 1..lines {
+        let yy = lcf + (tip - lcf) * k as f32 / lines as f32;
+        if yy > tip - rd * 0.9 && matches!(x.kind, K::Ball | K::Drill | K::Spot | K::Chamfer | K::Countersink | K::Engrave) {
+            break;
+        }
+        let tilt = if matches!(x.kind, K::Tap | K::ThreadMill) { 0.0 } else { rd * 0.5 };
+        p.line_segment([pos2(cx - rd, yy + tilt), pos2(cx + rd, yy - tilt)], Stroke::new(1.0, t.ink2.gamma_multiply(0.6)));
+    }
+    // the marks: diameter under the tip, flute length and overall length on the right
+    let mark = Stroke::new(1.0, t.ink2);
+    let font = mono(11.0);
+    p.text(pos2(cx, tip + 8.0), Align2::CENTER_CENTER, format!("\u{d8}{}", num(x.dc)), font.clone(), t.ink2);
+    // flute length on the right, overall length on the left: the marks stay inside `r`
+    let side = rd.max(rs) + 12.0;
+    for (from, to, label, right) in [(tip, lcf, num(x.lcf), true), (tip, y(oal), num(x.oal), false)] {
+        let xx = if right { cx + side } else { cx - side };
+        p.line_segment([pos2(xx, from), pos2(xx, to)], mark);
+        p.line_segment([pos2(xx - 4.0, from), pos2(xx + 4.0, from)], mark);
+        p.line_segment([pos2(xx - 4.0, to), pos2(xx + 4.0, to)], mark);
+        let (at, al) = if right { (pos2(xx + 6.0, (from + to) / 2.0), Align2::LEFT_CENTER) } else { (pos2(xx - 6.0, (from + to) / 2.0), Align2::RIGHT_CENTER) };
+        p.text(at, al, label, font.clone(), t.ink2);
+    }
+    if (x.dcon - x.dc).abs() > 1e-6 {
+        p.text(pos2(cx, y(oal) - 8.0), Align2::CENTER_CENTER, format!("shank \u{d8}{}", num(x.dcon)), font, t.ink2);
+    }
 }
 
 /// The lathe tool library (forge-turn's built-in records): insert, holder or bar, nose radius,

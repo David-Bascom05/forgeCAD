@@ -21,6 +21,9 @@ const SHOTS = [
   ["cam-5-drill-geometry.png", ["select bolts", "edit bolts", "tab 0"], (s) => s.cam.dialogs.includes("op")],
   ["cam-6-post.png", ["select prog", "post"], (s) => s.cam.dialogs.includes("post")],
   ["cam-7-tools.png", ["tools"], (s) => s.cam.dialogs.includes("tools")],
+  // the tool library's pass: narrowed to ball mills, one shown (its cross-section); a tool derived
+  ["cam-47-tools-ball.png", ["tools", "tools-kind ball", "tools-pick ball-6"], (s) => s.cam.dialogs.includes("tools")],
+  ["cam-48-tools-derive.png", ["tools", "tools-pick flat-10", "tools-derive"], (s) => s.cam.dialogs.includes("tools")],
   ["cam-8-setup.png", ["new-setup"], (s) => s.cam.dialogs.includes("setup")],
   ["cam-9-setup-stock.png", ["new-setup", "tab 1"], (s) => s.cam.dialogs.includes("setup")],
   ["cam-10-checks.png", ["select op1", "checks"], (s) => s.cam.dialogs.includes("checks")],

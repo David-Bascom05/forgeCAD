@@ -21,6 +21,7 @@ pub fn narrow(screen_w: f32) -> bool {
     screen_w > 0.0 && screen_w < 1280.0
 }
 pub mod run;
+pub mod toollib;
 pub mod schema;
 pub mod turnview;
 mod ui;
@@ -257,6 +258,12 @@ pub struct CamWs {
     /// The tool library's import field: a Fusion tool library's file, beside the document.
     pub import_path: String,
     pub tools_filter: String,
+    /// The tool library: what it is narrowed to, the tool shown, the tools used lately (most
+    /// recent first), and a new tool being made.
+    pub tools_find: toollib::Find,
+    pub tools_sel: Option<String>,
+    pub tools_recent: Vec<String>,
+    pub tools_form: Option<toollib::ToolForm>,
     pub checks_open: bool,
     pub text_open: bool,
     pub text_edit: String,
@@ -330,6 +337,10 @@ impl CamWs {
             quality_open: false,
             import_path: String::new(),
             tools_filter: String::new(),
+            tools_find: toollib::Find::default(),
+            tools_sel: None,
+            tools_recent: vec![],
+            tools_form: None,
             checks_open: false,
             text_open: false,
             text_edit: String::new(),
@@ -1217,6 +1228,27 @@ pub fn library(dir: &std::path::Path) -> forge_tooling::Library {
 }
 
 impl CamWs {
+    /// A tool made in the library (`toml`, read back already) appended to the project's
+    /// `cam/tools.toml` beside the document, and the library read again. Says what happened.
+    pub fn save_tool(&mut self, toml: &str, id: &str) -> Result<String, String> {
+        let dir = self.dir.join("cam");
+        let file = dir.join("tools.toml");
+        let mut text = forge_dirs::fs::read_to_string(&file).unwrap_or_default();
+        if text.is_empty() {
+            text.push_str("# The project's own tools (the Manufacture workspace's tool library writes here).\n");
+        }
+        text.push('\n');
+        text.push_str(toml);
+        // the whole file as it will be, read first: a file the library refuses is not written
+        let mut check = library(&self.dir);
+        check.add("cam/tools.toml", toml).map_err(|e| format!("{e:?}"))?;
+        let _ = forge_dirs::fs::create_dir_all(&dir);
+        forge_dirs::fs::write(&file, text.as_bytes()).map_err(|e| format!("{}: {e}", file.display()))?;
+        self.lib = library(&self.dir);
+        toollib::touch(&mut self.tools_recent, id);
+        Ok(format!("`{id}` saved to cam/tools.toml beside the document"))
+    }
+
     /// A Fusion tool library (its JSON, at `file` beside the document) converted into the
     /// project's `cam/<name>.toml` (forge-cam-import: read back before it is written), and the
     /// library reloaded. Says what happened.
