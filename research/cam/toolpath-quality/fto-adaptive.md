@@ -903,3 +903,23 @@ of the ordinary sweep. If it happens to open a corridor, that is the step rule's
 separately designed channel. Never add a channel pass whose purpose is to divide the region.
 If we ever want channels, add counsel Q14: does a separating channel chosen without any time
 comparison avoid the SolidCAM channel claims, given Celeritive's region-splitting nearby?
+
+**§10 note: how the length cap is set** (2026-11-24, cam/quality-adaptive-wip @b3003054; option (A)
+built: retrace the tool's own moves since it last came down, then one tested straight leg; test
+`links_never_cut`).
+
+The cap's defaults were tuned offline on benchmark parts:
+- one-way: 10 × the straight distance + 20r;
+- two-way: 20 × + 40r.
+
+They are fixed op constants. This is within condition (3). The element to avoid is choosing the
+link kind *per link* by an estimated-time comparison. A default picked once by experiment, and
+then applied as a pure length test, is not that.
+
+Keep it so:
+- do not derive the cap at run time from machine rapid or feed rates;
+- do not derive it from a time-parity formula, such as the length at which staying down equals
+  a retract's time;
+- do not let it vary per link.
+
+Record the benchmark that set it in the code comment, as provenance.
