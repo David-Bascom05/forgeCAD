@@ -1666,6 +1666,66 @@ theorem prefix_spec (hsmall : (allUses b).length < Usize.max) (nv : Usize) (hnv 
     have : w = 0 := by omega
     subst this; rw [ho0]; simp [vpre]
 
+theorem vpre_mono (b : Body) (A : List Nat) {w w' : Nat} (h : w ≤ w') : vpre b A w ≤ vpre b A w' := by
+  induction w' with
+  | zero => have : w = 0 := by omega
+            subst this; exact le_refl _
+  | succ w' ih =>
+    rcases Nat.lt_or_ge w (w' + 1) with h1 | h1
+    · have := ih (by omega); rw [vpre_succ]; omega
+    · have : w = w' + 1 := by omega
+      subst this; exact le_refl _
+
+theorem cntQ_sub (b : Body) {Q A : List Nat} (h : List.Sublist Q A) (w : Nat) : cntQ b Q w ≤ cntQ b A w :=
+  (h.filter _).length_le
+
+/-- What the placing loop has done after the coedges `Q`. -/
+def PlaceInv (b : Body) (A Q : List Nat) (atv items : List Usize) : Prop :=
+  atv.length = b.nv ∧ items.length = A.length ∧
+  (∀ w < b.nv, (atv[w]!).val = vpre b A w + cntQ b Q w) ∧
+  (∀ w < b.nv, ∀ j < cntQ b Q w, (items[vpre b A w + j]!).val = (Q.filter fun c => b.start c == w)[j]!)
+
+theorem place_step (b : Body) (A Q : List Nat) (c : Nat) (hQA : List.Sublist (Q ++ [c]) A) (hnvA : vpre b A b.nv = A.length)
+    (atv items : List Usize) (hP : PlaceInv b A Q atv items) (s : Nat) (hs : s < b.nv) (hcs : b.start c = s)
+    (cu : Usize) (hcu : cu.val = c) (a1 : Usize) (ha1 : a1.val = (atv[s]!).val + 1) :
+    PlaceInv b A (Q ++ [c]) (atv.set s a1) (items.set (atv[s]!).val cu) ∧
+    (atv[s]!).val < items.length := by
+  obtain ⟨hal, hil, hat, hit⟩ := hP
+  have hlt : cntQ b Q s < cntQ b A s := by
+    have := cntQ_sub b hQA s; rw [cntQ_snoc, if_pos hcs] at this; omega
+  have hpos : (atv[s]!).val < vpre b A (s + 1) := by rw [hat s hs, vpre_succ]; omega
+  have hend : vpre b A (s + 1) ≤ A.length := by rw [← hnvA]; exact vpre_mono b A (by omega)
+  refine ⟨⟨by simp [hal], by simp [hil], fun w hw => ?_, fun w hw j hj => ?_⟩, by omega⟩
+  · rw [getElem!_set _ _ _ _ (by omega), cntQ_snoc]
+    split
+    · rename_i h; subst h; rw [ha1, hat w hw, if_pos hcs]; omega
+    · rename_i h; rw [hat w hw, if_neg (by omega)]; rfl
+  · rw [getElem!_set _ _ _ _ (by
+      have := cntQ_sub b hQA w; have := vpre_mono b A (show w + 1 ≤ b.nv by omega); rw [vpre_succ] at this; omega)]
+    rw [List.filter_append]
+    by_cases hw' : w = s
+    · subst hw'
+      rw [cntQ_snoc, if_pos hcs] at hj
+      by_cases hj' : j = cntQ b Q w
+      · rw [if_pos (by rw [hat w hw, hj']), hcu]
+        have hl : (Q.filter fun c => b.start c == w).length = j := by rw [hj']; rfl
+        rw [getElem!_pos _ j (by simp [hcs]; omega)]
+        simp [hcs, List.getElem_append_right (by omega : (Q.filter fun c => b.start c == w).length ≤ j), hl]
+      · rw [if_neg (by rw [hat w hw]; omega)]
+        rw [hit w hw j (by omega), getElem!_pos _ j (by unfold cntQ at hj hj'; omega),
+          getElem!_pos _ j (by simp [hcs]; unfold cntQ at hj hj'; omega), List.getElem_append_left]
+    · have hj2 : j < cntQ b Q w := by rw [cntQ_snoc, if_neg (by omega)] at hj; omega
+      rw [if_neg ?_]
+      · have hcw : (b.start c == w) = false := by simp; omega
+        rw [hit w hw j hj2, getElem!_pos _ j (by unfold cntQ at hj2; omega),
+          getElem!_pos _ j (by simp [hcw]; unfold cntQ at hj2; omega)]
+        simp [hcw]; try rfl
+      · rw [hat s hs]
+        have h1 := cntQ_sub b hQA w; rw [cntQ_snoc, if_neg (by omega)] at h1
+        rcases Nat.lt_or_ge w s with hws | hws
+        · have := vpre_mono b A (show w + 1 ≤ s by omega); rw [vpre_succ] at this; omega
+        · have := vpre_mono b A (show s + 1 ≤ w by omega); rw [vpre_succ] at this; omega
+
 end sort
 
 end forge_topo
