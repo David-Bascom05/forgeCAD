@@ -59,7 +59,17 @@ fn plane_of(b: &Body, f: FaceId) -> Option<(forge_math::Vec3, f64)> {
 
 fn same_plane(a: (forge_math::Vec3, f64), b: (forge_math::Vec3, f64), tol: f64) -> bool {
     let c = a.0.dot(b.0);
-    (c > 1.0 - tol && (a.1 - b.1).abs() <= tol) || (c < -1.0 + tol && (a.1 + b.1).abs() <= tol)
+    (c >= 1.0 - tol && (a.1 - b.1).abs() <= tol) || (c <= -1.0 + tol && (a.1 + b.1).abs() <= tol)
+}
+
+/// Normals exactly parallel (each cross component exactly zero) and offsets equal as computed.
+fn same_plane_exact(a: (forge_math::Vec3, f64), b: (forge_math::Vec3, f64)) -> bool {
+    use forge_math::predicates::cross_sign;
+    let (n, m) = (a.0, b.0);
+    cross_sign(n.y, m.z, n.z, m.y) == 0.0
+        && cross_sign(n.z, m.x, n.x, m.z) == 0.0
+        && cross_sign(n.x, m.y, n.y, m.x) == 0.0
+        && (if n.dot(m) > 0.0 { a.1 == b.1 } else { a.1 == -b.1 })
 }
 
 /// The distance from `p` to planar face `f`'s region, for faces bounded by lines: the plane
@@ -133,7 +143,7 @@ fn measure_vertices() {
             let mut near = false;
             for i in 0..planes.len() {
                 for j in i + 1..planes.len() {
-                    if same_plane(planes[i].1, planes[j].1, 0.0) {
+                    if same_plane_exact(planes[i].1, planes[j].1) {
                         ex = true;
                     }
                     if same_plane(planes[i].1, planes[j].1, 1e-9) {
@@ -175,7 +185,7 @@ fn measure_vertices() {
         }
     }
     println!("bodies {}, vertices {nv}", bs.len());
-    println!("coplanar incident faces: exact {cop_exact}, within 1e-9 {cop_near}");
+    println!("coplanar incident faces: exactly parallel normals and equal offsets {cop_exact}, within 1e-9 {cop_near}");
     for e in &examples {
         println!("  {e}");
     }
@@ -185,3 +195,4 @@ fn measure_vertices() {
     }
     println!("smallest gap to a non-incident planar face: {min_gap:e}; curved faces skipped {skipped}");
 }
+
