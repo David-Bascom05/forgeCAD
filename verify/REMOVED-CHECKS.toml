@@ -12,6 +12,9 @@
 #   * `level`: "L4" when the lemma is about the Aeneas translation of the code itself; "L1"/"L2"
 #     when it is about a hand-written model. A hand-model entry needs a sampling and a mutation
 #     test, and lists "code = model" in `owed`.
+#   * an entry replaced on a hypothesis not yet proven has `lemmas = []`, names it in `hyp`, and lists
+#     "lemma" in `owed`; its tests carry it meanwhile.
+#   * an entry lands with its code: the registry is checked against the tree it is in.
 #
 # Entry form:
 #

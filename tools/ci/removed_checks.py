@@ -11,7 +11,8 @@
 * each guarding test listed exists as a `#[test]` and is not `#[ignore]`d (it then runs in the
   existing test jobs);
 * an entry whose lemma is about a hand model (level L1 or L2), not the translated code (L4), lists
-  at least one sampling test and one mutation test, and owes "code = model".
+  at least one sampling test and one mutation test, and owes "code = model";
+* an entry with no lemma yet (a check replaced on a hypothesis) names it (`hyp`) and owes "lemma".
 
 Usage: tools/ci/removed_checks.py [--hash ID] [--registry FILE]
   --hash ID       print an entry's current source hash (to set `reviewed_at` after a review)
@@ -138,7 +139,9 @@ def main() -> int:
                 f"against the new code, then set reviewed_at = \"{source_hash(src)}\"")
         # the lemmas
         if not e["lemmas"]:
-            err("no lemma")
+            # a check replaced on a hypothesis not yet proven: it says which, and owes the lemma
+            if not e.get("hyp") or "lemma" not in e.get("owed", []):
+                err('no lemma: name the hypothesis it rests on (`hyp`) and list "lemma" in `owed`')
         for lm in e["lemmas"]:
             proj = ROOT / lm["project"]
             if not proj.is_dir():
