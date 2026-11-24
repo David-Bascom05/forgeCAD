@@ -895,7 +895,7 @@ impl Shell {
     pub fn machine_side(&mut self, ui: &mut Ui, r: egui::Rect) {
         let Some(mut st) = self.machine.take() else { return };
         let t = self.theme;
-        let mut places = Vec::new();
+        let mut places = vec![("env:machine-builder:browser".to_string(), r)];
         ui.scope_builder(egui::UiBuilder::new().max_rect(r.shrink2(vec2(8.0, 6.0))), |ui| {
             lib_choice(ui, &mut st, &mut places);
             ui.add_space(4.0);
@@ -1162,7 +1162,8 @@ impl MachineUi {
         let none = || {
             let mut p = lm::Preview::default();
             p.ghosts.push(lm::Ghost {
-                edges: lm::dashed_box([-20.0; 3], [20.0; 3]),
+                bounds: Some(([-20.0; 3], [20.0; 3])),
+                edges: Vec::new(),
                 at: [20.0, 0.0, 20.0],
                 label: "no geometry to draw".into(),
             });

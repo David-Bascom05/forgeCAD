@@ -438,13 +438,40 @@ pub fn num_edit(ui: &mut Ui, x: &mut f64, unit: &str) -> bool {
         }
         return ch;
     }
-    let sfx = match unit {
-        "" => String::new(),
-        "deg" | "°" => "°".to_string(),
-        u => format!(" {u}"),
-    };
-    ui.add(egui::DragValue::new(x).speed(0.1).max_decimals(4).suffix(sfx))
-        .changed()
+    let u = unit.to_string();
+    ui.add(
+        egui::DragValue::new(x)
+            .speed(0.1)
+            .custom_formatter(move |v, _| value_text(v, &u))
+            .custom_parser(|t| leading_number(t)),
+    )
+    .changed()
+}
+
+/// A value as the sheet shows it: its number to the precision it carries (forge_units::trim),
+/// then its unit ("850 kN", "10 mm", "86°", "220 mm/s").
+pub fn value_text(x: f64, unit: &str) -> String {
+    match unit {
+        "" => forge_units::trim(x),
+        "deg" | "°" => format!("{}°", forge_units::trim(x)),
+        u => format!("{} {u}", forge_units::trim(x)),
+    }
+}
+
+/// The number a person typed, its unit word ignored ("850 kN" → 850).
+pub fn leading_number(t: &str) -> Option<f64> {
+    let t = t.trim();
+    let end = t
+        .char_indices()
+        .find(|(i, c)| {
+            !(c.is_ascii_digit()
+                || *c == '.'
+                || (*i == 0 && (*c == '-' || *c == '+'))
+                || *c == 'e'
+                || *c == 'E')
+        })
+        .map_or(t.len(), |(i, _)| i);
+    t[..end].parse().ok()
 }
 
 /// A level's heading in a library list: "Built-in · 236".

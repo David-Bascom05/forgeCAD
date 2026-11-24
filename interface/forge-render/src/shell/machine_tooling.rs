@@ -308,7 +308,7 @@ fn bookkeeping(k: &str) -> bool {
     )
 }
 
-fn unit_of(k: &str) -> &'static str {
+pub fn unit_of(k: &str) -> &'static str {
     match k {
         "angle" | "sig" | "helix" | "clearance" | "kr" => " °",
         "nof" => "",

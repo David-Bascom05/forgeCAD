@@ -430,7 +430,8 @@ impl BrakeUi {
                 let w = num("width").unwrap_or(h * 0.3);
                 let mut p = lm::Preview::default();
                 p.ghosts.push(lm::Ghost {
-                    edges: lm::dashed_box([-w / 2.0, 0.0, 0.0], [w / 2.0, h * 2.0, h]),
+                    bounds: Some(([-w / 2.0, 0.0, 0.0], [w / 2.0, h * 2.0, h])),
+                    edges: Vec::new(),
                     at: [w / 2.0, h, h],
                     label: format!(
                         "no section: {}",

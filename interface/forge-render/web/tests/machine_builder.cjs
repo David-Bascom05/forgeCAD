@@ -51,6 +51,8 @@ async function machine(p, cmd) {
     f = await t.pixels(p);
     console.log(`ok - a trunnion from its template (${t.shot("web-02-trunnion.png", f)})`);
 
+    // the user lets Z travel deeper than the template, then jogs into the contact that opens up
+    await machine(p, "range Z -400 0");
     for (const [j, v] of [["X", -160.19], ["Y", -300], ["Z", -400]]) await machine(p, `jog ${j} ${v}`);
     s = await machine(p, "jog B -120");
     assert.match(s, /contact: .*(cradle\/head|head\/cradle) HIT/, s);

@@ -24,6 +24,8 @@ pub struct MachHost {
     tints: Vec<[f32; 4]>,
     /// A library preview's ghost labels (world point, words) and its framing.
     labels: Vec<([f64; 3], String)>,
+    /// The preview's box ghosts, drawn see-through over the frame (`crate::ghost`).
+    ghost_boxes: Vec<crate::frame::Bounds>,
     /// A long tool's section and dimensions, for the inset.
     inset: Option<crate::library_mesh::Inset>,
 }
@@ -132,45 +134,39 @@ fn link_tint(def: &MachineDef, link: &str) -> [f32; 4] {
     }
 }
 
-/// A library preview framed (docs/ux/STANDARD.md §2): its bounds, ghosts included, filling about
-/// two thirds of the view's shorter side from the 3/4 view; a long tool (a punch or die set)
-/// seen along its length from its near end, so its section reads.
-fn frame_preview(
-    p: &crate::library_mesh::Preview,
-    parallel: bool,
-    size: (u32, u32),
-) -> crate::camera::Camera {
+/// A library preview framed (docs/ux/STANDARD.md §2, `crate::frame`): its bounds, ghosts
+/// included, at the standard fill from the 3/4 view; a long tool (a punch or die set) by its near
+/// end's stretch, seen along its length, so its section reads (the inset shows it to scale).
+fn frame_preview(p: &crate::library_mesh::Preview, size: (u32, u32)) -> crate::camera::Camera {
+    use crate::frame::{Bounds, Framing, ViewRect};
+    let view = ViewRect::full(size.0 as f32, size.1 as f32);
     let Some((lo, hi)) = p.bounds() else {
-        return super::view_camera([0.0; 3], 50.0, parallel, size);
+        return crate::frame::frame(Bounds::new([-50.0; 3], [50.0; 3]), view, Framing::default(), &[]).camera;
     };
+    let f = |a: [f64; 3]| a.map(|x| x as f32);
     let ext = [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]];
-    let mut c = [
-        (lo[0] + hi[0]) / 2.0,
-        (lo[1] + hi[1]) / 2.0,
-        (lo[2] + hi[2]) / 2.0,
-    ];
-    let mut r = (ext[0] * ext[0] + ext[1] * ext[1] + ext[2] * ext[2]).sqrt() / 2.0;
-    let mut along = false;
-    if p.long_axis == Some(1) {
-        let sec = ext[0].max(ext[2]);
-        if ext[1] > 4.0 * sec {
-            // the near end's first stretch, the rest running away from the eye
-            c[1] = hi[1] - 2.0 * sec;
-            r = 2.2 * sec;
-            along = true;
+    let sec = ext[0].max(ext[2]);
+    if p.long_axis == Some(1) && ext[1] > 4.0 * sec {
+        let near = Bounds::new(f(lo), f([hi[0], lo[1] + 4.0 * sec, hi[2]]));
+        return crate::frame::frame_from(near, view, 0.7, -62.0, 22.0);
+    }
+    crate::frame::frame(Bounds::new(f(lo), f(hi)), view, Framing::default(), &[]).camera
+}
+
+impl super::Gui {
+    /// The Library Builder's box ghosts into the frame's translucent world (gui_overlay).
+    pub(super) fn machine_ghost_world(
+        &self,
+        cam: &crate::camera::Camera,
+        size: (u32, u32),
+        out: &mut Vec<crate::origin::WorldVert>,
+    ) {
+        if self.shell.machine.as_ref().is_some_and(|m| m.lib != "machine") {
+            for b in &self.mach.ghost_boxes {
+                crate::ghost::ghost_box(*b, cam, size, out);
+            }
         }
     }
-    let mut cam = super::view_camera(
-        [c[0] as f32, c[1] as f32, c[2] as f32],
-        (r * 1.3) as f32,
-        parallel,
-        size,
-    );
-    if along {
-        cam.yaw = 62f32.to_radians();
-        cam.pitch = 22f32.to_radians();
-    }
-    cam
 }
 
 const HIT: [f32; 4] = [0.93, 0.25, 0.22, 0.0];
@@ -237,13 +233,20 @@ impl Gui {
             let mut meshes: Vec<PartMesh> = if let Some(prev) = &preview {
                 let mut ms: Vec<PartMesh> = prev.parts.iter().map(|(t, _)| body_mesh(t)).collect();
                 self.mach.tints = prev.parts.iter().map(|(_, l)| l.tint()).collect();
-                // the ghosts: edges only (a dashed outline), on one empty part
-                if !prev.ghosts.is_empty() {
+                let f32s = |p: [f64; 3]| p.map(|x| x as f32);
+                self.mach.ghost_boxes = prev
+                    .ghosts
+                    .iter()
+                    .filter_map(|g| g.bounds)
+                    .map(|(a, b)| crate::frame::Bounds::new(f32s(a), f32s(b)))
+                    .collect();
+                // the ghosts that are not boxes: dashed edges, on one empty part
+                if prev.ghosts.iter().any(|g| !g.edges.is_empty()) {
                     let mut g = crate::machine_mesh::Tris::default();
-                    let at = prev.ghosts[0]
-                        .edges
-                        .first()
-                        .and_then(|e| e.first())
+                    let at = prev
+                        .ghosts
+                        .iter()
+                        .find_map(|g| g.edges.first().and_then(|e| e.first()))
                         .copied()
                         .unwrap_or([0.0; 3]);
                     g.pos.extend([at; 3]);
@@ -266,6 +269,7 @@ impl Gui {
                 ms
             } else {
                 self.mach.labels.clear();
+                self.mach.ghost_boxes.clear();
                 def.bodies
                     .iter()
                     .map(|b| {
@@ -338,7 +342,7 @@ impl Gui {
                     if fresh || m.fit != self.mach.fit {
                         self.mach.fit = m.fit;
                         v.nav.camera = match preview.as_ref() {
-                            Some(p) => frame_preview(p, self.shell.view.parallel, v.size),
+                            Some(p) => frame_preview(p, v.size),
                             None => {
                                 let (c, r) = v.scene.bounds();
                                 super::view_camera(c, r, self.shell.view.parallel, v.size)
@@ -487,6 +491,22 @@ impl Gui {
                 }
                 None => Err(format!("no tab `{name}`")),
             },
+            ["range", joint, lo, hi] => {
+                let i = m.def.as_ref().and_then(|d| d.joint_index(joint));
+                match (i, lo.parse::<f64>(), hi.parse::<f64>()) {
+                    (Some(i), Ok(a), Ok(b)) if a < b => {
+                        if let Some(d) = &mut m.def {
+                            d.joints[i].range = [a, b];
+                            let path = format!("joint.{joint}.range");
+                            d.cites.retain(|c| c.path != path);
+                        }
+                        m.changed = true;
+                        m.edited(false);
+                        Ok(())
+                    }
+                    _ => Err(format!("no joint `{joint}` or not a range `{lo} {hi}`")),
+                }
+            }
             ["lib", word] => {
                 let all = ["machine", "workholding"]
                     .into_iter()
@@ -516,7 +536,7 @@ impl Gui {
                 Ok(())
             }
             _ => Err(format!(
-                "`{cmd}`: open | close | lib KIND | rec ID | pick NAME | template KIND NAME | clone NAME | jog JOINT VALUE | tab NAME | check | save user|project"
+                "`{cmd}`: open | close | lib KIND | rec ID | range JOINT LO HI | pick NAME | template KIND NAME | clone NAME | jog JOINT VALUE | tab NAME | check | save user|project"
             )),
         };
         let say = match got {

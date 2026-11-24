@@ -55,6 +55,9 @@ impl Look {
 /// A value the record does not give, where it would be.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Ghost {
+    /// A box ghost's bounds (drawn see-through by `crate::ghost::ghost_box`); None: `edges`.
+    pub bounds: Option<([f64; 3], [f64; 3])>,
+    /// Dashed lines, for a ghost that is not a box (a screw's axis, a turned jaw).
     pub edges: Vec<Vec<[f64; 3]>>,
     /// Where its label points.
     pub at: [f64; 3],
@@ -85,7 +88,13 @@ impl Preview {
             .parts
             .iter()
             .flat_map(|(t, _)| t.pos.iter())
-            .chain(self.ghosts.iter().flat_map(|g| g.edges.iter().flatten()));
+            .chain(self.ghosts.iter().flat_map(|g| g.edges.iter().flatten()))
+            .chain(
+                self.ghosts
+                    .iter()
+                    .filter_map(|g| g.bounds.as_ref())
+                    .flat_map(|(a, b)| [a, b]),
+            );
         for p in pts {
             for k in 0..3 {
                 lo[k] = lo[k].min(p[k]);
@@ -106,7 +115,8 @@ impl Preview {
 
     fn ghost_box(&mut self, min: [f64; 3], max: [f64; 3], label: impl Into<String>) {
         self.ghosts.push(Ghost {
-            edges: dashed_box(min, max),
+            bounds: Some((min, max)),
+            edges: Vec::new(),
             at: [max[0], (min[1] + max[1]) / 2.0, max[2]],
             label: label.into(),
         });
@@ -114,6 +124,7 @@ impl Preview {
 
     fn ghost_line(&mut self, a: [f64; 3], b: [f64; 3], label: impl Into<String>) {
         self.ghosts.push(Ghost {
+            bounds: None,
             edges: dashes(a, b, dist(a, b) / 24.0),
             at: b,
             label: label.into(),
@@ -483,6 +494,7 @@ pub fn chuck(r: &forge_workholding::Record) -> Preview {
             edges.extend(dashes(pts[a], pts[b], len.max(w) / 10.0));
         }
         p.ghosts.push(Ghost {
+            bounds: None,
             edges,
             at: pts[3],
             label: if k == 0 {
