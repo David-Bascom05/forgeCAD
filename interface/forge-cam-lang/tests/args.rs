@@ -27,7 +27,7 @@ fn a_misspelled_argument_is_refused_with_the_nearest() {
     assert!(
         e.iter()
             .any(|e| e
-                .contains("`colour` is not an argument of `facing` (it takes: tool, to, step, leave_axial)")),
+                .contains("`colour` is not an argument of `facing` (it takes: tool, to, step, leave_axial, vc, rpm")),
         "{e:?}"
     );
     // in an expression built-in, and a positional too many
