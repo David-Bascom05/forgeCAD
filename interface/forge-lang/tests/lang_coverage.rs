@@ -550,12 +550,13 @@ fn every_argument_list_has_its_rows() {
                     ));
                 }
                 let ops: BTreeSet<String> = lists.iter().map(|l| l.0.clone()).collect();
-                diff(
-                    &format!("{kind} ARGS' built-ins vs its families"),
-                    &names,
-                    &ops,
-                    &mut errs,
-                );
+                let missing: Vec<_> = names.difference(&ops).collect();
+                let extra: Vec<_> = ops.difference(&names).collect();
+                if !missing.is_empty() || !extra.is_empty() {
+                    errs.push(format!(
+                        "`{kind}` ARGS: built-ins without a list {missing:?}; lists of no built-in {extra:?}"
+                    ));
+                }
                 for (op, args) in &lists {
                     let item = format!("{kind}::{op}");
                     let want: BTreeSet<String> = args.iter().cloned().collect();
