@@ -15,6 +15,7 @@ pub mod drape;
 pub mod drop;
 pub mod geodesic;
 pub mod link;
+pub mod measure;
 pub mod path;
 pub mod pattern;
 pub mod pencil;
