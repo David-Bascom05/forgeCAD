@@ -3601,7 +3601,7 @@ impl Cam {
         // floor's outer ring is left (said, and G4 lists it)
         let (dc, ang) = (self.tools[ti].tool.dc, self.tools[ti].tool.angle);
         let tip_len = if self.tools[ti].tool.kind == Kind::Drill && ang > 0.0 && ang < 180.0 {
-            0.5 * dc / (0.5 * ang).to_radians().tan()
+            0.5 * dc / tan_rad((0.5 * ang).to_radians())
         } else {
             0.0
         };
@@ -3818,7 +3818,7 @@ impl Cam {
             };
             let ti = add(self, ct, base_t + 4)?;
             let t = &self.tools[ti];
-            let depth = 0.5 * (csd - t.tool.tip_d) / (0.5 * ang).to_radians().tan();
+            let depth = 0.5 * (csd - t.tool.tip_d) / tan_rad((0.5 * ang).to_radians());
             let f = self
                 .feeds_for(su, t, t.tool.dc, 1.0)
                 .map(|x| 0.3 * x.vf)
@@ -4141,6 +4141,17 @@ fn support_face(st: &Stock) -> Face {
 /// strictly inside a loop's first piece is on no other loop, and whether that loop lies inside
 /// another is decided by that point alone (exact ray casting). This is the hole less the section
 /// there, without a boolean of the section against its own loops (all ties: slow).
+/// tan by forge-math's sin and cos (the workspace's trigonometry).
+fn tan_rad(x: f64) -> f64 {
+    let (s, c) = forge_math::dmath::sin_cos(x);
+    s / c
+}
+
+/// The length of (x, y).
+fn len2(x: f64, y: f64) -> f64 {
+    (x * x + y * y).sqrt()
+}
+
 /// A region's box: its segments' ends and each arc's extreme points that lie on it (in f64).
 fn region_box(rg: &Region) -> [f64; 4] {
     let mut b = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
@@ -4150,8 +4161,8 @@ fn region_box(rg: &Region) -> [f64; 4] {
             let q = sg.start();
             add(q.x, q.y);
             if let Seg::Arc { a, b: e, c, ccw } = *sg {
-                let r = (a.x - c.x).hypot(a.y - c.y);
-                let ang = |p: P2| (p.y - c.y).atan2(p.x - c.x);
+                let r = len2(a.x - c.x, a.y - c.y);
+                let ang = |p: P2| forge_math::dmath::atan2(p.y - c.y, p.x - c.x);
                 // the sweep from a to e in the arc's sense, a full turn when they meet
                 let (t0, t1) = (ang(a), ang(e));
                 let tau = std::f64::consts::TAU;
@@ -4164,7 +4175,8 @@ fn region_box(rg: &Region) -> [f64; 4] {
                     let t = k as f64 * 0.5 * std::f64::consts::PI;
                     let d = if ccw { t - t0 } else { t0 - t };
                     if d.rem_euclid(tau) <= sweep {
-                        add(c.x + r * t.cos(), c.y + r * t.sin());
+                        let (sn, cs) = forge_math::dmath::sin_cos(t);
+                        add(c.x + r * cs, c.y + r * sn);
                     }
                 }
             }
@@ -4186,7 +4198,7 @@ fn reaches(below: &Region, rg: &Region) -> bool {
     let q = match *sg {
         Seg::Line { a, b } => {
             let (dx, dy) = (b.x - a.x, b.y - a.y);
-            let n = dx.hypot(dy);
+            let n = len2(dx, dy);
             if n == 0.0 {
                 return true;
             }
@@ -4194,7 +4206,7 @@ fn reaches(below: &Region, rg: &Region) -> bool {
         }
         Seg::Arc { a, c, ccw, .. } => {
             let (dx, dy) = (c.x - a.x, c.y - a.y);
-            let n = dx.hypot(dy);
+            let n = len2(dx, dy);
             if n == 0.0 {
                 return true;
             }
