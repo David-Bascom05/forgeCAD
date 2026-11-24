@@ -4339,6 +4339,75 @@ impl Cam {
     /// the spindle's power at the rpm (P ∝ fz^(1 − mc): exact). Every sample is posted as its
     /// own move (never joined); no abrasion term. The paths' geometry is unchanged; they are
     /// posted and certified after.
+    /// Retracts between cuts replaced by hops (forge_cam::hop) for clear, contour and adaptive:
+    /// one up-over-down move at the link feed (the machine's limit, held FEED_MARGIN under it),
+    /// over the material the stock holds at that point. The map starts from the in-process stock
+    /// (the voids earlier ops of the setup proved); when an earlier op of the setup did not build,
+    /// from the uncut stock.
+    fn hop_links(&mut self, su: usize, kind: &str, out: &OpOut, paths: Vec<OpPath>) -> Vec<OpPath> {
+        use forge_cam::engage::{HeightMap, Profile};
+        if !matches!(
+            kind,
+            "clear"
+                | "adaptive"
+                | "contour"
+                // the 3D ops: their lifted links (forge-cam-3d link.rs) over the setup's stock
+                | "parallel"
+                | "waterline"
+                | "zlevel"
+                | "steep_shallow"
+                | "spiral"
+                | "radial"
+                | "ramping"
+                | "flat"
+                | "scallop"
+                | "pencil"
+                | "rest"
+        ) {
+            return paths;
+        }
+        let Some(ti) = out.tool else {
+            return paths;
+        };
+        let t = &self.tools[ti];
+        let Some(prof) = Profile::of(&t.tool) else {
+            return paths;
+        };
+        let s = &self.setups[su];
+        let Some(feed) = self
+            .lib
+            .machine(&s.machine)
+            .ok()
+            .filter(|m| m.max_feed > 0.0)
+            .map(|m| m.max_feed - resolve::FEED_MARGIN)
+        else {
+            return paths;
+        };
+        // the bodies above the cutter (shank, holder): (lowest point above the tip, radius)
+        let bodies: Vec<(f64, f64)> = t
+            .shape
+            .bodies
+            .iter()
+            .filter(|b| b.z0 > 1e-9)
+            .map(|b| (b.z0, b.rmax))
+            .collect();
+        let cell = (t.tool.dc / 30.0).clamp(0.05, 0.25);
+        let trusted = !self.ops.iter().any(|o| o.setup == su && o.status != "built");
+        let mut map = if trusted {
+            HeightMap::of_stock(&s.ip, cell)
+        } else {
+            HeightMap::new(s.ip.min, s.ip.max, cell)
+        };
+        paths
+            .into_iter()
+            .map(|mut p| {
+                let (moves, _) = forge_cam::hop::hops(&p.moves, p.start, &mut map, &prof, &bodies, feed);
+                p.moves = moves;
+                p
+            })
+            .collect()
+    }
+
     fn feeds_from_engagement(
         &mut self,
         su: usize,
@@ -5775,6 +5844,7 @@ impl Cam {
                 return Ok(V::Op(self.ops.len() - 1));
             }
         };
+        let paths = self.hop_links(su, kind, &out, paths);
         let paths = self.feeds_from_engagement(su, kind, &out, paths);
         out.paths = paths;
         out.voids = voids.clone();
@@ -8774,8 +8844,10 @@ impl Cam {
                     ..
                 }
                 | PMove::Arc { to, .. } => cut_z = Some(cut_z.map_or(to[2], |c: f64| c.min(to[2]))),
+                // (a hop, forge_cam::hop, ends a level as the retract it replaced did)
                 PMove::Line {
-                    phase: Phase::Link, ..
+                    phase: Phase::Link | Phase::Hop,
+                    ..
                 }
                 | PMove::Rapid { .. } => {
                     let z = cut_z.take();
@@ -9079,7 +9151,23 @@ impl Cam {
                     spans.push((oi, pi, start, recs.len()));
                     continue;
                 }
-                for m in &p.moves {
+                // a hop (forge_cam::hop) is posted with a comment before it naming its blocks,
+                // `(HOP n)`, so a reader (and the certificate's reading of the text) can tell them
+                // from cuts
+                let is_hop = |m: &PMove| {
+                    matches!(
+                        m,
+                        PMove::Line {
+                            phase: Phase::Hop,
+                            ..
+                        }
+                    )
+                };
+                for (mi, m) in p.moves.iter().enumerate() {
+                    if is_hop(m) && (mi == 0 || !is_hop(&p.moves[mi - 1])) {
+                        let n = p.moves[mi..].iter().take_while(|m| is_hop(m)).count();
+                        recs.push(Rec::Comment(format!("HOP {n}")));
+                    }
                     let from = cur;
                     cur = match *m {
                         PMove::Rapid { to }
@@ -9250,6 +9338,29 @@ impl Cam {
                 // gives the same verdicts (CYCLE_PARAMS: tests/peck.rs)
                 let ms =
                     forge_post::motions_with(&sub, *CYCLE_PARAMS.lock().unwrap_or_else(|e| e.into_inner()));
+                // the hops, as the text names them (`(HOP n)` before n feed blocks), each checked
+                // against the plan: a label on a block that is not a planned hop's end is refused
+                // (hop_label), never trusted
+                let planned_hops: Vec<[f64; 3]> = self.ops[oi].paths[pi]
+                    .moves
+                    .iter()
+                    .filter_map(|m| match *m {
+                        PMove::Line {
+                            to,
+                            phase: Phase::Hop,
+                            ..
+                        } => Some([
+                            (to[0] - o[0]) * scale,
+                            (to[1] - o[1]) * scale,
+                            (to[2] - o[2]) * scale,
+                        ]),
+                        _ => None,
+                    })
+                    .collect();
+                let (hop_at, hop_bad) = match hop_labels(&sub.recs, ms.len(), &planned_hops) {
+                    Ok(v) => (v, None),
+                    Err(k) => (vec![false; ms.len()], Some(k)),
+                };
                 // G5's runtime half: what the text commands the spindle and the feed, as read back
                 let runtime = self.runtime_limits(oi, &ms, d.feed_decimals);
                 let back = |p: [i64; 3]| {
@@ -9275,7 +9386,7 @@ impl Cam {
                 let (mut lc, mut lr, mut time) = (0.0, 0.0, 0.0);
                 let mut column: Option<([f64; 2], f64, f64)> = None;
                 let mut at = [0.0; 3];
-                for m in &ms {
+                for (mk, m) in ms.iter().enumerate() {
                     let (to, ph, f) = match m {
                         forge_post::Motion::Rapid(p) => (back(*p), Phase::Rapid, 0.0),
                         forge_post::Motion::Feed(p, f) => {
@@ -9297,7 +9408,11 @@ impl Cam {
                                 at = to;
                                 continue;
                             }
-                            (to, Phase::Cut, *f as f64 / fscale)
+                            (
+                                to,
+                                if hop_at[mk] { Phase::Hop } else { Phase::Cut },
+                                *f as f64 / fscale,
+                            )
                         }
                         forge_post::Motion::Arc { to, c, cw, f, full } => {
                             let t = back(*to);
@@ -9412,7 +9527,11 @@ impl Cam {
                     }
                     // a feed move straight down is a plunge; a rapid straight back up its column, from
                     // where a plunge ended, retraces positions already checked: a link
-                    let ph = if ph == Phase::Cut && to[0] == at[0] && to[1] == at[1] && to[2] < at[2] {
+                    let ph = if matches!(ph, Phase::Cut | Phase::Hop)
+                        && to[0] == at[0]
+                        && to[1] == at[1]
+                        && to[2] < at[2]
+                    {
                         Phase::Plunge
                     } else {
                         ph
@@ -9493,6 +9612,24 @@ impl Cam {
                 if let Some(c) = runtime {
                     sum.clear = false;
                     sum.checks.insert(0, c);
+                }
+                if let Some(k) = hop_bad {
+                    sum.clear = false;
+                    sum.checks.insert(
+                        0,
+                        ops::CheckOut {
+                            rule: "hop_label",
+                            verdict: "fail",
+                            value: k as f64,
+                            limit: 0.0,
+                            at: [f64::NAN; 3],
+                            tool_part: "cutter",
+                            other: format!("motion {k}: a (HOP n) block that is not a planned hop"),
+                            phase: "hop",
+                            move_index: 0,
+                            path: 0,
+                        },
+                    );
                 }
                 // every check names this path (a hole plan posts one per tool)
                 for c in &mut sum.checks {
@@ -10123,6 +10260,97 @@ impl Cam {
         self.programs
             .iter()
             .find_map(|p| p.text.as_deref().map(|t| (t, p.post.as_str())))
+    }
+}
+
+/// The feed blocks a posted `(HOP n)` names, as a flag per motion of `recs` (in
+/// `forge_post::motions_with`'s order), each checked against `planned`: the planned hops' ends
+/// in order, in the text's units (mm × 10^decimals from the op's origin). A path with a canned
+/// cycle has no hops (all false). Err(the motion): a label names a block that is not the next
+/// planned hop's end (within one unit), or a record other than a feed block.
+pub(crate) fn hop_labels(
+    recs: &[forge_post::QRec],
+    n_motions: usize,
+    planned: &[[f64; 3]],
+) -> Result<Vec<bool>, usize> {
+    use forge_post::QRec;
+    if recs.iter().any(|r| matches!(r, QRec::Cycle { .. })) {
+        return Ok(vec![false; n_motions]);
+    }
+    let mut left = 0usize;
+    let mut next = planned.iter();
+    let mut v = Vec::with_capacity(n_motions);
+    for r in recs {
+        match r {
+            QRec::Comment(c) => {
+                if let Some(n) = c.strip_prefix("HOP ").and_then(|n| n.parse::<usize>().ok()) {
+                    left = n;
+                }
+            }
+            QRec::Wcs(_) => {}
+            QRec::Line(q, _) => {
+                if left > 0
+                    && !next
+                        .next()
+                        .is_some_and(|p| (0..3).all(|k| (q[k] as f64 - p[k]).abs() <= 1.0))
+                {
+                    return Err(v.len());
+                }
+                v.push(left > 0);
+                left = left.saturating_sub(1);
+            }
+            _ => {
+                // a label runs over feed blocks only
+                if left > 0 {
+                    return Err(v.len());
+                }
+                v.push(false);
+            }
+        }
+    }
+    if v.len() == n_motions {
+        Ok(v)
+    } else {
+        Ok(vec![false; n_motions])
+    }
+}
+
+#[cfg(test)]
+mod hop_label_tests {
+    use super::hop_labels;
+    use forge_post::QRec;
+
+    fn line(x: i64, z: i64) -> QRec {
+        QRec::Line([x, 0, z], 9999)
+    }
+
+    /// A hop labelled where the plan has one: its blocks flagged, the cut after it not.
+    #[test]
+    fn a_planned_hop_is_read_as_one() {
+        let recs = vec![
+            line(100, -50),
+            QRec::Comment("HOP 2".into()),
+            line(100, 10),
+            line(400, 10),
+            line(500, -50),
+        ];
+        let planned = [[100.0, 0.0, 10.0], [400.0, 0.0, 10.0]];
+        assert_eq!(hop_labels(&recs, 4, &planned), Ok(vec![false, true, true, false]));
+    }
+
+    /// `(HOP 1)` on a block that cuts (no planned hop there, or not the one the plan has next):
+    /// refused, never read as a hop.
+    #[test]
+    fn a_hop_label_on_a_cut_is_refused() {
+        let recs = vec![line(100, -50), QRec::Comment("HOP 1".into()), line(400, -50)];
+        assert_eq!(hop_labels(&recs, 2, &[]), Err(1));
+        assert_eq!(hop_labels(&recs, 2, &[[400.0, 0.0, 10.0]]), Err(1));
+        // a label longer than the hop runs onto the cut after it
+        let recs = vec![QRec::Comment("HOP 2".into()), line(100, 10), line(400, -50)];
+        assert_eq!(hop_labels(&recs, 2, &[[100.0, 0.0, 10.0]]), Err(1));
+        // a label over a rapid
+        let recs = vec![QRec::Comment("HOP 1".into()), QRec::Rapid([0, 0, 100])];
+        assert_eq!(hop_labels(&recs, 1, &[[0.0, 0.0, 100.0]]), Err(0));
     }
 }
 
