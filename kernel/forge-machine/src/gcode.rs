@@ -1283,13 +1283,12 @@ pub(crate) fn block_fanuc(
                     .or(st.protected_f)
                     .ok_or_else(|| ge(ln, "a protected move with no feed"))?;
                 st.protected_f = Some(f);
+                // its words are absolute positions: the move ends where they say, from wherever
+                // the machine is (after the probe switch's unpublished Z move, the simulation
+                // starts it from before that move, reported as `probe.switch`)
                 let mut to = vec![None; axis.len()];
                 for i in 0..axis.len() {
                     if let Some(v) = axis[i] {
-                        if st.core.pos[i].is_none() {
-                            // the move starts from where the machine is: unknown here
-                            return Err(ge(ln, "a protected move from an unknown position"));
-                        }
                         to[i] = Some(v);
                     }
                 }

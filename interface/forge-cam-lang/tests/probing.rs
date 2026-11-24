@@ -149,3 +149,40 @@ fn an_approach_no_longer_than_the_window_is_refused() {
         o.refusal
     );
 }
+
+#[test]
+fn on_haas_a_probe_op_is_written_with_the_inspection_plus_macros() {
+    let cam = run(
+        "z0 = probe_wcs(op1, tool: p, kind: \"surface\", at: (25, 25, 20), wcs: 54)\nw = probe_wcs(op1, tool: p, kind: \"web\", at: (0, 0, 10), size: 86, axis: \"x\")\nprog = program(op1, post: \"haas\", number: 10)\n",
+    );
+    assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+    let (txt, _) = cam.program_text().unwrap();
+    for want in [
+        "G65 P9832",
+        "G65 P9810",
+        "G65 P9811 Z",
+        "S1",
+        "G65 P9811 X",
+        "G65 P9833",
+        "G28",
+    ] {
+        assert!(txt.contains(want), "{want}: {txt}");
+    }
+    assert!(!txt.contains("G38"), "{txt}");
+    for name in ["z0", "w"] {
+        let o = op(&cam, name);
+        assert!(failing(o).is_empty(), "{name}: {:?}", failing(o));
+    }
+    // the surface measure's S writes the work offset; the web's measures do not
+    assert!(op(&cam, "z0").probe.as_ref().unwrap().sets_wcs);
+    assert!(!op(&cam, "w").probe.as_ref().unwrap().sets_wcs);
+}
+
+#[test]
+fn on_haas_a_probe_move_off_the_axes_is_refused() {
+    let cam = run(
+        "i = inspect(op1, tool: p, at: (43, 43, 10), normal: (1, 1, 0), nominal: 0, tol: 0.05)\nprog = program(op1, post: \"haas\", number: 10)\n",
+    );
+    let j = cam.json().to_string();
+    assert!(j.contains("not along X, Y or Z"), "{j}");
+}

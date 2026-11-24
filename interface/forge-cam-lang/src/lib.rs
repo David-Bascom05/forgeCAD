@@ -6879,6 +6879,11 @@ impl Cam {
             d.feed_decimals = k;
         }
         let mut recs = vec![];
+        // a control with no cited probe move but cited probing macros (Renishaw Inspection
+        // Plus on Haas): a probe path is written with the macros
+        let macros = d.template("probe_move").is_empty() && !d.template("probe_surface").is_empty();
+        // posting errors found while writing the records (a probe move the macros cannot say)
+        let mut refused: Option<String> = None;
         let mut current_tool: Option<u32> = None;
         // where the last path left the tool, in the part's frame
         let mut last: Option<(usize, [f64; 3])> = None;
@@ -6951,6 +6956,64 @@ impl Cam {
                 }
                 recs.push(Rec::Rapid(w(p.start)));
                 let mut cur = p.start;
+                if t.probe && macros {
+                    // the probe switched on, every move of it protected, each probe move a
+                    // single-surface measure; switched off and Z home at the end
+                    recs.push(Rec::ProbeOn(true));
+                    let r = 0.5 * t.tool.dc;
+                    let set = op
+                        .probe
+                        .as_ref()
+                        .filter(|pr| pr.kind == "surface")
+                        .and_then(|pr| pr.wcs);
+                    for m in &p.moves {
+                        let from = cur;
+                        match *m {
+                            PMove::Rapid { to } => {
+                                recs.push(Rec::Rapid(w(to)));
+                                cur = to;
+                            }
+                            PMove::Line { to, f, .. } => {
+                                recs.push(Rec::ProbeProtected { to: w(to), f });
+                                cur = to;
+                            }
+                            PMove::Probe {
+                                to, over, back: true, ..
+                            } => {
+                                let d = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
+                                let moving: Vec<usize> = (0..3).filter(|&k| d[k] != 0.0).collect();
+                                let [k] = moving[..] else {
+                                    refused.get_or_insert(format!(
+                                        "{}: a probe move not along X, Y or Z cannot be a single-surface measure on {post}",
+                                        op.name
+                                    ));
+                                    continue;
+                                };
+                                let sgn = d[k].signum();
+                                // the surface's coordinate along the axis: the tip on a Z
+                                // surface, the ball's side on an X or Y one
+                                let surf = if k == 2 { to[2] } else { to[k] + sgn * r };
+                                recs.push(Rec::ProbeSurface {
+                                    axis: k as u8,
+                                    at: surf - o[k],
+                                    q: over,
+                                    wcs: set,
+                                });
+                            }
+                            _ => {
+                                refused.get_or_insert(format!(
+                                    "{}: only rapids, feed moves and probe moves that back off are written with the probing macros",
+                                    op.name
+                                ));
+                            }
+                        }
+                    }
+                    recs.push(Rec::ProbeOn(false));
+                    recs.push(Rec::Home);
+                    last = Some((op.setup, cur));
+                    spans.push((oi, pi, start, recs.len()));
+                    continue;
+                }
                 for m in &p.moves {
                     let from = cur;
                     cur = match *m {
@@ -7042,6 +7105,10 @@ impl Cam {
             op.deepest = f64::INFINITY;
             op.posted.clear();
         }
+        if let Some(e) = refused {
+            po.error = Some(e);
+            return po;
+        }
         recs.push(Rec::SpindleStop);
         recs.push(Rec::Coolant(forge_post::Coolant::Off));
         if post != "grbl" {
@@ -7062,6 +7129,17 @@ impl Cam {
         match forge_post::round_trip(&q, &d) {
             Ok((txt, _)) => {
                 po.round_trip = true;
+                // the single-surface measure's S writes a surface probe's work offset
+                if macros {
+                    for &oi in &op_ids {
+                        if let Some(pr) = self.ops[oi].probe.as_mut()
+                            && pr.kind == "surface"
+                            && pr.wcs.is_some()
+                        {
+                            pr.sets_wcs = true;
+                        }
+                    }
+                }
                 po.lines = txt.lines().count();
                 po.text = Some(txt);
             }
@@ -7106,6 +7184,8 @@ impl Cam {
                 _ => None,
             });
             let mut moves = vec![];
+            // the probe's ball radius (a single-surface measure names the surface, not the tip)
+            let ball_r = 0.5 * self.tools[path.tool].tool.dc;
             // where the last probe move started (a feed straight back there is its back-off)
             let mut probe_from: Option<[f64; 3]> = None;
             let mut start: Option<[f64; 3]> = None;
@@ -7168,6 +7248,31 @@ impl Cam {
                             f: *f as f64 / fscale,
                         });
                         at = t;
+                        column = None;
+                        continue;
+                    }
+                    // the probing macros: the switch moves Z a little (not modelled here: the next
+                    // protected move names every axis), a protected move is a feed move, a
+                    // single-surface measure is a probe move that returns to its start
+                    forge_post::Motion::ProbeOn(_) => continue,
+                    forge_post::Motion::ProbeProtected(p, f) => (back(*p), Phase::Link, *f as f64 / fscale),
+                    forge_post::Motion::ProbeSurface { axis, at: sv, q, .. } => {
+                        let k = *axis as usize;
+                        let surf = *sv as f64 / scale + o[k];
+                        let sgn = if surf >= at[k] { 1.0 } else { -1.0 };
+                        let mut to = at;
+                        to[k] = if k == 2 { surf } else { surf - sgn * ball_r };
+                        let over = *q as f64 / scale;
+                        let (_, entry) = planned_probes.next().unwrap_or((0.0, 0.0));
+                        let l = (to[k] - at[k]).abs() + over;
+                        lc += 2.0 * l;
+                        moves.push(PMove::Probe {
+                            to,
+                            f: 0.0,
+                            over,
+                            entry,
+                            back: true,
+                        });
                         column = None;
                         continue;
                     }

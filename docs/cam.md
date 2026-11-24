@@ -188,7 +188,13 @@ contact, as if the probe never triggered. Every body of the probe keeps the setu
 from the part and the stock on every move. The one exception is the ball inside the contact
 window, from `entry` before the contact to `over` past it. A probe is never spun. It posts as
 the dialect's cited probe move: G38.2 on linuxcnc and grbl, then a move straight back to where
-the search started. A control with no openly published probe move refuses the program. The
+the search started. On a control whose probing macros are cited instead (Haas: Renishaw Inspection Plus,
+H-2000-6222), a probe path is written with them: the probe switched on (G65 P9832), every feed
+move a protected positioning move (P9810), each probe move a single-surface measure (P9811, Q
+the overtravel, S the work offset for a `surface` probe with `wcs:`, so `sets_wcs` is true
+there), then switched off (P9833) and Z home, as the macros require. A probe move not along X, Y
+or Z cannot be a single-surface measure and is refused. A control with neither refuses the
+program. The
 reply's op carries `probe`: the kind, what it measures, its points (each surface point and the
 direction of travel), the work offset, `sets_wcs` (false: a G38.2 post leaves the result in
 the control's variables and writes no offset), and the inspection's nominal and tolerance.
