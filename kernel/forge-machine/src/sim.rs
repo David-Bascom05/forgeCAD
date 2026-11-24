@@ -46,6 +46,9 @@ pub enum Cut {
     Nose { rn: f64, centre: [f64; 2] },
 }
 
+/// The affine tip's start tip and its (joint, column) pairs (`Setup::tip_columns`).
+pub type TipColumns = ([f64; 3], Vec<(usize, [f64; 3])>);
+
 /// The setup: the machine, its control, the mounts used, offsets and tools.
 #[derive(Clone, Debug)]
 pub struct Setup<'a> {
@@ -197,6 +200,87 @@ impl<'a> Setup<'a> {
             let f = pick(pl).then(&local).inverse();
             f.apply(tip)
         })
+    }
+
+    /// `tip_along`'s tip in its affine form: with the rotaries put, the tip in the part's frame is
+    /// an affine function of the linear joints, so it is the tip at the segment's start plus, for
+    /// each linear joint that moves, its change times the joint's column (its axis carried into
+    /// the part's frame by the rotations above it, + on the tool's chain, − on the part's, nothing
+    /// when on both). Not the same bits as `tip_along`: within the bound docs/cam-machine.md
+    /// states (Removal: the tip's two forms).
+    pub fn tip_affine<'s>(&'s self, seg: &'s Segment, t: u32) -> Option<impl Fn(f64) -> [f64; 3] + 's> {
+        let (base, cols) = self.tip_columns(seg, t)?;
+        let buf = std::cell::RefCell::new(vec![0.0; seg.q0.len()]);
+        Some(move |s: f64| {
+            let mut q = buf.borrow_mut();
+            seg.at_into(s, &mut q);
+            let mut x = base;
+            for (j, c) in &cols {
+                let d = q[*j] - seg.q0[*j];
+                for i in 0..3 {
+                    x[i] += d * c[i];
+                }
+            }
+            x
+        })
+    }
+
+    /// The affine form's start tip (`tip_along`'s operations at the start's joint values) and the
+    /// moving linear joints' columns.
+    pub fn tip_columns(&self, seg: &Segment, t: u32) -> Option<TipColumns> {
+        use crate::kin;
+        let tool = self.tool(t)?;
+        let m = self.mount_for(t)?;
+        let pm = self
+            .def
+            .mount(&self.part_mount)
+            .filter(|m| m.kind == MountKind::Part)?;
+        let n = self.def.joints.len();
+        if (0..n).any(|j| self.def.joints[j].ty == crate::def::JointType::Rotary && seg.q0[j] != seg.q1[j]) {
+            return None;
+        }
+        let fixed: Vec<bool> = seg.q0.iter().zip(&seg.q1).map(|(a, b)| a == b).collect();
+        let kc = kin::Fixed::new(self.def, &seg.q0, &fixed);
+        let p = kc.pose(self.def, &seg.q0);
+        let (tl, pl) = (self.def.joint_index(&m.link), self.def.joint_index(&pm.link));
+        let y = kin::cross(pm.dir, pm.xdir);
+        let local = kin::Rigid {
+            r: [
+                [pm.xdir[0], y[0], pm.dir[0]],
+                [pm.xdir[1], y[1], pm.dir[1]],
+                [pm.xdir[2], y[2], pm.dir[2]],
+            ],
+            p: pm.at,
+        };
+        let pick = |i: Option<usize>| match i {
+            Some(i) => p[i],
+            None => kin::Rigid::ID,
+        };
+        let f = pick(pl).then(&local).inverse();
+        let base = f.apply(pick(tl).apply(kin::add(m.at, tool.tip)));
+        let chain = |name: &str| match self.def.joint_index(name) {
+            Some(_) => self.def.chain(name),
+            None => Some(Vec::new()),
+        };
+        let (on_tool, on_part) = (chain(&m.link)?, chain(&pm.link)?);
+        let arc = match &seg.path {
+            Path::Arc { a, b, .. } => [Some(*a), Some(*b)],
+            Path::Line => [None, None],
+        };
+        let mut cols = Vec::new();
+        for (j, (jt, fx)) in self.def.joints.iter().zip(&fixed).enumerate() {
+            if jt.ty != crate::def::JointType::Linear || (*fx && !arc.contains(&Some(j))) {
+                continue;
+            }
+            let sign = match (on_tool.contains(&j), on_part.contains(&j)) {
+                (true, false) => 1.0,
+                (false, true) => -1.0,
+                _ => continue,
+            };
+            let up = self.def.joint_index(&jt.parent).map_or(kin::Rigid::ID, |i| p[i]);
+            cols.push((j, kin::scale(f.dir(up.dir(jt.axis)), sign)));
+        }
+        Some((base, cols))
     }
 
     /// A tool's tip and axis (tip toward the gauge) in the part's frame at joint values q.

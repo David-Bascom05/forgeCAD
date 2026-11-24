@@ -246,6 +246,64 @@ pieces into material, the removal summary, and what is claimed.
 
 Native and wasm32 give the same bits (tests/bits.rs).
 
+### Removal: the tip's two forms
+
+Milling removal finds, at each grid node, the lowest the cutter comes over a segment, which takes
+the tip (in the part's frame) at many points s along the segment. Every segment removal accepts
+keeps its rotaries in place, so the tip is an affine function of the linear joints. There are two
+ways to compute it:
+
+- **chained** (`Setup::tip_along`): at each s, the pose chain (every link's `then` from the base),
+  the tool's tip through its link, and the inverse of the part frame. This was the only form
+  before; it still checks the affine one.
+- **affine** (`Setup::tip_affine`, what `mill` uses): the chained tip once, at the segment's start
+  q0, plus, for each moving linear joint j, (q_j(s) − q0_j)·c_j. The column c_j is the joint's
+  axis carried by the rotations above it into the part's frame: `+` when the joint is on the tool's
+  chain, `−` when it is on the part's, and none when it is on both (it moves both). It is
+  about 5.7 times faster (flange pocket, 0.5 mm grid: 20 s to 3.5 s).
+
+**The bound.** Both forms are measured against T\*: the same chain in exact arithmetic, using
+the rotation matrices as computed. Those matrices are the same bits in both forms and at every s,
+because a linear joint's `then` multiplies by the identity exactly. With the rotations held to
+those values, T\* is exactly affine, and c_j is its exact derivative evaluated in floating point.
+
+Terms, all coordinates in the ∞-norm, and first order in u (O(u²) dropped):
+
+- u = 2⁻⁵³.
+- k: the number of joints on the tool's chain plus the number on the part's chain.
+- n: the number of moving linear joints.
+- M: twice the sum of the tool point's magnitude (mount point plus tip), the part mount's point,
+  each linear chain joint's largest |q| over the segment (an arc's centre plus its radius), and
+  3·|pivot| for each rotary chain joint. M bounds every vector and partial sum in either form.
+  A computed rotation's row has an absolute sum of at most √3 < 2.
+
+- chained: each `then` or `apply` (a 3-term dot plus a translation) adds at most
+  4u(2M + M) + 2uM = 14uM, and an error carried in passes through times at most 2. The tool's
+  side contributes (k_t + 1)·14uM, the part frame's side (k_p + 1)·14uM, and the inverse and the
+  last apply add 18uM. So |chained − T\*| ≤ **(28k + 74)·u·M**.
+- affine: the start tip is a chained tip, with the bound above. Each c_j is two 3-term products of
+  a unit axis, so it is within 24u of exact and |c_j| ≤ 2. The sum base + Σ d_j·c_j adds
+  (n + 1)(4n + 1)·u·M, and the errors in d_j and c_j add 52n·u·M. So |affine − T\*| ≤
+  **(28k + 74)·u·M + ((n + 1)(4n + 1) + 52n)·u·M**.
+- Their difference is at most the sum of the two:
+  **2(28k + 74)·u·M + ((n + 1)(4n + 1) + 52n)·u·M**, which is about 1e-10 mm on the built-in mills.
+
+tests/removal_tip.rs checks every segment of the flange-sized pocket (CAM-SIM's grid, 265
+segments, 1025 values of s each). It runs on the 3-axis mill and on the trunnion turned to
+C−121.25°, where the sine and cosine are not exact:
+
+| machine | largest tip gap | largest bound | largest height gap |
+|---|---|---|---|
+| 3-axis mill | 3.6e-15 mm | 8.7e-11 mm | 0 |
+| trunnion at C−121.25° | 1.4e-14 mm | 1.0e-10 mm | 7.7e-14 mm |
+
+A height follows the tip with slope 1 under the cutter's flat. Under its corner it follows with
+the corner's slope. At a node that the cutter's rim only grazes (distance r from the path), it is
+not continuous in the tip at all: a gap of δ can add or drop that node's cut. The test asserts the
+heights are within the bound on this grid, and they are; that says nothing about other grids. The
+pinned digests (tests/bits.rs, and the flange pocket's 0xa9118efcb77c7167) are unchanged by the
+affine form.
+
 ## Several channels (`multi`)
 
 A Swiss lathe, a twin-turret lathe, a mill-turn's sub-spindle: each channel's program runs on its
