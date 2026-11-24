@@ -24,6 +24,7 @@
 //! and the stock, rapids against both. An op whose checks are not all `pass` is refused, with the
 //! check, where, and a fix. The reply is `forgecad.cam/1`.
 use forge_lang::syntax::{self, Arg, Expr, ExprKind, StmtKind};
+pub mod cycle;
 pub mod export;
 pub mod holes;
 pub mod life;
@@ -6254,14 +6255,20 @@ impl Cam {
                 esc(&format!("{}; {}", t.tool.source, t.tool.note))
             ));
         }
+        // the cycle time as the app shows it: the lower bound and the estimate together
+        let ct = self.cycle_times(&forge_machine::library::Library::with_builtin(), None);
+        let time_of = |i: usize, feed: f64| match ct.ops.get(i) {
+            Some(t) if t.t_min > 0.0 => cycle::cycle_words(t.t_min, t.t_scurve),
+            _ => format!("{feed:.0} s feed time"),
+        };
         h.push_str("</table>\n<h2>Operations</h2>\n<table><tr><th>op</th><th>kind</th><th>tool</th><th>rpm</th><th>feed</th><th>moves</th><th>cut mm</th><th>time</th><th>certificate</th></tr>\n");
-        for o in &self.ops {
+        for (oi, o) in self.ops.iter().enumerate() {
             let t = o
                 .tool
                 .map(|i| format!("T{} {}", self.tools[i].t, self.tools[i].tool.id))
                 .unwrap_or_default();
             h.push_str(&format!(
-                "<tr class=\"{}\"><td>{}</td><td>{}{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{:.0}</td><td>{:.0} s</td><td>{}</td></tr>\n",
+                "<tr class=\"{}\"><td>{}</td><td>{}{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{:.0}</td><td>{}</td><td>{}</td></tr>\n",
                 if o.status == "built" { "" } else { "refused" },
                 esc(&o.name),
                 o.kind,
@@ -6271,11 +6278,53 @@ impl Cam {
                 o.feeds.map(|f| format!("{:.0}", f.vf)).unwrap_or("-".into()),
                 o.moves,
                 o.length_cut,
-                o.time_s,
+                time_of(oi, o.time_s),
                 if o.status == "built" { "pass (certified)".to_string() } else { format!("refused: {}", esc(o.refusal.as_deref().unwrap_or(""))) }
             ));
         }
-        h.push_str("</table>\n<p>Feeds and speeds are starting points from generic data: verify with the tool maker. The certificate covers the geometry only.</p>\n</body></html>\n");
+        h.push_str("</table>\n");
+        // each setup's and program's cycle time, and what the two numbers are
+        let mut timed = false;
+        for (si, s) in self.setups.iter().enumerate() {
+            let (lo, est) = self
+                .ops
+                .iter()
+                .zip(&ct.ops)
+                .filter(|(o, _)| o.setup == si)
+                .fold((0.0, 0.0), |(a, b), (_, t)| (a + t.t_min, b + t.t_scurve));
+            if lo > 0.0 {
+                timed = true;
+                h.push_str(&format!(
+                    "<p>Setup <b>{}</b>: {}.</p>\n",
+                    esc(&s.name),
+                    cycle::cycle_words(lo, est)
+                ));
+            }
+        }
+        for p in &ct.progs {
+            match &p.error {
+                None => {
+                    timed = true;
+                    h.push_str(&format!(
+                        "<p>Program <b>{}</b> on {}: {}, {} tool change{}.</p>\n",
+                        esc(&p.name),
+                        esc(&p.machine),
+                        cycle::cycle_words(p.t_min, p.t_scurve),
+                        p.tool_changes,
+                        if p.tool_changes == 1 { "" } else { "s" }
+                    ));
+                }
+                Some(e) => h.push_str(&format!(
+                    "<p>Program <b>{}</b>: not timed ({}).</p>\n",
+                    esc(&p.name),
+                    esc(e)
+                )),
+            }
+        }
+        if timed {
+            h.push_str(&format!("<p>{}</p>\n", esc(cycle::CYCLE_NOTE)));
+        }
+        h.push_str("<p>Feeds and speeds are starting points from generic data: verify with the tool maker. The certificate covers the geometry only.</p>\n</body></html>\n");
         h
     }
 
