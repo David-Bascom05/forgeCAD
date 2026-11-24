@@ -88,6 +88,14 @@ each; a mill-turn has two part mounts (main, sub).
 primitives envelope), `ignore` (bodies it touches by construction: ways, neighbours). Bodies on one
 link are never checked against each other.
 
+## Self-collision through travel
+
+A machine's own bodies must not collide anywhere inside the declared travel: a pose the joints
+can reach where they do is wrong data (fix the geometry or the travel; the format has no soft limits
+or interference zones yet). tests/collide.rs sweeps every built-in: for each pair of bodies, each
+joint that moves one relative to the other through its whole range, with the others at every
+combination of their ends; no Hit and no Near.
+
 ## Structural checks (`MachineDef::validate`)
 
 Unique names and letters; the tree is acyclic and rooted at the base; every link named exists;
@@ -127,7 +135,7 @@ pieces into material, the removal summary, and what is claimed.
 | interpreter (gcode.rs) | words to control events in exact integers; agrees with forge-post's reader on its subset (L6, 240 programs × 4 dialects); its Lean spec refines forge-cam's post model, so posted programs do the planned motion (verify/forge-machine, L1) |
 | kinematics (kin.rs) | joint values to link placements, dmath rotations (exact at multiples of 90°), and the same over intervals |
 | timing (sim.rs) | `t_min` a lower bound (feed and axis limits; G95 with G96 integrated exactly on lines, the clamp's bound on arcs); `t_stop` exact stops with trapezoidal acceleration, an estimate |
-| collision (collide.rs) | every pair of bodies on different links through every segment: interval poses and separating-axis lower bounds prove Clear; a penetration witness gives Hit; otherwise Near (refused) |
+| collision (collide.rs) | every pair of bodies on different links through every segment: interval poses and separating-axis lower bounds prove Clear; a penetration witness gives Hit; otherwise Near (refused). A Hit's witness is a point in the base (machine) frame at the segment parameter `s` |
 | removal (removal.rs) | a height map (milling, tool on the part's +Z) or a radius map (turning) at grid nodes, in floating point: rapids into material and tool pieces (shank, holder) into material, with the stock as cut so far |
 
 Native and wasm32 give the same bits (tests/bits.rs).

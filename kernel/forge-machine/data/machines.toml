@@ -173,7 +173,7 @@ parent = "Y"
 side = "head"
 type = "linear"
 axis = [0, 0, 1]
-range = [-350, 0]
+range = [-280, 0]       # the head's underside stays above the cradle and table at any tilt
 rapid = 30000
 max_feed = 12000
 accel = 4000
@@ -271,8 +271,8 @@ link = "B"
 part = "parts/generic-trunnion-bc/cradle.fg"
 ignore = ["rotary"]
 [[machine.body.box]]
-min = [-200, -240, -150]
-max = [200, 240, -40]
+min = [-160, -240, -150]
+max = [160, 240, -40]
 
 [[machine.body]]
 name = "rotary"
@@ -317,7 +317,7 @@ parent = "base"
 side = "head"
 type = "linear"
 axis = [0, 0, 1]
-range = [-60, 400]
+range = [-30, 400]      # the turret's underside stays above the headstock face
 home = 400
 rapid = 24000
 max_feed = 5000
@@ -468,7 +468,8 @@ parent = "Z"
 side = "head"
 type = "linear"
 axis = [1, 0, 0]
-range = [-50, 300]
+range = [90, 300]       # the head stays outside the headstock, chucks and sub-head radially (no
+                        # interference zones in the format yet: a real mill-turn's head reaches in)
 home = 300
 rapid = 30000
 max_feed = 8000
@@ -493,7 +494,7 @@ side = "head"
 type = "rotary"
 axis = [0, 1, 0]
 pivot = [250, 0, 0]
-range = [-30, 210]
+range = [0, 90]         # horizontal to vertical
 rapid = 18000
 max_feed = 7200
 accel = 3600
