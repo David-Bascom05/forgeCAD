@@ -1,0 +1,17 @@
+[package]
+name = "forge-machine-lang"
+description = "Machine tools as parts: builds a machine definition's bodies from their .fg files and checks each lies in its collision envelope; the `forgecad machine` glue"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-lang = { path = "../forge-lang" }
+forge-machine = { path = "../../kernel/forge-machine" }
+forge-machine-builder = { path = "../forge-machine-builder" }
+forge-mesh = { path = "../../kernel/forge-mesh" }
+forge-math = { path = "../../kernel/forge-math" }
+
+[lints]
+workspace = true

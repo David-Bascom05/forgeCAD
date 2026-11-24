@@ -1,0 +1,17 @@
+# generic-vmc3 column: behind the table, carrying the head's Z ways; cored from the back.
+# frame: the machine's base frame at the home pose.
+shared L = 600
+shared D = 300
+shared H = 1300
+shared y0 = 450
+shared z0 = -400
+shared wall = 40
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (-L / 2, y0), size: (L, D))
+}
+body = extrude(plan, H)
+sketch core(on: body.end) {
+  r = rect(corner: (-L / 2 + wall, y0 + wall), size: (L - 2 * wall, D - 2 * wall))
+}
+cored = cut(core.r, H - wall)

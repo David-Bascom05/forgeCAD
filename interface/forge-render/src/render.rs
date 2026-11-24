@@ -237,6 +237,9 @@ pub struct Overlay<'a> {
     pub world: &'a [crate::origin::WorldVert],
     /// Drawn only where the part is nearer: what's behind it, seen dimly through.
     pub behind: &'a [crate::origin::WorldVert],
+    /// Opaque triangles in the world, their light baked into their colours: they hide each
+    /// other and what's translucent behind them (a simulation's stock, tool and fixture).
+    pub solid: &'a [crate::origin::WorldVert],
 }
 
 /// A B-rep entity of a part.
@@ -316,6 +319,9 @@ struct PickState {
     surface: wgpu::RenderPipeline,
     line: wgpu::RenderPipeline,
     ready: Arc<AtomicBool>,
+    /// Called when a pick's read back is in: an event loop that has gone idle (a browser's,
+    /// where the answer comes on the page's own loop) is woken to take it.
+    wake: Option<Arc<dyn Fn() + Send + Sync>>,
     /// The pixel asked about, the camera it was asked with, when.
     busy: Option<((f32, f32), Camera, f64)>,
     /// The geometry it was asked of.
@@ -359,6 +365,7 @@ pub struct Renderer {
     cube_verts: wgpu::Buffer,
     world: wgpu::RenderPipeline,
     world_behind: wgpu::RenderPipeline,
+    world_solid: wgpu::RenderPipeline,
     world_verts: wgpu::Buffer,
     /// A map over the part (a thermoform's wall), drawn as the world's triangles are: kept on the
     /// GPU, written again only when it changes.
@@ -1022,6 +1029,14 @@ impl Renderer {
             msaa,
             &over,
         );
+        let world_solid = pipeline(
+            ("world_vs", "cube_fs"),
+            &world_buffers,
+            None,
+            &writes,
+            msaa,
+            &over,
+        );
         let world_verts = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("world"),
             size: WORLD_BYTES,
@@ -1263,6 +1278,7 @@ impl Renderer {
             surface: pick_surface,
             line: pick_line,
             ready: Arc::new(AtomicBool::new(false)),
+            wake: None,
             busy: None,
             asked: 0,
         };
@@ -1432,6 +1448,7 @@ impl Renderer {
             cube_verts,
             world,
             world_behind,
+            world_solid,
             world_verts,
             map_verts,
             map_count: 0,
@@ -1619,6 +1636,11 @@ impl Renderer {
     }
 
     /// Whether a pick is under way: one at a time.
+    /// What a pick's read back calls when it is in (the host's waker).
+    pub fn set_pick_wake(&mut self, wake: Arc<dyn Fn() + Send + Sync>) {
+        self.pick.wake = Some(wake);
+    }
+
     pub fn pick_busy(&self) -> bool {
         self.pick.busy.is_some()
     }
@@ -1718,12 +1740,16 @@ impl Renderer {
         self.pick.id_read.slice(..).map_async(wgpu::MapMode::Read, |_| {});
         self.pick.ready.store(false, Ordering::Release);
         let ready = self.pick.ready.clone();
+        let wake = self.pick.wake.clone();
         self.pick
             .depth_read
             .slice(..)
             .map_async(wgpu::MapMode::Read, move |r| {
                 if r.is_ok() {
                     ready.store(true, Ordering::Release);
+                }
+                if let Some(w) = wake {
+                    w();
                 }
             });
         self.pick.busy = Some((px, *camera, now_ms()));
@@ -2496,7 +2522,7 @@ impl Renderer {
         let (ground, sphere) = self.write_backdrop(&mut bytes, scene);
         let cube_verts = self.write_cube(camera, &overlay);
         // grown (to the next power of two, up to WORLD_MAX) when a map needs more
-        let need = ((overlay.world.len() + overlay.behind.len()) * 28) as u64;
+        let need = ((overlay.solid.len() + overlay.world.len() + overlay.behind.len()) * 28) as u64;
         if need > self.world_verts.size() && self.world_verts.size() < WORLD_MAX {
             self.world_verts = self.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("world"),
@@ -2506,12 +2532,20 @@ impl Renderer {
             });
         }
         let room = (self.world_verts.size() / 28) as usize;
-        let world_count = overlay.world.len().min(room) as u32;
-        let behind_count = overlay.behind.len().min(room - world_count as usize) as u32;
-        if world_count + behind_count > 0 {
-            let mut b = Vec::with_capacity((world_count + behind_count) as usize * 28);
+        let solid_count = overlay.solid.len().min(room) as u32;
+        let world_count = overlay.world.len().min(room - solid_count as usize) as u32;
+        let behind_count = overlay
+            .behind
+            .len()
+            .min(room - (solid_count + world_count) as usize) as u32;
+        if solid_count + world_count + behind_count > 0 {
+            let mut b = Vec::with_capacity((solid_count + world_count + behind_count) as usize * 28);
             let front = &overlay.world[..world_count as usize];
-            for v in front.iter().chain(&overlay.behind[..behind_count as usize]) {
+            for v in overlay.solid[..solid_count as usize]
+                .iter()
+                .chain(front)
+                .chain(&overlay.behind[..behind_count as usize])
+            {
                 for x in v.at.iter().chain(&v.colour) {
                     b.extend_from_slice(&x.to_le_bytes());
                 }
@@ -2931,15 +2965,21 @@ impl Renderer {
                 pass.set_vertex_buffer(0, self.map_verts.slice(..));
                 pass.draw(0..self.map_count, 0..1);
             }
+            if solid_count > 0 {
+                pass.set_pipeline(&self.world_solid);
+                pass.set_vertex_buffer(0, self.world_verts.slice(..));
+                pass.draw(0..solid_count, 0..1);
+            }
             if world_count > 0 {
                 pass.set_pipeline(&self.world);
                 pass.set_vertex_buffer(0, self.world_verts.slice(..));
-                pass.draw(0..world_count, 0..1);
+                pass.draw(solid_count..solid_count + world_count, 0..1);
             }
             if behind_count > 0 {
+                let w = solid_count + world_count;
                 pass.set_pipeline(&self.world_behind);
                 pass.set_vertex_buffer(0, self.world_verts.slice(..));
-                pass.draw(world_count..world_count + behind_count, 0..1);
+                pass.draw(w..w + behind_count, 0..1);
             }
             if cube_verts > 0 {
                 pass.set_pipeline(&self.cube);

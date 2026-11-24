@@ -1,0 +1,14 @@
+# blocked_hosts, group mazak-okuma, taken 2026-11-23 (no user-agent spoofing used)
+www.mazakusa.com    curl: HTTP 406 (reported by caller). WebFetch: HTTP 301 -> https://www.mazak.com/us-en/ (site retired, no content)
+www.mazak.com       curl: HTTP 406 on /us-en/products/ (bot filter). WebFetch: HTTP 200 on /us-en/, /uk-en/, /my-en/, /id-en/ product and /detail/ pages -> used as source
+www.okuma.com       curl: HTTP 403 on /. WebFetch: HTTP 403 on /genos-m560-v. No content obtained.
+www.okumaeurope.com agent proxy: connect_unreachable, HTTP 502 (no public DNS / host down)
+www.mazak.eu        agent proxy: ws_closed_mid_exchange (tunnel closed, no response), curl status 000
+www.mazak.co.uk     agent proxy: ws_closed_mid_exchange (tunnel closed, no response), curl status 000
+www.mazak.jp        curl status 000, exit 35 (TLS connect error), no response
+english.mazak.jp    curl status 000 (no response)
+www.mazakeu.com     curl status 000 (no response)
+# not blocked but gated:
+okuma.co.jp brochure download -> login form at area18.smp.ne.jp (sign-up required); not attempted
+okuma.eu "Catalogue download" -> sign-up form (personal data transfer to distributors); not attempted
+# reachable and used: www.okuma.co.jp (200, curl), www.okuma.eu (200, curl)

@@ -1,0 +1,18 @@
+# generic-mill-turn B head: the milling spindle along -x (gauge x = 150), housing behind it about B's
+# pivot (x = 250).
+# frame: the machine's base frame at the home pose.
+shared nose_r = 45
+shared gauge = 150
+shared nose_l = 80
+shared x0 = 230
+shared hl = 170
+shared hw = 180
+
+sketch nk(on: offset(yz, gauge)) {
+  c = circle((0, 0), nose_r)
+}
+nose = extrude(nk.c, nose_l)
+sketch hs(on: offset(nk, x0 - gauge)) {
+  r = rect(center: (0, 0), size: (hw, hw))
+}
+housing = extrude(hs.r, hl)

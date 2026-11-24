@@ -188,7 +188,8 @@ pub fn clear(
                 }
             }
             Kind::Cone { axis, .. } => {
-                let dmin = pt_sec(*axis, &sec).lo.max(0.0);
+                // the path arc's stored ends: lowered by Move::path_gap
+                let dmin = Ival::pt(pt_sec(*axis, &sec).lo).sub(p(mv.path_gap())).lo.max(0.0);
                 let far = |q: [f64; 2]| {
                     p(q[0])
                         .sub(p(axis[0]))

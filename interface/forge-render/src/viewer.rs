@@ -186,6 +186,7 @@ impl Viewer {
             marks: &marks,
             world: &[],
             behind: &[],
+            solid: &[],
         };
         let drawn = self
             .renderer

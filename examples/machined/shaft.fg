@@ -1,0 +1,16 @@
+# A stepped shaft for turning: Ø20 from the front face to a Ø30 shoulder, a 1 mm chamfer at the
+# front, back face 55 below. Frame: z along the axis, Z0 on the front face (the part lies in z ≤ 0).
+shared d = 20
+shared ds = 30
+shared l = 55
+shared ls = 15
+shared c = 1
+
+sketch prof(on: xz) {
+  o = poly([(0, -l), (ds / 2, -l), (ds / 2, -l + ls), (d / 2, -l + ls), (d / 2, -c), (d / 2 - c, 0), (0, 0)])
+  zax = line((0, -l), (0, 0), construction: true)
+}
+body = revolve(prof.o, axis: prof.zax)
+
+expect valid
+expect bodies = 1

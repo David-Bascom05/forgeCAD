@@ -1,0 +1,14 @@
+# makino-d500 cradle: the tilting cradle under the rotary table (estimate).
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared x0 = -330
+shared y0 = -270
+shared z0 = -200
+shared L = 660
+shared W = 540
+shared H = 120
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (L, W))
+}
+body = extrude(plan, H)

@@ -1,0 +1,17 @@
+# cylinder_sphere/pole_on_cap/Add (scoreboard degen_cylinder_sphere/2).
+# A ball resting on the centre of a cylinder's top cap, touching it at one point. The ball's
+# axis is horizontal, so the contact is on its equator.
+# Exact reference: non-manifold (sphere and cap plane touch at a point). Kernel: builds
+# 6 806.8 mm³ (cylinder 6 283.2 + ball 523.6), one valid body; it must refuse ZeroThickness.
+shared R = 10
+shared H = 20
+shared r = 5
+
+sketch plan(on: xy) {
+  rim = circle((0, 0), R)
+}
+base = extrude(plan.rim, H)
+sketch c(on: xz) {                     # a vertical plane: the ball's axis is horizontal
+  p = pt(0, H + r)
+}
+knob = ball(c.p, r)

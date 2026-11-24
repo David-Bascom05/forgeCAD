@@ -1,0 +1,235 @@
+# The builder's own templates for kinds the built-in library has no generic machine of. Every
+# value is a placeholder: a machine made from a template cites each one as an estimate until the
+# user enters their machine's value. Format: docs/cam-machine.md.
+
+# A gantry router: X carries the gantry, Y the carriage on its beam, Z the spindle; the table is
+# fixed to the bed. Kind vmc3: three linear joints, all on the head side.
+[[machine]]
+name = "template-gantry"
+kind = "vmc3"
+control = "grbl"
+length_joint = "Z"
+coolants = ["air"]
+clearance = 1
+source = "forgecad machine-builder template; placeholders, not a real machine"
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-1200, 1200]
+rapid = 20000
+max_feed = 10000
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [-600, 600]
+rapid = 20000
+max_feed = 10000
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-150, 0]
+rapid = 10000
+max_feed = 5000
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 200]
+rpm = [6000, 24000]
+max = [100, 25]
+interface = "ER25"
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 200]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "base"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+[[machine.body.box]]
+min = [-1500, -1100, -400]
+max = [1500, 1100, -200]
+[[machine.body.box]]
+min = [-1300, -700, -200]
+max = [1300, 700, 0]
+
+[[machine.body]]
+name = "gantry"
+link = "X"
+ignore = ["bed"]
+[[machine.body.box]]
+min = [-250, -950, 450]
+max = [-100, 950, 600]
+[[machine.body.box]]
+min = [-250, -1050, -190]
+max = [-100, -950, 600]
+[[machine.body.box]]
+min = [-250, 950, -190]
+max = [-100, 1050, 600]
+
+[[machine.body]]
+name = "carriage"
+link = "Y"
+ignore = ["gantry"]
+[[machine.body.box]]
+min = [-100, -150, 250]
+max = [-50, 150, 650]
+
+[[machine.body]]
+name = "head"
+link = "Z"
+ignore = ["carriage"]
+[[machine.body.cyl]]
+base = [0, 0, 200]
+axis = [0, 0, 1]
+r = 45
+h = 300
+
+# A 5-axis head-table: X Y Z carry a head that tilts on B, the rotary table turns on C.
+[[machine]]
+name = "template-head-table"
+kind = "head-table"
+control = "fanuc"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "forgecad machine-builder template; placeholders, not a real machine"
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-400, 400]
+rapid = 30000
+max_feed = 10000
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [-300, 300]
+rapid = 30000
+max_feed = 10000
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-150, 0]
+rapid = 24000
+max_feed = 10000
+
+[[machine.joint]]
+name = "B"
+parent = "Z"
+side = "head"
+type = "rotary"
+axis = [0, 1, 0]
+pivot = [0, 0, 400]
+range = [-110, 110]
+rapid = 5400
+max_feed = 3600
+tcp = true
+
+[[machine.joint]]
+name = "C"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [0, 0, 1]
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 7200
+max_feed = 5400
+cyclic = true
+tcp = true
+
+[[machine.spindle]]
+name = "S1"
+link = "B"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 300]
+rpm = [100, 15000]
+max = [200, 80]
+interface = "HSK-A63"
+
+[[machine.changer]]
+pockets = 24
+change_s = 4
+max_tool_kg = 6
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "B"
+at = [0, 0, 300]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "C"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+[[machine.body.box]]
+min = [-700, -600, -400]
+max = [700, 600, -160]
+
+[[machine.body]]
+name = "rotary"
+link = "C"
+ignore = ["bed"]
+[[machine.body.cyl]]
+base = [0, 0, -160]
+axis = [0, 0, 1]
+r = 250
+h = 160
+
+[[machine.body]]
+name = "head"
+link = "B"
+[[machine.body.box]]
+min = [-90, -120, 350]
+max = [90, 120, 600]
+[[machine.body.cyl]]
+base = [0, 0, 300]
+axis = [0, 0, 1]
+r = 50
+h = 50
