@@ -187,6 +187,12 @@ impl Shell {
         let t = self.theme;
         ui.set_max_width(300.0);
         let (line, key) = tip(scope, tool.name).unwrap_or(("", ""));
+        // a Manufacture tool that is off: why, first
+        if tool.action.is_none()
+            && let Some(why) = self.cam.as_ref().and_then(|w| super::super::cam::disabled_why(w, tool.name))
+        {
+            ui.label(RichText::new(why).font(sans(12.0)).color(t.warn));
+        }
         let key = key_of(self, key);
         ui.horizontal(|ui| {
             ui.label(RichText::new(tool.name).font(semi(13.0)).color(t.ink));

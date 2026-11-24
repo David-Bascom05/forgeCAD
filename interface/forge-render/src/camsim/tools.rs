@@ -25,6 +25,51 @@ pub struct Piece {
     /// Per vertex, a factor on the colour: the flutes' valleys dark, their lands light, so a
     /// fluted cutter reads as one at a glance (empty: 1 everywhere).
     pub shade: Vec<f32>,
+    /// Part of the cutter body (the checker's `Part::Cutter`): tinted alone when a check says
+    /// the cutter hit; the shank, holder and nut when it says those did.
+    pub cutter: bool,
+}
+
+/// Which of a tool's pieces a failed check now names, to tint them alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Hit {
+    None,
+    /// The cutter body.
+    Cutter,
+    /// The shank, holder or nut.
+    Holder,
+    /// Not said (a machine's contact, a refused op): the whole tool.
+    Whole,
+}
+
+impl Hit {
+    /// From a marker's tool part ("cutter", "shank/holder", or "" when not said).
+    pub fn of(part: &str) -> Hit {
+        match part {
+            "cutter" => Hit::Cutter,
+            "" => Hit::Whole,
+            _ => Hit::Holder,
+        }
+    }
+
+    /// Two at once (two checks failing now): the whole tool if they differ.
+    pub fn and(self, o: Hit) -> Hit {
+        match (self, o) {
+            (Hit::None, x) | (x, Hit::None) => x,
+            (a, b) if a == b => a,
+            _ => Hit::Whole,
+        }
+    }
+
+    /// Whether a piece (of the cutter body or not) is tinted.
+    pub fn tints(self, cutter: bool) -> bool {
+        match self {
+            Hit::None => false,
+            Hit::Whole => true,
+            Hit::Cutter => cutter,
+            Hit::Holder => !cutter,
+        }
+    }
 }
 
 /// A tool as drawn.
@@ -40,6 +85,11 @@ pub struct ToolLook {
     /// Where it points: (radius, height) from the tip, on the holder's lower outer edge (or the
     /// shank's top).
     pub note: Option<([f64; 2], String)>,
+    /// The tool and its holder in people's words, the note's label beside the tool ("Ø10 flat
+    /// end mill · BT40 holder, ER32 nut"); the note itself (record keys, sources) is its hover.
+    pub label: String,
+    /// The drawing's widest radius (the holder's flange, the nut): the label stands clear of it.
+    pub reach: f64,
     /// A generic holder interface (taper and flange) above the gauge line, drawn see-through and
     /// labelled "generic shape": no record of the library holds the interface's dimensions.
     pub ghost: Option<Tris>,
@@ -133,6 +183,7 @@ pub fn build(tu: &ToolUse, helix: Option<f64>) -> ToolLook {
                 colour: look::HOLDER,
                 spins: false,
                 shade: vec![],
+                cutter: false,
             });
             continue;
         }
@@ -175,6 +226,7 @@ pub fn build(tu: &ToolUse, helix: Option<f64>) -> ToolLook {
                 colour: cutting_colour(tu),
                 spins: true,
                 shade,
+                cutter: true,
             });
             // the cutter body above its flutes (to its top): plain
             let rest: Vec<[f64; 2]> = std::iter::once([lcf, 0.0])
@@ -186,6 +238,7 @@ pub fn build(tu: &ToolUse, helix: Option<f64>) -> ToolLook {
                     colour: shank_colour(tu),
                     spins: true,
                     shade: vec![],
+                    cutter: true,
                 });
             }
         } else {
@@ -198,6 +251,7 @@ pub fn build(tu: &ToolUse, helix: Option<f64>) -> ToolLook {
                 },
                 spins: true,
                 shade: vec![],
+                cutter: b.part == Part::Cutter,
             });
         }
     }
@@ -257,6 +311,7 @@ pub fn build(tu: &ToolUse, helix: Option<f64>) -> ToolLook {
             colour: look::HOLDER,
             spins: false,
             shade: vec![],
+            cutter: false,
         });
         note = note.map(|(a, t)| {
             let rest: Vec<&str> = t.lines().skip(1).collect();
@@ -290,6 +345,7 @@ pub fn build(tu: &ToolUse, helix: Option<f64>) -> ToolLook {
             colour: look::NUT,
             spins: true,
             shade: vec![],
+            cutter: false,
         });
         note = note.map(|(a, t)| {
             let mut lines: Vec<String> = t.lines().map(str::to_string).collect();
@@ -300,12 +356,71 @@ pub fn build(tu: &ToolUse, helix: Option<f64>) -> ToolLook {
         });
     }
     let tris = pieces.iter().map(|p| p.tris.tri.len()).sum();
+    let label = format!("{} \u{b7} {}", tool_words(tu), holder_words(tu.holder.as_deref()));
+    let reach = pieces
+        .iter()
+        .flat_map(|p| p.tris.pos.iter())
+        .map(|q| (q[0] * q[0] + q[1] * q[1]).sqrt())
+        .fold(0.0, f64::max);
     ToolLook {
         pieces,
         tris,
         no_holder: tu.holder.is_none(),
         note,
+        label,
+        reach,
         ghost,
+    }
+}
+
+/// A tool in people's words: its diameter and kind ("Ø10 flat end mill", "Ø6.8 drill").
+pub fn tool_words(tu: &ToolUse) -> String {
+    let kind = match tu.tool.kind {
+        _ if tu.probe => "probe",
+        Kind::Flat => "flat end mill",
+        Kind::Ball => "ball end mill",
+        Kind::Bull => "bull-nose end mill",
+        Kind::Chamfer => "chamfer mill",
+        Kind::Spot => "spot drill",
+        Kind::Drill => "drill",
+        Kind::Tap => "tap",
+        Kind::ThreadMill => "thread mill",
+        Kind::Reamer => "reamer",
+        Kind::Bore => "boring bar",
+        Kind::Counterbore => "counterbore",
+        Kind::Countersink => "countersink",
+        Kind::Slot => "slitting saw",
+        Kind::Engrave => "engraver",
+    };
+    let d = format!("{:.2}", tu.tool.dc);
+    let d = d.trim_end_matches('0').trim_end_matches('.');
+    format!("\u{d8}{d} {kind}")
+}
+
+/// A holder in people's words: its interface and collet nut ("BT40 holder, ER32 nut"), from the
+/// library's records; the record key is the note's.
+pub fn holder_words(holder: Option<&str>) -> String {
+    let Some(id) = holder else {
+        return "no holder given".into();
+    };
+    static LIB: std::sync::OnceLock<forge_tooling::Library> = std::sync::OnceLock::new();
+    let lib = LIB.get_or_init(forge_tooling::Library::builtin);
+    let iface = lib
+        .holder(id)
+        .ok()
+        .map(|h| h.interface.clone())
+        .unwrap_or_default();
+    let holder = match iface.as_str() {
+        "" => "holder".to_string(),
+        "straight" => "straight-shank holder".to_string(),
+        i => format!("{i} holder"),
+    };
+    match collet_nut(id) {
+        Some((_, _, nut)) => {
+            let system = nut.split(" from ").next().unwrap_or(&nut).to_string();
+            format!("{holder}, {system} nut")
+        }
+        None => holder,
     }
 }
 
@@ -324,13 +439,17 @@ pub fn helices() -> std::collections::HashMap<String, f64> {
 }
 
 /// Draws a tool with its tip at `p`, turned `spin` radians about its axis; red where it is in a
-/// failed check now.
-pub fn draw(t: &ToolLook, p: [f64; 3], spin: f64, fail: bool, out: &mut Vec<WorldVert>) {
+/// failed check now: the cutter alone, the shank and holder alone, or (not said) the whole.
+pub fn draw(t: &ToolLook, p: [f64; 3], spin: f64, fail: Hit, out: &mut Vec<WorldVert>) {
     let (s, c) = forge_math::dmath::sin_cos(spin);
     out.reserve(t.tris * 3);
     for pc in &t.pieces {
         let (s, c) = if pc.spins { (s, c) } else { (0.0, 1.0) };
-        let base = if fail { look::FAIL } else { pc.colour };
+        let base = if fail.tints(pc.cutter) {
+            look::FAIL
+        } else {
+            pc.colour
+        };
         let tr = &pc.tris;
         for tri in &tr.tri {
             for &k in tri {

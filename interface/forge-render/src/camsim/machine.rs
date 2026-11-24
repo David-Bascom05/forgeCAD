@@ -299,7 +299,11 @@ impl MachineView {
                     "line {}: {} {word} {} (posted program on {})",
                     c.line, c.b, c.a, self.run.def.name
                 ),
+                row: format!("line {} \u{b7} {} {word} {}", c.line, c.b, c.a),
+                tool: String::new(),
+                part: String::new(),
                 region: None,
+                planned: false,
             });
         }
         for v in &self.run.tl.violations {
@@ -353,8 +357,12 @@ impl MachineView {
                 verdict: "fail".into(),
                 at: tip_at(i, 0.0),
                 t,
+                row: text.clone(),
                 text,
+                tool: String::new(),
+                part: String::new(),
                 region: None,
+                planned: false,
             });
         }
         out.sort_by(|a, b| a.t.total_cmp(&b.t));

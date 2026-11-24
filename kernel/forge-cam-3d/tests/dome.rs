@@ -83,17 +83,7 @@ fn dome_waterline_is_certified() {
     let full = std::env::var("FORGE_CAM3D_FULL").is_ok();
     let (top, bottom, step) = if full { (10.0, 1.0, dz) } else { (8.0, 5.0, 1.5) };
     for z in waterline::levels(top, bottom, step) {
-        loops.extend(
-            waterline::level(
-                &dc,
-                z,
-                Params {
-                    grid: 2.0,
-                    tol_xy: 0.01,
-                },
-            )
-            .unwrap(),
-        );
+        loops.extend(waterline::level(&dc, z, Params::new(2.0, 0.01)).unwrap());
     }
     assert!(!loops.is_empty());
     let e = Emit {
@@ -239,17 +229,7 @@ fn other_strategies_certify_on_the_dome() {
     // ramp: from the level at 19 to the level at 18.5 (a small ring on the cap)
     let lv: Vec<_> = [19.0, 18.5]
         .iter()
-        .map(|&z| {
-            waterline::level(
-                &dc,
-                z,
-                Params {
-                    grid: 1.0,
-                    tol_xy: 0.01,
-                },
-            )
-            .unwrap()
-        })
+        .map(|&z| waterline::level(&dc, z, Params::new(1.0, 0.01)).unwrap())
         .collect();
     let rp = ramp::ramps(&dc, &lv, d).unwrap();
     ps.extend(quarter.clip(rp, None));

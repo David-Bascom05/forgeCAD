@@ -65,6 +65,7 @@ impl Dialect {
                 .ok_or(PostError::Dialect(format!("missing `{k}`")))
         };
         let n = |k: &str| toml::num(&t, k).ok_or(PostError::Dialect(format!("missing `{k}`")));
+        let d = |k: &str| n(k).and_then(|v| forge_post::decimals_of(k, v).map_err(PostError::Dialect));
         let point = match s("point")?.as_str() {
             "always" => Point::Always,
             "never" => Point::Never,
@@ -74,9 +75,9 @@ impl Dialect {
         Ok(Dialect {
             name: s("name")?,
             extension: s("extension")?,
-            decimals: n("decimals")? as u32,
-            feed_decimals: n("feed_decimals")? as u32,
-            pitch_decimals: n("pitch_decimals")? as u32,
+            decimals: d("decimals")?,
+            feed_decimals: d("feed_decimals")?,
+            pitch_decimals: d("pitch_decimals")?,
             point,
             t,
         })
