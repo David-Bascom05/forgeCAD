@@ -91,7 +91,7 @@ ops); the text-level theorems (`Print`, `Suppress.suppress_text_closure`) are th
 | Kind | Item | Names | Rust site | Lean |
 |---|---|---|---|---|
 | op | `SetParam` | | `edit.rs` `apply`; text: `syntax::reparse_number` | `Edits.setParam_roundtrip`, `Edits.setParam_ids`, `Edits.sole_driver`, `Print.setLit_text`, `LL1.Lex.num_literal`, `LL1.ReparseModel.reparse_number_correct`, `LL1.Reparse.reparse_parse`; observed literal: a re-run (`Loops.count_prefix`, `Loops.keyed_insert`) |
-| op | `AddLocalParam` | | `edit.rs` (`param F.name = v`) | GAP: no theorem for adding a local param. Closest: `Scoped.addParam_occ` (a component param with a literal default, unread: every occurrence unchanged) and `Complete.add_complete`; the local-param statement itself is not in the core model |
+| op | `AddLocalParam` | | `edit.rs` (`param F.name = v`) | a name nothing reads (a new param no statement yet uses): adding its binding is `Complete.add_complete` (a literal binding adds no fragment: the same model; `Scoped.addParam_occ` for a component's). GAP: a name the feature already reads (a local param over a shared one of that name: that feature's value changes, a value edit, not stated); the local scope itself is not in the core |
 | op | `MakeShared` | | `edit.rs` | `Shared.makeShared_complete`, `Shared.makeShared_sound`, `Shared.makeShared_nums` |
 | op | `SplitInstance` | | `edit.rs` | `Split.split_doc`, `Sites.split_independent`, `Sites.split_edit_one`; counterexample `Counter.ValueEdit.split_edit_one` |
 | op | `AddFeature` | | `edit.rs` | `Complete.add_complete`, `Scoped.scopedAdd_ok`, `Print.body_text_insert`, `Scoped.scoped_text_insert`; sound half `Struct.execS_append` |
