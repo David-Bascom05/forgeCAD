@@ -183,3 +183,5 @@ open ForgeLang ForgeLang.Counter
 #print axioms LL1.Documents.turning_doc_accepted
 #print axioms LL1.Documents.assembly_header_accepted
 #print axioms LL1.Documents.header_glued_refused
+#print axioms closure_runs
+#print axioms edit_closure
