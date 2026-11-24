@@ -583,7 +583,7 @@ pub fn measure_op(
         let flutes = p.tool.nof.max(1) as f64;
         let rpm = p.rpm;
         q.rpm = rpm;
-        q.p_avail = power_at(&curve, rpm);
+        q.p_avail = power_at(curve, rpm);
         let l = cell.max((0.25 * r).min(0.5));
         let mut at = p.start;
         // the last feed direction (xy), for corners
