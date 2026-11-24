@@ -5,6 +5,7 @@ import IEEE754.Theorems
 import IEEE754.RoundProps
 import IEEE754.TwoProduct
 import IEEE754.Sqrt
+import IEEE754.Conic
 
 /-!
 # ssi `equal_crossing`'s ellipse: the divisor `|x × a|` is not too small (stage 1: one operation)
@@ -468,5 +469,537 @@ theorem caller_bound {a1 a2 a3 b1 b2 b3 : F64} (ha1 : a1.isFinite) (ha2 : a2.isF
   have h76 : (2 : ℚ) ^ (-76 : ℤ) = 1 / 2 ^ 76 := by norm_num
   rw [h74] at hgt; rw [h76]
   exact caller_core _ _ _ _ _ _ _ _ η0 hη ec1 ec2 ec3 (abs_le.mp eq).2 hgt
+
+/-! ## binary64: `equal_crossing`'s own `|x × a|`, `x = normalize(a ± b)` -/
+
+/-- A cross product's squared length is at most `|v|² |a|²` (Lagrange's identity). -/
+lemma cross_sq_le (v1 v2 v3 a1 a2 a3 : ℚ) :
+    (v2 * a3 - v3 * a2) * (v2 * a3 - v3 * a2) + (v3 * a1 - v1 * a3) * (v3 * a1 - v1 * a3) +
+      (v1 * a2 - v2 * a1) * (v1 * a2 - v2 * a1) ≤
+    (v1 * v1 + v2 * v2 + v3 * v3) * (a1 * a1 + a2 * a2 + a3 * a3) := by
+  nlinarith [sq_nonneg (v1 * a1 + v2 * a2 + v3 * a3)]
+
+/-- `D` within `2e` of `E`: `D² >= E²/2 - 4e²`. -/
+lemma sq_near_half (ε D E : ℚ) (h1 : -(2 * ε) ≤ D - E) (h2 : D - E ≤ 2 * ε) :
+    E * E / 2 - 4 * ε * ε ≤ D * D := by
+  nlinarith [sq_nonneg (D + (D - E)), mul_nonneg (by linarith : (0:ℚ) ≤ 2 * ε - (D - E))
+    (by linarith : (0:ℚ) ≤ 2 * ε + (D - E))]
+
+/-- **`normalize_core`**: the f64 `v = a ± b` (within `eps` of it, componentwise), its f64 squared
+length `q` and length `l` (with `l² >= (1-u)² q`): then `v × a` keeps most of `b × a`, and each
+`|v|² <= 1.01² l²` (so `x = v / l` has length at most about 1). Over ℚ, `u = 2^-53`,
+`eta <= 2^-100`, `|a_i|, |b_i| <= 1`, and `Σ (a × b)² >= 2^-76` (`caller_bound`). -/
+lemma normalize_core (a1 a2 a3 b1 b2 b3 v1 v2 v3 q l η : ℚ) (hη0 : 0 ≤ η) (hη : η ≤ 1 / 2 ^ 100)
+    (ba1 : |a1| ≤ 1) (ba2 : |a2| ≤ 1) (ba3 : |a3| ≤ 1)
+    (bb1 : |b1| ≤ 1) (bb2 : |b2| ≤ 1) (bb3 : |b3| ≤ 1)
+    (hab : 1 / 2 ^ 76 ≤ (a2 * b3 - a3 * b2) * (a2 * b3 - a3 * b2) +
+      (a3 * b1 - a1 * b3) * (a3 * b1 - a1 * b3) + (a1 * b2 - a2 * b1) * (a1 * b2 - a2 * b1))
+    (hv1 : |v1 - (a1 + b1)| ≤ 3 / 9007199254740992)
+    (hv2 : |v2 - (a2 + b2)| ≤ 3 / 9007199254740992)
+    (hv3 : |v3 - (a3 + b3)| ≤ 3 / 9007199254740992)
+    (hq : |q - (v1 * v1 + v2 * v2 + v3 * v3)| ≤
+      4 * (1 / 9007199254740992) * (v1 * v1 + v2 * v2 + v3 * v3) + 6 * η)
+    (hl0 : 0 < l) (hl : (1 - 1 / 9007199254740992) ^ 2 * q ≤ l * l) :
+    1 / 2 ^ 78 ≤ (v2 * a3 - v3 * a2) * (v2 * a3 - v3 * a2) + (v3 * a1 - v1 * a3) * (v3 * a1 - v1 * a3) +
+      (v1 * a2 - v2 * a1) * (v1 * a2 - v2 * a1) ∧
+    v1 * v1 + v2 * v2 + v3 * v3 ≤ (101 / 100) ^ 2 * (l * l) := by
+  obtain ⟨ε, hε⟩ : ∃ ε : ℚ, ε = 3 / 9007199254740992 := ⟨_, rfl⟩
+  rw [← hε] at hv1 hv2 hv3
+  -- v × a differs from (a + b) × a = b × a by at most 2 eps per component
+  have pm : ∀ r c : ℚ, |r| ≤ ε → |c| ≤ 1 → -ε ≤ r * c ∧ r * c ≤ ε := fun r c hr hc => by
+    have : |r * c| ≤ ε := by rw [abs_mul]; nlinarith [abs_nonneg r, abs_nonneg c]
+    exact abs_le.mp this
+  have r1 := pm _ _ hv1 ba1; have r2 := pm _ _ hv2 ba2; have r3 := pm _ _ hv3 ba3
+  have r12 := pm _ _ hv1 ba2; have r13 := pm _ _ hv1 ba3; have r21 := pm _ _ hv2 ba1
+  have r23 := pm _ _ hv2 ba3; have r31 := pm _ _ hv3 ba1; have r32 := pm _ _ hv3 ba2
+  have dsq := sq_near_half ε
+  have k1 := dsq (v2 * a3 - v3 * a2) ((a2 + b2) * a3 - (a3 + b3) * a2)
+    (by linarith) (by linarith)
+  have k2 := dsq (v3 * a1 - v1 * a3) ((a3 + b3) * a1 - (a1 + b1) * a3)
+    (by linarith) (by linarith)
+  have k3 := dsq (v1 * a2 - v2 * a1) ((a1 + b1) * a2 - (a2 + b2) * a1)
+    (by linarith) (by linarith)
+  have hE : (a2 * b3 - a3 * b2) * (a2 * b3 - a3 * b2) + (a3 * b1 - a1 * b3) * (a3 * b1 - a1 * b3) +
+      (a1 * b2 - a2 * b1) * (a1 * b2 - a2 * b1) =
+      ((a2 + b2) * a3 - (a3 + b3) * a2) * ((a2 + b2) * a3 - (a3 + b3) * a2) +
+      ((a3 + b3) * a1 - (a1 + b1) * a3) * ((a3 + b3) * a1 - (a1 + b1) * a3) +
+      ((a1 + b1) * a2 - (a2 + b2) * a1) * ((a1 + b1) * a2 - (a2 + b2) * a1) := by ring
+  have hD : 1 / 2 ^ 78 ≤ (v2 * a3 - v3 * a2) * (v2 * a3 - v3 * a2) +
+      (v3 * a1 - v1 * a3) * (v3 * a1 - v1 * a3) + (v1 * a2 - v2 * a1) * (v1 * a2 - v2 * a1) := by
+    have : (1 : ℚ) / 2 ^ 78 + 12 * ε * ε ≤ 1 / 2 ^ 76 / 2 := by rw [hε]; norm_num
+    linarith only [k1, k2, k3, hE, hab, this]
+  refine ⟨hD, ?_⟩
+  -- |v|² is at least |v × a|² / 3, far above eta, so l² >= |v|² / 1.01²
+  have ha : a1 * a1 + a2 * a2 + a3 * a3 ≤ 3 := by
+    have := abs_le.mp ba1; have := abs_le.mp ba2; have := abs_le.mp ba3
+    have h1 : a1 * a1 ≤ 1 := by nlinarith only [abs_le.mp ba1]
+    have h2 : a2 * a2 ≤ 1 := by nlinarith only [abs_le.mp ba2]
+    have h3 : a3 * a3 ≤ 1 := by nlinarith only [abs_le.mp ba3]
+    linarith only [h1, h2, h3]
+  have lag := cross_sq_le v1 v2 v3 a1 a2 a3
+  have hV0 : 0 ≤ v1 * v1 + v2 * v2 + v3 * v3 :=
+    add_nonneg (add_nonneg (mul_self_nonneg _) (mul_self_nonneg _)) (mul_self_nonneg _)
+  have hV : 1 / 2 ^ 78 / 3 ≤ v1 * v1 + v2 * v2 + v3 * v3 := by
+    have := mul_le_mul_of_nonneg_left ha hV0
+    rw [div_le_iff₀ (by norm_num)]; linarith only [this, lag, hD]
+  have hql := (abs_le.mp hq).1
+  have hL : (101 / 100) ^ (2 : ℕ) * (l * l) ≥ v1 * v1 + v2 * v2 + v3 * v3 := by
+    have c1 : (0 : ℚ) < (1 - 1 / 9007199254740992) ^ 2 := by norm_num
+    have : (1 - 1 / 9007199254740992 : ℚ) ^ 2 *
+        ((v1 * v1 + v2 * v2 + v3 * v3) - 4 * (1 / 9007199254740992) * (v1 * v1 + v2 * v2 + v3 * v3) - 6 * η)
+        ≤ l * l := le_trans (mul_le_mul_of_nonneg_left (by linarith) c1.le) hl
+    have hη' : 6 * η ≤ 6 / 2 ^ 100 := by linarith only [hη]
+    linarith only [this, hη', hV]
+  exact hL
+
+/-- `|p - q| <= e`: `p² <= 2q² + 2e²`. -/
+lemma sq_near_upper (e p q : ℚ) (h : |p - q| ≤ e) : p * p ≤ 2 * (q * q) + 2 * (e * e) := by
+  have := abs_le.mp h
+  nlinarith [sq_nonneg (p - 2 * q), mul_nonneg (by linarith : (0:ℚ) ≤ e - (p - q))
+    (by linarith : (0:ℚ) ≤ e + (p - q))]
+
+/-- A component of `x × a` against `t × a`, for `x` within `e` of `t` and `|a_i| <= 1`. -/
+lemma cross_comp_near (e x1 x2 t1 t2 a1 a2 : ℚ) (h1 : |x1 - t1| ≤ e) (h2 : |x2 - t2| ≤ e)
+    (ba1 : |a1| ≤ 1) (ba2 : |a2| ≤ 1) :
+    -(2 * e) ≤ (x1 * a2 - x2 * a1) - (t1 * a2 - t2 * a1) ∧
+      (x1 * a2 - x2 * a1) - (t1 * a2 - t2 * a1) ≤ 2 * e := by
+  have k1 : |(x1 - t1) * a2| ≤ e := by
+    rw [abs_mul]; nlinarith [abs_nonneg (x1 - t1), abs_nonneg a2]
+  have k2 : |(x2 - t2) * a1| ≤ e := by
+    rw [abs_mul]; nlinarith [abs_nonneg (x2 - t2), abs_nonneg a1]
+  have := abs_le.mp k1; have := abs_le.mp k2
+  constructor <;> nlinarith
+
+/-- `unit_core`'s lower chain, over atoms. -/
+lemma chain_lower (u T1 T2 T3 X1 X2 X3 c1 c2 c3 C : ℚ)
+    (lx1 : T1 * T1 / 2 - 4 * (2 * u) * (2 * u) ≤ X1 * X1)
+    (lx2 : T2 * T2 / 2 - 4 * (2 * u) * (2 * u) ≤ X2 * X2)
+    (lx3 : T3 * T3 / 2 - 4 * (2 * u) * (2 * u) ≤ X3 * X3)
+    (lc1 : X1 * X1 / 2 - 4 * (6 * u) * (6 * u) ≤ c1 * c1)
+    (lc2 : X2 * X2 / 2 - 4 * (6 * u) * (6 * u) ≤ c2 * c2)
+    (lc3 : X3 * X3 / 2 - 4 * (6 * u) * (6 * u) ≤ c3 * c3)
+    (hTa : 1 / 2 ^ 82 ≤ T1 * T1 + T2 * T2 + T3 * T3)
+    (hC : c1 * c1 + c2 * c2 + c3 * c3 = C) : 1 / 2 ^ 84 - 456 * (u * u) ≤ C := by
+  linarith only [lc1, lc2, lc3, lx1, lx2, lx3, hTa, hC]
+
+/-- `unit_core`'s upper chain, over atoms. -/
+lemma chain_upper (u T1 T2 T3 X1 X2 X3 c1 c2 c3 C P : ℚ) (uu : u * u ≤ 1 / 2 ^ 104)
+    (ux1 : X1 * X1 ≤ 2 * (T1 * T1) + 2 * (4 * u * (4 * u)))
+    (ux2 : X2 * X2 ≤ 2 * (T2 * T2) + 2 * (4 * u * (4 * u)))
+    (ux3 : X3 * X3 ≤ 2 * (T3 * T3) + 2 * (4 * u * (4 * u)))
+    (uc1 : c1 * c1 ≤ 2 * (X1 * X1) + 2 * (12 * u * (12 * u)))
+    (uc2 : c2 * c2 ≤ 2 * (X2 * X2) + 2 * (12 * u * (12 * u)))
+    (uc3 : c3 * c3 ≤ 2 * (X3 * X3) + 2 * (12 * u * (12 * u)))
+    (lag : T1 * T1 + T2 * T2 + T3 * T3 ≤ P) (hP : P ≤ (101 / 100) ^ 2 * 3)
+    (hC : c1 * c1 + c2 * c2 + c3 * c3 = C) : C ≤ 13 := by
+  have : (4 : ℚ) * ((101 / 100) ^ 2 * 3) + 4 * (16 + 144) * (1 / 2 ^ 104) ≤ 13 := by norm_num
+  linarith only [this, uu, ux1, ux2, ux3, uc1, uc2, uc3, lag, hP, hC]
+
+/-- `unit_core`'s last step, over atoms. -/
+lemma chain_q (u η C Q : ℚ) (hη : η ≤ 1 / 2 ^ 100) (uu : u * u ≤ 1 / 2 ^ 104)
+    (hClo : 1 / 2 ^ 84 - 456 * (u * u) ≤ C) (hCup : C ≤ 13) (hC0 : 0 ≤ C)
+    (uC : u * C ≤ 1 / 8 * C) (hu : u ≤ 1 / 2 ^ 52)
+    (hq : -(4 * u * C + 6 * η) ≤ Q - C ∧ Q - C ≤ 4 * u * C + 6 * η) : 1 / 2 ^ 86 ≤ Q ∧ Q ≤ 16 := by
+  have uC' : u * C ≤ 13 / 2 ^ 52 := by nlinarith
+  have : (1 : ℚ) / 2 ^ 86 + 6 * (1 / 2 ^ 100) ≤ (1 / 2 ^ 84 - 456 * (1 / 2 ^ 104)) / 2 := by norm_num
+  have h2 : (13 : ℚ) + 4 * (13 / 2 ^ 52) + 6 * (1 / 2 ^ 100) ≤ 16 := by norm_num
+  constructor
+  · linarith only [this, hClo, uu, hq.1, uC, hη]
+  · linarith only [h2, hCup, hq.2, uC', hη]
+
+/-- **`unit_core`**: `t = v / l` (`t_i l = v_i`) with `|v × a|² >= 2^-78`, `|v|² <= 1.01² l²` and
+`0 < l <= 4`; `x` its f64 rounding (`|x_i - t_i| <= u |t_i| + eta`), `c` the f64 `x × a` (each
+within `10u + 4 eta`), `Q` its f64 squared length: `2^-86 <= Q <= 16`. Over ℚ, `u <= 2^-52`,
+`eta <= 2^-100`, `|a_i| <= 1`. -/
+lemma unit_core (u η a1 a2 a3 v1 v2 v3 t1 t2 t3 x1 x2 x3 c1 c2 c3 Q l : ℚ)
+    (hul : 1 / 2 ^ 53 ≤ u) (hu : u ≤ 1 / 2 ^ 52) (hη0 : 0 ≤ η) (hη : η ≤ 1 / 2 ^ 100)
+    (ba1 : |a1| ≤ 1) (ba2 : |a2| ≤ 1) (ba3 : |a3| ≤ 1)
+    (hD : 1 / 2 ^ 78 ≤ (v2 * a3 - v3 * a2) * (v2 * a3 - v3 * a2) +
+      (v3 * a1 - v1 * a3) * (v3 * a1 - v1 * a3) + (v1 * a2 - v2 * a1) * (v1 * a2 - v2 * a1))
+    (hV : v1 * v1 + v2 * v2 + v3 * v3 ≤ (101 / 100) ^ 2 * (l * l))
+    (hl0 : 0 < l) (hl4 : l ≤ 4)
+    (ht1 : t1 * l = v1) (ht2 : t2 * l = v2) (ht3 : t3 * l = v3)
+    (hx1 : |x1 - t1| ≤ u * |t1| + η) (hx2 : |x2 - t2| ≤ u * |t2| + η)
+    (hx3 : |x3 - t3| ≤ u * |t3| + η)
+    (hc1 : |c1 - (x2 * a3 - x3 * a2)| ≤ 5 * u * 2 + 4 * η)
+    (hc2 : |c2 - (x3 * a1 - x1 * a3)| ≤ 5 * u * 2 + 4 * η)
+    (hc3 : |c3 - (x1 * a2 - x2 * a1)| ≤ 5 * u * 2 + 4 * η)
+    (hQ : |Q - (c1 * c1 + c2 * c2 + c3 * c3)| ≤ 4 * u * (c1 * c1 + c2 * c2 + c3 * c3) + 6 * η) :
+    1 / 2 ^ 86 ≤ Q ∧ Q ≤ 16 := by
+  have hu0 : 0 ≤ u := le_trans (by norm_num) hul
+  subst ht1 ht2 ht3
+  have hl2 : 0 < l * l := mul_pos hl0 hl0
+  -- |t|² <= 1.01², and |t × a|² >= 2^-82
+  have hT : t1 * t1 + t2 * t2 + t3 * t3 ≤ (101 / 100) ^ 2 := by
+    have : (t1 * t1 + t2 * t2 + t3 * t3) * (l * l) ≤ (101 / 100) ^ 2 * (l * l) := by
+      linarith only [hV, show (t1 * l) * (t1 * l) + (t2 * l) * (t2 * l) + (t3 * l) * (t3 * l) =
+        (t1 * t1 + t2 * t2 + t3 * t3) * (l * l) by ring]
+    exact le_of_mul_le_mul_right this hl2
+  have hTa : 1 / 2 ^ 82 ≤ (t2 * a3 - t3 * a2) * (t2 * a3 - t3 * a2) +
+      (t3 * a1 - t1 * a3) * (t3 * a1 - t1 * a3) + (t1 * a2 - t2 * a1) * (t1 * a2 - t2 * a1) := by
+    generalize hS : (t2 * a3 - t3 * a2) * (t2 * a3 - t3 * a2) +
+      (t3 * a1 - t1 * a3) * (t3 * a1 - t1 * a3) + (t1 * a2 - t2 * a1) * (t1 * a2 - t2 * a1) = S
+    have hS0 : 0 ≤ S := by
+      rw [← hS]; exact add_nonneg (add_nonneg (mul_self_nonneg _) (mul_self_nonneg _)) (mul_self_nonneg _)
+    have e : (t1 * l * a2 - t2 * l * a1) * (t1 * l * a2 - t2 * l * a1) +
+        ((t2 * l * a3 - t3 * l * a2) * (t2 * l * a3 - t3 * l * a2) +
+        (t3 * l * a1 - t1 * l * a3) * (t3 * l * a1 - t1 * l * a3)) = (l * l) * S := by
+      rw [← hS]; ring
+    have h16 : l * l ≤ 16 := by nlinarith
+    have : 1 / 2 ^ 78 ≤ (l * l) * S := by linarith only [hD, e]
+    nlinarith
+  -- each |t_i| <= 1.01, so x is within 2u of t
+  have tb : ∀ t : ℚ, t * t ≤ (101 / 100) ^ 2 → |t| ≤ 101 / 100 := fun t h =>
+    abs_le_of_sq_le_sq' (by nlinarith) (by norm_num) |>.elim (fun h1 h2 => abs_le.mpr ⟨h1, h2⟩)
+  have s1 := mul_self_nonneg t1; have s2 := mul_self_nonneg t2; have s3 := mul_self_nonneg t3
+  have tb1 := tb t1 (by linarith only [hT, s2, s3]); have tb2 := tb t2 (by linarith only [hT, s1, s3])
+  have tb3 := tb t3 (by linarith only [hT, s1, s2])
+  have e2u : ∀ x t : ℚ, |t| ≤ 101 / 100 → |x - t| ≤ u * |t| + η → |x - t| ≤ 2 * u := fun x t h1 h2 => by
+    have : u * |t| ≤ u * (101 / 100) := mul_le_mul_of_nonneg_left h1 hu0
+    have : η ≤ u * (1 / 2) := by
+      have : (1 : ℚ) / 2 ^ 100 ≤ 1 / 2 ^ 53 * (1 / 2) := by norm_num
+      linarith only [this, hul, hη]
+    linarith only [this, ‹u * |t| ≤ u * (101 / 100)›, h2, hu0]
+  have ex1 := e2u x1 t1 tb1 hx1; have ex2 := e2u x2 t2 tb2 hx2; have ex3 := e2u x3 t3 tb3 hx3
+  obtain ⟨d1l, d1h⟩ := cross_comp_near (2 * u) x2 x3 t2 t3 a2 a3 ex2 ex3 ba2 ba3
+  obtain ⟨d2l, d2h⟩ := cross_comp_near (2 * u) x3 x1 t3 t1 a3 a1 ex3 ex1 ba3 ba1
+  obtain ⟨d3l, d3h⟩ := cross_comp_near (2 * u) x1 x2 t1 t2 a1 a2 ex1 ex2 ba1 ba2
+  have h12 : 5 * u * 2 + 4 * η ≤ 2 * (6 * u) := by
+    have : (4 : ℚ) / 2 ^ 100 ≤ 2 * (1 / 2 ^ 53) := by norm_num
+    linarith only [this, hul, hη]
+  have c1' := abs_le.mp (le_trans hc1 h12); have c2' := abs_le.mp (le_trans hc2 h12)
+  have c3' := abs_le.mp (le_trans hc3 h12)
+  -- lower: |x × a|² >= |t × a|² / 2 - 48u², Σ c² >= that / 2 - 432u²
+  have lx1 := sq_near_half (2 * u) _ _ d1l d1h; have lx2 := sq_near_half (2 * u) _ _ d2l d2h
+  have lx3 := sq_near_half (2 * u) _ _ d3l d3h
+  have lc1 := sq_near_half (6 * u) _ _ c1'.1 c1'.2; have lc2 := sq_near_half (6 * u) _ _ c2'.1 c2'.2
+  have lc3 := sq_near_half (6 * u) _ _ c3'.1 c3'.2
+  have uu : u * u ≤ 1 / 2 ^ 104 := by
+    have h := mul_le_mul hu hu hu0 (by norm_num)
+    have e : (1 / 2 ^ 52 : ℚ) * (1 / 2 ^ 52) = 1 / 2 ^ 104 := by norm_num
+    linarith only [h, e]
+  generalize hC : c1 * c1 + c2 * c2 + c3 * c3 = C at hQ
+  have hC0 : 0 ≤ C := by
+    rw [← hC]; exact add_nonneg (add_nonneg (mul_self_nonneg _) (mul_self_nonneg _)) (mul_self_nonneg _)
+  have hClo := chain_lower u _ _ _ _ _ _ c1 c2 c3 C lx1 lx2 lx3 lc1 lc2 lc3 hTa hC
+  have hq := abs_le.mp hQ
+  have uC : u * C ≤ (1 / 8) * C := mul_le_mul_of_nonneg_right (le_trans hu (by norm_num : (1 : ℚ) / 2 ^ 52 ≤ 1 / 8)) hC0
+  -- upper: |t × a|² <= |t|² |a|² <= 1.01² · 3
+  have ha : a1 * a1 + a2 * a2 + a3 * a3 ≤ 3 := by
+    have h1 : a1 * a1 ≤ 1 := by nlinarith only [abs_le.mp ba1]
+    have h2 : a2 * a2 ≤ 1 := by nlinarith only [abs_le.mp ba2]
+    have h3 : a3 * a3 ≤ 1 := by nlinarith only [abs_le.mp ba3]
+    linarith only [h1, h2, h3]
+  have lag := cross_sq_le t1 t2 t3 a1 a2 a3
+  have hT3 : (t1 * t1 + t2 * t2 + t3 * t3) * (a1 * a1 + a2 * a2 + a3 * a3) ≤ (101 / 100) ^ 2 * 3 :=
+    mul_le_mul hT ha (add_nonneg (add_nonneg (mul_self_nonneg _) (mul_self_nonneg _)) (mul_self_nonneg _))
+      (by norm_num)
+  have ux1 := sq_near_upper (4 * u) _ _ (abs_le.mpr ⟨by linarith only [d1l], by linarith only [d1h]⟩ :
+    |(x2 * a3 - x3 * a2) - (t2 * a3 - t3 * a2)| ≤ 4 * u)
+  have ux2 := sq_near_upper (4 * u) _ _ (abs_le.mpr ⟨by linarith only [d2l], by linarith only [d2h]⟩ :
+    |(x3 * a1 - x1 * a3) - (t3 * a1 - t1 * a3)| ≤ 4 * u)
+  have ux3 := sq_near_upper (4 * u) _ _ (abs_le.mpr ⟨by linarith only [d3l], by linarith only [d3h]⟩ :
+    |(x1 * a2 - x2 * a1) - (t1 * a2 - t2 * a1)| ≤ 4 * u)
+  have uc1 := sq_near_upper (12 * u) _ _ (abs_le.mpr ⟨by linarith only [c1'.1], by linarith only [c1'.2]⟩ :
+    |c1 - (x2 * a3 - x3 * a2)| ≤ 12 * u)
+  have uc2 := sq_near_upper (12 * u) _ _ (abs_le.mpr ⟨by linarith only [c2'.1], by linarith only [c2'.2]⟩ :
+    |c2 - (x3 * a1 - x1 * a3)| ≤ 12 * u)
+  have uc3 := sq_near_upper (12 * u) _ _ (abs_le.mpr ⟨by linarith only [c3'.1], by linarith only [c3'.2]⟩ :
+    |c3 - (x1 * a2 - x2 * a1)| ≤ 12 * u)
+  have hCup := chain_upper u _ _ _ _ _ _ c1 c2 c3 C _ uu ux1 ux2 ux3 uc1 uc2 uc3 lag hT3 hC
+  exact chain_q u η C Q hη uu hClo hCup hC0 uC hu hq
+
+/-- **`sqrt_sq_lower`**: an f64 square root that is finite and positive came from a positive `x`,
+and squares back to at least `(1-u)² x` (any format with `2 emin <= qmin`, as binary64's
+`-2044 <= -1074`: the root of every positive value is normal). -/
+theorem sqrt_sq_lower (he : 2 * f.emin ≤ f.qmin) {x : FP f} (hfin : x.sqrt.isFinite)
+    (hpos : 0 < x.sqrt.val) :
+    0 < x.val ∧ (1 - 2 ^ (-(f.prec : ℤ))) ^ 2 * x.val ≤ x.sqrt.val * x.sqrt.val := by
+  cases x with
+  | zero s => simp [FP.sqrt, FP.val] at hpos
+  | inf s => cases s <;> simp [FP.sqrt, FP.isFinite] at hfin
+  | nan => simp [FP.sqrt, FP.isFinite] at hfin
+  | fin s m e h =>
+    cases s
+    · have hv : (FP.fin false m e h : FP f).val = (m : ℚ) * 2 ^ e := by simp [FP.val, FP.sgn]
+      have hm : (1 : ℚ) ≤ m := by exact_mod_cast h.1
+      have hX : (2 : ℚ) ^ (2 * f.emin) ≤ (m : ℚ) * 2 ^ e := by
+        have h1 : (2 : ℚ) ^ (2 * f.emin) ≤ 2 ^ e :=
+          zpow_le_zpow_right₀ (by norm_num) (le_trans he h.2.2.1)
+        nlinarith [two_zpow_pos (K := ℚ) e]
+      have hX0 : (0 : ℚ) < (m : ℚ) * 2 ^ e := lt_of_lt_of_le (two_zpow_pos _) hX
+      refine ⟨by rw [hv]; exact hX0, ?_⟩
+      have hn : (2 : ℝ) ^ f.emin ≤ Real.sqrt ((FP.fin false m e h : FP f).val : ℝ) := by
+        rw [hv]
+        have hsq : (2 : ℝ) ^ f.emin = Real.sqrt (((2 : ℝ) ^ f.emin) ^ 2) :=
+          (Real.sqrt_sq (two_zpow_pos _).le).symm
+        rw [hsq]
+        apply Real.sqrt_le_sqrt
+        have : (((2 : ℚ) ^ (2 * f.emin) : ℚ) : ℝ) ≤ (((m : ℚ) * 2 ^ e : ℚ) : ℝ) := by exact_mod_cast hX
+        rw [← zpow_natCast, ← zpow_mul, mul_comm]; push_cast at this ⊢; simpa using this
+      have hr := sqrt_rel_err f h hfin hn
+      generalize hL : (FP.fin false m e h : FP f).sqrt.val = L at hr ⊢
+      generalize hXv : (FP.fin false m e h : FP f).val = X at hr hn ⊢
+      have hX0' : (0 : ℝ) ≤ (X : ℝ) := by rw [← hXv, hv]; exact_mod_cast hX0.le
+      have hS := Real.sq_sqrt hX0'
+      have hu : (2 : ℝ) ^ (-(f.prec : ℤ)) ≤ 1 := zpow_le_one_of_nonpos₀ (by norm_num) (by omega)
+      have hu0 : (0 : ℝ) ≤ 2 ^ (-(f.prec : ℤ)) := (two_zpow_pos _).le
+      have hS0 := Real.sqrt_nonneg (X : ℝ)
+      have hlo := (abs_le.mp hr).1
+      have hLr : (1 - 2 ^ (-(f.prec : ℤ))) * Real.sqrt (X : ℝ) ≤ (L : ℝ) := by linarith
+      have hc0 : (0 : ℝ) ≤ (1 - 2 ^ (-(f.prec : ℤ))) * Real.sqrt (X : ℝ) :=
+        mul_nonneg (by linarith) hS0
+      have : ((1 - 2 ^ (-(f.prec : ℤ))) ^ 2 * X : ℚ) ≤ (L * L : ℚ) := by
+        have h2 := mul_le_mul hLr hLr hc0 (le_trans hc0 hLr)
+        have : ((1 - 2 ^ (-(f.prec : ℤ))) ^ 2 * X : ℚ) = (((1 - 2 ^ (-(f.prec : ℤ))) * Real.sqrt (X : ℝ)) *
+            ((1 - 2 ^ (-(f.prec : ℤ))) * Real.sqrt (X : ℝ)) : ℝ) := by
+          push_cast; rw [show ∀ a b : ℝ, a * b * (a * b) = a ^ 2 * b ^ 2 from fun a b => by ring, hS]
+        exact_mod_cast (this ▸ h2 : _)
+      exact this
+    · simp [FP.sqrt, FP.isFinite] at hfin
+
+/-- `t = v / l` (`t_i l = v_i`) with `|v|² <= 1.01² l²`: each `|t_i| <= 1.01`. -/
+lemma t_bound (v1 v2 v3 t1 t2 t3 l : ℚ) (hl0 : 0 < l)
+    (hV : v1 * v1 + v2 * v2 + v3 * v3 ≤ (101 / 100) ^ 2 * (l * l))
+    (ht1 : t1 * l = v1) (ht2 : t2 * l = v2) (ht3 : t3 * l = v3) :
+    |t1| ≤ 101 / 100 ∧ |t2| ≤ 101 / 100 ∧ |t3| ≤ 101 / 100 := by
+  subst ht1 ht2 ht3
+  have hl2 : 0 < l * l := mul_pos hl0 hl0
+  have hT : t1 * t1 + t2 * t2 + t3 * t3 ≤ (101 / 100) ^ 2 := by
+    have : (t1 * t1 + t2 * t2 + t3 * t3) * (l * l) ≤ (101 / 100) ^ 2 * (l * l) := by
+      linarith only [hV, show (t1 * l) * (t1 * l) + (t2 * l) * (t2 * l) + (t3 * l) * (t3 * l) =
+        (t1 * t1 + t2 * t2 + t3 * t3) * (l * l) by ring]
+    exact le_of_mul_le_mul_right this hl2
+  have s1 := mul_self_nonneg t1; have s2 := mul_self_nonneg t2; have s3 := mul_self_nonneg t3
+  have tb : ∀ t : ℚ, t * t ≤ (101 / 100) ^ 2 → |t| ≤ 101 / 100 := fun t h =>
+    abs_le_of_sq_le_sq' (by nlinarith) (by norm_num) |>.elim (fun h1 h2 => abs_le.mpr ⟨h1, h2⟩)
+  exact ⟨tb t1 (by linarith only [hT, s2, s3]), tb t2 (by linarith only [hT, s1, s3]),
+    tb t3 (by linarith only [hT, s1, s2])⟩
+
+/-- `x` within `u |t| + eta` of `t`, `|t| <= 1.01`, `|a| <= 1`: `|x| <= 2` and `|x a| <= 2`. -/
+lemma x_bound (u η x t a : ℚ) (hu0 : 0 ≤ u) (hu : u ≤ 1 / 8) (hη : η ≤ 1 / 8)
+    (ht : |t| ≤ 101 / 100) (hx : |x - t| ≤ u * |t| + η) (ha : |a| ≤ 1) :
+    |x| ≤ 2 ∧ |x * a| ≤ 2 := by
+  have : u * |t| ≤ 1 / 8 * (101 / 100) := mul_le_mul hu ht (abs_nonneg _) (by norm_num)
+  have h1 := abs_le.mp hx; have h2 := abs_le.mp ht
+  have hx2 : |x| ≤ 2 := abs_le.mpr ⟨by linarith, by linarith⟩
+  refine ⟨hx2, ?_⟩
+  rw [abs_mul]; nlinarith [abs_nonneg x, abs_nonneg a]
+
+/-- `|p| <= 2 + 3 eps` style: `|v - (a + b)| <= e`, `|a|, |b| <= 1`: `|v| <= 2 + e`. -/
+lemma v_bound (v a b e : ℚ) (h : |v - (a + b)| ≤ e) (ha : |a| ≤ 1) (hb : |b| ≤ 1) : |v| ≤ 2 + e := by
+  have := abs_le.mp h; have := abs_le.mp ha; have := abs_le.mp hb
+  exact abs_le.mpr ⟨by linarith, by linarith⟩
+
+lemma sq_le_of_abs_le {v B : ℚ} (h : |v| ≤ B) : v * v ≤ B * B := by
+  have := abs_le.mp h; nlinarith [abs_nonneg v]
+
+/-- **`unit_cross_len`** (binary64): `v` the f64 `a ± b` (`b` here the exact `±b`, each component
+within `3u` of `a_i + b_i`), `l` its f64 length (finite and positive: `normalize` returns `None`
+otherwise), `x_i = v_i / l` in f64, `Q` the f64 `|x × a|²`: then `sqrt Q` is finite and in
+`[2^-43, 4]`. For `a`, `b` with components at most 1 and the exact `|a × b|² >= 2^-76`. -/
+theorem unit_cross_len {a1 a2 a3 v1 v2 v3 l x1 x2 x3 : F64} {b1 b2 b3 : ℚ}
+    (fa1 : a1.isFinite) (fa2 : a2.isFinite) (fa3 : a3.isFinite)
+    (fv1 : v1.isFinite) (fv2 : v2.isFinite) (fv3 : v3.isFinite)
+    (ba1 : |a1.val| ≤ 1) (ba2 : |a2.val| ≤ 1) (ba3 : |a3.val| ≤ 1)
+    (bb1 : |b1| ≤ 1) (bb2 : |b2| ≤ 1) (bb3 : |b3| ≤ 1)
+    (hab : 1 / 2 ^ 76 ≤ (a2.val * b3 - a3.val * b2) * (a2.val * b3 - a3.val * b2) +
+      (a3.val * b1 - a1.val * b3) * (a3.val * b1 - a1.val * b3) +
+      (a1.val * b2 - a2.val * b1) * (a1.val * b2 - a2.val * b1))
+    (hv1 : |v1.val - (a1.val + b1)| ≤ 3 / 9007199254740992)
+    (hv2 : |v2.val - (a2.val + b2)| ≤ 3 / 9007199254740992)
+    (hv3 : |v3.val - (a3.val + b3)| ≤ 3 / 9007199254740992)
+    (hl : l = (lsq v1 v2 v3).sqrt) (fl : l.isFinite) (hl0 : 0 < l.val)
+    (hx1 : x1 = FP.div v1 l) (hx2 : x2 = FP.div v2 l) (hx3 : x3 = FP.div v3 l) :
+    (lsq (cx x2 a3 x3 a2) (cx x3 a1 x1 a3) (cx x1 a2 x2 a1)).sqrt.isFinite ∧
+      (2 : ℚ) ^ (-43 : ℤ) ≤ (lsq (cx x2 a3 x3 a2) (cx x3 a1 x1 a3) (cx x1 a2 x2 a1)).sqrt.val ∧
+      (lsq (cx x2 a3 x3 a2) (cx x3 a1 x1 a3) (cx x1 a2 x2 a1)).sqrt.val ≤ 4 := by
+  have hu8 : (2 : ℚ) ^ (-(binary64.prec : ℤ)) ≤ 1 / 8 := by rw [u64]; norm_num
+  have hη1 : (2 : ℚ) ^ (binary64.qmin - 1) ≤ 1 :=
+    le_trans η64_le (by rw [one_div]; exact inv_le_one_of_one_le₀ (one_le_pow₀ (by norm_num)))
+  have hη := η64_le
+  have η0 : (0 : ℚ) ≤ 2 ^ (binary64.qmin - 1) := (two_zpow_pos _).le
+  have hη100 : (2 : ℚ) ^ (binary64.qmin - 1) ≤ 1 / 2 ^ 100 :=
+    le_trans hη (one_div_le_one_div_of_le (by positivity) (pow_le_pow_right₀ (by norm_num) (by norm_num)))
+  have hη8 : (2 : ℚ) ^ (binary64.qmin - 1) ≤ 1 / 8 := le_trans hη100 (by norm_num)
+  have e1023 : ∀ c : ℚ, c ≤ 2 ^ 10 → c ≤ 2 ^ binary64.emax := fun c hc => by
+    rw [emax64]; exact le_trans hc (pow_le_pow_right₀ (by norm_num) (by norm_num))
+  -- the f64 squared length of v, and v's length l
+  have vb1 := sq_le_of_abs_le (v_bound _ _ _ _ hv1 ba1 bb1)
+  have vb2 := sq_le_of_abs_le (v_bound _ _ _ _ hv2 ba2 bb2)
+  have vb3 := sq_le_of_abs_le (v_bound _ _ _ _ hv3 ba3 bb3)
+  have hv9 : (2 + 3 / 9007199254740992 : ℚ) * (2 + 3 / 9007199254740992) ≤ 5 := by norm_num
+  obtain ⟨fq, eq⟩ := sq3_err binary64 fv1 fv2 fv3 hu8 hη1 (e1023 _ (by linarith))
+  rw [u64] at eq
+  have hlo := sqrt_sq_lower binary64 (by rw [binary64_emin, binary64_qmin]; norm_num)
+    (hl ▸ fl) (hl ▸ hl0)
+  rw [← hl, u64] at hlo
+  obtain ⟨hD, hV⟩ := normalize_core _ _ _ _ _ _ _ _ _ _ _ _ η0 hη100 ba1 ba2 ba3 bb1 bb2 bb3 hab
+    hv1 hv2 hv3 eq hl0 hlo.2
+  -- l <= 4: its square q is at most 16
+  have hq16 : (lsq v1 v2 v3).val ≤ (2 : ℚ) ^ (2 * (2 : ℤ)) := by
+    have := (abs_le.mp eq).2
+    have : (16 : ℚ) = 2 ^ (2 * (2 : ℤ)) := by norm_num
+    rw [← this]
+    show (FP.add (FP.add (FP.mul v1 v1) (FP.mul v2 v2)) (FP.mul v3 v3)).val ≤ 16
+    linarith
+  have hl4 := (sqrt_le_two_pow binary64 fq hlo.1 (k := 2) (by rw [binary64_qmin]; norm_num)
+    (by rw [binary64_emax]; norm_num) hq16).2
+  have hl4' : l.val ≤ 4 := by
+    have e4 : (2 : ℚ) ^ (2 : ℤ) = 4 := by norm_num
+    rw [e4] at hl4; rw [hl]; exact hl4
+  -- x_i = v_i / l
+  have hl0' : l.val ≠ 0 := ne_of_gt hl0
+  have ht : ∀ v : F64, v.val / l.val * l.val = v.val := fun v => div_mul_cancel₀ _ hl0'
+  obtain ⟨tb1, tb2, tb3⟩ := t_bound _ _ _ _ _ _ _ hl0 hV (ht v1) (ht v2) (ht v3)
+  have dv : ∀ {v : F64}, v.isFinite → |v.val / l.val| ≤ 101 / 100 →
+      (FP.div v l).isFinite ∧ |(FP.div v l).val - v.val / l.val| ≤
+        1 / 9007199254740992 * |v.val / l.val| + 2 ^ (binary64.qmin - 1) := fun fv h => by
+    have := div_err_le binary64 fv fl hl0' (e1023 _ (le_trans h (by norm_num)))
+    rwa [u64] at this
+  obtain ⟨fx1, ex1⟩ := dv fv1 tb1; obtain ⟨fx2, ex2⟩ := dv fv2 tb2; obtain ⟨fx3, ex3⟩ := dv fv3 tb3
+  rw [← hx1] at fx1 ex1; rw [← hx2] at fx2 ex2; rw [← hx3] at fx3 ex3
+  have u0 : (0 : ℚ) ≤ 1 / 9007199254740992 := by norm_num
+  have u8 : (1 : ℚ) / 9007199254740992 ≤ 1 / 8 := by norm_num
+  have xa : ∀ {x : F64} {t : ℚ}, |t| ≤ 101 / 100 →
+      |x.val - t| ≤ 1 / 9007199254740992 * |t| + 2 ^ (binary64.qmin - 1) → ∀ a : F64, |a.val| ≤ 1 →
+      |x.val * a.val| ≤ 2 := fun ht hx a ha => (x_bound _ _ _ _ _ u0 u8 hη8 ht hx ha).2
+  -- the f64 x × a
+  have hM : 4 * (2 : ℚ) + 8 ≤ 2 ^ binary64.emax := e1023 _ (by norm_num)
+  obtain ⟨fc1, ec1⟩ := diff_prod_err binary64 fx2 fa3 fx3 fa2 (xa tb2 ex2 a3 ba3) (xa tb3 ex3 a2 ba2)
+    hM hu8 hη1
+  obtain ⟨fc2, ec2⟩ := diff_prod_err binary64 fx3 fa1 fx1 fa3 (xa tb3 ex3 a1 ba1) (xa tb1 ex1 a3 ba3)
+    hM hu8 hη1
+  obtain ⟨fc3, ec3⟩ := diff_prod_err binary64 fx1 fa2 fx2 fa1 (xa tb1 ex1 a2 ba2) (xa tb2 ex2 a1 ba1)
+    hM hu8 hη1
+  rw [u64] at ec1 ec2 ec3
+  -- each f64 component of x × a at most 5, so the f64 squared length cannot overflow
+  have cq : ∀ (c : F64) (p r : ℚ), |p| ≤ 2 → |r| ≤ 2 →
+      |c.val - (p - r)| ≤ 5 * (1 / 9007199254740992) * 2 + 4 * 2 ^ (binary64.qmin - 1) →
+      c.val * c.val ≤ 25 := fun c p r hp hr hc => by
+    have := abs_le.mp hp; have := abs_le.mp hr; have := abs_le.mp hc
+    have : 5 * (1 / 9007199254740992 : ℚ) * 2 + 4 * 2 ^ (binary64.qmin - 1) ≤ 1 := by linarith
+    exact sq_le_of_abs_le (abs_le.mpr ⟨by linarith, by linarith⟩ : |c.val| ≤ 5) |>.trans (by norm_num)
+  have q1 := cq _ _ _ (xa tb2 ex2 a3 ba3) (xa tb3 ex3 a2 ba2) ec1
+  have q2 := cq _ _ _ (xa tb3 ex3 a1 ba1) (xa tb1 ex1 a3 ba3) ec2
+  have q3 := cq _ _ _ (xa tb1 ex1 a2 ba2) (xa tb2 ex2 a1 ba1) ec3
+  obtain ⟨fQ, eQ⟩ := sq3_err binary64 fc1 fc2 fc3 hu8 hη1 (e1023 _ (by linarith))
+  rw [u64] at eQ
+  obtain ⟨hQlo, hQhi⟩ := unit_core (1 / 9007199254740992) _ a1.val a2.val a3.val v1.val v2.val v3.val
+    _ _ _ x1.val x2.val x3.val _ _ _ _ l.val (by norm_num) (by norm_num) η0 hη100 ba1 ba2 ba3 hD hV
+    hl0 hl4' (ht v1) (ht v2) (ht v3) ex1 ex2 ex3 ec1 ec2 ec3 eQ
+  have hQ0 : 0 < (lsq (cx x2 a3 x3 a2) (cx x3 a1 x1 a3) (cx x1 a2 x2 a1)).val :=
+    lt_of_lt_of_le (by norm_num) hQlo
+  obtain ⟨fs, hs⟩ := sqrt_ge_two_pow binary64 fQ (k := -43) (by rw [binary64_qmin]; norm_num)
+    (by rw [binary64_emax]; norm_num) (by
+      have e : (2 : ℚ) ^ (2 * (-43 : ℤ)) = 1 / 2 ^ 86 := by norm_num
+      rw [e]; exact hQlo)
+  have hs4 := (sqrt_le_two_pow binary64 fQ hQ0 (k := 2) (by rw [binary64_qmin]; norm_num)
+    (by rw [binary64_emax]; norm_num) (by
+      have e : (2 : ℚ) ^ (2 * (2 : ℤ)) = 16 := by norm_num
+      rw [e]; exact hQhi)).2
+  have e4 : (2 : ℚ) ^ (2 : ℤ) = 4 := by norm_num
+  rw [e4] at hs4
+  exact ⟨fs, hs, hs4⟩
+
+/-- `div_pos_finite` for a divisor up to 4: `x / y` is finite and positive for `x` finite in
+`[2^(qmin+2), 2^emax * A]` and `y` finite in `[A, 4]`, `A > 0`. -/
+theorem div_pos_finite4 {x y : FP f} (hx : x.isFinite) (hy : y.isFinite) {A : ℚ} (hA : 0 < A)
+    (hyA : A ≤ y.val) (hy4 : y.val ≤ 4) (hxlo : (2 : ℚ) ^ (f.qmin + 2) ≤ x.val)
+    (hxhi : x.val ≤ 2 ^ f.emax * A) :
+    (FP.div x y).isFinite ∧ 0 < (FP.div x y).val := by
+  have hypos : 0 < y.val := lt_of_lt_of_le hA hyA
+  rw [div_eq_round hx hy (ne_of_gt hypos)]
+  have hlo : (2 : ℚ) ^ f.qmin ≤ x.val / y.val := by
+    rw [le_div_iff₀ hypos]
+    have h2 : (2 : ℚ) ^ (f.qmin + 2) = 2 ^ f.qmin * 4 := by
+      rw [zpow_add₀ (by norm_num : (2 : ℚ) ≠ 0)]; norm_num
+    have hq := two_zpow_pos (K := ℚ) f.qmin
+    nlinarith
+  have hhi : x.val / y.val ≤ 2 ^ f.emax := by
+    rw [div_le_iff₀ hypos]
+    have he := two_zpow_pos (K := ℚ) f.emax
+    nlinarith
+  obtain ⟨hfin, hge⟩ := round_ge_two_pow_qmin f (zs := x.sign ^^ y.sign) hlo hhi
+  exact ⟨hfin, lt_of_lt_of_le (two_zpow_pos _) hge⟩
+
+/-- **`equal_crossing_major`** (binary64; kernel/forge-bool/src/ssi.rs `equal_crossing`): for
+`a`, `b` with finite components at most 1 where the caller's f64 `|a × b|` exceeds `2^-37`
+(`ANGULAR = 1e-11`), `v` the f64 `a + b` or `a - b` (`op`), `normalize` succeeding (`l` finite and
+positive; it returns `None` otherwise), `x = v / l` componentwise, and a finite radius `r` in
+`[2^(qmin+2), 2^(emax-43)]`: `major = r / |x × a|` is finite and positive. -/
+theorem equal_crossing_major {a1 a2 a3 b1 b2 b3 v1 v2 v3 l x1 x2 x3 r : F64}
+    {op : F64 → F64 → F64} (hop : op = FP.add ∨ op = FP.sub)
+    (fa1 : a1.isFinite) (fa2 : a2.isFinite) (fa3 : a3.isFinite)
+    (fb1 : b1.isFinite) (fb2 : b2.isFinite) (fb3 : b3.isFinite)
+    (ba1 : |a1.val| ≤ 1) (ba2 : |a2.val| ≤ 1) (ba3 : |a3.val| ≤ 1)
+    (bb1 : |b1.val| ≤ 1) (bb2 : |b2.val| ≤ 1) (bb3 : |b3.val| ≤ 1)
+    (hL : (2 : ℚ) ^ (-37 : ℤ) < (lsq (cx a2 b3 a3 b2) (cx a3 b1 a1 b3) (cx a1 b2 a2 b1)).sqrt.val)
+    (hv1 : v1 = op a1 b1) (hv2 : v2 = op a2 b2) (hv3 : v3 = op a3 b3)
+    (hl : l = (lsq v1 v2 v3).sqrt) (fl : l.isFinite) (hl0 : 0 < l.val)
+    (hx1 : x1 = FP.div v1 l) (hx2 : x2 = FP.div v2 l) (hx3 : x3 = FP.div v3 l)
+    (fr : r.isFinite) (hrlo : (2 : ℚ) ^ (binary64.qmin + 2) ≤ r.val)
+    (hrhi : r.val ≤ 2 ^ (binary64.emax - 43)) :
+    (FP.div r (lsq (cx x2 a3 x3 a2) (cx x3 a1 x1 a3) (cx x1 a2 x2 a1)).sqrt).isFinite ∧
+      0 < (FP.div r (lsq (cx x2 a3 x3 a2) (cx x3 a1 x1 a3) (cx x1 a2 x2 a1)).sqrt).val := by
+  have hab := caller_bound fa1 fa2 fa3 fb1 fb2 fb3 ba1 ba2 ba3 bb1 bb2 bb3 hL
+  have h76 : (2 : ℚ) ^ (-76 : ℤ) = 1 / 2 ^ 76 := by norm_num
+  rw [h76] at hab
+  have hu : (2 : ℚ) ^ (-(binary64.prec : ℤ)) = 1 / 9007199254740992 := u64
+  have hη : (2 : ℚ) ^ (binary64.qmin - 1) ≤ 1 / 9007199254740992 :=
+    le_trans η64_le (le_trans (one_div_le_one_div_of_le (by positivity)
+      (pow_le_pow_right₀ (by norm_num) (by norm_num : 100 ≤ 1000))) (by norm_num))
+  have e1023 : ∀ c : ℚ, c ≤ 2 ^ 10 → c ≤ 2 ^ binary64.emax := fun c hc => by
+    rw [emax64]; exact le_trans hc (pow_le_pow_right₀ (by norm_num) (by norm_num))
+  -- each f64 v_i within 3u of a_i ± b_i
+  have near : ∀ {p q : ℚ} {w : F64}, |p| ≤ 1 → |q| ≤ 1 →
+      |w.val - (p + q)| ≤ 2 ^ (-(binary64.prec : ℤ)) * |p + q| + 2 ^ (binary64.qmin - 1) →
+      |w.val - (p + q)| ≤ 3 / 9007199254740992 := fun {p q w} hp hq hw => by
+    rw [hu] at hw
+    have : |p + q| ≤ 2 := le_trans (abs_add_le _ _) (by linarith)
+    have : 1 / 9007199254740992 * |p + q| ≤ 1 / 9007199254740992 * 2 :=
+      mul_le_mul_of_nonneg_left this (by norm_num)
+    linarith
+  have sum2 : ∀ {p q : ℚ}, |p| ≤ 1 → |q| ≤ 1 → |p + q| ≤ 2 ^ binary64.emax := fun {p q} hp hq =>
+    e1023 _ (le_trans (abs_add_le _ _) (by linarith))
+  have core : ∀ {c1 c2 c3 : ℚ}, |c1| ≤ 1 → |c2| ≤ 1 → |c3| ≤ 1 →
+      1 / 2 ^ 76 ≤ (a2.val * c3 - a3.val * c2) * (a2.val * c3 - a3.val * c2) +
+        (a3.val * c1 - a1.val * c3) * (a3.val * c1 - a1.val * c3) +
+        (a1.val * c2 - a2.val * c1) * (a1.val * c2 - a2.val * c1) →
+      (v1.isFinite ∧ |v1.val - (a1.val + c1)| ≤ 3 / 9007199254740992) →
+      (v2.isFinite ∧ |v2.val - (a2.val + c2)| ≤ 3 / 9007199254740992) →
+      (v3.isFinite ∧ |v3.val - (a3.val + c3)| ≤ 3 / 9007199254740992) →
+      (FP.div r (lsq (cx x2 a3 x3 a2) (cx x3 a1 x1 a3) (cx x1 a2 x2 a1)).sqrt).isFinite ∧
+        0 < (FP.div r (lsq (cx x2 a3 x3 a2) (cx x3 a1 x1 a3) (cx x1 a2 x2 a1)).sqrt).val :=
+    fun {c1 c2 c3} h1 h2 h3 hc e1 e2 e3 => by
+      obtain ⟨fs, slo, shi⟩ := unit_cross_len fa1 fa2 fa3 e1.1 e2.1 e3.1 ba1 ba2 ba3 h1 h2 h3 hc
+        e1.2 e2.2 e3.2 hl fl hl0 hx1 hx2 hx3
+      have hA : (0 : ℚ) < 2 ^ (-43 : ℤ) := two_zpow_pos _
+      refine div_pos_finite4 binary64 fr fs hA slo shi hrlo ?_
+      rw [← zpow_add₀ (by norm_num : (2 : ℚ) ≠ 0)]; exact hrhi
+  rcases hop with rfl | rfl
+  · subst hv1 hv2 hv3
+    refine core bb1 bb2 bb3 hab ?_ ?_ ?_
+    · obtain ⟨f, e⟩ := add_err_le binary64 fa1 fb1 (sum2 ba1 bb1); exact ⟨f, near ba1 bb1 e⟩
+    · obtain ⟨f, e⟩ := add_err_le binary64 fa2 fb2 (sum2 ba2 bb2); exact ⟨f, near ba2 bb2 e⟩
+    · obtain ⟨f, e⟩ := add_err_le binary64 fa3 fb3 (sum2 ba3 bb3); exact ⟨f, near ba3 bb3 e⟩
+  · subst hv1 hv2 hv3
+    have nb : ∀ {p : ℚ}, |p| ≤ 1 → |-p| ≤ 1 := fun {p} h => by rwa [abs_neg]
+    refine core (nb bb1) (nb bb2) (nb bb3) (by linarith only [hab, show
+        (a2.val * -b3.val - a3.val * -b2.val) * (a2.val * -b3.val - a3.val * -b2.val) +
+        (a3.val * -b1.val - a1.val * -b3.val) * (a3.val * -b1.val - a1.val * -b3.val) +
+        (a1.val * -b2.val - a2.val * -b1.val) * (a1.val * -b2.val - a2.val * -b1.val) =
+        (a2.val * b3.val - a3.val * b2.val) * (a2.val * b3.val - a3.val * b2.val) +
+        (a3.val * b1.val - a1.val * b3.val) * (a3.val * b1.val - a1.val * b3.val) +
+        (a1.val * b2.val - a2.val * b1.val) * (a1.val * b2.val - a2.val * b1.val) by ring]) ?_ ?_ ?_
+    · have sn : a1.val - b1.val = a1.val + -b1.val := sub_eq_add_neg _ _
+      obtain ⟨f, e⟩ := sub_err_le binary64 fa1 fb1 (by rw [sn]; exact sum2 ba1 (nb bb1))
+      rw [sn] at e; exact ⟨f, near ba1 (nb bb1) e⟩
+    · have sn : a2.val - b2.val = a2.val + -b2.val := sub_eq_add_neg _ _
+      obtain ⟨f, e⟩ := sub_err_le binary64 fa2 fb2 (by rw [sn]; exact sum2 ba2 (nb bb2))
+      rw [sn] at e; exact ⟨f, near ba2 (nb bb2) e⟩
+    · have sn : a3.val - b3.val = a3.val + -b3.val := sub_eq_add_neg _ _
+      obtain ⟨f, e⟩ := sub_err_le binary64 fa3 fb3 (by rw [sn]; exact sum2 ba3 (nb bb3))
+      rw [sn] at e; exact ⟨f, near ba3 (nb bb3) e⟩
 
 end IEEE754
