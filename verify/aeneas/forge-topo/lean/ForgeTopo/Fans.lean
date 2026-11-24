@@ -642,4 +642,130 @@ theorem count_spec (R : FanReads FI t b corners) (H : Sound b) (W : b.WF) (close
 
 end count
 
+/-! ## The corner table -/
+
+theorem eraseDups_snoc (xs : List Nat) (x : Nat) :
+    (xs ++ [x]).eraseDups = xs.eraseDups ++ (if x ∈ xs then [] else [x]) := by
+  rw [List.eraseDups_append]
+  by_cases h : x ∈ xs
+  · simp [h, List.removeAll]
+  · simp [h, List.removeAll, List.eraseDups_cons]
+
+theorem eraseDups_nodup (xs : List Nat) : xs.eraseDups.Nodup := by
+  induction xs using List.reverseRecOn with
+  | nil => simp
+  | append_singleton xs x ih =>
+    rw [eraseDups_snoc]; split
+    · simpa using ih
+    · rename_i h
+      exact List.nodup_append.2 ⟨ih, by simp, by simp; intro a ha hax; exact h (hax ▸ ha)⟩
+
+/-- The three vectors of `Closes` hold the table `L` (faces, each once, with their corners). -/
+structure CRep (cf : alloc.vec.Vec Usize) (cl : alloc.vec.Vec (Usize × Usize)) (cs : alloc.vec.Vec Usize)
+    (L : List (Nat × List (Nat × Nat))) : Prop where
+  cf : cf.val.map (·.val) = L.map (·.1)
+  cl : cl.val.map (fun p => (p.1.val, p.2.val)) = L.flatMap (·.2)
+  cs_len : cs.val.length = L.length + 1
+  cs : ∀ k ≤ L.length, (cs.val[k]!).val = ((L.take k).flatMap (·.2)).length
+  nodup : (L.map (·.1)).Nodup
+
+section before
+variable {T : Type} (FI : topo_fans.FanTopo T) (t : T) {b : Body} {corners : Nat → Nat → List (Nat × Nat)}
+
+theorem filter_face_nodup (L : List (Nat × List (Nat × Nat))) (hn : (L.map (·.1)).Nodup) (k : Nat)
+    (hk : k < L.length) : L.filter (fun x => x.1 == L[k].1) = [L[k]] := by
+  induction L generalizing k with
+  | nil => simp at hk
+  | cons y ys ih =>
+    simp only [List.map_cons, List.nodup_cons, List.mem_map] at hn
+    cases k with
+    | zero =>
+      simp only [List.getElem_cons_zero, List.filter_cons, beq_self_eq_true, ite_true, List.cons.injEq, true_and]
+      rw [List.filter_eq_nil_iff]
+      intro a ha h; simp at h; exact hn.1 ⟨a, ha, h⟩
+    | succ k =>
+      simp only [List.getElem_cons_succ, List.filter_cons]
+      have hk' : k < ys.length := by simpa using hk
+      have hne : (y.1 == ys[k].1) = false := by
+        simp; intro h; exact hn.1 ⟨ys[k], List.getElem_mem hk', h.symm⟩
+      rw [hne]; simp only [Bool.false_eq_true, ite_false]; exact ih hn.2 k hk'
+
+theorem filter_face_none (L : List (Nat × List (Nat × Nat))) (f : Nat) (h : f ∉ L.map (·.1)) :
+    L.filter (fun x => x.1 == f) = [] := by
+  rw [List.filter_eq_nil_iff]; intro a ha hf; simp at hf; exact h (List.mem_map.2 ⟨a, ha, hf⟩)
+
+theorem seg_flatMap (L : List (Nat × List (Nat × Nat))) (k : Nat) (hk : k < L.length) :
+    ((L.flatMap (·.2)).drop ((L.take k).flatMap (·.2)).length).take (L[k].2.length) = L[k].2 := by
+  have h : L.flatMap (·.2) = (L.take k).flatMap (·.2) ++ (L[k].2 ++ (L.drop (k + 1)).flatMap (·.2)) := by
+    conv_lhs => rw [← List.take_append_drop k L]
+    rw [List.flatMap_append, List.drop_eq_getElem_cons hk, List.flatMap_cons]
+  rw [h, List.drop_left, List.take_left]
+
+theorem inner_spec (cl : alloc.vec.Vec (Usize × Usize)) (c : Usize) (P : List (Nat × Nat))
+    (j0 e : Usize) (hseg : ((cl.val.map (fun p => (p.1.val, p.2.val))).drop j0.val).take (e.val - j0.val) = P)
+    (hje : j0.val ≤ e.val) (he : e.val ≤ cl.val.length) (into : Usize) :
+    topo_fans.before_loop0_loop0 cl c into false j0 e ⦃ r =>
+      (r.2 = true ∧ P.find? (·.1 == c.val) = some (c.val, r.1.val)) ∨
+      (r.2 = false ∧ P.find? (·.1 == c.val) = none) ⦄ := by
+  have hPl : P.length = e.val - j0.val := by rw [← hseg]; simp; omega
+  unfold topo_fans.before_loop0_loop0
+  apply loop.spec_decr_nat
+    (fun (y : Usize × Bool × Usize) => e.val - y.2.2.val + (if y.2.1 then 0 else 1))
+    (fun y => j0.val ≤ y.2.2.val ∧ y.2.2.val ≤ e.val ∧
+      ((y.2.1 = true ∧ P.find? (·.1 == c.val) = some (c.val, y.1.val)) ∨
+       (y.2.1 = false ∧ (P.take (y.2.2.val - j0.val)).find? (·.1 == c.val) = none)))
+  · rintro ⟨into0, found, j⟩ ⟨hj0, hje', hinv⟩
+    simp only at hj0 hje' hinv ⊢
+    unfold topo_fans.before_loop0_loop0.body
+    split
+    · rename_i hf
+      simp only [WP.spec_ok]
+      rcases hinv with ⟨-, hq⟩ | ⟨hf', -⟩
+      · exact Or.inl ⟨hf, hq⟩
+      · rw [hf] at hf'; simp at hf'
+    · rename_i hf
+      have hf' : found = false := by simpa using hf
+      rcases hinv with ⟨h1, -⟩ | ⟨-, hq⟩
+      · rw [hf'] at h1; simp at h1
+      split
+      · rename_i hlt
+        have hlt' : j.val < e.val := by scalar_tac
+        have hjl : j.val < cl.val.length := by omega
+        step as ⟨x, y, hxy⟩
+        have hPj : P[j.val - j0.val]'(by omega) = (x.val, y.val) := by
+          subst hseg
+          simp only [List.getElem_take, List.getElem_drop, List.getElem_map]
+          simp only [show j0.val + (j.val - j0.val) = j.val by omega, ← hxy]
+        have htk : P.take (j.val + 1 - j0.val) = P.take (j.val - j0.val) ++ [(x.val, y.val)] := by
+          rw [show j.val + 1 - j0.val = (j.val - j0.val) + 1 by omega,
+            List.take_succ_eq_append_getElem (by omega), hPj]
+        have h1 : (1#usize).val = 1 := rfl
+        apply WP.spec_bind (Pₘ := fun (r : Usize × Bool) =>
+          (r.2 = true ∧ r.1.val = y.val ∧ x.val = c.val) ∨ (r.2 = false ∧ x.val ≠ c.val))
+        · split
+          · rename_i hx; simp only [WP.spec_ok]; exact Or.inl ⟨trivial, by simp, by rw [hx]⟩
+          · rename_i hx; simp only [WP.spec_ok]
+            exact Or.inr ⟨hf', fun h => hx (UScalar.eq_of_val_eq h)⟩
+        · rintro ⟨into1, found1⟩ hr
+          step with usize_add_wspec j 1#usize (by have := le_max e; rw [h1]; omega) as ⟨j1, hj1⟩
+          have hj1v : j1.val = j.val + 1 := by rw [hj1]; exact succ_val j e hlt'
+          rw [hj1v]
+          rcases hr with ⟨hf1, hi1, hx⟩ | ⟨hf1, hx⟩
+          · have hf1' : found1 = true := hf1
+            refine ⟨by omega, by omega, Or.inl ⟨hf1, ?_⟩, by rw [if_pos hf1']; omega⟩
+            rw [← List.take_append_drop (j.val + 1 - j0.val) P, List.find?_append, htk, List.find?_append, hq]
+            simp [hx, hi1]
+          · have hf1' : found1 = false := hf1
+            refine ⟨by omega, by omega, Or.inr ⟨hf1, ?_⟩, by rw [if_neg (by simp [hf1'])]; omega⟩
+            rw [htk, List.find?_append, hq]; simp; exact fun h => hx h
+      · rename_i hlt
+        have hje2 : j.val = e.val := by scalar_tac
+        simp only [WP.spec_ok]
+        refine Or.inr ⟨hf', ?_⟩
+        rw [hje2, ← hPl, List.take_length] at hq; exact hq
+  · have h0 : j0.val - j0.val = 0 := by omega
+    refine ⟨le_refl _, hje, Or.inr ⟨rfl, by rw [h0]; simp⟩⟩
+
+end before
+
 end forge_topo
