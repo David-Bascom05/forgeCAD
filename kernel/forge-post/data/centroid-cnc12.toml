@@ -6,6 +6,10 @@ name = "centroid-cnc12"
 extension = "nc"
 decimals = 4
 feed_decimals = 1
+units_mm = "G21"
+units_inch = "G20"
+inch_decimals = 4
+inch_feed_decimals = 2
 point = "always"
 program_open = ["; {title}"]
 program_close = ["M30"]
@@ -13,7 +17,7 @@ comment = "; {text}"
 comment_eol = ";"
 comment_strip = ";()[]"
 line_numbers = false
-safe_start = ["G17 G21 G40 G49 G80 G90 G94"]
+safe_start = ["G17 {units} G40 G49 G80 G90 G94"]
 tool_change = ["T{t} M6"]
 length_comp = "G43 H{h}"
 spindle_cw = "S{rpm} M3"
@@ -236,3 +240,31 @@ source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator
 taken = "2026-11-23"
 where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 11.2.3 p192"
 note = "4 decimals written"
+
+[[dialect.cite]]
+key = "units_mm"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 12.x; 11.2.5 example p192"
+note = "G21 (the safe start's)"
+
+[[dialect.cite]]
+key = "units_inch"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-24"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 12.8 p209 (G20), 12.9 p209 (G21)"
+note = "G20 selects inch units, affecting the interpretation of all subsequent dimensions and feedrates in the job file"
+
+[[dialect.cite]]
+key = "inch_decimals"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 11.2.3 p192"
+note = "the number format reads decimals (inch increment not stated): 4 written, 0.0001 in"
+
+[[dialect.cite]]
+key = "inch_feed_decimals"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 11.2.3 p192"
+note = "the number format reads decimals (inch feed increment not stated): 2 written"

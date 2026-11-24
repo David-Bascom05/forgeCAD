@@ -39,16 +39,25 @@ fn rounded(r: f64) -> Result<f64, String> {
         .map_err(|e| format!("{e:?}"))
 }
 
-/// Every radius the sweeps found refused before (step 0.01 from 10.9 to 13.5, 0.1 to 30), each
-/// built, checked and of a volume.
+/// Every radius the sweeps found refused before (step 0.01 from 10.9 to 13.5, 0.1 to 30).
+const ONCE: [f64; 34] = [
+    10.98, 11.09, 11.1, 11.15, 11.22, 11.44, 11.53, 11.61, 11.7, 11.9, 12.06, 12.07, 12.08, 12.12, 12.13,
+    12.14, 12.18, 12.31, 12.4, 12.48, 12.5, 12.64, 12.75, 12.91, 12.92, 12.98, 13.0, 13.08, 13.35, 14.9,
+    15.1, 16.7, 23.3, 24.3,
+];
+
+/// Whether this build has the mend switched off (`--features node-mend-off`, the mutation job).
+fn mend_off() -> bool {
+    cfg!(feature = "node-mend-off")
+}
+
+/// Each radius once refused: built, checked and of a volume.
 #[test]
 fn every_radius_once_refused_builds() {
-    let once = [
-        10.98, 11.09, 11.1, 11.15, 11.22, 11.44, 11.53, 11.61, 11.7, 11.9, 12.06, 12.07, 12.08, 12.12, 12.13,
-        12.14, 12.18, 12.31, 12.4, 12.48, 12.5, 12.64, 12.75, 12.91, 12.92, 12.98, 13.0, 13.08, 13.35, 14.9,
-        15.1, 16.7, 23.3, 24.3,
-    ];
-    let refused: Vec<String> = once
+    if mend_off() {
+        return;
+    }
+    let refused: Vec<String> = ONCE
         .iter()
         .filter_map(|&r| rounded(r).err().map(|e| format!("{r}: {e}")))
         .collect();
@@ -60,6 +69,9 @@ fn every_radius_once_refused_builds() {
 /// last's (measured: within 1%). A blend region lost or doubled at a node would jump.
 #[test]
 fn the_volume_falls_smoothly_through_the_two_rounds_range() {
+    if mend_off() {
+        return;
+    }
     let rs: Vec<f64> = (0..=143).map(|i| 10.0 + 0.1 * i as f64).collect();
     let vs: Vec<f64> = rs
         .iter()
@@ -94,4 +106,17 @@ fn past_the_corners_limit_every_radius_is_refused() {
         let e = rounded(r).expect_err("refused");
         assert!(e.contains("Mitre"), "r = {r}: {e}");
     }
+}
+
+/// The mutation: with the mend switched off (`FORGECAD_CACHE=off cargo test -p forge-lang --test
+/// round_node --features node-mend-off`, .github/workflows/node-mutation.yml), the radii once
+/// refused are refused again: what makes them build is the mend, and these tests see it go. Without
+/// the switch this test asks nothing.
+#[test]
+fn without_the_mend_the_radii_once_refused_are_refused_again() {
+    if !mend_off() {
+        return;
+    }
+    let built: Vec<f64> = ONCE.iter().copied().filter(|&r| rounded(r).is_ok()).collect();
+    assert!(built.is_empty(), "built without the mend: {built:?}");
 }

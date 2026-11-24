@@ -27,6 +27,7 @@ fn main() {
         holder: Some("bt40-er32".into()),
         stickout: 40.0,
         shape: shape.clone(),
+        probe: false,
     };
     let sf = Surfacer::new(&faces, &shape.bodies[0], 0.0, 0.01, 10.0).unwrap();
     let dc = SurfDrop::new(&sf).unwrap();

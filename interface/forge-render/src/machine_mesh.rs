@@ -79,6 +79,26 @@ pub fn prim_tris(p: &Prim, out: &mut Tris) {
                 out.edges.push(vec![c(i), c(j)]);
             }
         }
+        Prim::OBox { o, axes, size } => {
+            // corners o + Σ f_k size_k axes_k (f_k 0 or 1); each face's normal ± its axis, its
+            // corners counter-clockwise seen from outside (as camsim/machine.rs draws it)
+            let v = |f: [u8; 3]| Prim::obox_at(o, axes, size, f.map(f64::from));
+            for (k, i, j) in [(0, 1, 2), (1, 2, 0), (2, 0, 1)] {
+                let at = |side: u8, a: u8, b: u8| {
+                    let mut f = [0u8; 3];
+                    f[k] = side;
+                    f[i] = a;
+                    f[j] = b;
+                    v(f)
+                };
+                out.quad([at(1, 0, 0), at(1, 1, 0), at(1, 1, 1), at(1, 0, 1)], axes[k]);
+                out.quad([at(0, 0, 0), at(0, 0, 1), at(0, 1, 1), at(0, 1, 0)], axes[k].map(|x| -x));
+                // the four edges along axis k
+                for (a, b) in [(0, 0), (1, 0), (1, 1), (0, 1)] {
+                    out.edges.push(vec![at(0, a, b), at(1, a, b)]);
+                }
+            }
+        }
         Prim::Cyl { base, axis, r, h } => {
             let a = kin::scale(*axis, 1.0 / kin::norm(*axis));
             let u0 = if a[0].abs() < 0.9 {

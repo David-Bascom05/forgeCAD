@@ -729,3 +729,64 @@ fn tilted_wedge_thinner_than_two_tolerances() {
         }
     }
 }
+
+/// A chain of booleans on one plate: tilted rectangular prisms (z tilted up to `tilt`, any angle
+/// in plane), nine subtracts through it then a union below, `n` of them, as in turn from seed 7.
+/// The tools with ids in `only` (all if empty). Each result must be valid (names included).
+fn plate_chain(n: usize, tilt: f64, only: &[u64]) {
+    let block = |f: Frame, w: f64, h: f64, d: f64, id: u64| {
+        extrude(
+            &Profile {
+                plane: f,
+                loops: vec![Profile::rectangle(Point2::ORIGIN, w, h, id * 10)],
+            },
+            d,
+            id,
+        )
+    };
+    let mut rng = Rng::new(7);
+    let mut body = block(Frame::WORLD, 200.0, 200.0, 10.0, 1).unwrap();
+    for i in 0..n {
+        let z = Vec3::new(rng.range(-tilt, tilt), rng.range(-tilt, tilt), 1.0)
+            .normalize()
+            .unwrap();
+        let (s, c) = dmath::sin_cos(rng.range(0.0, dmath::TAU));
+        let o = Point3::new(
+            rng.range(10.0, 180.0),
+            rng.range(10.0, 180.0),
+            rng.range(-5.0, 2.0),
+        );
+        let Some(f) = Frame::from_zx(o, z, Vec3::new(c, s, 0.0)) else {
+            continue;
+        };
+        let (w, h) = (rng.range(3.0, 30.0), rng.range(3.0, 30.0));
+        let op = if i % 10 == 9 { Op::Union } else { Op::Subtract };
+        let d = if op == Op::Union {
+            rng.range(1.0, 8.0)
+        } else {
+            20.0
+        };
+        let id = 100 + i as u64;
+        if !only.is_empty() && !only.contains(&id) {
+            continue;
+        }
+        let tool = block(f, w, h, d, id).unwrap();
+        body = boolean(&body, &tool, op, id).unwrap_or_else(|e| panic!("op {i} {op:?}: {e:?}"));
+        let p = check(&body);
+        assert!(p.is_empty(), "after op {i} ({op:?}): {p:?}");
+    }
+}
+
+/// A face split twice, the second time by its own boundary piece that named it the first time:
+/// the new region once took the face's own name (`Name::piece` keeps the first whole's high
+/// half), a duplicate name in a body handed out (the plate's bottom, at the tenth tool).
+#[test]
+fn a_region_split_again_by_its_naming_edge_gets_its_own_name() {
+    plate_chain(95, 0.05, &[118, 119, 138, 139, 144, 145, 186, 187, 188, 194]);
+}
+
+/// The chain whole: 100 booleans of tilted tools on one plate, every result valid.
+#[test]
+fn a_hundred_tilted_booleans_on_one_plate() {
+    plate_chain(100, 0.05, &[]);
+}
