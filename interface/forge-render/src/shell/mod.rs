@@ -1209,8 +1209,6 @@ impl Shell {
             pos2(s.width() - 330.0, st.top() + 2.0),
             vec2(78.0, STATUS_H - 4.0),
         );
-        // the status on one row, cut with "…" short of Markup (in a narrow window it ran on under
-        // Markup and the issues), the whole of it on hover when cut
         let words = if let Some(l) = &env_line {
             l.as_str()
         } else if self.status.is_empty() && self.unshown {
@@ -1218,13 +1216,28 @@ impl Shell {
         } else {
             &*status
         };
-        let room = (mr.left() - theme::S2 - (x + 4.0)).max(0.0);
+        // a refusal's fix a click away (Manufacture: the unplaced setup's dialog): always seen,
+        // right after the words, which are cut to leave it room short of Markup
+        let fix = if self.tab == CAM_TAB {
+            self.cam.as_ref().and_then(cam::status_fix)
+        } else {
+            None
+        };
+        let fix_g = fix.as_ref().map(|(label, _)| {
+            ui.fonts_mut(|f| f.layout_no_wrap(label.to_string(), sans(12.0), Color32::WHITE))
+        });
+        let fix_w = fix_g.as_ref().map_or(0.0, |g| 12.0 + g.size().x + 16.0);
+        // the words on one row, short of the fix and Markup (in a narrow window they ran on under
+        // Markup and the issues): cut between their parts (" · "), the details last, then "…"
+        let room = (mr.left() - theme::S2 - fix_w - (x + 4.0)).max(0.0);
+        // too little room for any of the words beside a fix (a narrow window): the fix alone, the
+        // words on its hover (a lone "…" said nothing)
+        let wordless = fix.is_some() && room < 60.0;
         let width = |t: &str| {
             ui.fonts_mut(|f| f.layout_no_wrap(t.to_string(), sans(12.0), Color32::WHITE))
                 .size()
                 .x
         };
-        // cut between its parts (" · "), the details last: whole parts kept, then "…"
         let parts: Vec<&str> = words.split(" \u{b7} ").collect();
         let mut fits = words.to_string();
         if width(words) > room {
@@ -1240,6 +1253,9 @@ impl Shell {
                 fits = words.to_string();
             }
         }
+        if wordless {
+            fits = String::new();
+        }
         let mut job = egui::text::LayoutJob::simple_singleline(fits.clone(), sans(12.0), Color32::WHITE);
         job.wrap = egui::text::TextWrapping {
             max_width: room,
@@ -1252,11 +1268,50 @@ impl Shell {
         let cut = g.elided || fits != words;
         self.status_shown = if g.elided { format!("{fits} (cut)") } else { fits };
         p.galley(said.min, g, Color32::WHITE);
-        if cut {
-            ui.interact(said, ui.scope_id().with("status-cut"), Sense::hover())
-                .on_hover_text(words);
+        // on hover: the whole line when cut, and a release refusal's detail (its rule, the syntax)
+        let detail = if self.tab == CAM_TAB {
+            self.cam.as_ref().and_then(cam::release_words).map(|b| b.detail)
+        } else {
+            None
+        };
+        let hover = match (cut, detail) {
+            (true, Some(d)) => Some(format!("{words}\n\n{d}")),
+            (false, Some(d)) => Some(d),
+            (true, None) => Some(words.to_string()),
+            (false, None) => None,
+        };
+        if let Some(h) = &hover
+            && !wordless
+        {
+            ui.interact(said, ui.scope_id().with("status-line"), Sense::hover())
+                .on_hover_text(h);
         }
         self.note("status:said", said);
+        if let (Some((label, action)), Some(g)) = (fix, fix_g) {
+            let fr = Rect::from_min_size(
+                pos2(said.right() + 12.0, st.top() + 2.0),
+                vec2(g.size().x + 16.0, STATUS_H - 4.0),
+            );
+            let mut r = ui.interact(fr, ui.scope_id().with("status-fix"), Sense::click());
+            if wordless && let Some(h) = &hover {
+                r = r.on_hover_text(h);
+            }
+            r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
+            p.rect_filled(
+                fr,
+                3.0,
+                Color32::from_white_alpha(if r.hovered() { 56 } else { 36 }),
+            );
+            p.galley(
+                pos2(fr.left() + 8.0, fr.center().y - g.size().y * 0.5),
+                g,
+                Color32::WHITE,
+            );
+            self.note("status:fix", fr);
+            if r.clicked() {
+                self.out.push(action);
+            }
+        }
         let m_resp = ui
             .interact(mr, ui.scope_id().with("status-markup"), Sense::click())
             .on_hover_text("Draw on the window for the agent (K)");

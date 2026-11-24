@@ -189,11 +189,11 @@ fn refine(
 ) -> Result<bool, DrapeError> {
     let m = [0.5 * (a[0] + b[0]), 0.5 * (a[1] + b[1])];
     let mz = 0.5 * (a[2] + b[2]);
-    // the cheap test first: one drop at the middle
-    let close = match dc.drop(m[0], m[1]) {
-        None => return Ok(false),
-        Some(band) => mz - band.lo.max(d.zmin) <= d.leave,
+    // the cheap test first: one drop at the middle (kept: the split point is its CL)
+    let Some(band) = dc.drop(m[0], m[1]) else {
+        return Ok(false);
     };
+    let close = mz - band.lo.max(d.zmin) <= d.leave;
     let below = close && dc.seg3_below(a, b, d.slack);
     if below {
         return Ok(true);
@@ -218,9 +218,8 @@ fn refine(
     if depth > 40 {
         return Err(DrapeError::Unproven { at: m });
     }
-    let Some(q) = cl(dc, m, d.zmin) else {
-        return Ok(false);
-    };
+    // (`cl` at m: the same drop)
+    let q = [m[0], m[1], band.hi.max(d.zmin)];
     if !refine(dc, a, q, d, depth + 1, out)? {
         return Ok(false);
     }

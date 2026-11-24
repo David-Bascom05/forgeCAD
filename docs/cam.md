@@ -60,7 +60,7 @@ prog  = program(op1, post: "fanuc", number: 1001)
 | `soft_jaw(vise(NAME, across:), blank:, from: SETUP, grip:, fit:, tool:, relief: "corners", min_contact:)` | soft jaws cut to what `from:` left, turned over, `grip` deep: the pocket is the opening of that outline by `tool`'s radius, grown by `fit` (default 0.02), with a relief of radius r + fit at each corner if asked. Refused unless what `from:` left seats in the pocket (exactly), the seat is at least `min_contact` mm² (default a quarter of the largest section), the blank keeps 3 mm of wall and the part stands more than the fixture clearance above the jaws. The value is a part (the jaws closed, pocketed: `setup(jaws, ..)` cuts them, held by the vise) and a fixture (`setup(f, from: op1, fixture: jaws)`) |
 | `facing(SETUP, tool:, to:, step:, leave_axial:)` | zig-zag over the stock down to `to` |
 | `clear(SETUP, tool:, from:, to:, step:, stepover:, leave:, leave_axial:, ramp:)` | everything between the stock outline and the part's section, as offset passes |
-| `adaptive(SETUP, tool:, from:, to:, step:, engagement:, step_length:, leave:, sweep:, passes:)` | **opt-in, never the default**: roughing around the part (clear's region) with the radial engagement held under one cap (`engagement`, degrees, default 60) by simulating the cleared area step by step, so the full flute can cut at a steady load. Passes are one-direction peels within 75° of `sweep` (degrees from +x), or with `passes: "two_way"` a zigzag across the sweep; a pass curves no tighter than the tool's radius. Where a sweep stops with material left away from the walls, the level is swept again from the other directions; anything still left is reported as a warning. Links stay at depth where the cleared area allows (straight, back along the pass, or through the cleared area) and run at a link feed just under the machine's limit; else a low retract just over the stock. Then plain offset rings where material is left, and a wall pass. Closed pockets are not offered (use `pocket`). **It reduces and steadies tool load. On deep open levels (≥ 2 D) it was faster than clear on our jerk-limited benchmark in steel (2–44 %) and on an open slot in aluminium (27–39 %); round several islands, on shallow levels and on deep_boss in aluminium it was slower** (table below). Check cycle time on your machine. The voids it claims are only cells provably inside the tool's flat end's sweep |
+| `adaptive(SETUP, tool:, from:, to:, step:, engagement:, step_length:, leave:, sweep:, passes:)` | **opt-in, never the default**: roughing around the part (clear's region) with the radial engagement held under one cap (`engagement`, degrees, default 60) by simulating the cleared area step by step, so the full flute can cut at a steady load. Passes are one-direction peels within 75° of `sweep` (degrees from +x), or with `passes: "two_way"` a zigzag across the sweep; a pass curves no tighter than the tool's radius. Where a sweep stops with material left away from the walls, the level is swept again from the other directions; anything still left is reported as a warning. Links stay at depth where the cleared area allows (straight, back along the pass, or through the cleared area) and run at a link feed just under the machine's limit; else a hop over the material (below). Then plain offset rings where material is left, and a wall pass. Closed pockets are not offered (use `pocket`). **It reduces and steadies tool load. On deep open levels (≥ 2 D) it was faster than clear on our jerk-limited benchmark, round a boss and in an open slot, in steel (20–56 %) and aluminium (6–54 %); round several islands it was slower (22–70 %), and on shallow levels too** (table below). Check cycle time on your machine. The voids it claims are only cells provably inside the tool's flat end's sweep |
 | `contour(SETUP, tool:, side:, from:, to:, step:, leave:, leave_axial:, direction:, finish:, finish_step:, spring:, lead:, lead_radius:, lead_sweep:, lead_length:, entry:, overlap:, tabs:, tab_spacing:, tab_at:, tab_width:, tab_height:, tab_shape:)` | the part's outline (`side: "outside"`) or its holes (`"inside"`) at the section |
 | `pocket(SETUP, PART.HOLE, tool:, stepover:, step:, leave:, leave_axial:, ramp:)` | a hole feature's circle, to its depth |
 | `pocket(SETUP, tool:, from:, to:, stepover:, step:, leave:, leave_axial:, ramp:)` | every hole and slot of the part's section between the heights, each less the part's section there (islands standing in it, a boss in a well, are kept: examples/machined/well_island_cam.fg) |
@@ -69,7 +69,7 @@ prog  = program(op1, post: "fanuc", number: 1001)
 | `thread_mill(SETUP, PART.HOLE, tool:, length:, passes:, spring:, hand:, starts:, lead:)` | a hole's recorded thread (`thread:`, or `screw:` with `fit: "tap"`), the model not carrying it: declares a cosmetic thread Δ per place (the ring from the bore to the major diameter over `length`, default the depth less two pitches), listed in the op's `removals`, and is certified against P ∖ Δ (never a blanket tolerance). Down the bore, in to the radius, up a helix of the pitch (G3: right hand), out. `passes: n` radial passes splitting the depth from the bore to the major evenly (default 1), `spring: n` the last again, `hand: "left"` climbs down from the top (G3), `starts: n` a helix of n pitches per turn once per start, each a pitch higher, `lead: "arc"` in and out on a half circle tangent to the helix (default `"line"`) |
 | `bore(SETUP, PART.HOLE, tool:, pitch:, ramp:, finish_leave:, spring:, leave:, leave_axial:)` | helical bore of a round hole along −z: the tool's centre on the hole's radius less its own, down a helix of `pitch:` per turn (default a 3° ramp; or `ramp:` degrees, at most 30), G3 (climb), a full circle at the bottom, back to the axis, up. `finish_leave:` leaves that much for a second helix at the final radius; `spring: n` repeats it. The tool must be at least half the hole across (no core left), else refused with the fix (`pocket(..)` the hole). Certified against the part |
 | `edge_break(SETUP, tool:, size:, tip_offset:, at:)` | chamfer/deburr of the part's top edges with a chamfer mill or spot drill of 30° to 150°: a chamfer `size` wide at half the tool's angle from the wall (45° for a 90° tool), its tip `tip_offset:` below the chamfer's bottom (default 0.2) so the flank, not the tip, cuts. The removal is declared (Δ, in `removals`) and the op certified against P ∖ Δ. In this phase: the part's top, over vertical walls; sharp corners between lines only |
-| `drill(SETUP, PART.HOLE, plan: "auto")` | the plan from the hole feature: spot, drill (peck past 3 D), then its counterbore (a counterbore tool of its diameter, else the largest end mill under it pocketing the circle) or countersink (a countersink, chamfer or spot tool of its angle, plunged until the cone is its diameter at the mouth), tap for a thread; `plan: "drill"` leaves the thread (to `thread_mill`). A hole with an ISO class in the part (`hole(.., d: 6, fit: "H7")`) is drilled under size (the library's drill 0.1 to 0.4 under, nearest 0.2 under) and reamed (a reamer of its size, G85); a plain hole of a dowel's size with no class is said. A blind hole with a flat floor is drilled with the drill's point on the floor; the ring that leaves is said |
+| `drill(SETUP, PART.HOLE, plan: "auto")` | the plan from the hole feature: spot, drill (peck past 3 D), then its counterbore (a counterbore tool of its diameter, else the largest end mill under it pocketing the circle) or countersink (a countersink, chamfer or spot tool of its angle, plunged until the cone is its diameter at the mouth), tap for a thread; `plan: "drill"` leaves the thread (to `thread_mill`). A hole with an ISO class in the part (`hole(.., d: 6, fit: "H7")`) is drilled under size and reamed (a reamer of its size, G85). The pre-drill is the hole less the reaming allowance for its diameter (`[[ream_allowance]]`, or `allowance:` in mm on the diameter), and the drill is the library's nearest to it, within 0.1 of it and at least 0.1 under size. The reamer's speed and feed are its preset, else the group's `[[ream]]` row; a counterbore tool's are its preset, else the group's `[[counterbore]]` row. Each is in the op's `drilling` (roles `ream`, `counterbore`). With no data, the op is refused by name rather than run at a made-up feed; a plain hole of a dowel's size with no class is said. A blind hole with a flat floor is drilled with the drill's point on the floor; the ring that leaves is said |
 | `zlevel(SETUP, tool:, leave:, from:, to:, step:, stepover:, area:, grid:)` | 3-axis roughing, offset clearing (not adaptive): at each level from `from` (the stock's top) down to `to`, `step` apart (and at the part's own top), the tool centres the drop-cutter leaves free on a CL grid `grid` apart, cleared by passes `stepover` apart (at most the tool's radius) from that region's boundary; `area: (x0, y0, x1, y1)` bounds the tool centres. Its flat bottom's sweep is recorded in the in-process stock |
 | `parallel(SETUP, tool:, stepover:, angle:, sample:, leave:, area:, floor:)` | 3-axis finishing: zig-zag rows `stepover` apart at `angle` degrees, each dropped onto the part (samples at most `sample` apart, split until each move is proven) |
 | `waterline(SETUP, tool:, from:, to:, step:, area:, grid:)` | constant-z contours where the tool's reach crosses each level (marching squares on a CL grid, each crossing by certified bisection) |
@@ -90,7 +90,14 @@ tip height), `sample:` (the spacing of the drop-cutter's samples along a pass), 
 proven above the surface) and `lift:` (a lifted link's height over the surface); otherwise a
 link retracts. Every move is certified like any op. With `cusp:` the reply's `finish` gives the
 cusp asked, the cusp the spacing is proven to bound, the stepover, the step-down and the links
-made.
+made. The ops from `pencil` to `flat` also take `fit:`, a chord tolerance in mm (default
+0.25 × the setup's `tol`, at most half of it; `fit: 0` turns it off): each pass's points are
+fitted into the longest lines and arcs (G2/G3 in xy, level) that stay within it of the pass, both
+ways, and each piece is proven by the drop-cutter as a chord is before it is kept (forge-cam's
+`fit`, shared with adaptive). The fit comes out of the path's tolerance, not the cusp: the passes
+are draped within `tol` − `fit` above the surface (`steep_shallow`'s waterlines are left as the plain op's, unfitted), so a fitted path
+keeps the plain op's `tol` and its spacing, and the cusp is the plain op's. The plan gives the
+pieces made and their measured largest distance from the passes.
 | `program(SETUP or [SETUPS], post:, number:, ops:)` | `fanuc`, `haas`, `linuxcnc`, `grbl` (default: the machine's control); `ops: OP` or `[OPS]` posts only those ops of its setups. Each op is certified on the stock every earlier op of its setup (and of the setup it continues) leaves, so those are posted first, by an earlier program or earlier in this one, or the program is refused with the fix; an op no program posts is not certified (`unposted`). `decimals:` and `feed_decimals:` set the program's number formats (the text is quantised, read back and certified at them), `coolant:` (`"flood"`, `"mist"`, `"through"`, `"off"`) every path's coolant, refused if the machine has none of it. `split: "setup"`: one program per setup, named `PROGRAM/SETUP` and numbered on from `number:` (the reply's program has its `setup`) |
 
 `ramp: DEG` (over 0, at most 30) enters each pass by a helix of half the tool's radius at that angle,
@@ -253,26 +260,72 @@ the top and the outline down to just above the jaws; `soft_jaw(.., from: op1)` m
 op1 left; `opj` cuts the jaws' pocket; op2 holds the part turned over in them and cuts the rest.
 Edit the part and every step follows: the jaws are recomputed from the new outline.
 
+### Hops between cuts
+
+`clear`, `contour` and `adaptive` replace a retract between two cuts (up, across at the retract
+height, down: blocks that each start and stop) with a **hop**: up, across and down as G1 moves
+at the machine's feed limit, only as high as the material it crosses needs. Each hop is posted
+after a `(HOP n)` comment naming its n blocks, and the reply and the simulation show it as a
+link (phase `hop`). The certificate reads the posted text: a `(HOP n)` is believed only where
+its blocks are the planned hop's own (each end within the text's last digit), else the op is
+refused (`hop_label`). A hop block is checked as any feed block is; the label changes only
+that it does not count as a cut when the certificate decides a level is done.
+
+- It is G1, not G0: a G0 path is the control's own (some controls move each axis at its own
+  rapid, a dog-leg), a G1 is the line posted.
+- Its clearance is checked against **the in-process stock as a map**: the stock the setup's
+  earlier ops proved removed, less this op's own moves so far (the uncut stock when an earlier
+  op of the setup did not build). The map holds a height at each cell's centre, so the test
+  reads r + h around the tool (r its radius, h a cell), wider than that sampling's error: the
+  tip stays 0.5 mm above all material within it at every cell of the way. That is the test
+  every link at depth passes. Afterwards the certificate checks every non-cutting body, and
+  the feed scheduler holds any contact to the chip rule (a hop that met material would be fed
+  as a cut).
+- It climbs straight up from a cut's end that stands beside a wall (as the retract did),
+  otherwise on a ramp; it is never higher than the retract it replaces; it lands only on a
+  start whose tool's column is clear of material, coming straight down onto it where material
+  stands beside it (down the column the retract came down). A retract that ends above a plunge into material
+  hops down to 0.5 mm over the material there, and the plunge goes on from that height (its
+  slow feed only through the stock, not through the air above it).
+
+Measured (rough op, steel, equal volume, every op certified; jerk-limited S-curve planner
+over four sets of acceleration, jerk and blend tolerance, with G0 blended and with an exact
+stop at every G0, the honest default where a control's rapid blending is not known):
+
+| part | op | retracts → left after hops | time saved (G0 blended) | (stop at every G0) |
+| --- | --- | --- | --- | --- |
+| deep_islands | adaptive | 397 → 69 | 5.2–7.0 % | 7.0–9.5 % |
+| deep_boss | adaptive | 157 → 11 | 5.7–7.7 % | 7.7–10.7 % |
+| deep_open_slot | adaptive | 19 → 8 | 0.9–1.4 % | 1.4–2.3 % |
+| deep_islands | clear | 12 → 5 | 1.1–1.4 % | 1.2–1.4 % |
+| deep_boss | clear | 8 → 4 | 0.8 % | 0.8–0.9 % |
+| deep_open_slot | clear | 21 → 5 | 3.9–5.6 % | 4.1–5.9 % |
+
 ### Adaptive against clear: measured
 
 verify/forge-cam-quality, rough op only, Ø6 flat end mill on generic-vmc3, every level cleared to
-the same volume as clear (tests/guards.rs checks it) with the chip at its target. Time under
-CAM-MACHINE's jerk-limited planner (`plan_scurve`) with four acceleration/jerk sets fitted from a
-Spinner U5-620's logs (750/2e4, 500/5e4, 3000/1e4, 250/1e6 mm/s², mm/s³), against clear's time:
+the same volume as clear (within 0.2 %; tests/guards.rs checks it) with the chip at its target,
+hops on for both. Time under CAM-MACHINE's jerk-limited planner (`plan_scurve`) with four
+acceleration/jerk sets fitted from a Spinner U5-620's logs (750/2e4, 500/5e4, 3000/1e4, 250/1e6
+mm/s², mm/s³), with an exact stop at every G0 (the default where a control's rapid blending is
+not known), against clear's time:
 
 | part (level) | material | adaptive one-way | adaptive two-way |
 |---|---|---|---|
-| deep_boss (open, round a boss, 14.8 mm) | steel (P) | −11.4 / −10.2 / −8.6 / −2.3 % | −14.3 / −12.5 / −12.4 / −3.0 % |
-| deep_open_slot (12 wide, 15 deep) | steel | −44.2 / −44.4 / −42.9 / −42.0 % | −43.7 / −43.1 / −42.7 / −39.0 % |
-| deep_islands (round three islands, 15 deep) | steel | +22 / +23 / +26 / +33 % | +42 / +45 / +48 / +65 % |
-| deep_boss | aluminium (N) | +5.3 / +7.5 / +10.2 / +21.5 % | +4.8 / +8.3 / +8.2 / +24.7 % |
-| deep_open_slot | aluminium | −38.2 / −38.5 / −35.9 / −34.4 % | −34.9 / −33.9 / −33.2 / −27.3 % |
-| deep_islands | aluminium | +46 / +48 / +55 / +67 % | +83 / +89 / +94 / +123 % |
+| deep_boss (open, round a boss, 14.8 mm) | steel (P) | −24.9 / −24.1 / −23.7 / −19.6 % | −27.3 / −26.8 / −25.2 / −21.9 % |
+| deep_open_slot (12 wide, 15 deep) | steel | −55.5 / −55.2 / −55.5 / −54.2 % | −42.2 / −41.9 / −41.7 / −39.5 % |
+| deep_islands (round three islands, 15 deep) | steel | +22 / +23 / +26 / +34 % | +34 / +35 / +41 / +48 % |
+| deep_boss | aluminium (N) | −15.0 / −13.6 / −13.1 / −5.7 % | −16.7 / −15.7 / −13.1 / −7.0 % |
+| deep_open_slot | aluminium | −53.7 / −53.2 / −53.8 / −51.5 % | −37.2 / −36.6 / −36.4 / −32.5 % |
+| deep_islands | aluminium | +48 / +50 / +56 / +70 % | +65 / +66 / +77 / +90 % |
 
-On shallow levels (the RPTU parts, 4 mm) clear is faster. Each pass is posted as long arcs and
-lines with one feed each: on deep_boss 1,040 blocks one-way and 941 two-way (mean move 10.9 and
-13.5 mm) against clear's 1,171 (5.5 mm); on deep_open_slot 162 against 389. These are simulations, not machine trials; the planner has
-no block-rate limit.
+With rapids blended the figures move by at most 1.3 points (deep_islands one-way: +21 / +22 / +26 /
++34 % in steel, +47 / +49 / +55 / +69 % in aluminium). On shallow levels (the RPTU parts, 4 mm)
+clear is faster. Each pass is posted as long arcs and lines with one feed each: on deep_boss 663
+blocks one-way and 776 two-way (mean move 14.0 and 9.9 mm) against clear's 1,164 (5.5 mm); on
+deep_open_slot 85 against 488. These are simulations, not machine trials; the planner has no
+block-rate limit. The feeds are the analysis branch's (before train 5's feed model); the paths are
+the same.
 
 ## Probing
 
@@ -350,7 +403,7 @@ ops[]      name, kind (facing|clear|contour|pocket|drill|engrave|slot|thread_mil
            path {moves, length_cut, length_rapid, time_s},
            certificate {verdict (pass|fail), certified, pairs, cells, least_cutter_distance, against},
            checks[] (failures only) {rule, verdict (fail|undecided), certified, value, limit, unit,
-                    at, tool_part (cutter|shank/holder), other, phase (cut|plunge|link|rapid), move, path (which of a hole plan's paths `move` counts in)},
+                    at, tool_part (cutter|shank/holder), other, phase (cut|plunge|link|hop|rapid), move, path (which of a hole plan's paths `move` counts in)},
            removals[] (declared Δ, e.g. cosmetic threads), leftover {status}, refusal | null
 blocking[] {op, why}      fixes[] {op, fix}      suggestions[] {kind: NeedTool, op, why}
 programs[] {name, post, lines, round_trip, certified (full | except G5 (unchecked: no `at:`) | full except G4 (leftover not computed) | except G4 and G5 (..) | no),

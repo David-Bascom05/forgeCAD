@@ -933,6 +933,7 @@ fn state_json(g: &Gui, canvas: Json) -> String {
                             || n.starts_with("tool:")
                             || n.starts_with("robot:")
                             || n.starts_with("measure:")
+                            || n.starts_with("status:")
                     })
                     .map(|(n, r)| {
                         Json::obj(vec![
@@ -996,6 +997,11 @@ fn cam_words(g: &mut Gui, words: &str) -> Result<(), String> {
             w.tools_form = Some(crate::shell::cam::toollib::ToolForm::derived(&w.lib, x));
         }
         "tools-new" => w.tools_form = Some(crate::shell::cam::toollib::ToolForm::blank(&w.lib, forge_tooling::Kind::Flat)),
+        "unset" => {
+            // a statement's keyword taken out (a test makes a setup unplaced: `unset op1 at`)
+            let (id, arg) = rest.split_once(' ').ok_or("unset ID ARG")?;
+            w.edit(&crate::shell::cam::doc::Edit::Unset { id: id.into(), arg: arg.into() });
+        }
         "earlier" => w.command(Cmd::Move(rest.into(), true)),
         "suppress" => w.command(Cmd::Suppress(rest.into())),
         "ok" => {
@@ -1055,6 +1061,9 @@ fn cam_json(g: &Gui) -> Json {
         ("dirty", w.dirty().into()),
         ("text", w.text.clone().into()),
         ("said", w.said.clone().map_or(Json::Null, Json::from)),
+        // the status bar's words in Manufacture (what was refused first)
+        ("status_line", crate::shell::cam::status_line(w).into()),
+        ("release_block", crate::shell::cam::release_block(w).map_or(Json::Null, Json::from)),
         ("exported", (w.exported as f64).into()),
         (
             "colour_by",

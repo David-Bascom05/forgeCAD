@@ -525,6 +525,9 @@ pub struct Timeline {
     /// segment in `seg_scurve`. Not a prediction; `t_min` is the guaranteed lower bound beside it.
     pub t_scurve: f64,
     pub seg_scurve: Vec<f64>,
+    /// With the record's `rapid_blend` UNKNOWN (`t_scurve` then stops at every G0 block): the
+    /// same estimate with G0 blocks blended, so both are shown. None when the record states it.
+    pub t_scurve_blend: Option<f64>,
     /// The moves after a skip (probe) move whose start depends on where the probe stops: each
     /// with the joints that start, and end, at the skip's stop (collide checks them for every
     /// stop).
@@ -704,6 +707,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
         seg_la: Vec::new(),
         t_scurve: 0.0,
         seg_scurve: Vec::new(),
+        t_scurve_blend: None,
         after_skip: Vec::new(),
         skip_unmodelled: Vec::new(),
     };
@@ -1396,6 +1400,13 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
     let (per, total) = crate::lookahead::plan_scurve(def, &tl, &crate::lookahead::SCurve::for_machine(def));
     tl.seg_scurve = per;
     tl.t_scurve = total + off_segments;
+    if def.rapid_blend.is_none() {
+        let blended = crate::lookahead::SCurve {
+            rapid_stop: false,
+            ..crate::lookahead::SCurve::for_machine(def)
+        };
+        tl.t_scurve_blend = Some(crate::lookahead::plan_scurve(def, &tl, &blended).1 + off_segments);
+    }
     for sg in &tl.segments {
         for z in &def.zones {
             if let Some(sv) = zone_entry(def, z, sg) {
@@ -1864,11 +1875,12 @@ pub fn timeline_json(tl: &Timeline) -> String {
             .join(",")
     ));
     o.push_str(&format!(
-        "\"t_min\":{},\"t_stop\":{},\"t_la\":{},\"t_scurve\":{},\"accel_missing\":{},",
+        "\"t_min\":{},\"t_stop\":{},\"t_la\":{},\"t_scurve\":{},\"t_scurve_blend\":{},\"accel_missing\":{},",
         num(tl.t_min),
         num(tl.t_stop),
         num(tl.t_la),
         num(tl.t_scurve),
+        tl.t_scurve_blend.map_or("null".to_string(), num),
         tl.accel_missing
     ));
     o.push_str("\"segments\":[");
@@ -1994,7 +2006,7 @@ pub fn timeline_json(tl: &Timeline) -> String {
 pub struct Unchecked {
     /// The value, as a cite path: `joint.X.range`, `spindle.S1.rpm`, `changer.pockets`, `body.head`.
     pub path: String,
-    /// "unknown" or "estimated".
+    /// "unknown", "estimated", or "display" (a body drawn and never collision-checked).
     pub why: &'static str,
     /// The first program line whose check needed it (0: the machine itself, e.g. a body).
     pub line: usize,
@@ -2144,8 +2156,14 @@ pub fn unchecked(def: &MachineDef, tl: &Timeline) -> Vec<Unchecked> {
             _ => {}
         }
     }
+    // display-only bodies (`check = false`): reported after `note`'s last use
+    let mut display: Vec<String> = Vec::new();
     for b in &def.bodies {
-        note(format!("body.{}", b.name), !b.prims.is_empty(), 0, "collision");
+        if b.check {
+            note(format!("body.{}", b.name), !b.prims.is_empty(), 0, "collision");
+        } else {
+            display.push(format!("body.{}", b.name));
+        }
     }
     if let Some(&(line, model)) = skips.first() {
         out.push(Unchecked {
@@ -2157,6 +2175,14 @@ pub fn unchecked(def: &MachineDef, tl: &Timeline) -> Vec<Unchecked> {
             } else {
                 "moves after a skip move, from its programmed end"
             },
+        });
+    }
+    for path in display {
+        out.push(Unchecked {
+            path,
+            why: "display",
+            line: 0,
+            check: "collision: display only (`check = false`), drawn and never checked",
         });
     }
     out
