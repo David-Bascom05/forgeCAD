@@ -116,7 +116,7 @@ axiom forge_geom.curve.Line.new
     forge_geom.curve.Line
 
 /-- [forge_geom::intersect::plane_surface]:
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 921:0-921:62
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 969:0-969:62
     Name pattern: [forge_geom::intersect::plane_surface]
     Visibility: public -/
 @[rust_fun "forge_geom::intersect::plane_surface"]
