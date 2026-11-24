@@ -127,3 +127,28 @@ fn nurbs_face_meshes_closed_at_the_default_chord() {
 fn oring_as_one_closed_nurbs_face_reads() {
     sound(&one("oring_closed_nurbs.step"));
 }
+
+/// ST20LY-25LY #140177 (40 faces): a bore along z through the middle, subtracted. The Ok's new
+/// cylinder-cylinder intersection edge (tolerance 1e-5) has a vertex 2.1e-5 off it
+/// (VertexOffEdge); intersect fails alike. FLAT-SITES (drift). 6 such Oks in the first 43 zips.
+#[test]
+#[ignore = "open: a boolean's vertex drifts off its intersection edge"]
+fn bore_through_a_part_checks() {
+    use forge_bool::{Op, boolean};
+    use forge_math::{Frame, Point2, UnitVec3, Vec3};
+    let b = one("bore_vertex_drift_40faces.step");
+    sound(&b);
+    let bx = b.faces_box();
+    let small = bx.x.width().min(bx.y.width()).min(bx.z.width());
+    let len = 3.0 * bx.diagonal();
+    let p = forge_ops::Profile {
+        plane: Frame::from_z(bx.center() - Vec3::from(UnitVec3::Z) * (0.5 * len), UnitVec3::Z),
+        loops: vec![forge_ops::Profile::circle(Point2::ORIGIN, 0.13 * small, 7001)],
+    };
+    let tool = forge_ops::extrude(&p, len, 7000).unwrap();
+    for op in [Op::Subtract, Op::Intersect] {
+        let r = boolean(&b, &tool, op, 9000).unwrap();
+        let p = check(&r);
+        assert!(p.is_empty(), "{op:?}: {p:?}");
+    }
+}
