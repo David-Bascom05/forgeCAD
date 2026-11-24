@@ -54,8 +54,6 @@ impl Gui {
         {
             r.quality = Some(q);
             changed = true;
-            // the status line drops its "measuring quality"
-            self.shell.status = crate::shell::cam::status_line(w);
         }
         if !took && self.shell.status.is_empty() && w.run.is_some() && w.running.is_none() {
             // nothing else to say (a view loaded after the run cleared it): the run's state
@@ -71,10 +69,6 @@ impl Gui {
             w.running = Some(text.clone());
             self.shell.status = "Generating: every op posted, read back and certified".into();
             let qslot = w.quality_job.clone();
-            // this run's number: its quality measure stops once a later run starts (an edit
-            // made while it measures), so it never holds the cores the new run needs
-            let runs = w.runs.clone();
-            let mine = runs.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
             crate::plat::spawn("forge-cam", move || {
                 // the paths shown first, then the quality measured on them (it can take longer
                 // than the run): taken in only while the text is still the run's
@@ -82,10 +76,8 @@ impl Gui {
                 let cam = r.cam.clone();
                 *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
                 waker();
-                let later = || runs.load(std::sync::atomic::Ordering::SeqCst) != mine;
-                if let Some(cam) = cam
-                    && let Some(q) = run::measure_cam_unless(&cam, &later)
-                {
+                if let Some(cam) = cam {
+                    let q = run::measure_cam(&cam);
                     *qslot.lock().unwrap_or_else(|e| e.into_inner()) = Some((text, q));
                     waker();
                 }
@@ -119,22 +111,10 @@ impl Gui {
             let key = (op.clone(), r.text.clone());
             if w.alt_asked.as_ref() != Some(&key) {
                 w.alt_asked = Some(key);
-                let (text, dir, slot, waker) = (
-                    r.text.clone(),
-                    w.dir.clone(),
-                    w.alt_job.clone(),
-                    self.waker.clone(),
-                );
+                let (text, dir, slot, waker) = (r.text.clone(), w.dir.clone(), w.alt_job.clone(), self.waker.clone());
                 crate::plat::spawn("forge-cam-alt", move || {
-                    let q = forge_cam_quality::alternative_clear(
-                        &text,
-                        &dir,
-                        &op,
-                        &forge_cam_quality::Config::default(),
-                    );
-                    let got = q
-                        .filter(|q| q.t_min > 0.0)
-                        .map(|q| (q.t_min, q.t_scurve.max(q.t_min)));
+                    let q = forge_cam_quality::alternative_clear(&text, &dir, &op, &forge_cam_quality::Config::default());
+                    let got = q.filter(|q| q.t_min > 0.0).map(|q| (q.t_min, q.t_scurve.max(q.t_min)));
                     *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some((op, text, got));
                     waker();
                 });
@@ -284,11 +264,7 @@ impl Gui {
         let free = self.shell.camsim_free(vr);
         let Some(w) = &mut self.shell.cam else { return };
         // what covers the view's bottom: the timeline, and the Document Text panel above it
-        let text = if w.text_open {
-            crate::shell::cam::text_panel_h(free.height()) + 4.0
-        } else {
-            0.0
-        };
+        let text = if w.text_open { crate::shell::cam::text_panel_h(free.height()) + 4.0 } else { 0.0 };
         let cover = vr.bottom() - free.bottom() + text;
         if (w.view_w - vr.width()).abs() < 1.0 && (w.view_cover - cover).abs() < 1.0 {
             return;
