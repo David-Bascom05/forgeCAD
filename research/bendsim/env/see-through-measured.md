@@ -103,3 +103,23 @@ station and eases along the bed as the part moves to the next. The other station
 through only where they stand between the eye and the bend.
 
 Jerk, measured the same way: max 8.7, median 0.25, 2 frames over 5, no duplicates.
+
+## The cut-away faded, ghosts keeping their shadows
+
+The cut-away now fades in and out over the ghosts' 9 frames, so no press part vanishes in a
+frame. A part wholly cut away stays in the scene as an unseen ghost. Seen-through and cut-away
+parts keep casting their shadows (the scene's `ghost_shadows`, on only for the bend simulation),
+so the floor's light does not jump as they go.
+
+The clips were re-rendered on bendsim/next with bendsim/tools 6fa149ea merged.
+
+| clip | max | median | frames over 5 | duplicates |
+|---|---|---|---|---|
+| three-quarter | 4.9 | 0.17 | 0 | 0 |
+| 5 stations, TruBend 5130 | 8.2 | 0.26 | 3 | 0 |
+
+The five-station clip's three frames over 5 are at its first frame (8.2), and at the start of the
+ram's approach on bends 1 and 5 (7.6 and 5.2), where the whole floor's shading changes at once.
+That is not the cut-away, nor a ghost losing its shadow: the numbers did not move with either.
+The cause is still open; the next suspect is the sun's shadow fit following the press's moving
+bounds.

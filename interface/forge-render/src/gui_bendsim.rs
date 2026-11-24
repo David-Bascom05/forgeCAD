@@ -56,6 +56,8 @@ pub struct BendView {
     /// How far each press part is cut away (0 there, 1 gone), stepped a frame at a time over
     /// FADE_FRAMES as it is cut or put back (the coordinator: no part vanishes in one frame).
     cutfade: std::collections::HashMap<String, f32>,
+    /// What is drawn and seen (the bodies but those wholly cut away).
+    visible: Vec<Body>,
     /// A body is fading in or out, or waiting its frames to.
     fading: bool,
     /// The instant's bodies as the scene makes them (before the cut-away and the x-ray), and the
@@ -638,9 +640,9 @@ impl BendView {
         self.bodies.iter().map(|x| x.name.clone()).collect()
     }
 
-    /// What is drawn now, whole.
+    /// What is drawn now, whole (not what is wholly cut away).
     pub fn drawn(&self) -> &[Body] {
-        &self.bodies
+        &self.visible
     }
 
     /// What is drawn seen through now.
@@ -930,13 +932,9 @@ impl Gui {
         }
         let cutfade = self.bend.cutfade.clone();
         let cut_level = |n: &str| cutfade.get(n).copied().unwrap_or(0.0);
-        // drawn while not wholly cut away; a part being cut is no see-through candidate
-        let working: Vec<&Body> = self
-            .bend
-            .raw
-            .iter()
-            .filter(|x| cut_level(&x.name) < 1.0)
-            .collect();
+        // all drawn (a part wholly cut away an unseen ghost: it still casts its shadow, so the
+        // floor's light does not jump as it goes); a part being cut is no see-through candidate
+        let working: Vec<&Body> = self.bend.raw.iter().collect();
         // the x-ray, from this eye: a candidate hiding enough of what is watched (the bend's zone,
         // the punch's contact, a witness) from it
         let zone = bounds(
@@ -1010,6 +1008,7 @@ impl Gui {
         let names: Vec<String> = drawn.iter().map(|x| x.name.clone()).collect();
         let mut scene = Scene::new(&info, placements);
         scene.set_explode(0.0);
+        scene.ghost_shadows = true;
         if names == self.bend.names && self.bend.taken.is_some() {
             v.renderer.set_parts(&parts);
             v.renderer.set_tints(&scene);
@@ -1073,6 +1072,10 @@ impl Gui {
                 continue;
             }
             v.scene.set_ghost(k, true);
+            if level >= 1.0 {
+                // wholly cut away: not drawn, its shadow kept
+                continue;
+            }
             let t = tint(x, material);
             let to8 = |x: f32| (x.clamp(0.0, 1.0) * 255.0).round() as u8;
             self.bend.ghosts.push(crate::render::FaceColour {
@@ -1081,6 +1084,11 @@ impl Gui {
                 rgba: [to8(t[0]), to8(t[1]), to8(t[2]), to8(1.0 - level)],
             });
         }
+        self.bend.visible = drawn
+            .iter()
+            .filter(|x| cut_level(&x.name) < 1.0)
+            .cloned()
+            .collect();
         self.bend.outline = outline;
         self.bend.bodies = drawn;
         self.bend.ours = Some(v.renderer.geometry());
@@ -1106,6 +1114,7 @@ impl Gui {
         self.bend.ghosts.clear();
         self.bend.fade.clear();
         self.bend.cutfade.clear();
+        self.bend.visible.clear();
         self.bend.fading = false;
         self.bend.outline.clear();
         self.bend.step = None;

@@ -1339,6 +1339,11 @@ fn a_staged_clip() {
         .ok()
         .and_then(|x| x.parse().ok())
         .unwrap_or(360);
+    // settled on the first instant before the first frame
+    h.gui.shell.env_timeline().unwrap().seek(&mut h.gui.shell, 0.0);
+    for _ in 0..20 {
+        h.step();
+    }
     for i in 0..n {
         let tl = h.gui.shell.env_timeline().unwrap();
         tl.seek(&mut h.gui.shell, total * i as f64 / (n - 1) as f64);
