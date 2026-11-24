@@ -73,7 +73,7 @@ fn make_jog_check_save_and_close() {
     h.step();
     assert!(h.gui.shell.machine.is_some(), "the workspace did not open");
     shot(&mut h, "01-library");
-    // the library's search narrows the list; the Manage tab carries the builder's commands
+    // the library's search narrows the list; the environment's ribbon carries the builder's commands
     h.gui.shell.machine.as_mut().unwrap().filter = "trunnion".into();
     for _ in 0..3 {
         h.step();
