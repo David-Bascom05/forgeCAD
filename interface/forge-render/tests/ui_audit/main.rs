@@ -74,7 +74,16 @@ fn hover_tip(h: &mut Headless, r: Rect) -> String {
         )],
     )
     .iter()
-    .filter(|t| t.size <= 11.5 && t.rect.top() >= r.bottom() - 2.0)
+    // painted after the item's own label (the menu's layer), not a panel's text beneath
+    .filter(|t| {
+        let item = s
+            .texts
+            .iter()
+            .filter(|x| r.contains(x.rect.center()))
+            .map(|x| x.idx)
+            .max();
+        t.size <= 11.5 && t.rect.top() >= r.bottom() - 2.0 && item.is_some_and(|i| t.idx > i)
+    })
     .map(|t| t.s.trim().to_string())
     .collect();
     if !under.is_empty() {
