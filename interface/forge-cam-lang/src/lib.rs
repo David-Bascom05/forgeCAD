@@ -4400,14 +4400,12 @@ impl Cam {
                         PMove::Line { f, .. } | PMove::Arc { f, .. } => f,
                         _ => 0.0,
                     };
-                    // adaptive: one F per move, the lowest its samples call for, the move posted
-                    // whole (its passes are long arcs and lines; engage::schedule_per_move's rule,
-                    // TOOLPATH-QUALITY)
+                    // adaptive's passes are long arcs and lines: each move whole, one F, the lowest
+                    // its samples call for (a move wholly in air keeps its own feed where higher)
                     if kind == "adaptive" {
-                        let mut f = (start..k).map(|i| feed[i].0).fold(f64::INFINITY, f64::min);
-                        if (start..k).all(|i| samples[i].engage.is_none()) && own > f {
-                            f = own.min(sc.f_max.max(sc.f_min));
-                        }
+                        let air = samples[start..k].iter().all(|sm| sm.engage.is_none());
+                        let lo = feed[start..k].iter().map(|x| x.0).fold(f64::INFINITY, f64::min);
+                        let f = if air && own > lo { own.min(sc.f_max.max(sc.f_min)) } else { lo };
                         moves.push(match *mv {
                             PMove::Line { to, phase, .. } => PMove::Line { to, f, phase },
                             PMove::Arc { to, c, cw, .. } => PMove::Arc { to, c, cw, f },

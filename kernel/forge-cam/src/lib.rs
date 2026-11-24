@@ -3,6 +3,7 @@
 pub mod adaptive;
 pub mod bore;
 pub mod engage;
+pub mod fit;
 pub mod fixture;
 pub mod leads;
 pub mod life;
