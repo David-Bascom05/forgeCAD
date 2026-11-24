@@ -5,7 +5,7 @@
 
 use super::schema::{self, Kind, Tab};
 use super::{Ask, CamWs, Cmd, Locate, OpDlg, SetupDlg};
-use crate::shell::placed::Placed;
+use crate::shell::placed::{Host, Placed};
 use crate::shell::theme::{Theme, medium, mono, sans};
 use crate::shell::thermo_ui::{button, foot, frame, head, heading, note, row, tabs};
 use crate::shell::{Action, Shell, icons};
@@ -503,6 +503,9 @@ impl Shell {
     /// The workspace's windows.
     pub(in crate::shell) fn cam_ui(&mut self, ctx: &egui::Context) {
         let Some(mut w) = self.cam.take() else { return };
+        // docked this frame only if the environment's properties column said so this frame
+        let dock = w.dock.take();
+        w.dock = dock;
         let t = self.theme;
         // the view less what the simulation's panel and timeline cover: the windows keep inside
         let v = self.camsim_free(self.view_rect);
@@ -543,6 +546,8 @@ impl Shell {
         if w.turning() && w.turnview.open {
             blocks.extend(section_window(ctx, &t, v, &mut w, &mut places));
         }
+        // docked only in a frame whose properties column set it (it draws before this)
+        w.dock = None;
         self.view_blocks.extend(blocks);
         self.places.extend(places);
         self.cam = Some(w);
@@ -1262,7 +1267,7 @@ fn op_dialog(
         .map(|s| (format!("{}.{s}", part.name), s.clone()))
         .collect();
     let new = d.id.is_none();
-    let r = egui::Window::new("cam-op")
+    let r = dialog_host(w.dock, "cam-op-dialog", t, egui::Window::new("cam-op")
         .id(egui::Id::unique("cam-op-dialog"))
         .title_bar(false)
         .collapsible(false)
@@ -1271,7 +1276,7 @@ fn op_dialog(
         .fixed_size(vec2(DLG_W, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(below_chips(v))
+        .constrain_to(below_chips(v)))
         .show_placed(ctx, places, |ui, places| {
             ui.spacing_mut().item_spacing.y = 4.0;
             close = head(
@@ -1496,7 +1501,7 @@ fn setup_dialog(
             .map(|s| (s.name.clone(), format!("{} (turned over)", s.name))),
     );
     let new = d.id.is_none();
-    let r = egui::Window::new("cam-setup")
+    let r = dialog_host(w.dock, "cam-setup-dialog", t, egui::Window::new("cam-setup")
         .id(egui::Id::unique("cam-setup-dialog"))
         .title_bar(false)
         .collapsible(false)
@@ -1505,7 +1510,7 @@ fn setup_dialog(
         .fixed_size(vec2(DLG_W, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(below_chips(v))
+        .constrain_to(below_chips(v)))
         .show_placed(ctx, places, |ui, places| {
             ui.spacing_mut().item_spacing.y = 4.0;
             close = head(
@@ -1694,7 +1699,7 @@ fn lathe_dialog(
         "a new chuck (face −70, grip 30, jaw 15)".into(),
     ));
     let new = d.id.is_none();
-    let r = egui::Window::new("cam-lathe")
+    let r = dialog_host(w.dock, "cam-lathe-dialog", t, egui::Window::new("cam-lathe")
         .id(egui::Id::unique("cam-lathe-dialog"))
         .title_bar(false)
         .collapsible(false)
@@ -1703,7 +1708,7 @@ fn lathe_dialog(
         .fixed_size(vec2(DLG_W, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(below_chips(v))
+        .constrain_to(below_chips(v)))
         .show_placed(ctx, places, |ui, places| {
             ui.spacing_mut().item_spacing.y = 4.0;
             close = head(
@@ -3113,4 +3118,13 @@ fn forge_text(ui: &mut Ui, t: &Theme, text: &str, w: f32) {
 /// Planes, Anchors), 4 px in from the other edges.
 fn below_chips(v: Rect) -> Rect {
     Rect::from_min_max(pos2(v.left() + 4.0, v.top() + 40.0), pos2(v.right() - 4.0, v.bottom() - 4.0))
+}
+
+/// An op or setup dialog's host: docked in the Manufacture environment's properties column when
+/// it has one (`CamWs::dock`, set by the environment each frame), else floating over the view.
+fn dialog_host<'a>(dock: Option<Rect>, id: &str, t: &Theme, win: egui::Window<'a>) -> Host<'a> {
+    match dock {
+        Some(r) => Host::Dock(egui::Id::unique(("cam-dock", id)), r, frame(t)),
+        None => Host::Float(Box::new(win)),
+    }
 }

@@ -445,3 +445,20 @@ fn the_op_dialog_answers_enter_and_escape() {
     assert!(text(&h).contains("leave: 0.3"), "Enter is OK: {}", text(&h));
     assert!(h.gui.shell.cam.as_ref().unwrap().op_dlg.is_none());
 }
+
+/// The op dialog docks in the Manufacture environment's properties column (no floating window
+/// over the view): its OK inside the column, the view narrowed by it.
+#[test]
+fn the_op_dialog_docks_in_the_properties_column() {
+    let Some((mut h, _)) = open("dock") else { return };
+    let view_before = h.gui.shell.view_rect;
+    h.gui.shell.cam.as_mut().unwrap().command(forge_render::shell::cam::Cmd::Edit("prof".into()));
+    for _ in 0..3 {
+        h.step();
+    }
+    let col = h.placed("env:manufacture:properties").expect("the properties column");
+    let ok = h.placed("cam:op:ok").expect("the op dialog");
+    assert!(col.contains_rect(ok), "OK {ok:?} outside the column {col:?}");
+    assert!(h.gui.shell.view_rect.right() <= col.left() + 1.0, "the view gives up the column");
+    assert!(h.gui.shell.view_rect.width() <= view_before.width());
+}

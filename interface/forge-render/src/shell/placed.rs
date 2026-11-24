@@ -52,3 +52,46 @@ impl Placed for egui::Area {
         (r, sizing)
     }
 }
+
+/// Where a dialog is shown: floating over the view, or docked in a rect of the environment's
+/// properties column (docs/ux/STANDARD.md: docked panels, not floating windows). The same body
+/// draws in either; docked, it scrolls when taller than its rect.
+pub(crate) enum Host<'a> {
+    Float(Box<egui::Window<'a>>),
+    Dock(egui::Id, Rect, egui::Frame),
+}
+
+impl Placed for Host<'_> {
+    type Out<R> = Option<InnerResponse<Option<R>>>;
+
+    fn show_sizing<R>(self, ctx: &Context, add: impl FnOnce(&mut Ui) -> R) -> (Self::Out<R>, bool) {
+        match self {
+            Host::Float(w) => (*w).show_sizing(ctx, add),
+            Host::Dock(id, r, frame) => {
+                let mut sizing = false;
+                let ir = egui::Area::new(id)
+                    .fixed_pos(r.min)
+                    .order(egui::Order::Middle)
+                    .fade_in(false)
+                    .show(ctx, |ui| {
+                        ui.set_width(r.width());
+                        ui.set_max_height(r.height());
+                        frame
+                            .show(ui, |ui| {
+                                egui::ScrollArea::vertical()
+                                    .id_salt(id.with("scroll"))
+                                    .max_height(r.height() - 4.0)
+                                    .auto_shrink([false, true])
+                                    .show(ui, |ui| {
+                                        sizing = ui.is_sizing_pass();
+                                        add(ui)
+                                    })
+                                    .inner
+                            })
+                            .inner
+                    });
+                (Some(InnerResponse::new(Some(ir.inner), ir.response)), sizing)
+            }
+        }
+    }
+}

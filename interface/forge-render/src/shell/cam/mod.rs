@@ -8,6 +8,9 @@
 
 pub mod doc;
 pub mod nc;
+
+/// The Manufacture environment's properties column, px: a dialog (DLG_W) and its frame.
+pub const DOCK_W: f32 = 410.0;
 pub mod run;
 pub mod schema;
 pub mod turnview;
@@ -270,6 +273,9 @@ pub struct CamWs {
     pub exported: u64,
     /// A program setting being typed (its key, the text so far).
     pub prog_field: Option<(String, String)>,
+    /// The rect of the environment's properties column the op and setup dialogs dock in (None:
+    /// they float); set by the Manufacture environment each frame.
+    pub dock: Option<egui::Rect>,
     pub posted_cache: Option<(u64, Vec<nc::PostedRow>)>,
 }
 
@@ -323,6 +329,7 @@ impl CamWs {
             write_gen: 0,
             exported: 0,
             posted_cache: None,
+            dock: None,
             prog_field: None,
         };
         ws.read_parts();

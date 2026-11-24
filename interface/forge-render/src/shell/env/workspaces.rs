@@ -68,6 +68,32 @@ impl Environment for Manufacture {
     fn status(&self, s: &Shell) -> Option<String> {
         s.cam.as_ref().map(super::super::cam::status_line)
     }
+
+    /// The properties column: the op or setup being edited (its sheet, CAM-UI's dialogs docked)
+    /// over the simulation (CAM-SIM's panel, its Simulation section). None while there is
+    /// neither: the view keeps the width.
+    fn properties_width(&self, s: &Shell) -> Option<f32> {
+        let w = s.cam.as_ref()?;
+        let sheet = w.op_dlg.is_some() || w.setup_dlg.is_some();
+        (sheet || s.camsim.is_some()).then_some(super::super::cam::DOCK_W)
+    }
+
+    fn properties(&self, s: &mut Shell, ui: &mut Ui, r: Rect) {
+        let sheet = s.cam.as_ref().is_some_and(|w| w.op_dlg.is_some() || w.setup_dlg.is_some());
+        let sim = s.camsim.is_some();
+        // the sheet on top (most of the height while one is open), the simulation under it
+        let split = if sheet && sim { r.top() + r.height() * 0.62 } else if sheet { r.bottom() } else { r.top() };
+        if let Some(w) = &mut s.cam {
+            w.dock = sheet.then(|| Rect::from_min_max(r.min, egui::pos2(r.right(), split)));
+        }
+        if sim {
+            let rest = Rect::from_min_max(egui::pos2(r.left() + 8.0, split + 6.0), egui::pos2(r.right() - 8.0, r.bottom()));
+            if sheet {
+                ui.painter().hline(r.x_range(), split, egui::Stroke::new(1.0, s.theme.line));
+            }
+            s.camsim_properties(ui, rest);
+        }
+    }
 }
 
 pub(super) struct MachineBuilder;
