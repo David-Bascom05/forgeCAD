@@ -164,6 +164,65 @@ pub struct CheckSummary {
     pub least: f64,
 }
 
+/// A level arc (`Move::Arc`) proven clear at `limit` by its chords on the column route, or None:
+/// cut evenly in its parameter t into pieces of sagitta s ≤ tol/8 (a piece spans at most 2h of
+/// angle, so it lies within r h²/2 of its chord); each chord, per face, cleared by the closed
+/// form at limit + s, or by the column grown by s (which holds the body anywhere within s of the
+/// chord, so its vertical gap bounds the arc's) at limit on a small budget. The lower bound: s
+/// under the chords' least.
+fn arc_by_chords(
+    col: &forge_cam_geom::drop::Column,
+    body: &forge_cam_geom::tool::Body,
+    f: &Face,
+    m: &Move,
+    limit: f64,
+    tol: f64,
+) -> Option<f64> {
+    use forge_cam_geom::drop::Gap;
+    let Move::Arc { c, x, y, r, t0, t1 } = *m else {
+        return None;
+    };
+    let ok = |v: f64| v.is_finite() && v.abs() <= 1e100;
+    if !(ok(r) && r > 0.0 && ok(t0) && ok(t1) && t0 <= t1 && ok(limit) && ok(tol) && tol > 0.0) {
+        return None;
+    }
+    let h_max = (0.25 * tol / r).sqrt();
+    let n = ((t1 - t0) / h_max).ceil().max(1.0);
+    // (a NaN or an overlong cut: not proven)
+    if n.is_nan() || n > 4096.0 {
+        return None;
+    }
+    let n = n as usize;
+    let h = (t1 - t0) / n as f64;
+    let scale = 1.0 + r + c.iter().fold(0.0f64, |a, v| a.max(v.abs()));
+    let sag = 1.01 * 0.5 * r * h * h + 1e-12 * scale;
+    let grown = col.grow(sag)?;
+    let at = |t: f64| -> [f64; 3] {
+        let d = 1.0 + t * t;
+        let (u, v) = ((1.0 - t * t) / d, 2.0 * t / d);
+        [
+            c[0] + r * (x[0] * u + y[0] * v),
+            c[1] + r * (x[1] * u + y[1] * v),
+            c[2] + r * (x[2] * u + y[2] * v),
+        ]
+    };
+    let mut least = f64::INFINITY;
+    let mut a = at(t0);
+    for k in 1..=n {
+        let e = if k == n { at(t1) } else { at(t0 + h * k as f64) };
+        let ch = Move::Line { a, b: e };
+        match forge_cam_geom::contact::clear(body, f, &ch, limit + sag) {
+            Some(Verdict::Clear { lower }) => least = least.min(lower),
+            _ => match forge_cam_geom::drop::gap_move(&grown, f, &ch, limit, tol / 4.0, 2_000).0 {
+                Gap::Clear { lower } => least = least.min(lower),
+                _ => return None,
+            },
+        }
+        a = e;
+    }
+    Some(least - sag)
+}
+
 /// The moves of a path as the checker's (arcs cut into pieces of at most a quarter turn, cycles
 /// expanded into their motion), each with its phase.
 pub fn checker_moves(p: &OpPath) -> Vec<(Move, Phase, usize)> {
@@ -501,6 +560,15 @@ pub fn certify_with(
                                 },
                             };
                             if let Some(forge_cam_geom::check::Verdict::Clear { lower }) = cf {
+                                if b.part == Part::Cutter {
+                                    o.least = o.least.min(lower);
+                                }
+                                continue;
+                            }
+                            // a level arc the closed form does not clear (a face's full surface near it): its
+                            // chords, each by the closed form or the column grown by their sagitta (it holds the
+                            // cutter anywhere within that of a chord); undecided, the arc's own search below
+                            if let Some(lower) = arc_by_chords(col, b, f, m, limit, tol) {
                                 if b.part == Part::Cutter {
                                     o.least = o.least.min(lower);
                                 }
@@ -2028,5 +2096,112 @@ impl TanDeg for f64 {
     fn to_radians_tan(self) -> f64 {
         let r = self.to_radians();
         dmath::sin(r) / dmath::cos(r)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use forge_cam_geom::check::Surf;
+    use forge_cam_geom::drop::{Column, Gap, gap_move};
+    use forge_cam_geom::ival::Ival;
+    use forge_cam_geom::tool::{Cutter, assemble};
+
+    /// The column route's arc fallback (`arc_by_chords`): where it clears a level arc, the
+    /// column's own search on the whole arc never finds it over the bound; an arc moved into
+    /// the face is not cleared.
+    #[test]
+    fn an_arc_cleared_by_its_chords_is_never_over_by_the_search() {
+        let body = assemble(&Cutter::Ball { d: 6.0 }, 18.0, 6.0, 24.0, None)
+            .unwrap()
+            .bodies[0]
+            .clone();
+        let col = Column::of(&body).unwrap();
+        let mut seed = 0x853c49e6748fea9bu64;
+        let mut rnd = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed >> 11) as f64 / (1u64 << 53) as f64
+        };
+        let (mut cleared, mut k) = (0, 0);
+        while k < 60 {
+            let rc = 3.0 + rnd() * 8.0;
+            let f = Face::new(
+                Surf::Cyl {
+                    o: [0.0, 0.0, -5.0],
+                    x: [0.0, 1.0, 0.0],
+                    y: [0.0, 0.0, 1.0],
+                    ax: [1.0, 0.0, 0.0],
+                    r: rc,
+                },
+                Ival::new(-1.0, 1.0),
+                Ival::new(-20.0, 20.0),
+                None,
+                0.0,
+                1,
+            );
+            let (ux, uy) = (rnd() - 0.5, rnd() - 0.5);
+            let l = (ux * ux + uy * uy).sqrt().max(1e-3);
+            let (cs, sn) = (ux / l, uy / l);
+            // a tip height from just over the cylinder's top to well above it
+            let z = -5.0 + rc + rnd() * 3.0 - 0.2;
+            let m = Move::Arc {
+                c: [rnd() * 16.0 - 8.0, rnd() * 16.0 - 8.0, z],
+                x: [cs, sn, 0.0],
+                y: [-sn, cs, 0.0],
+                r: 0.5 + rnd() * 8.0,
+                t0: -rnd() * 0.9,
+                t1: rnd() * 0.9,
+            };
+            if let Some(lower) = arc_by_chords(&col, &body, &f, &m, -0.01, 0.01) {
+                assert!(lower >= -0.01 - 1e-9, "k={k}: cleared below the limit: {lower}");
+                let (g, _) = gap_move(&col, &f, &m, lower - 1e-6, 0.002, 200_000);
+                assert!(!matches!(g, Gap::Over { .. }), "k={k}: chords clear at {lower}, the search is over: {g:?}");
+                cleared += 1;
+            }
+            k += 1;
+        }
+        assert!(cleared > 10, "{cleared}");
+        // straight through the cylinder's top: never cleared
+        let f = Face::new(
+            Surf::Cyl {
+                o: [0.0, 0.0, -5.0],
+                x: [0.0, 1.0, 0.0],
+                y: [0.0, 0.0, 1.0],
+                ax: [1.0, 0.0, 0.0],
+                r: 5.0,
+            },
+            Ival::new(-1.0, 1.0),
+            Ival::new(-20.0, 20.0),
+            None,
+            0.0,
+            1,
+        );
+        let m = Move::Arc {
+            c: [0.0, 0.0, -0.5],
+            x: [1.0, 0.0, 0.0],
+            y: [0.0, 1.0, 0.0],
+            r: 4.0,
+            t0: -0.8,
+            t1: 0.8,
+        };
+        assert!(arc_by_chords(&col, &body, &f, &m, -0.01, 0.01).is_none());
+        // non-finite data: never cleared (a NaN tolerance once made no chords and a Clear)
+        let clear = Move::Arc {
+            c: [0.0, 0.0, 20.0],
+            x: [1.0, 0.0, 0.0],
+            y: [0.0, 1.0, 0.0],
+            r: 4.0,
+            t0: -0.8,
+            t1: 0.8,
+        };
+        assert!(arc_by_chords(&col, &body, &f, &clear, -0.01, 0.01).is_some());
+        for bad in [f64::NAN, f64::INFINITY, -1.0, 0.0] {
+            assert!(arc_by_chords(&col, &body, &f, &clear, -0.01, bad).is_none(), "tol {bad}");
+        }
+        for bad in [f64::NAN, f64::INFINITY] {
+            assert!(arc_by_chords(&col, &body, &f, &clear, bad, 0.01).is_none(), "limit {bad}");
+        }
     }
 }
