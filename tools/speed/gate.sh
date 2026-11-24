@@ -71,13 +71,20 @@ case $counter in
     vgonly=
     count1() {
       if [ "$exact" = 1 ]; then
+        # every exact count from the binary's own main (`regen1::main`, `benchparts::main`), unless
+        # the line names its own call: what the process does before main (the loader, std's
+        # runtime start, its stack-guard probe parsing /proc/self/maps, which scales with the
+        # binary's size) and after it is never counted. The process runs on one CPU (taskset), so
+        # its work is on main's thread, under main.
+        only=${vgonly:-"--toggle-collect=$(basename "$1")::main"}
         (cd / && env -i PATH=/usr/bin:/bin HOME=/tmp LD_PRELOAD="$bin/fixedrandom.so" \
           FORGE_BENCH_PARTS="$bin/parts" taskset -c "${GATE_CPU:-0}" setarch -R \
-          valgrind --fair-sched=yes --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null $vgonly "$@")
+          valgrind --fair-sched=yes --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null $only "$@")
       else
         valgrind --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null $vgonly "$@"
       fi 2>&1 >/dev/null |
-        awk '/Collected :/{n=$NF}/Process terminating/{bad=1}END{if(!bad&&n!="")print n}'
+        # a count of 0 is a toggle that matched nothing (a renamed main): a failure, never a pass
+        awk '/Collected :/{n=$NF}/Process terminating/{bad=1}END{if(!bad&&n!=""&&n>0)print n}'
     }
     ;;
   *) echo "GATE_COUNTER: perf or callgrind, not $counter" >&2; exit 64 ;;
@@ -140,10 +147,10 @@ if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
   bin=$gatedir
 fi
 now=$(mktemp)
-# each binary's process alone (its start, std's runtime and the loader's work, nothing built):
-# band.py takes it off that binary's whole-process lines, so a strict line is not charged with
-# start-up work that moves with the binary's layout (glibc reading /proc/self/maps for the main
-# thread's stack guard, say), which on the smallest lines is several hundredths of a percent
+# each binary's main alone, given nothing to build (exact counts start at main, so start-up work
+# that moves with the binary's layout, glibc reading /proc/self/maps for the main thread's stack
+# guard say, is in no line): a constant, which band.py still takes off both sides' whole-process
+# lines; with counts from before this gate (start-up included) it is what keeps them comparable
 echo "noop regen1 $(count "$bin/regen1" noop)" >> "$now"
 echo "noop benchparts $(count "$bin/benchparts" noop)" >> "$now"
 for p in torture plate shaft housing coplanar patterns mixed hole-grid tour upto upto-flat; do
