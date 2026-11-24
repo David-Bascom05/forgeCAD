@@ -31,6 +31,9 @@ pub struct Marker {
     /// When on the timeline.
     pub t: f64,
     pub text: String,
+    /// Its row under its kind's heading (UX: the heading says what, the row when, where and how
+    /// much): "move 0 · 0.35 mm into the stock".
+    pub row: String,
     /// A leftover region's box (xmin ymin xmax ymax, z0 z1).
     pub region: Option<([f64; 4], f64, f64)>,
     /// Material left by the plan, not missed: a leftover region wholly under the part's bottom
@@ -260,6 +263,7 @@ impl Sim {
                         "{name}: a rapid goes {d:.3} mm into the stock as cut (move {})",
                         g.mv
                     ),
+                    row: format!("move {} \u{b7} {d:.2} mm into the stock as cut", g.mv),
                     region: None,
                     planned: false,
                 });
@@ -279,6 +283,7 @@ impl Sim {
                         "{name}: the shank or holder goes {d:.3} mm into the stock as cut (move {})",
                         g.mv
                     ),
+                    row: format!("move {} \u{b7} {d:.2} mm into the stock as cut", g.mv),
                     region: None,
                     planned: false,
                 });
@@ -436,11 +441,12 @@ impl Sim {
                 out.push(Marker {
                     op: Some(oi),
                     setup: op.setup,
-                    rule: c.rule.to_string(),
+                    rule: check_kind(c),
                     verdict: c.verdict.to_string(),
                     at: c.at,
                     t,
                     text: format!("{}: {}", op.name, check_sentence(c)),
+                    row: check_row(c),
                     region: None,
                     planned: false,
                 });
@@ -462,6 +468,7 @@ impl Sim {
                         op.name,
                         op.refusal.as_deref().unwrap_or("no reason given")
                     ),
+                    row: tidy(op.refusal.as_deref().unwrap_or("no reason given")),
                     region: None,
                     planned: false,
                 });
@@ -498,6 +505,10 @@ impl Sim {
                     t,
                     text: format!(
                         "{place}, z {:.2} to {:.2} mm, {w:.1} \u{d7} {d:.1} mm ({})",
+                        l.z0, l.z1, l.why
+                    ),
+                    row: format!(
+                        "z {:.2} to {:.2} mm \u{b7} {w:.1} \u{d7} {d:.1} mm \u{b7} {}",
                         l.z0, l.z1, l.why
                     ),
                     region: Some((*b, l.z0, l.z1)),
@@ -599,6 +610,48 @@ pub fn check_sentence(c: &forge_cam::ops::CheckOut) -> String {
             mm(c.limit)
         )
     }
+}
+
+/// A failed check's kind, by what happened: a rapid that goes into the stock, the part or the
+/// workholding is a crash, not a near miss, and is a kind of its own ("rapid_into_stock", ..);
+/// otherwise the checker's rule.
+pub fn check_kind(c: &forge_cam::ops::CheckOut) -> String {
+    if c.rule == "rapid_clear" && c.value < -0.005 {
+        return format!("rapid_into_{}", what_word(&c.other));
+    }
+    c.rule.to_string()
+}
+
+/// What a check's `other` names, in a word: stock, part or workholding (else as given).
+fn what_word(other: &str) -> String {
+    let o = other.to_ascii_lowercase();
+    if o.starts_with("stock") {
+        "stock".into()
+    } else if o.starts_with("part") || o.is_empty() {
+        "part".into()
+    } else if ["fixture", "vise", "clamp", "workholding"]
+        .iter()
+        .any(|w| o.contains(w))
+    {
+        "workholding".into()
+    } else {
+        other.to_string()
+    }
+}
+
+/// A failed check's row under its kind: when (the move), where and how much, not what (the
+/// heading says that): "move 0 · 0.35 mm into the stock".
+pub fn check_row(c: &forge_cam::ops::CheckOut) -> String {
+    let what = format!("the {}", what_word(&c.other));
+    let mm = |v: f64| format!("{:.2} mm", v.abs());
+    let how = if c.value < -0.005 {
+        format!("{} into {what}", mm(c.value))
+    } else if c.value < 0.005 {
+        format!("touches {what}, needs {} clear", mm(c.limit))
+    } else {
+        format!("{} from {what}, needs {}", mm(c.value), mm(c.limit))
+    };
+    format!("move {} \u{b7} {how}", c.move_index)
 }
 
 /// A run's message tidied for a person: a parser's `NotPrism { face: 38 }` said in words and

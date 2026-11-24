@@ -299,6 +299,7 @@ impl MachineView {
                     "line {}: {} {word} {} (posted program on {})",
                     c.line, c.b, c.a, self.run.def.name
                 ),
+                row: format!("line {} \u{b7} {} {word} {}", c.line, c.b, c.a),
                 region: None,
                 planned: false,
             });
@@ -354,6 +355,7 @@ impl MachineView {
                 verdict: "fail".into(),
                 at: tip_at(i, 0.0),
                 t,
+                row: text.clone(),
                 text,
                 region: None,
                 planned: false,

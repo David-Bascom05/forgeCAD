@@ -1409,7 +1409,11 @@ fn checks(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
         }
     }
     for n in &st.check_notes {
-        ui.label(egui::RichText::new(n).size(11.0).color(t.warn));
+        let words = note_words(n);
+        let r = ui.label(egui::RichText::new(&words).size(11.0).color(t.warn));
+        if words != *n {
+            r.on_hover_text(n.as_str());
+        }
     }
     // the markers by kind: an issue's kind (a failed check's rule), material left over, and the
     // stock left by the plan apart; each kind one row, opened to its places
@@ -1503,7 +1507,7 @@ fn checks(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
                         let to = if all { n } else { (from + SHOWN).min(n) };
                         for (&k, m) in ks.iter().zip(&ms).skip(from).take(to - from) {
                             let picked = st.issue == Some(k);
-                            let mut text = egui::RichText::new(format!("{}  {}", clock(m.t), m.text))
+                            let mut text = egui::RichText::new(format!("{} \u{b7} {}", clock(m.t), m.row))
                                 .size(11.0)
                                 .color(if *rank == 2 { t.ink2 } else { c });
                             if picked {
@@ -1513,7 +1517,7 @@ fn checks(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
                             if picked && st.issue_new {
                                 r.scroll_to_me(Some(egui::Align::Center));
                             }
-                            if r.on_hover_text("Go there").clicked() {
+                            if r.on_hover_text(format!("{}\nGo there", m.text)).clicked() {
                                 pick = Some(k);
                                 jump = Some(m.t);
                             }
@@ -1552,48 +1556,86 @@ fn look_selected(t: &crate::shell::theme::Theme) -> Color32 {
 /// (each failure in its issue kind's words), and whether the leftover was measured; true if any
 /// check failed. The checker's pair count and rule codes are its hover.
 pub fn checked_line(markers: &[Marker], leftover_done: bool) -> (String, bool) {
-    let count = |rules: &[&str]| {
-        markers
-            .iter()
-            .filter(|m| rules.contains(&m.rule.as_str()))
-            .count()
+    // each failed kind counted, said by its title ("24 rapids into the stock")
+    let said = |rules: &[&str], clear: &str| -> (String, usize) {
+        let mut parts = vec![];
+        let mut all = 0;
+        for r in rules {
+            let k = markers.iter().filter(|m| m.rule == *r).count();
+            if k > 0 {
+                all += k;
+                let title = rule_title(r).to_lowercase();
+                let title = if k == 1 { singular(&title) } else { title };
+                parts.push(format!("{k} {title}"));
+            }
+        }
+        if parts.is_empty() {
+            (clear.to_string(), 0)
+        } else {
+            (parts.join(", "), all)
+        }
     };
-    let gouge = count(&["gouge"]);
-    let holder = count(&[
-        "holder_collision",
-        "shank_collision",
-        "fixture_collision",
-        "holder_into_stock",
-        "machine_collision",
-    ]);
-    let rapid = count(&["rapid_clear", "rapid_into_stock"]);
-    let n = |k: usize, one: &str, many: &str| format!("{k} {}", if k == 1 { one } else { many });
-    let parts = [
-        if gouge == 0 {
-            "no gouges".to_string()
-        } else {
-            n(gouge, "gouge", "gouges")
-        },
-        if holder == 0 {
-            "holder and fixture clear".to_string()
-        } else {
-            n(holder, "holder or fixture hit", "holder or fixture hits")
-        },
-        if rapid == 0 {
-            "rapids clear".to_string()
-        } else {
-            n(rapid, "rapid too close", "rapids too close")
-        },
-    ];
+    let (g, gn) = said(&["gouge"], "no gouges");
+    let (h, hn) = said(
+        &[
+            "holder_collision",
+            "shank_collision",
+            "fixture_collision",
+            "holder_into_stock",
+            "machine_collision",
+        ],
+        "holder and fixture clear",
+    );
+    let (r, rn) = said(
+        &[
+            "rapid_into_stock",
+            "rapid_into_part",
+            "rapid_into_workholding",
+            "rapid_clear",
+        ],
+        "rapids clear",
+    );
     let leftover = if leftover_done {
         "Leftover stock measured exactly."
     } else {
         "Leftover stock not measured."
     };
     (
-        format!("Every move checked: {}. {leftover}", parts.join(", ")),
-        gouge + holder + rapid > 0,
+        format!("Every move checked: {g}, {h}, {r}. {leftover}"),
+        gn + hn + rn > 0,
     )
+}
+
+/// A kind's title for one of it: "rapids into the stock" → "rapid into the stock".
+fn singular(title: &str) -> String {
+    let (head, rest) = title.split_once(' ').unwrap_or((title, ""));
+    let head = head.strip_suffix('s').unwrap_or(head);
+    if rest.is_empty() {
+        head.to_string()
+    } else {
+        format!("{head} {rest}")
+    }
+}
+
+/// A run's warning in people's words (UX-LEAD: what is wrong and what to do; the syntax and the
+/// rule's code are its hover): a setup not placed on the machine, a part whose material is only
+/// a group. Else the warning as it is.
+pub fn note_words(raw: &str) -> String {
+    if let Some(i) = raw.find("setup `")
+        && raw.contains("is not placed")
+    {
+        let name = raw[i + 7..].split('`').next().unwrap_or("");
+        return format!(
+            "Setup {name} isn't placed on the machine. Place it to check machine travel, or allow uncertified output in NC Programs."
+        );
+    }
+    if let Some(i) = raw.find("names only a material group (") {
+        let g = raw[i + 29..].split(')').next().unwrap_or("");
+        return format!(
+            "The part's material is only a group ({g}). Pick the alloy for realistic feeds and tool life."
+        );
+    }
+    raw.to_string()
 }
 
 /// A check's rule as a group's title.
@@ -1607,6 +1649,8 @@ fn rule_title(rule: &str) -> String {
         "gouge" => "Gouges".into(),
         "rapid_clear" => "Rapids too close".into(),
         "rapid_into_stock" => "Rapids into the stock".into(),
+        "rapid_into_part" => "Rapids into the part".into(),
+        "rapid_into_workholding" => "Rapids into the workholding".into(),
         "holder_into_stock" => "Holder into the stock".into(),
         "machine_collision" => "Machine collisions".into(),
         "refused" => "Refused ops".into(),

@@ -770,8 +770,33 @@ fn the_checks_line_is_in_words() {
     eprintln!("broken flange: {rules:?}");
     let (line, failed) = checked_line(&sim.markers, sim.cam.leftover_done);
     assert!(failed, "{line}");
-    assert!(line.contains("too close"), "{line}");
+    // a rapid into the stock is a crash: its own kind, named so in the line
+    assert!(line.contains("rapids into the stock"), "{line}");
+    let m = sim
+        .markers
+        .iter()
+        .find(|m| m.rule == "rapid_into_stock")
+        .expect("a rapid into the stock");
+    // its row says when, where and how much, not what (the heading does)
+    assert!(
+        m.row.starts_with("move ") && m.row.ends_with("mm into the stock"),
+        "{}",
+        m.row
+    );
+    assert!(!m.row.contains("bolts") && !m.row.contains("hits"), "{}", m.row);
     assert!(!line.contains("G3") && !line.contains("pairs"), "{line}");
+    // the run's warnings in people's words, the syntax on hover
+    use forge_render::gui_camsim_panel::note_words;
+    assert_eq!(
+        note_words(
+            "setup `op1` is not placed: G5 checked each axis's span against the travel, not the positions; fix: add `at: (x, y, z)` to the setup"
+        ),
+        "Setup op1 isn't placed on the machine. Place it to check machine travel, or allow uncertified output in NC Programs."
+    );
+    assert_eq!(
+        note_words("part `flange.fg` names only a material group (N): name the alloy"),
+        "The part's material is only a group (N). Pick the alloy for realistic feeds and tool life."
+    );
 }
 
 /// The flange's bolt holes drilled alone under a clear height below the stock's top: rapids into

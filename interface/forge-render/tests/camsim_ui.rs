@@ -232,7 +232,7 @@ fn realistic_tools_close_up() {
 }
 
 /// Issues of two kinds in the Checks tab (UX-LEAD's review): the flange's bolt holes drilled alone
-/// under a clear height below the stock's top rapid too close to it, and drilling alone leaves
+/// under a clear height below the stock's top rapid into it, and drilling alone leaves
 /// the plate's material. A place is picked: its kind's row opens to it, highlighted, and the
 /// playhead is on it. The first line names the failure in words.
 #[test]
@@ -245,16 +245,16 @@ fn issues_of_two_kinds_in_the_checks() {
     };
     let st = h.gui.shell.camsim.as_ref().unwrap();
     let kinds = |rule: &str| st.sim.markers.iter().filter(|m| m.rule == rule).count();
-    assert!(kinds("rapid_clear") > 0, "rapids too close");
+    assert!(kinds("rapid_into_stock") > 0, "rapids into the stock");
     assert!(kinds("leftover") > 0, "material left");
     let (line, failed) =
         forge_render::gui_camsim_panel::checked_line(&st.sim.markers, st.sim.cam.leftover_done);
-    assert!(failed && line.contains("rapids too close"), "{line}");
+    assert!(failed && line.contains("rapids into the stock"), "{line}");
     let k = st
         .sim
         .markers
         .iter()
-        .position(|m| m.rule == "rapid_clear")
+        .position(|m| m.rule == "rapid_into_stock")
         .unwrap();
     h.gui
         .camsim_command(&format!("tab=checks;marker={k};part=hidden"))
