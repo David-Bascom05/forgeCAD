@@ -46,5 +46,3 @@ SwiftShader, 1600×1000), the same document:
 - `web-01-robot-open.png`, `web-02-robot-joint.png` (the elbow selected from the browser),
   `web-03-robot-link.png` (the forearm): the same layout, sheet, badges, named axis arrows and
   status line as the native pictures.
-- The parts draw black there: every assembly does in this browser set-up, the robot or not
-  (`arm2.fg` opened alone draws the same; a single part draws lit). Not the Robot environment's.
