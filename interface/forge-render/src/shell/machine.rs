@@ -339,6 +339,9 @@ impl MachineUi {
             hover: None,
             rows: Vec::new(),
             fresh: true,
+            screen: Vec::new(),
+            picked: None,
+            scroll_pick: false,
         });
         Ok(())
     }
@@ -1283,6 +1286,22 @@ impl Shell {
             if st.lib != "machine" {
                 overlay(ctx, &t, &st, v);
             } else {
+                // a click in the view on a split's part chooses its row
+                if let Some(sp) = st.split.as_mut()
+                    && let Some(p) = ctx.input(|i| {
+                        i.pointer
+                            .primary_clicked()
+                            .then(|| i.pointer.interact_pos())
+                            .flatten()
+                    })
+                    && v.contains(p)
+                    // not on a window or a control over the view
+                    && ctx.layer_id_at(p).is_none_or(|l| l.order == egui::Order::Background)
+                    && let Some(k) = sp.part_at(p)
+                {
+                    sp.picked = Some(k);
+                    sp.scroll_pick = true;
+                }
                 envelope_overlay(ctx, &t, &st, v);
             }
             // a machine's jog is the sheet's Motion section (nothing floats over the view, §1)
@@ -2494,6 +2513,25 @@ pub struct Split {
     pub rows: Vec<egui::Rect>,
     /// Just opened: the sheet scrolls it into view on its first frame.
     pub fresh: bool,
+    /// Each part's placed bounds on the screen (the host's, each frame).
+    pub screen: Vec<Option<egui::Rect>>,
+    /// The part last clicked in the view: its row is marked and scrolled to.
+    pub picked: Option<usize>,
+    /// The picked row is still to be scrolled into view.
+    pub scroll_pick: bool,
+}
+
+impl Split {
+    /// The part under a click in the view: of the parts whose screen bounds hold it, the one with
+    /// the smallest (the most specific).
+    pub fn part_at(&self, p: egui::Pos2) -> Option<usize> {
+        self.screen
+            .iter()
+            .enumerate()
+            .filter_map(|(k, r)| r.filter(|r| r.contains(p)).map(|r| (k, r.area())))
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|x| x.0)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -2895,10 +2933,22 @@ fn tab_bodies(
             if ui.rect_contains_pointer(row.rect) {
                 hover = Some(k);
             }
+            if sp.picked == Some(k) {
+                ui.painter().rect_stroke(
+                    row.rect.expand(2.0),
+                    4.0,
+                    egui::Stroke::new(1.5, t.accent),
+                    egui::StrokeKind::Outside,
+                );
+                if sp.scroll_pick {
+                    ui.scroll_to_rect(row.rect, Some(egui::Align::Center));
+                }
+            }
             rows.push(row.rect);
         }
         sp.hover = hover;
         sp.rows = rows;
+        sp.scroll_pick = false;
         ui.label(small(t, sp.count_line()));
         let ready = sp.decided();
         ui.horizontal(|ui| {

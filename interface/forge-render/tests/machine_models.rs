@@ -246,6 +246,36 @@ fn a_users_model_is_kept_in_their_library_placed_drawn_and_checked() {
     let sp = h.gui.shell.machine.as_ref().unwrap().split.as_ref().unwrap();
     assert_eq!(sp.hover, Some(0), "row {row:?}, now {:?}", sp.rows.first());
     shot(&mut h, "models-03-split-hover");
+    // a click on part 2 in the view chooses its row (part 1's screen box is larger)
+    let r2 = h
+        .gui
+        .shell
+        .machine
+        .as_ref()
+        .unwrap()
+        .split
+        .as_ref()
+        .unwrap()
+        .screen[1]
+        .expect("part 2 on the screen");
+    h.click_at(r2.center().x, r2.center().y);
+    for _ in 0..6 {
+        h.step();
+    }
+    assert_eq!(
+        h.gui
+            .shell
+            .machine
+            .as_ref()
+            .unwrap()
+            .split
+            .as_ref()
+            .unwrap()
+            .picked,
+        Some(1)
+    );
+    h.move_to(5.0, 5.0);
+    shot(&mut h, "models-04-split-picked-in-view");
     let mut m2 = h.gui.shell.machine.take().unwrap();
     m2.split.as_mut().unwrap().parts[0].dest = None;
     assert!(m2.apply_split().is_err(), "a part not decided keeps Split off");

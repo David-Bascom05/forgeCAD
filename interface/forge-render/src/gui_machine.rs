@@ -470,7 +470,7 @@ impl Gui {
         // under the pointer, lit
         self.mach.envelope.clear();
         if let Some(sp) = &m.split
-            && let Some(p) = sp.hover.and_then(|k| sp.parts.get(k))
+            && let Some(p) = sp.hover.or(sp.picked).and_then(|k| sp.parts.get(k))
         {
             let f = |a: [f64; 3]| a.map(|x| x as f32);
             self.mach
@@ -544,9 +544,33 @@ impl Gui {
                 })
             });
             let worst = worst.and_then(|(p, d)| px(p).map(|q| (q, d)));
+            // a split's parts on the screen, so a click in the view can choose one
+            let split_px: Vec<Option<egui::Rect>> = m
+                .split
+                .as_ref()
+                .map(|sp| {
+                    sp.parts
+                        .iter()
+                        .map(|p| {
+                            let (lo, hi) = p.bounds;
+                            let pts: Option<Vec<egui::Pos2>> = (0..8)
+                                .map(|k| {
+                                    px(std::array::from_fn(
+                                        |a| if k >> a & 1 == 1 { hi[a] } else { lo[a] },
+                                    ))
+                                })
+                                .collect();
+                            pts.map(|v| egui::Rect::from_points(&v))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
             if let Some(m) = &mut self.shell.machine {
                 m.envelope_px = boxes;
                 m.out_px = worst;
+                if let Some(sp) = &mut m.split {
+                    sp.screen = split_px;
+                }
             }
         }
         let Some(m) = &self.shell.machine else { return };
