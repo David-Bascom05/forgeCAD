@@ -2305,6 +2305,69 @@ mod tests {
     use forge_cam_geom::ival::Ival;
     use forge_cam_geom::tool::{Cutter, assemble};
 
+    /// `arc_by_chords` keeps the chords' sagitta: a long shallow arc over a horizontal
+    /// cylinder's ridge whose one chord is clear of the ridge (by about 0.015) while the arc
+    /// itself dips into it (by about 0.015) is not cleared. With the sagitta dropped from the
+    /// closed form's limit, or the column not grown by it, the chord alone would clear it.
+    #[test]
+    fn arc_by_chords_keeps_the_sagitta() {
+        let body = assemble(&Cutter::Ball { d: 6.0 }, 18.0, 6.0, 24.0, None)
+            .unwrap()
+            .bodies[0]
+            .clone();
+        let col = Column::of(&body).unwrap();
+        let f = Face::new(
+            Surf::Cyl {
+                o: [0.0, 0.0, -5.0],
+                x: [0.0, 1.0, 0.0],
+                y: [0.0, 0.0, 1.0],
+                ax: [1.0, 0.0, 0.0],
+                r: 5.0,
+            },
+            Ival::new(-1.0, 1.0),
+            Ival::new(-20.0, 20.0),
+            None,
+            0.0,
+            1,
+        );
+        // the ball's centre must stay 8 from the cylinder's axis (y, z) = (0, -5); the arc, of
+        // radius 20 about (0, 21), comes to y = 1 at its middle and its chord to y = 21 - 20 cos φ
+        let phi: f64 = 0.15;
+        let y_chord = 21.0 - 20.0 * forge_math::dmath::cos(phi);
+        // the centre's height over the axis where the clearance is 0 halfway between them
+        let ym = 0.5 * (1.0 + y_chord);
+        let zc = (64.0 - ym * ym).sqrt();
+        let clear_at = |y: f64| (y * y + zc * zc).sqrt() - 8.0;
+        assert!(
+            clear_at(1.0) < -1e-3 && clear_at(y_chord) > 1e-3,
+            "{} {}",
+            clear_at(1.0),
+            clear_at(y_chord)
+        );
+        let th = forge_math::dmath::sin(0.5 * phi) / forge_math::dmath::cos(0.5 * phi);
+        let m = Move::Arc {
+            c: [0.0, 21.0, zc - 5.0 - 3.0],
+            x: [0.0, -1.0, 0.0],
+            y: [1.0, 0.0, 0.0],
+            r: 20.0,
+            t0: -th,
+            t1: th,
+        };
+        // one chord (the sagitta bound r h²/2 with h = 2 tan(φ/2) is within tol/8 at tol 2)
+        assert!(arc_by_chords(&col, &body, &f, &m, 0.0, 2.0).is_none());
+        // and the chord alone, as a line, is clear at the limit: only the sagitta refuses the arc
+        let ch = Move::Line {
+            a: [-20.0 * forge_math::dmath::sin(phi), y_chord, zc - 8.0],
+            b: [20.0 * forge_math::dmath::sin(phi), y_chord, zc - 8.0],
+        };
+        let by_form = matches!(
+            forge_cam_geom::contact::clear(&body, &f, &ch, 0.0),
+            Some(Verdict::Clear { .. })
+        );
+        let by_col = matches!(gap_move(&col, &f, &ch, 0.0, 0.002, 200_000).0, Gap::Clear { .. });
+        assert!(by_form || by_col, "the chord itself should be clear at the limit");
+    }
+
     /// The column route's arc fallback (`arc_by_chords`): where it clears a level arc, the
     /// column's own search on the whole arc never finds it over the bound; an arc moved into
     /// the face is not cleared.
