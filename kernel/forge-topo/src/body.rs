@@ -138,10 +138,15 @@ pub struct Face {
     pub bbox: Cached<Box3>,
     /// A point-in-face index, kept by whoever built it (the booleans) across edits that leave
     /// the face alone or only add loops to it; compaction drops it (coedge ids change there).
-    pub query: Cached<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
+    pub query: Cached<FaceQuery>,
     /// False once the face is removed by an in-place edit.
     pub alive: bool,
 }
+
+/// A face's point-in-face index, of a type its builder knows (forge-bool's `FaceInfo`): named so
+/// that the translation can hold it as an opaque value.
+#[derive(Clone)]
+pub struct FaceQuery(pub std::sync::Arc<dyn std::any::Any + Send + Sync>);
 
 /// Data derived from an entity and kept with it so it is worked out once.
 /// It takes no part in equality.
