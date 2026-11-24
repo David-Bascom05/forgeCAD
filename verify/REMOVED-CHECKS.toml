@@ -93,7 +93,7 @@ owed = ["code = model"]
 [[check]]
 id = "contact-ball-quadric-lower"
 owner = "CAM-3D-FINISH"
-removed = "certify_bb (via check.rs certify_shared's fast gate) skipped where the closed-form bound proves Clear: the bound"
+removed = "certify_bb (via check::closed_form, in certify_shared and certify_with's column route) skipped where the closed-form bound proves Clear: the bound"
 rust = { file = "kernel/forge-cam-geom/src/contact.rs", fn = "lower" }
 reviewed_at = "61360b08f6e52e02"
 level = "L1"
@@ -120,5 +120,67 @@ tests = [
   { file = "kernel/forge-cam-geom/src/contact.rs", name = "never_above_the_true_minimum", kind = "sampling" },
   { file = "kernel/forge-cam-geom/src/contact.rs", name = "nan_inf_and_overflow_are_refused", kind = "mutation" },
   { file = "kernel/forge-cam-geom/src/contact.rs", name = "a_ball_cutter_has_a_capsule_and_a_flat_does_not", kind = "unit" },
+]
+owed = ["lemma", "code = model"]
+
+# CAM-3D-FINISH (train 6): level arcs by their chords, and the closed-form gate's second call site.
+# H.contact (5) (verify/forge-cam/RESUME.md): the body's signed distance to a face is 1-Lipschitz in
+# the body's translation, and every point of a level arc piece spanning at most 2h lies within
+# r h^2 / 2 of its chord; so chords clear at limit + s clear the arc at limit, lower bound
+# min(chord) - s.
+[[check]]
+id = "contact-ball-arc-chords"
+owner = "CAM-3D-FINISH"
+removed = "certify_bb (via check::closed_form, in certify_shared and certify_with's column route) skipped where a level arc's chords clear by contact::clear: the bound"
+rust = { file = "kernel/forge-cam-geom/src/contact.rs", fn = "clear_arc" }
+reviewed_at = "bcb7b2aee70ecc9d"
+level = "L1"
+hyp = "H.contact (5) (verify/forge-cam/RESUME.md): signed distance 1-Lipschitz in translation; an arc piece of angle <= 2h (a step h in t = tan(theta/2)) within r h^2/2 of its chord; a Move::Arc's x and y orthonormal (not checked here)"
+lemmas = []
+tests = [
+  { file = "kernel/forge-cam-geom/src/contact.rs", name = "arcs_by_chords_never_above_the_true_minimum", kind = "sampling" },
+  { file = "kernel/forge-cam-geom/src/contact.rs", name = "arcs_with_bad_data_are_refused", kind = "mutation" },
+  # s dropped from the chords' limit (lim = limit): fails
+  { file = "kernel/forge-cam-geom/src/contact.rs", name = "clear_arc_keeps_the_sagitta", kind = "mutation" },
+  # clear_arc forced to Clear: "an arc 0.05 into the cap was certified"
+  { file = "kernel/forge-cam/tests/surf.rs", name = "a_level_arc_round_the_cap_is_cleared_by_its_chords_and_one_into_it_refused", kind = "mutation" },
+]
+owed = ["lemma", "code = model"]
+
+[[check]]
+id = "contact-closed-form-gate"
+owner = "CAM-3D-FINISH"
+removed = "certify_bb skipped where the closed form proves Clear, at both call sites: check.rs certify_shared, and forge-cam ops.rs certify_with's column route (contact::clear for lines, clear_arc for level arcs, prism faces included; Clear = the body's own signed distance >= the limit)"
+rust = { file = "kernel/forge-cam-geom/src/check.rs", fn = "closed_form" }
+reviewed_at = "f4840cc2960a4a76"
+level = "L1"
+hyp = "H.contact and H.contact (5) (verify/forge-cam/RESUME.md)"
+lemmas = []
+tests = [
+  { file = "kernel/forge-cam-geom/src/contact.rs", name = "never_above_the_true_minimum", kind = "sampling" },
+  { file = "kernel/forge-cam/tests/surf.rs", name = "a_level_arc_round_the_cap_is_cleared_by_its_chords_and_one_into_it_refused", kind = "mutation" },
+  # lines on the column route: a parallel path 0.05 in is refused
+  { file = "kernel/forge-cam/tests/surf.rs", name = "finishing_ops_certify_on_the_dome", kind = "unit" },
+]
+owed = ["lemma", "code = model"]
+
+# CAM-3D-FINISH: when clear_arc leaves a level arc undecided on the column route, each chord is
+# proven by contact::clear at limit + s, or by gap_move on the column grown by s (Column::grow),
+# and the arc's own gap_move search is skipped. Hyp: H.contact (5), and the column grown by s is
+# the Minkowski sum with a ball of radius s, so it holds the body anywhere within s of the chord
+# and its vertical gap bounds the arc's.
+[[check]]
+id = "contact-arc-chords-column"
+owner = "CAM-3D-FINISH"
+removed = "gap_move's search on a level arc on the column route, skipped where every chord is proven at limit + s (contact::clear) or by gap_move on the column grown by s"
+rust = { file = "kernel/forge-cam/src/ops.rs", fn = "arc_by_chords" }
+reviewed_at = "46e0a21a55cd9b2d"
+level = "L1"
+hyp = "H.contact (5), and Column::grow(s) is the Minkowski sum with a ball of radius s (verify/forge-cam/RESUME.md); a Move::Arc's x and y orthonormal (not checked here)"
+lemmas = []
+tests = [
+  { file = "kernel/forge-cam/src/ops.rs", name = "an_arc_cleared_by_its_chords_is_never_over_by_the_search", kind = "sampling" },
+  # fails under each of: s dropped and no grow; no grow; every chord taken as clear
+  { file = "kernel/forge-cam/src/ops.rs", name = "arc_by_chords_keeps_the_sagitta", kind = "mutation" },
 ]
 owed = ["lemma", "code = model"]

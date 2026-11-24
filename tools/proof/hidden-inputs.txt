@@ -172,6 +172,8 @@ no-output (allocator bookkeeping: spin locks, page owners and heaps, never a val
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|atomic|use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|static|static ALLOC: Alloc = Alloc {
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|static|static ALLOC: Alloc = Alloc(UnsafeCell::new(Heap::new()));
+no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|static|static CACHE: core::cell::UnsafeCell<Cache> = const { core::cell::UnsafeCell::new(Cache::new()) };
+no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|thread_local|std::thread_local! {
 no-output (work index, counter or stop flag)  @ forge-asm/src/check.rs|atomic|let next = std::sync::atomic::AtomicUsize::new(0);
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-asm/src/check.rs|hash-order|static GAPS: std::sync::Mutex<Option<std::collections::HashMap<GapKey, Gap>>> = std::sync::Mutex::new(None);
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-asm/src/check.rs|hash-order|static NARROWS: std::sync::Mutex<Option<std::collections::HashMap<NarrowKey, Narrow>>> =
@@ -336,12 +338,16 @@ no-output (powi: small integer exponents, same bits native and wasm; ban-list it
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-brake/src/sim.rs|float|return (dr.max(0.0).powi(2) + dy.max(0.0).powi(2)).sqrt();
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/sim.rs|hash-order|pub type Memo = std::collections::HashMap<MemoKey, Verdict>;
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam-3d/src/measure.rs|float|let l = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2) + (b[2] - a[2]).powi(2)).sqrt();
+no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam-3d/src/surfdrop.rs|float|let r = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2)).sqrt();
 speed (an order hint: which face this thread tests first; the answer, every face near proven clear, is the same in any order)  @ forge-cam-3d/src/surfdrop.rs|static|static LAST_REFUSED: std::cell::Cell<u32> = const { std::cell::Cell::new(u32::MAX) };
 speed (an order hint: which face this thread tests first; the answer, every face near proven clear, is the same in any order)  @ forge-cam-3d/src/surfdrop.rs|thread_local|std::thread_local! {
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-cam-geom/src/boolean.rs|hash-order|type Made = HashMap<(u64, u64, u8), Vec<(Region, Region, Result<Vec<OLoop>, OffsetError>)>>;
 speed (cache answering a function of its own key)  @ forge-cam-geom/src/boolean.rs|static|static MADE: Mutex<Option<Made>> = Mutex::new(None);
+speed (the held answers' budget: whether an answer is kept, never what it is)  @ forge-cam-geom/src/check.rs|atomic|static HELD_TOTAL: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 no-output (constant tables or print switches)  @ forge-cam-geom/src/check.rs|env|*ON.get_or_init(|| std::env::var_os("FORGE_CAM_CELLS").is_some())
+speed (cache answering a function of its own key: a face box's holds answer, the box alone; looked up by key only)  @ forge-cam-geom/src/check.rs|hash-order|pub struct Held(std::sync::Mutex<std::collections::HashMap<[u64; 4], i32>>);
 no-output (constant tables or print switches)  @ forge-cam-geom/src/check.rs|lazy|static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+speed (the held answers' budget: whether an answer is kept, never what it is)  @ forge-cam-geom/src/check.rs|static|static HELD_TOTAL: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 no-output (constant tables or print switches)  @ forge-cam-geom/src/check.rs|static|static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam-geom/src/drop.rs|float|let da = (a[0] - x).powi(2) + (a[1] - y).powi(2);
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam-geom/src/drop.rs|float|let db = (b[0] - x).powi(2) + (b[1] - y).powi(2);
@@ -369,12 +375,15 @@ no-output (powi: small integer exponents, same bits native and wasm; ban-list it
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam/src/adaptive.rs|float|let l = ((w[1][0] - w[0][0]).powi(2) + (w[1][1] - w[0][1]).powi(2)).sqrt();
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam/src/adaptive.rs|float|let r = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2)).sqrt();
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam/src/adaptive.rs|float|let step_len = ((q[0] - pos[0]).powi(2) + (q[1] - pos[1]).powi(2)).sqrt();
+no-output (looked up by key only: get, insert; retain drops by position, whatever the order)  @ forge-cam/src/adaptive.rs|hash-order|let mut disk_cache: std::collections::HashMap<(u64, u64), bool> = std::collections::HashMap::new();
 speed (lazy field or constant table)  @ forge-cam/src/engage.rs|lazy|static EDGE: std::sync::OnceLock<[(f64, f64, f64); EDGE_N]> = std::sync::OnceLock::new();
 speed (lazy field or constant table)  @ forge-cam/src/engage.rs|static|static EDGE: std::sync::OnceLock<[(f64, f64, f64); EDGE_N]> = std::sync::OnceLock::new();
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam/src/fit.rs|float|let er = (((p[0] - c[0]).powi(2) + (p[1] - c[1]).powi(2)).sqrt() - r).abs();
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam/src/fit.rs|float|let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam/src/fixture.rs|float|let rr = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam/src/fixture.rs|float|let rr = ((p.x - c.x).powi(2) + (p.y - c.y).powi(2)).sqrt();
+no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam/src/hop.rs|float|let l = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam/src/hop.rs|float|let rad = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam/src/life.rs|float|let dxy = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam/src/life.rs|float|let rr = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam/src/life.rs|float|let xy = (len * len - (to[2] - at[2]).powi(2)).max(0.0).sqrt();
@@ -406,6 +415,7 @@ no-output (prints only)  @ forge-cam/src/surf.rs|env|if std::env::var("FORGE_CAM
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam/src/surf.rs|float|let len = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();  x 3
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam/src/surf.rs|float|let len = ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2)).sqrt();
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam/src/surf.rs|float|let off = ((mm[0] - 0.5 * (a[0] + b[0])).powi(2) + (mm[1] - 0.5 * (a[1] + b[1])).powi(2)).sqrt();
+no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam/src/surf.rs|float|let r = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2)).sqrt();
 no-output (in-memory filesystem's file times: its count of changes, no clock read; read only for cache staleness and eviction)  @ forge-dirs/src/fs.rs|clock|pub fn accessed(&self) -> io::Result<SystemTime> {
 no-output (in-memory filesystem's file times: its count of changes, no clock read; read only for cache staleness and eviction)  @ forge-dirs/src/fs.rs|clock|pub fn created(&self) -> io::Result<SystemTime> {
 no-output (in-memory filesystem's file times: its count of changes, no clock read; read only for cache staleness and eviction)  @ forge-dirs/src/fs.rs|clock|pub fn modified(&self) -> io::Result<SystemTime> {
@@ -562,6 +572,8 @@ no-output (constant tables or print switches)  @ forge-gpu/src/lib.rs|static|sta
 no-output (read only by the n-ary regen, Part::regenerate_nary*; forge-lang builds by step_solids, which never batches, and the n-ary regen is not memoised)  @ forge-gpu/src/lib.rs|threads|std::thread::spawn(gpu);
 no-output (powi: 10^k for a dialect's decimals, exact for k <= 22 whatever the multiplication order; ban-list it)  @ forge-machine/src/comp.rs|float|let scale = 10f64.powi(k as i32);
 no-output (constant tables or print switches)  @ forge-machine/src/library.rs|env|include!(concat!(env!("OUT_DIR"), "/builtin.rs"));
+speed (lazy field or constant table: the built-in machine files parsed once)  @ forge-machine/src/library.rs|lazy|static KEPT: std::sync::OnceLock<Vec<(MachineDef, String)>> = std::sync::OnceLock::new();
+speed (lazy field or constant table: the built-in machine files parsed once)  @ forge-machine/src/library.rs|static|static KEPT: std::sync::OnceLock<Vec<(MachineDef, String)>> = std::sync::OnceLock::new();
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-machine/src/lookahead.rs|float|.map(|w| (0..n).map(|j| (w[1][j] - w[0][j]).powi(2)).sum::<f64>().sqrt())  x 2
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-machine/src/removal.rs|float|((x[0] - prev[0]).powi(2) + (x[1] - prev[1]).powi(2) + (x[2] - prev[2]).powi(2)).sqrt(),
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-machine/src/removal.rs|float|let d = ((x - c[0]).powi(2) + (y - c[1]).powi(2)).sqrt();  x 2
@@ -578,6 +590,7 @@ speed (lazy field or constant table)  @ forge-material/src/lib.rs|lazy|static LI
 speed (lazy field or constant table)  @ forge-material/src/lib.rs|lazy|use std::sync::{Arc, Mutex, OnceLock};
 speed (cache answering a function of its own key)  @ forge-material/src/lib.rs|static|static CACHE: OnceLock<Cache> = OnceLock::new();
 speed (lazy field or constant table)  @ forge-material/src/lib.rs|static|static LIB: OnceLock<Vec<Material>> = OnceLock::new();
+keyed (declared: the library files cached() used, path and hash of the bytes its key holds; Run::libraries)  @ forge-material/src/lib.rs|static|static LIBRARY_SOURCES: SourceTable = std::sync::Mutex::new(Vec::new());
 no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|clock|SystemTime::now()
 no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|clock|pub fn system_now() -> SystemTime {
 no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|clock|pub fn system_now() -> std::time::SystemTime {
@@ -602,6 +615,14 @@ no-output (prints only)  @ forge-math/src/trace.rs|env|*ON.get_or_init(|| std::e
 no-output (prints only)  @ forge-math/src/trace.rs|lazy|static ON: OnceLock<bool> = OnceLock::new();
 no-output (prints only)  @ forge-math/src/trace.rs|lazy|use std::sync::OnceLock;
 no-output (prints only)  @ forge-math/src/trace.rs|static|static ON: OnceLock<bool> = OnceLock::new();
+no-output (test counter: group numbers for computed())  @ forge-memo/src/lib.rs|atomic|static NEXT_GROUP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+speed (cache answering a function of its own key: whole Debug text compared; only the least-recently-used eviction iterates, and it decides what is made again, never an answer)  @ forge-memo/src/lib.rs|hash-order|map: Option<HashMap<u64, Vec<Entry<V>>>>,
+no-output (test counter: calls made anew per group, read only by computed() in tests)  @ forge-memo/src/lib.rs|hash-order|static COMPUTED: Mutex<Option<HashMap<(u64, usize), u64>>> = Mutex::new(None);
+no-output (test switch, off unless a test sets it; GROUP only numbers computed()'s counts)  @ forge-memo/src/lib.rs|static|static BYPASS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+no-output (test counter: calls made anew per group, read only by computed() in tests)  @ forge-memo/src/lib.rs|static|static COMPUTED: Mutex<Option<HashMap<(u64, usize), u64>>> = Mutex::new(None);
+no-output (test switch, off unless a test sets it; GROUP only numbers computed()'s counts)  @ forge-memo/src/lib.rs|static|static GROUP: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+no-output (test counter: group numbers for computed())  @ forge-memo/src/lib.rs|static|static NEXT_GROUP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+no-output (test switch, off unless a test sets it; GROUP only numbers computed()'s counts)  @ forge-memo/src/lib.rs|thread_local|std::thread_local! {
 no-output (Weld: entry() lookups only, never iterated; vertices numbered in file order)  @ forge-mesh/src/read.rs|hash-order|at: HashMap<[u64; 3], u32>,
 no-output (prints only)  @ forge-mesh/src/tessellate.rs|env|if let Some(path) = std::env::var_os("FORGE_CDT_DUMP") {
 no-output (no iteration order reaches an output; audit)  @ forge-mesh/src/tessellate.rs|hash-order|let mut placed: std::collections::HashMap<(u32, u64, u64), u32> = std::collections::HashMap::new();
@@ -785,4 +806,5 @@ speed (cache answering a function of its own key)  @ forge-vendor/src/lib.rs|laz
 speed (lazy field or constant table)  @ forge-vendor/src/lib.rs|lazy|use std::sync::{Arc, Mutex, OnceLock};
 speed (lazy field or constant table)  @ forge-vendor/src/lib.rs|static|static B: OnceLock<Vec<Vendor>> = OnceLock::new();
 speed (cache answering a function of its own key)  @ forge-vendor/src/lib.rs|static|static CACHE: OnceLock<Cache> = OnceLock::new();
+keyed (declared: the library files cached() used, path and hash of the bytes its key holds; Run::libraries)  @ forge-vendor/src/lib.rs|static|static PROFILE_SOURCES: forge_material::SourceTable = std::sync::Mutex::new(Vec::new());
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-workholding/src/lathe.rs|float|let len = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
