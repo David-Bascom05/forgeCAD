@@ -32,7 +32,7 @@ def F64.Insts.CoreCloneClone : core.clone.Clone F64 := {
 }
 
 /-- [forge_bool::ssi::turned_flush::{impl core::ops::function::Fn<(forge_math::interval::Interval,), bool> for forge_bool::ssi::turned_flush::{closure}}::call]:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 191:15-191:72 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 243:15-243:72 -/
 def ssi.turned_flush.closure.Insts.CoreOpsFunctionFnTupleIntervalBool.call
   (c : ssi.turned_flush.closure) (tupled_args : forge_math.interval.Interval) :
   Result Bool
@@ -43,7 +43,7 @@ def ssi.turned_flush.closure.Insts.CoreOpsFunctionFnTupleIntervalBool.call
   ok (F64.Ops.gt fl fl2)
 
 /-- [forge_bool::ssi::within_at_foot]:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 179:0-181:1 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 231:0-233:1 -/
 def ssi.within_at_foot
   (p : forge_geom.surface.Plane) (q : forge_geom.surface.Plane)
   (k : forge_math.vec.Point3) :
@@ -59,7 +59,7 @@ def ssi.within_at_foot
   ok (F64.Ops.le fl2 fl3)
 
 /-- [forge_bool::ssi::corners]:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 87:0-98:1 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 139:0-150:1 -/
 def ssi.corners
   (region : forge_math.interval.Box3) :
   Result (Array forge_math.vec.Point3 8#usize)
@@ -75,7 +75,7 @@ def ssi.corners
   ok (Array.make 8#usize [ p, p1, p2, p3, p4, p5, p6, p7 ])
 
 /-- [forge_bool::ssi::turned_flush]: loop body 0:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 199:4-202:5 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 251:4-254:5 -/
 @[rust_loop_body]
 def ssi.turned_flush_loop.body
   (p : forge_geom.surface.Plane) (q : forge_geom.surface.Plane)
@@ -97,7 +97,7 @@ def ssi.turned_flush_loop.body
   else ok (done all)
 
 /-- [forge_bool::ssi::turned_flush]: loop 0:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 199:4-202:5 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 251:4-254:5 -/
 @[rust_loop]
 def ssi.turned_flush_loop
   (p : forge_geom.surface.Plane) (q : forge_geom.surface.Plane)
@@ -109,7 +109,7 @@ def ssi.turned_flush_loop
     (all, i)
 
 /-- [forge_bool::ssi::turned_flush]:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 189:0-204:1 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 241:0-256:1 -/
 def ssi.turned_flush
   (p : forge_geom.surface.Plane) (q : forge_geom.surface.Plane)
   (region : forge_math.interval.Box3) :
@@ -138,12 +138,141 @@ def ssi.turned_flush
        ssi.turned_flush_loop p q ks true 0#usize
 
 /-- [forge_bool::ssi::nearly_flush::NEAR]
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 107:4-107:27 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 159:4-159:27 -/
 @[global_simps, irreducible]
 def ssi.nearly_flush.NEAR : F64 := F64.Ops.ofBits 4547007122018943789
 
+/-- [forge_bool::ssi::parallel_in]: loop body 0:
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 110:4-116:5 -/
+@[rust_loop_body]
+def ssi.parallel_in_loop.body
+  (p : forge_geom.surface.Plane) (q : forge_geom.surface.Plane) (flip : F64)
+  (ks : Array forge_math.vec.Point3 8#usize) (within : Bool) (pos : Bool)
+  (neg : Bool) (i : Std.Usize) :
+  Result (ControlFlow (Bool × Bool × Bool × Std.Usize) (Bool × Bool ×
+    Bool))
+  := do
+  if i < 8#usize
+  then
+    let p1 ← Array.index_usize ks i
+    let fl ← forge_geom.surface.Plane.signed_distance p p1
+    let fl1 ← forge_geom.surface.Plane.signed_distance q p1
+    let fl2 ← lift (F64.Ops.mul flip fl1)
+    let g ← lift (F64.Ops.sub fl fl2)
+    let within1 ←
+      if within
+      then
+        do
+        let fl3 ← core.f64.F64.abs g
+        let fl4 ← forge_math.tol.LINEAR
+        ok (F64.Ops.le fl3 fl4)
+      else ok false
+    let pos1 ← if pos
+                 then ok true
+                 else ok (F64.Ops.ge g (F64.Ops.ofBits 0))
+    let neg1 ← if neg
+                 then ok true
+                 else ok (F64.Ops.le g (F64.Ops.ofBits 0))
+    let i1 ← i + 1#usize
+    ok (cont (within1, pos1, neg1, i1))
+  else ok (done (within, pos, neg))
+
+/-- [forge_bool::ssi::parallel_in]: loop 0:
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 110:4-116:5 -/
+@[rust_loop]
+def ssi.parallel_in_loop
+  (p : forge_geom.surface.Plane) (q : forge_geom.surface.Plane) (flip : F64)
+  (ks : Array forge_math.vec.Point3 8#usize) (within : Bool) (pos : Bool)
+  (neg : Bool) (i : Std.Usize) :
+  Result (Bool × Bool × Bool)
+  := do
+  loop
+    (fun (within1, pos1, neg1, i1) => ssi.parallel_in_loop.body p q flip ks
+      within1 pos1 neg1 i1)
+    (within, pos, neg, i)
+
+/-- [forge_bool::ssi::parallel_in]:
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 104:0-135:1 -/
+def ssi.parallel_in
+  (p : forge_geom.surface.Plane) (q : forge_geom.surface.Plane)
+  (region : forge_math.interval.Box3) :
+  Result (Option forge_geom.intersect.SurfaceSurface)
+  := do
+  let n ← forge_geom.surface.Plane.normal_vec p
+  let m ← forge_geom.surface.Plane.normal_vec q
+  let fl ←
+    forge_math.vec.UnitVec3.dot (core.convert.IntoFrom
+      forge_math.vec.Vec3.Insts.CoreConvertFromUnitVec3) n m
+  let flip ←
+    if F64.Ops.lt fl (F64.Ops.ofBits 0)
+    then ok (F64.Ops.ofBits 13830554455654793216)
+    else ok (F64.Ops.ofBits 4607182418800017408)
+  let ks ← ssi.corners region
+  let (within, pos, neg) ←
+    ssi.parallel_in_loop p q flip ks true false false 0#usize
+  if within
+  then ok (some forge_geom.intersect.SurfaceSurface.Coincident)
+  else
+    if pos
+    then
+      if neg
+      then
+        let u ←
+          forge_math.vec.UnitVec3.cross (core.convert.IntoFrom
+            forge_math.vec.Vec3.Insts.CoreConvertFromUnitVec3) n m
+        let c ← forge_math.interval.Box3.center region
+        let n1 ← forge_math.vec.UnitVec3.get n
+        let n2 ← forge_math.vec.UnitVec3.get m
+        let v ← forge_math.vec.Vec3.cross n2 u
+        let fl1 ← forge_geom.surface.Plane.signed_distance p c
+        let fl2 ← lift (F64.Ops.neg fl1)
+        let v1 ← forge_math.vec.Vec3.Insts.CoreOpsArithMulF64Vec3.mul v fl2
+        let v2 ← forge_math.vec.Vec3.cross u n1
+        let fl3 ← forge_geom.surface.Plane.signed_distance q c
+        let fl4 ← lift (F64.Ops.neg fl3)
+        let v3 ← forge_math.vec.Vec3.Insts.CoreOpsArithMulF64Vec3.mul v2 fl4
+        let v4 ← forge_math.vec.Vec3.Insts.CoreOpsArithAddVec3Vec3.add v1 v3
+        let fl5 ← forge_math.vec.Vec3.length_sq u
+        let t ← forge_math.vec.Vec3.Insts.CoreOpsArithDivF64Vec3.div v4 fl5
+        let x ← forge_math.vec.Point3.Insts.CoreOpsArithAddVec3Point3.add c t
+        let fl6 ← forge_geom.surface.Plane.signed_distance p x
+        let v5 ← forge_math.vec.Vec3.Insts.CoreOpsArithMulF64Vec3.mul n1 fl6
+        let x1 ←
+          forge_math.vec.Point3.Insts.CoreOpsArithSubVec3Point3.sub x v5
+        let o ← forge_math.vec.Vec3.normalize u
+        let cf ← core.option.Option.Insts.CoreOpsTry_traitTry.branch o
+        match cf with
+        | core.ops.control_flow.ControlFlow.Continue val =>
+          let d ← forge_math.vec.UnitVec3.get val
+          let fl7 ← forge_math.vec.Vec3.dot n1 d
+          let v6 ←
+            forge_math.vec.Vec3.Insts.CoreOpsArithMulF64Vec3.mul n1 fl7
+          let v7 ← forge_math.vec.Vec3.Insts.CoreOpsArithSubVec3Vec3.sub d v6
+          let o1 ← forge_math.vec.Vec3.normalize v7
+          let cf1 ← core.option.Option.Insts.CoreOpsTry_traitTry.branch o1
+          match cf1 with
+          | core.ops.control_flow.ControlFlow.Continue val1 =>
+            let l ← forge_geom.curve.Line.new x1 val1
+            let y ←
+              lift (Std.Array.to_slice
+                (Array.make 1#usize [
+                   (forge_geom.curve.Curve.Line l,
+                   forge_geom.intersect.Contact.Crossing)
+                   ] : Array (forge_geom.curve.Curve ×
+                forge_geom.intersect.Contact) 1#usize))
+            let ret := alloc.slice.Slice.into_vec y
+            ok (some (forge_geom.intersect.SurfaceSurface.Curves ret))
+          | core.ops.control_flow.ControlFlow.Break residual =>
+            core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionNever.from_residual
+              forge_geom.intersect.SurfaceSurface residual
+        | core.ops.control_flow.ControlFlow.Break residual =>
+          core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionNever.from_residual
+            forge_geom.intersect.SurfaceSurface residual
+      else ok (some forge_geom.intersect.SurfaceSurface.Empty)
+    else ok (some forge_geom.intersect.SurfaceSurface.Empty)
+
 /-- [forge_bool::ssi::spread_apart::{impl core::ops::function::Fn<(f64, forge_math::interval::Interval), f64> for forge_bool::ssi::spread_apart::{closure}}::call]:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 81:12-81:78 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 90:12-90:78 -/
 def ssi.spread_apart.closure.Insts.CoreOpsFunctionFnPairF64IntervalF64.call
   (c : ssi.spread_apart.closure)
   (tupled_args : (F64 × forge_math.interval.Interval)) :
@@ -156,7 +285,7 @@ def ssi.spread_apart.closure.Insts.CoreOpsFunctionFnPairF64IntervalF64.call
   ok (F64.Ops.mul fl1 fl2)
 
 /-- [forge_bool::ssi::spread_apart]:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 77:0-83:1 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 86:0-92:1 -/
 def ssi.spread_apart
   (p : forge_geom.surface.Plane) (q : forge_geom.surface.Plane) (d : F64)
   (region : forge_math.interval.Box3) :
@@ -184,7 +313,7 @@ def ssi.spread_apart
   ok (F64.Ops.gt fl4 fl6)
 
 /-- [forge_bool::ssi::nearly_flush]: loop body 0:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 124:16-128:17 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 176:16-180:17 -/
 @[rust_loop_body]
 def ssi.nearly_flush_loop0.body
   (p : forge_geom.surface.Plane) (q : forge_geom.surface.Plane) (flip : F64)
@@ -208,7 +337,7 @@ def ssi.nearly_flush_loop0.body
   else ok (done all)
 
 /-- [forge_bool::ssi::nearly_flush]: loop 0:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 124:16-128:17 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 176:16-180:17 -/
 @[rust_loop]
 def ssi.nearly_flush_loop0
   (p : forge_geom.surface.Plane) (q : forge_geom.surface.Plane) (flip : F64)
@@ -220,7 +349,7 @@ def ssi.nearly_flush_loop0
     (all, i)
 
 /-- [forge_bool::ssi::nearly_flush]: loop body 1:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 149:12-152:13 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 201:12-204:13 -/
 @[rust_loop_body]
 def ssi.nearly_flush_loop1.body
   (f : forge_math.frame.Frame) (ax : forge_math.vec.UnitVec3)
@@ -243,7 +372,7 @@ def ssi.nearly_flush_loop1.body
   else ok (done (f, along))
 
 /-- [forge_bool::ssi::nearly_flush]: loop 1:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 149:12-152:13 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 201:12-204:13 -/
 @[rust_loop]
 def ssi.nearly_flush_loop1
   (f : forge_math.frame.Frame) (ax : forge_math.vec.UnitVec3)
@@ -256,7 +385,7 @@ def ssi.nearly_flush_loop1
     (along, i)
 
 /-- [forge_bool::ssi::nearly_flush]: loop body 2:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 155:12-159:13 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 207:12-211:13 -/
 @[rust_loop_body]
 def ssi.nearly_flush_loop2.body
   (along : Array F64 8#usize) (lo : F64) (hi : F64) (i : Std.Usize) :
@@ -272,7 +401,7 @@ def ssi.nearly_flush_loop2.body
   else ok (done (lo, hi))
 
 /-- [forge_bool::ssi::nearly_flush]: loop 2:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 155:12-159:13 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 207:12-211:13 -/
 @[rust_loop]
 def ssi.nearly_flush_loop2
   (along : Array F64 8#usize) (lo : F64) (hi : F64) (i : Std.Usize) :
@@ -283,7 +412,7 @@ def ssi.nearly_flush_loop2
     (lo, hi, i)
 
 /-- [forge_bool::ssi::nearly_flush]: loop body 3:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 149:12-152:13 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 201:12-204:13 -/
 @[rust_loop_body]
 def ssi.nearly_flush_loop3.body
   (f : forge_math.frame.Frame) (ax : forge_math.vec.UnitVec3)
@@ -306,7 +435,7 @@ def ssi.nearly_flush_loop3.body
   else ok (done (f, along))
 
 /-- [forge_bool::ssi::nearly_flush]: loop 3:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 149:12-152:13 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 201:12-204:13 -/
 @[rust_loop]
 def ssi.nearly_flush_loop3
   (f : forge_math.frame.Frame) (ax : forge_math.vec.UnitVec3)
@@ -319,7 +448,7 @@ def ssi.nearly_flush_loop3
     (along, i)
 
 /-- [forge_bool::ssi::nearly_flush]: loop body 4:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 155:12-159:13 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 207:12-211:13 -/
 @[rust_loop_body]
 def ssi.nearly_flush_loop4.body
   (along : Array F64 8#usize) (lo : F64) (hi : F64) (i : Std.Usize) :
@@ -335,7 +464,7 @@ def ssi.nearly_flush_loop4.body
   else ok (done (lo, hi))
 
 /-- [forge_bool::ssi::nearly_flush]: loop 4:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 155:12-159:13 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 207:12-211:13 -/
 @[rust_loop]
 def ssi.nearly_flush_loop4
   (along : Array F64 8#usize) (lo : F64) (hi : F64) (i : Std.Usize) :
@@ -346,7 +475,7 @@ def ssi.nearly_flush_loop4
     (lo, hi, i)
 
 /-- [forge_bool::ssi::nearly_flush]:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 106:0-175:1 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 158:0-227:1 -/
 def ssi.nearly_flush
   (a : forge_geom.surface.Surface) (b : forge_geom.surface.Surface)
   (region : forge_math.interval.Box3) :
@@ -375,7 +504,7 @@ def ssi.nearly_flush
         let c ← forge_math.vec.Vec3.length v
         let fl ← forge_math.tol.ANGULAR
         if F64.Ops.le c fl
-        then ok none
+        then ssi.parallel_in p q region
         else
           if F64.Ops.le c ssi.nearly_flush.NEAR
           then
@@ -538,7 +667,7 @@ def ssi.nearly_flush
   | forge_geom.surface.Surface.Procedural _ => ok none
 
 /-- [forge_bool::ssi::sphere_sphere]:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 471:0-499:1 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 523:0-551:1 -/
 def ssi.sphere_sphere
   (s : forge_geom.surface.Sphere) (t : forge_geom.surface.Sphere) :
   Result forge_geom.intersect.SurfaceSurface
@@ -607,7 +736,7 @@ def ssi.sphere_sphere
           ok (forge_geom.intersect.SurfaceSurface.Curves ret)
 
 /-- [forge_bool::ssi::equal_crossing]: loop body 0:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 454:4-469:1 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 506:4-521:1 -/
 @[rust_loop_body]
 def ssi.equal_crossing_loop.body
   (r : F64) (a : forge_math.vec.Vec3) (o : forge_math.vec.Point3)
@@ -655,7 +784,7 @@ def ssi.equal_crossing_loop.body
       ok (done o3)
 
 /-- [forge_bool::ssi::equal_crossing]: loop 0:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 454:4-469:1 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 506:4-521:1 -/
 @[rust_loop]
 def ssi.equal_crossing_loop
   (iter : core.array.iter.IntoIter forge_math.vec.Vec3 2#usize) (r : F64)
@@ -670,7 +799,7 @@ def ssi.equal_crossing_loop
     (iter, out)
 
 /-- [forge_bool::ssi::equal_crossing]:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 442:0-469:1 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 494:0-521:1 -/
 def ssi.equal_crossing
   (c : forge_geom.surface.Cylinder) (d : forge_geom.surface.Cylinder) :
   Result (Option forge_geom.intersect.SurfaceSurface)
@@ -716,7 +845,7 @@ def ssi.equal_crossing
       ssi.equal_crossing_loop iter c.radius a o m out
 
 /-- [forge_bool::ssi::crossing_touch]:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 412:0-437:1 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 464:0-489:1 -/
 def ssi.crossing_touch
   (c : forge_geom.surface.Cylinder) (d : forge_geom.surface.Cylinder) :
   Result (Option forge_geom.intersect.SurfaceSurface)
@@ -793,7 +922,7 @@ def ssi.crossing_touch
       forge_geom.intersect.SurfaceSurface residual
 
 /-- [forge_bool::ssi::cylinder_cylinder::{impl core::ops::function::Fn<(f64,), forge_math::vec::Point3> for forge_bool::ssi::cylinder_cylinder::{closure}<'_0, '_1, '_2, '_3>}::call]:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 395:13-395:54 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 447:13-447:54 -/
 def ssi.cylinder_cylinder.closure.Insts.CoreOpsFunctionFnTupleF64Point3.call
   (c : ssi.cylinder_cylinder.closure) (tupled_args : F64) :
   Result forge_math.vec.Point3
@@ -808,7 +937,7 @@ def ssi.cylinder_cylinder.closure.Insts.CoreOpsFunctionFnTupleF64Point3.call
   forge_math.vec.Point3.Insts.CoreOpsArithAddVec3Point3.add p v3
 
 /-- [forge_bool::ssi::cylinder_cylinder]:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 367:0-405:1 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 419:0-457:1 -/
 def ssi.cylinder_cylinder
   (c : forge_geom.surface.Cylinder) (d : forge_geom.surface.Cylinder) :
   Result forge_geom.intersect.SurfaceSurface
@@ -1024,7 +1153,7 @@ def ssi.closed_form
   else ok r
 
 /-- [forge_bool::ssi::closed_or_flush]:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 48:0-66:1 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 48:0-75:1 -/
 def ssi.closed_or_flush
   (a : forge_geom.surface.Surface) (b : forge_geom.surface.Surface)
   (region : forge_math.interval.Box3) :
@@ -1039,8 +1168,32 @@ def ssi.closed_or_flush
         do
         let b1 ←
           match r with
-          | forge_geom.intersect.SurfaceSurface.Empty => ok false
-          | forge_geom.intersect.SurfaceSurface.Coincident => ok false
+          | forge_geom.intersect.SurfaceSurface.Empty =>
+            do
+            let uv ← forge_geom.surface.Plane.normal_vec p
+            let uv1 ← forge_geom.surface.Plane.normal_vec q
+            let u ←
+              forge_math.vec.UnitVec3.cross (core.convert.IntoFrom
+                forge_math.vec.Vec3.Insts.CoreConvertFromUnitVec3) uv uv1
+            if F64.Ops.ne u.x (F64.Ops.ofBits 0)
+            then ok true
+            else
+              if F64.Ops.ne u.y (F64.Ops.ofBits 0)
+              then ok true
+              else ok (F64.Ops.ne u.z (F64.Ops.ofBits 0))
+          | forge_geom.intersect.SurfaceSurface.Coincident =>
+            do
+            let uv ← forge_geom.surface.Plane.normal_vec p
+            let uv1 ← forge_geom.surface.Plane.normal_vec q
+            let u ←
+              forge_math.vec.UnitVec3.cross (core.convert.IntoFrom
+                forge_math.vec.Vec3.Insts.CoreConvertFromUnitVec3) uv uv1
+            if F64.Ops.ne u.x (F64.Ops.ofBits 0)
+            then ok true
+            else
+              if F64.Ops.ne u.y (F64.Ops.ofBits 0)
+              then ok true
+              else ok (F64.Ops.ne u.z (F64.Ops.ofBits 0))
           | forge_geom.intersect.SurfaceSurface.Points _ => ok false
           | forge_geom.intersect.SurfaceSurface.Curves _ =>
             do

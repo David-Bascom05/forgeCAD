@@ -57,6 +57,15 @@ pub(crate) fn closed_or_flush(a: &Surface, b: &Surface, region: &Box3) -> Surfac
         (Surface::Plane(p), Surface::Plane(q), SurfaceSurface::Curves(_)) => {
             p.normal_vec().dot(q.normal_vec()).abs() > 0.5
         }
+        // two planes `plane_plane` takes as parallel (within ANGULAR) it decides at q's frame
+        // origin, which holds only within LINEAR/ANGULAR = 1e6 of it: unless the normals are
+        // parallel to the bit, `nearly_flush` decides them again over `region`, where the boolean
+        // looks (research/kernel-audit/tilt-wrong-ok.md, B1)
+        (Surface::Plane(p), Surface::Plane(q), SurfaceSurface::Empty)
+        | (Surface::Plane(p), Surface::Plane(q), SurfaceSurface::Coincident) => {
+            let u = p.normal_vec().cross(q.normal_vec());
+            u.x != 0.0 || u.y != 0.0 || u.z != 0.0
+        }
         _ => false,
     };
     if near && let Some(f) = nearly_flush(a, b, region) {
@@ -80,6 +89,49 @@ fn spread_apart(p: &Plane, q: &Plane, d: f64, region: &Box3) -> bool {
     // S - 1e-8 sum ext_i past 6 LINEAR
     let w = |g: f64, i: forge_math::Interval| (g.abs() - 1e-8) * (i.hi - i.lo);
     w(g.x, region.x) + w(g.y, region.y) + w(g.z, region.z) > 6.0 * tol::LINEAR
+}
+
+/// Two planes within ANGULAR of parallel, but not parallel to the bit, over `region`. Their gap
+/// p.sd - flip q.sd is affine: Coincident if it is within LINEAR at every corner, Empty if it has
+/// one sign over the box (they do not meet there), and else the line where they cross, from
+/// `region`'s centre (well conditioned: the offsets there are small) and held to p, so it stays
+/// on both planes across the region (the gap changes by |n1 x n2| per unit along it). The same
+/// answer either way round. None (`plane_plane`'s answer stands) if the direction will not
+/// normalize.
+// (index loops, not iterator adaptors and closures: Aeneas, research/aeneas/STYLE.md)
+#[cold]
+#[inline(never)]
+fn parallel_in(p: &Plane, q: &Plane, region: &Box3) -> Option<SurfaceSurface> {
+    let (n, m) = (p.normal_vec(), q.normal_vec());
+    let flip = if n.dot(m) < 0.0 { -1.0 } else { 1.0 };
+    let ks = corners(region);
+    let (mut within, mut pos, mut neg) = (true, false, false);
+    let mut i = 0;
+    while i < 8 {
+        let g = p.signed_distance(ks[i]) - flip * q.signed_distance(ks[i]);
+        within = within && g.abs() <= tol::LINEAR;
+        pos = pos || g >= 0.0;
+        neg = neg || g <= 0.0;
+        i += 1;
+    }
+    if within {
+        return Some(SurfaceSurface::Coincident);
+    }
+    if !(pos && neg) {
+        return Some(SurfaceSurface::Empty);
+    }
+    let u = n.cross(m);
+    let c = region.center();
+    let (n1, n2) = (n.get(), m.get());
+    let t = (n2.cross(u) * -p.signed_distance(c) + u.cross(n1) * -q.signed_distance(c)) / u.length_sq();
+    let x = c + t;
+    let x = x - n1 * p.signed_distance(x);
+    let d = u.normalize()?.get();
+    let dir = (d - n1 * n1.dot(d)).normalize()?;
+    Some(SurfaceSurface::Curves(vec![(
+        Curve::Line(Line::new(x, dir)),
+        Contact::Crossing,
+    )]))
 }
 
 /// The eight corners of `region`, in the order the flush rules visit them.
@@ -115,7 +167,7 @@ fn nearly_flush(a: &Surface, b: &Surface, region: &Box3) -> Option<SurfaceSurfac
             let flip = if d < 0.0 { -1.0 } else { 1.0 };
             let c = n.cross(m).length();
             if c <= tol::ANGULAR {
-                return None;
+                return parallel_in(p, q, region);
             }
             let flush = if c <= NEAR {
                 let ks = corners(region);
@@ -562,6 +614,53 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// B1 (research/kernel-audit/tilt-wrong-ok.md): two walls 5e-12 rad apart (within ANGULAR) that
+    /// cross at x = 4e6 inside a 1.6e7-long region. `plane_plane` calls them Empty at the frame
+    /// origin; over the region they meet in a line, on both walls along the whole region, the same
+    /// either way round; and where they do not cross in the region, Empty or Coincident by the gap.
+    #[test]
+    fn nearly_parallel_walls_are_decided_over_the_region() {
+        use forge_math::{Frame, Interval, Vec3};
+        let wall = |o: Point3, n: Vec3| Plane::new(Frame::from_z(o, n.normalize().unwrap()));
+        let (l, y0, y1) = (1.6e7, -2e-5, 6e-5);
+        let a = wall(Point3::new(0.0, 0.0, 0.0), Vec3::new(0.0, -1.0, 0.0));
+        let b = wall(Point3::new(l, y1, 0.0), Vec3::new(-(y1 - y0), l, 0.0));
+        let region = Box3 {
+            x: Interval::new(0.0, l),
+            y: Interval::new(y0, y1),
+            z: Interval::new(0.0, 10.0),
+        };
+        assert_eq!(forge_geom::intersect::plane_plane(&a, &b), SurfaceSurface::Empty);
+        let (sa, sb) = (Surface::Plane(a), Surface::Plane(b));
+        for (p, q) in [(&sa, &sb), (&sb, &sa)] {
+            let SurfaceSurface::Curves(cs) = surfaces_in(p, q, region) else {
+                panic!("{:?}", surfaces_in(p, q, region))
+            };
+            let Curve::Line(line) = cs[0].0 else {
+                panic!("{cs:?}")
+            };
+            // the crossing: x = 4e6 on y = 0, along z
+            for k in [0.0, 0.5, 1.0] {
+                let at = line.origin + line.dir.get() * ((k - 0.5) * 20.0);
+                assert!(sa.distance(at) <= 1e-7 && sb.distance(at) <= 1e-7, "{line:?}");
+            }
+            assert!((line.origin.x - 4e6).abs() < 1.0, "{line:?}");
+        }
+        // the same walls over a stretch where they do not cross: Empty (gap past LINEAR) or
+        // Coincident (within LINEAR all over)
+        let far = Box3 {
+            x: Interval::new(1.2e7, l),
+            ..region
+        };
+        assert_eq!(surfaces_in(&sa, &sb, far), SurfaceSurface::Empty);
+        let near = Box3 {
+            x: Interval::new(3.5e6, 4.5e6),
+            ..region
+        };
+        assert_eq!(surfaces_in(&sa, &sb, near), SurfaceSurface::Coincident);
+        assert_eq!(surfaces_in(&sb, &sa, near), SurfaceSurface::Coincident);
     }
 
     #[test]

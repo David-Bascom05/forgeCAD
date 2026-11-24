@@ -23,17 +23,17 @@ set_option maxRecDepth 2048
 namespace forge_bool
 
 /-- [forge_bool::ssi::turned_flush::{closure}]
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 191:15-191:72 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 243:15-243:72 -/
 @[reducible]
 def ssi.turned_flush.closure := Unit
 
 /-- [forge_bool::ssi::spread_apart::{closure}]
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 81:12-81:78 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 90:12-90:78 -/
 @[reducible]
 def ssi.spread_apart.closure := Unit
 
 /-- [forge_bool::ssi::cylinder_cylinder::{closure}]
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 395:13-395:54 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 447:13-447:54 -/
 def ssi.cylinder_cylinder.closure :=
   forge_geom.surface.Cylinder × forge_math.vec.Vec3 × F64 ×
   forge_math.vec.Vec3
