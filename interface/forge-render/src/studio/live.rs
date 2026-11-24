@@ -69,6 +69,13 @@ impl Live {
         Ok(())
     }
 
+    /// A scene already built (its hierarchy kept for final renders too).
+    pub fn set_built(&mut self, built: &Built, materials: &[Bsdf]) -> Result<(), String> {
+        self.tracer.set_scene(built, materials, &self.lut)?;
+        self.has_scene = true;
+        Ok(())
+    }
+
     pub fn set_materials(&mut self, materials: &[Bsdf]) {
         self.tracer.set_materials(materials, &self.lut);
     }
@@ -191,6 +198,8 @@ pub struct Queue {
     pub log: Vec<Result<String, String>>,
     tracer: Option<Tracer>,
     at: (usize, u32),
+    /// The frame finished and on its way back from the GPU.
+    reading: Option<super::gpu::Pending>,
     pub per_frame: u32,
 }
 
@@ -201,6 +210,7 @@ impl Default for Queue {
             log: Vec::new(),
             tracer: None,
             at: (0, 0),
+            reading: None,
             per_frame: 8,
         }
     }
@@ -226,11 +236,13 @@ impl Queue {
     /// Stops the job under way and drops the rest.
     pub fn cancel(&mut self) {
         self.tracer = None;
+        self.reading = None;
         self.jobs.clear();
         self.at = (0, 0);
     }
 
-    /// A frame's step: the job under way gets samples; a finished frame is written with
+    /// A frame's step: the job under way gets samples; a finished frame comes back from the GPU
+    /// over the next ticks (nothing waits) and is written with
     /// `save(path, size, rgba)` (native: a file; the browser: a download). The scene is the
     /// view's, given each time it's needed: `scene()` -> its triangles and appearances.
     pub fn tick(
@@ -262,6 +274,22 @@ impl Queue {
             t.set_env(env);
             self.tracer = Some(t);
         }
+        if let Some(r) = &self.reading {
+            let Some(got) = r.take(device) else {
+                return;
+            };
+            self.reading = None;
+            let path = job.path(self.at.1);
+            self.log.push(got.and_then(|rgba| save(&path, job.size, rgba)).map(|_| path));
+            let t = self.tracer.as_mut().expect("it read");
+            t.reset();
+            self.at.1 += 1;
+            if self.at.1 >= job.frames() {
+                self.at = (self.at.0 + 1, 0);
+                self.tracer = None;
+            }
+            return;
+        }
         let t = self.tracer.as_mut().expect("made above");
         let view = job.view_at(self.at.1);
         let n = self.per_frame.min(job.spp - t.samples.min(job.spp));
@@ -272,15 +300,7 @@ impl Queue {
             return;
         }
         t.show(job.settings.exposure, job.denoise);
-        let rgba = t.read_rgba();
-        let path = job.path(self.at.1);
-        self.log.push(save(&path, job.size, rgba).map(|_| path));
-        t.reset();
-        self.at.1 += 1;
-        if self.at.1 >= job.frames() {
-            self.at = (self.at.0 + 1, 0);
-            self.tracer = None;
-        }
+        self.reading = Some(t.start_read_rgba());
     }
 }
 

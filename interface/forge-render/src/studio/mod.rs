@@ -120,3 +120,16 @@ impl Default for Settings {
         }
     }
 }
+
+/// RGBA bytes to a PNG file (in the browser, the page's own files).
+pub fn save_png(path: &str, size: (u32, u32), rgba: &[u8]) -> Result<(), String> {
+    let mut out = Vec::new();
+    {
+        let mut e = png::Encoder::new(&mut out, size.0, size.1);
+        e.set_color(png::ColorType::Rgba);
+        e.set_depth(png::BitDepth::Eight);
+        let mut w = e.write_header().map_err(|e| e.to_string())?;
+        w.write_image_data(rgba).map_err(|e| e.to_string())?;
+    }
+    forge_dirs::fs::write(path, &out).map_err(|e| format!("{path}: {e}"))
+}

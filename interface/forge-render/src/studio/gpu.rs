@@ -623,6 +623,44 @@ impl Tracer {
             .collect()
     }
 
+    /// Asks for the shown picture back without waiting: `Pending::take` has it once the GPU is
+    /// done (natively after a poll, in the browser after the page's event loop turns).
+    pub fn start_read_rgba(&self) -> Pending {
+        let (w, h) = self.size;
+        let row = (w * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+        let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("studio picture back"),
+            size: (row * h) as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut e = self.device.create_command_encoder(&Default::default());
+        e.copy_texture_to_buffer(
+            self.picture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(row),
+                    rows_per_image: None,
+                },
+            },
+            self.picture.size(),
+        );
+        self.queue.submit([e.finish()]);
+        let ready = std::sync::Arc::new(std::sync::atomic::AtomicU8::new(0));
+        let r = ready.clone();
+        buffer.slice(..).map_async(wgpu::MapMode::Read, move |res| {
+            r.store(if res.is_ok() { 1 } else { 2 }, std::sync::atomic::Ordering::Release);
+        });
+        Pending {
+            buffer,
+            ready,
+            size: self.size,
+            row,
+        }
+    }
+
     /// The shown picture as RGBA8, rows from the top (native only: it waits).
     pub fn read_rgba(&self) -> Vec<u8> {
         let (w, h) = self.size;
@@ -655,5 +693,36 @@ impl Tracer {
             out.extend_from_slice(&map[y * row as usize..][..w as usize * 4]);
         }
         out
+    }
+}
+
+/// A picture on its way back from the GPU.
+pub struct Pending {
+    buffer: wgpu::Buffer,
+    ready: std::sync::Arc<std::sync::atomic::AtomicU8>,
+    size: (u32, u32),
+    row: u32,
+}
+
+impl Pending {
+    /// The picture, RGBA8 rows from the top, once it's back; Err if the GPU couldn't give it.
+    pub fn take(&self, device: &wgpu::Device) -> Option<Result<Vec<u8>, String>> {
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = device.poll(wgpu::PollType::Poll);
+        #[cfg(target_arch = "wasm32")]
+        let _ = device;
+        match self.ready.load(std::sync::atomic::Ordering::Acquire) {
+            0 => None,
+            2 => Some(Err("the GPU could not give the picture back".into())),
+            _ => {
+                let (w, h) = self.size;
+                let map = self.buffer.slice(..).get_mapped_range().ok()?;
+                let mut out = Vec::with_capacity((w * h * 4) as usize);
+                for y in 0..h as usize {
+                    out.extend_from_slice(&map[y * self.row as usize..][..w as usize * 4]);
+                }
+                Some(Ok(out))
+            }
+        }
     }
 }

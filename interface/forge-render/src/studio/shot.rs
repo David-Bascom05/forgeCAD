@@ -205,18 +205,7 @@ pub fn render(
     Ok((shot.size.0 * shot.size.1) as f64 * shot.spp as f64 * frames.max(1) as f64 / secs.max(1e-9))
 }
 
-/// RGBA bytes to a PNG file.
-pub fn save_png(path: &str, size: (u32, u32), rgba: &[u8]) -> Result<(), String> {
-    let mut out = Vec::new();
-    {
-        let mut e = png::Encoder::new(&mut out, size.0, size.1);
-        e.set_color(png::ColorType::Rgba);
-        e.set_depth(png::BitDepth::Eight);
-        let mut w = e.write_header().map_err(|e| e.to_string())?;
-        w.write_image_data(rgba).map_err(|e| e.to_string())?;
-    }
-    forge_dirs::fs::write(path, &out).map_err(|e| format!("{path}: {e}"))
-}
+pub use super::save_png;
 
 pub const USAGE: &str = "forge-studio PART.fg|ASSEMBLY.fg|BENCH -o OUT.png [options]
   --look NAME[;NAME..]   appearances (data/appearances.toml), one per part in turn
