@@ -563,6 +563,12 @@ fn every_argument_list_has_its_rows() {
                     ));
                 }
                 let ops: BTreeSet<String> = lists.iter().map(|l| l.0.clone()).collect();
+                // a built-in listed twice: the lookup takes the first, the second is dead
+                if ops.len() != lists.len() {
+                    let mut seen = BTreeSet::new();
+                    let twice: Vec<&String> = lists.iter().map(|l| &l.0).filter(|o| !seen.insert(*o)).collect();
+                    errs.push(format!("`{kind}` ARGS: listed more than once {twice:?} (only the first entry is read)"));
+                }
                 // a built-in without a list yet: its `args` row says GAP (any keyword is taken,
                 // unchecked), and the row goes when the list comes
                 let mut missing = vec![];
