@@ -670,28 +670,16 @@ fn a_turning_document_docks_its_section_and_windows_take_turns() {
     let w = h.gui.shell.cam.as_ref().unwrap();
     assert!(w.tools_open && !w.programs_open, "one floating window at a time");
     // a turning run is not measured: nothing to colour its toolpath by
-    h.gui
-        .shell
-        .cam
-        .as_mut()
-        .unwrap()
-        .command(forge_render::shell::cam::Cmd::Quality);
+    h.gui.shell.cam.as_mut().unwrap().command(forge_render::shell::cam::Cmd::Quality);
     for _ in 0..6 {
         h.step();
     }
-    assert!(
-        h.gui.shell.place("cam:quality:colour:chip").is_some(),
-        "the quality window's chips"
-    );
+    assert!(h.gui.shell.place("cam:quality:colour:chip").is_some(), "the quality window's chips");
     h.click("cam:quality:colour:chip");
     for _ in 0..4 {
         h.step();
     }
-    assert_eq!(
-        h.gui.shell.cam.as_ref().unwrap().focus.colour_by,
-        None,
-        "a turning run coloured by chip load"
-    );
+    assert_eq!(h.gui.shell.cam.as_ref().unwrap().focus.colour_by, None, "a turning run coloured by chip load");
 }
 
 /// The op dialog's keys: Esc cancels (the text unchanged), Enter is OK (the edit written).
@@ -907,52 +895,24 @@ fn suppressing_an_op_generates_again() {
 #[test]
 fn the_quality_window_shows_the_measure_on_its_way() {
     use forge_render::shell::cam::{Cmd, status_line};
-    let Some((mut h, _)) = open("quality-measuring") else {
-        return;
-    };
+    let Some((mut h, _)) = open("quality-measuring") else { return };
     // the measure landed with the run's settle: keep it, then take it away as an edit does
     // (the run shown, its measure not yet in)
     for _ in 0..600 {
-        if h.gui
-            .shell
-            .cam
-            .as_ref()
-            .unwrap()
-            .run
-            .as_ref()
-            .unwrap()
-            .quality
-            .is_some()
-        {
+        if h.gui.shell.cam.as_ref().unwrap().run.as_ref().unwrap().quality.is_some() {
             break;
         }
         h.step();
     }
     let w = h.gui.shell.cam.as_mut().unwrap();
-    let measured = w
-        .run
-        .as_mut()
-        .unwrap()
-        .quality
-        .take()
-        .expect("the flange's quality measured");
-    assert!(
-        status_line(w).ends_with(" · measuring quality"),
-        "{}",
-        status_line(w)
-    );
+    let measured = w.run.as_mut().unwrap().quality.take().expect("the flange's quality measured");
+    assert!(status_line(w).ends_with(" · measuring quality"), "{}", status_line(w));
     w.command(Cmd::Quality);
     for _ in 0..12 {
         h.step();
     }
-    assert!(
-        h.gui.shell.place("cam:quality:measuring").is_some(),
-        "no spinner while measuring"
-    );
-    assert!(
-        h.gui.shell.place("cam:quality:not-measured").is_none(),
-        "the turning note while measuring"
-    );
+    assert!(h.gui.shell.place("cam:quality:measuring").is_some(), "no spinner while measuring");
+    assert!(h.gui.shell.place("cam:quality:not-measured").is_none(), "the turning note while measuring");
     assert!(h.gui.shell.place("tool:Quality").is_some() || h.gui.shell.place("cam:quality").is_some());
     // nothing to colour by yet: chip load and engagement are off until the measure lands
     let before = h.gui.shell.cam.as_ref().unwrap().focus.colour_by;
@@ -960,27 +920,16 @@ fn the_quality_window_shows_the_measure_on_its_way() {
     for _ in 0..4 {
         h.step();
     }
-    assert_eq!(
-        h.gui.shell.cam.as_ref().unwrap().focus.colour_by,
-        before,
-        "coloured by chip load while measuring"
-    );
+    assert_eq!(h.gui.shell.cam.as_ref().unwrap().focus.colour_by, before, "coloured by chip load while measuring");
     shot(&mut h, "cam-quality-measuring");
     // the measure lands: the table, and the status line without it
     let w = h.gui.shell.cam.as_mut().unwrap();
     w.run.as_mut().unwrap().quality = Some(measured);
-    assert!(
-        !status_line(w).contains("measuring quality"),
-        "{}",
-        status_line(w)
-    );
+    assert!(!status_line(w).contains("measuring quality"), "{}", status_line(w));
     for _ in 0..12 {
         h.step();
     }
-    assert!(
-        h.gui.shell.place("cam:quality:measuring").is_none(),
-        "the spinner after the measure landed"
-    );
+    assert!(h.gui.shell.place("cam:quality:measuring").is_none(), "the spinner after the measure landed");
     assert!(h.click("cam:quality:colour:chip"));
     for _ in 0..4 {
         h.step();

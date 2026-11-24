@@ -73,8 +73,8 @@ static ROUND_TRIPS: memo::Memo<RoundTrip> = memo::Memo::new();
 /// 2D ops' engagement samples, per path (`feeds_from_engagement`).
 static SCHEDULED: memo::Memo<Vec<Vec<forge_cam::engage::Sample>>> = memo::Memo::new();
 
-/// An adaptive clearing's path, the cells it cleared per level and its notes for the user, or
-/// its refusal (`adaptive_memo`).
+/// An adaptive clearing's path, the cells it cleared per level and its notes, or its refusal
+/// (`adaptive_memo`).
 type Cleared = Result<(OpPath, Vec<(Region, f64)>, Vec<String>), String>;
 static ADAPTIVE: memo::Memo<Cleared> = memo::Memo::new();
 
@@ -99,13 +99,13 @@ fn adaptive_memo(
         lead_feed,
     } = cut;
     let key = format!(
-        "adaptive/2 {:?}",
+        "adaptive/1 {:?}",
         (rg, (tool, tidx, h, feed, ramp_feed, lead_feed), span, ip, prm)
     );
     ADAPTIVE.get_or(key, || {
         forge_cam::adaptive::adaptive(rg, cut, span, ip, prm)
             .map(|o| (o.path, o.voids, o.notes))
-            .map_err(|e| format!("{e:?}"))
+            .map_err(|e| e.refusal(""))
     })
 }
 
