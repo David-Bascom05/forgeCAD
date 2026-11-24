@@ -326,6 +326,11 @@ pub struct MachineDef {
     pub coolants: Vec<String>,
     /// Least gap between two bodies the collision check holds, mm.
     pub clearance: f64,
+    /// G83's peck clearance and G73's chip-break lift, mm (the control's parameters: Fanuc
+    /// 5115/5114, Haas settings, ...). None: not stated; the simulation uses forge-post's and says
+    /// so for every peck cycle.
+    pub peck_clear: Option<f64>,
+    pub chip_lift: Option<f64>,
     /// A record of a real maker's model: every value in `cite_paths` must be cited.
     pub real: bool,
     pub cites: Vec<Cite>,
@@ -1028,7 +1033,20 @@ impl MachineDef {
                 note,
             });
         }
+        let nonneg = |k: &'static str| -> Result<Option<f64>, DefError> {
+            match num(t, k) {
+                Some(v) if v >= 0.0 && v.is_finite() => Ok(Some(v)),
+                Some(v) => Err(DefError::Bad {
+                    record: m.clone(),
+                    field: k,
+                    why: format!("must be >= 0 mm (is {v})"),
+                }),
+                None => Ok(None),
+            }
+        };
         let def = MachineDef {
+            peck_clear: nonneg("peck_clear")?,
+            chip_lift: nonneg("chip_lift")?,
             real: boolean(t, "real").unwrap_or(false),
             cites,
             kind,

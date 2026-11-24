@@ -272,7 +272,8 @@ pub fn run_setup(path: &Path) -> Result<Outcome, String> {
         text.push_str(&format!("violation: {v:?}\n"));
     }
     // checks made against an unknown or estimated value: never a silent pass
-    let unchecked = forge_machine::sim::unchecked(def, &tl);
+    let mut unchecked = forge_machine::sim::unchecked(def, &tl);
+    unchecked.extend(forge_machine::sim::unchecked_cycles(def, &prog));
     for u in &unchecked {
         text.push_str(&format!(
             "not checked: {} {} ({}{})\n",

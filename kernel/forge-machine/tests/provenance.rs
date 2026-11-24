@@ -169,3 +169,30 @@ fn m6_moves_to_the_change_position_and_that_move_is_checked() {
             .any(|u| u.path == "changer.position" && u.why == "unknown")
     );
 }
+
+#[test]
+fn the_machine_states_its_peck_parameters_and_the_interpreter_uses_them() {
+    let src = vmc3().replacen(
+        "clearance = 1.0\n",
+        "clearance = 1.0\npeck_clear = 1.0\nchip_lift = 0.3\n",
+        1,
+    );
+    let m = &MachineDef::parse_all(&src).unwrap()[0];
+    assert_eq!((m.peck_clear, m.chip_lift), (Some(1.0), Some(0.3)));
+    let c = Control::for_dialect(m, "fanuc", 1).unwrap();
+    assert_eq!((c.peck_clear, c.chip_lift), (1.0, 0.3));
+    let prog = "G0 X0 Y0 Z10.\nG98 G83 X0 Y0 Z-6. R2. Q3. F100.\nG80\n";
+    let (blocks, _) = forge_machine::gcode::run(prog, &c).unwrap();
+    // after the peck to -4 it comes back down to -4 + 1.0 (forge-post's 0.5 would give -3.5)
+    let text = format!("{blocks:?}");
+    assert!(text.contains("-3000") && !text.contains("-3500"), "{text}");
+    assert!(sim::unchecked_cycles(m, prog).is_empty());
+    // not stated: forge-post's numbers, and the reply says so
+    let g = &forge_machine::library::builtin_named("generic-vmc3").unwrap();
+    let u = sim::unchecked_cycles(
+        g,
+        "(G83 in a comment)\nG98 G83 X0 Y0 Z-6. R2. Q3. F100.\nG73 X1.\n",
+    );
+    let got: Vec<(&str, usize)> = u.iter().map(|u| (u.path.as_str(), u.line)).collect();
+    assert_eq!(got, vec![("machine.peck_clear", 2), ("machine.chip_lift", 3)]);
+}

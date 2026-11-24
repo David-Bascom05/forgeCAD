@@ -52,6 +52,10 @@ pub struct Control {
     pub lathe: bool,
     /// The plane at program start: 17 (mill) or 18 (lathe).
     pub plane0: u8,
+    /// G83's peck clearance and G73's chip-break lift, mm: the machine's (its control's
+    /// parameters, e.g. Fanuc 5115/5114) when the record gives them, else forge-post's.
+    pub peck_clear: f64,
+    pub chip_lift: f64,
 }
 
 impl Control {
@@ -66,6 +70,8 @@ impl Control {
             dwell_seconds,
             lathe: false,
             plane0: 17,
+            peck_clear: forge_post::PECK_CLEAR,
+            chip_lift: forge_post::CHIP_LIFT,
         }
     }
 
@@ -111,6 +117,8 @@ impl Control {
             dwell_seconds: !dwell.contains("{ms}"),
             lathe,
             plane0: if lathe { 18 } else { 17 },
+            peck_clear: def.peck_clear.unwrap_or(forge_post::PECK_CLEAR),
+            chip_lift: def.chip_lift.unwrap_or(forge_post::CHIP_LIFT),
         })
     }
 
@@ -844,8 +852,8 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
                 }
                 83 | 73 => {
                     let step = if cy.q > 0 { cy.q } else { cy.r - cy.z };
-                    let pc = forge_post::quant(forge_post::PECK_CLEAR, k).unwrap_or(0);
-                    let lift = forge_post::quant(forge_post::CHIP_LIFT, k).unwrap_or(0);
+                    let pc = forge_post::quant(c.peck_clear, k).unwrap_or(0);
+                    let lift = forge_post::quant(c.chip_lift, k).unwrap_or(0);
                     let mut depth = cy.r;
                     while depth > cy.z {
                         let next = if depth - step > cy.z { depth - step } else { cy.z };

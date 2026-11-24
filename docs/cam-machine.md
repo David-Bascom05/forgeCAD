@@ -38,6 +38,7 @@ what their absence means.
 | clearance | required | least gap (mm) the collision check holds between bodies |
 | length_joint | mills: required | the linear head joint G43 moves (Z); lathes use X/Z offsets instead |
 | coolants | optional | kinds present: flood mist through air (empty: none declared) |
+| peck_clear, chip_lift | optional | G83's peck clearance and G73's chip-break lift, mm: the control's parameters (Fanuc 5115/5114, Haas settings, Siemens _ZSFR, ...), citable as `machine.peck_clear` / `machine.chip_lift`. Absent: forge-post's 0.5 / 0.2 mm are used and every program with G83/G73 reports them not checked (`sim::unchecked_cycles`) |
 | real | optional | true: a real maker's model; every value must be cited (Provenance). false if absent |
 
 ## `[[machine.joint]]`

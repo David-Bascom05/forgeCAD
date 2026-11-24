@@ -1283,3 +1283,54 @@ pub fn unchecked(def: &MachineDef, tl: &Timeline) -> Vec<Unchecked> {
     }
     out
 }
+
+/// The peck parameters a program's G83/G73 used, when the machine does not state them (forge-post's
+/// 0.5 / 0.2 mm then stand in) or cites them unknown or estimated. Comments are skipped.
+pub fn unchecked_cycles(def: &MachineDef, program: &str) -> Vec<Unchecked> {
+    use crate::def::CiteStatus;
+    let mut out = Vec::new();
+    for (i, raw) in program.lines().enumerate() {
+        let mut text = String::new();
+        let mut depth = 0;
+        for ch in raw.chars() {
+            match ch {
+                '(' => depth += 1,
+                ')' => depth -= 1,
+                ';' if depth == 0 => break,
+                _ if depth == 0 => text.push(ch.to_ascii_uppercase()),
+                _ => {}
+            }
+        }
+        // a G word with this number (G83, G083), not G83.1
+        let g = |code: u32| {
+            text.match_indices('G').any(|(at, _)| {
+                let n: String = text[at + 1..]
+                    .chars()
+                    .take_while(|c| c.is_ascii_digit())
+                    .collect();
+                let after = text[at + 1 + n.len()..].chars().next();
+                n.parse::<u32>() == Ok(code) && after != Some('.')
+            })
+        };
+        for (code, path, value, check) in [
+            (83, "machine.peck_clear", def.peck_clear, "G83 peck clearance"),
+            (73, "machine.chip_lift", def.chip_lift, "G73 chip-break lift"),
+        ] {
+            if !g(code) || out.iter().any(|u: &Unchecked| u.path == path) {
+                continue;
+            }
+            let why = match (value, def.cite_status(path)) {
+                (None, _) | (_, Some(CiteStatus::Unknown)) => "unknown",
+                (_, Some(CiteStatus::Estimate)) => "estimated",
+                _ => continue,
+            };
+            out.push(Unchecked {
+                path: path.into(),
+                why,
+                line: i + 1,
+                check,
+            });
+        }
+    }
+    out
+}
