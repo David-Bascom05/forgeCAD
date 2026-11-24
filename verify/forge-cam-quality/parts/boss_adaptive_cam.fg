@@ -1,0 +1,13 @@
+machining
+# Benchmark (verify/forge-cam-quality): boss.fg roughed by adaptive clearing, one level the
+# whole depth under a 40° engagement cap (compare boss_cam's clear, five 3 mm levels).
+shared tol = 0.01
+
+f    = part("boss.fg", group: "N")
+m    = machine("generic-vmc3")
+t1   = tool("flat-10", t: 1, stickout: 32, holder: "bt40-er32")
+op1  = setup(f, machine: m, stock: box(margin: (3, 3, 1)), origin: "top-corner", tol: tol)
+skim = facing(op1, tool: t1, to: 25, step: 1)
+rough = adaptive(op1, tool: t1, from: 25, to: 10.2, step: 15, engagement: 40)
+fin  = contour(op1, tool: t1, side: "outside", from: 25, to: 10, step: 15)
+prog = program(op1, post: "fanuc", number: 5006)

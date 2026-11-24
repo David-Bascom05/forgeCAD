@@ -119,6 +119,22 @@ fn main() {
                 cfg.feeds
                     .push((n.to_string(), c.parse().expect("CUT"), p.parse().expect("PLUNGE")));
             }
+            "--la" => {
+                // the lookahead planner: --la ACCEL_SCALE BLOCKS (grbl's defaults otherwise)
+                let a: f64 = args
+                    .next()
+                    .and_then(|x| x.parse().ok())
+                    .expect("--la ACCEL_SCALE BLOCKS");
+                let b: usize = args
+                    .next()
+                    .and_then(|x| x.parse().ok())
+                    .expect("--la ACCEL_SCALE BLOCKS");
+                cfg.lookahead = Some(forge_machine::lookahead::LookAhead {
+                    accel_scale: a,
+                    blocks: b,
+                    ..Default::default()
+                });
+            }
             "--flutes" => flutes = args.next().and_then(|s| s.parse().ok()),
             "--cell" => cfg.cell = args.next().and_then(|s| s.parse().ok()),
             _ => files.push(PathBuf::from(a)),

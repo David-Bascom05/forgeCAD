@@ -487,6 +487,7 @@ pub fn measure_text(text: &str, file: String, f: &Foreign) -> JobQ {
         Ok(tl) => {
             pq.t_min = tl.t_min;
             pq.t_stop = tl.t_stop;
+            pq.t_la = tl.t_la;
             pq.accel_missing = tl.accel_missing;
             pq.violations = tl.violations.len();
             if std::env::var_os("FORGE_QUALITY_TRACE").is_some() {
@@ -498,10 +499,11 @@ pub fn measure_text(text: &str, file: String, f: &Foreign) -> JobQ {
                 let k = op_of_line(line).map(|k| k + 1).unwrap_or(0);
                 op_index.get(k).copied().flatten()
             };
-            for sg in &tl.segments {
+            for (si, sg) in tl.segments.iter().enumerate() {
                 if let Some(k) = to_op(sg.line) {
                     job.ops[k].t_min += sg.t_min;
                     job.ops[k].t_stop += sg.t_stop;
+                    job.ops[k].t_la += tl.seg_la.get(si).copied().unwrap_or(sg.t_stop);
                 }
             }
             for mk in &tl.marks {
