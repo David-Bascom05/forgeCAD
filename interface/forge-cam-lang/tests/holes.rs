@@ -7,7 +7,7 @@ use common::dir;
 
 fn doc(body: &str) -> String {
     format!(
-        "machining\nf = part(\"blind_holes.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 1), below: 6), origin: \"top-corner\", tol: 0.01, at: (-20, -20, -250))\n{body}\np = program(op1, post: \"fanuc\", number: 1)\n"
+        "machining\nf = part(\"blind_holes.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 1), below: 3), origin: \"top-corner\", tol: 0.01, at: (-20, -20, -250))\n{body}\np = program(op1, post: \"fanuc\", number: 1)\n"
     )
 }
 
@@ -65,5 +65,23 @@ fn a_countersink_is_cut_after_the_drill() {
         o.plan.iter().any(|p| p.starts_with("countersink ")),
         "{:?}",
         o.plan
+    );
+}
+
+#[test]
+fn a_through_hole_stops_short_of_the_support_or_says_what_stock_it_needs() {
+    // 3 mm under the part: the 6.6 drill's point (1.98) and a break-through fit above the
+    // support; 1 mm does not: refused, naming the stock it needs
+    let cam = forge_cam_lang::run(&doc("h = drill(op1, f.csk, plan: \"drill\")"), &dir());
+    assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+    assert_eq!(cam.ops.iter().find(|o| o.name == "h").unwrap().status, "built");
+    let thin = doc("h = drill(op1, f.csk, plan: \"drill\")").replace("below: 3", "below: 1");
+    let cam = forge_cam_lang::run(&thin, &dir());
+    let o = cam.ops.iter().find(|o| o.name == "h").unwrap();
+    assert_eq!(o.status, "refused");
+    let r = o.refusal.clone().unwrap_or_default() + &cam.errors.join(" ");
+    assert!(
+        r.contains("goes through") && r.contains("of stock under the part"),
+        "{r}"
     );
 }
