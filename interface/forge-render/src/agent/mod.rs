@@ -58,6 +58,9 @@ impl std::fmt::Debug for Picture {
 pub const PICTURE_BYTES: usize = 5 << 20;
 /// The most pictures one message takes.
 pub const PICTURES: usize = 20;
+/// The most they may add up to (as sent: a message's body holds a third more, as base64, under
+/// forgecad web's 12 MB; room left for the view's picture).
+pub const PICTURES_BYTES: usize = 7 << 20;
 
 impl Picture {
     pub fn png(bytes: Vec<u8>) -> Picture {

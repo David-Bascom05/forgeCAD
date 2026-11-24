@@ -50,9 +50,6 @@ pub struct Agent {
     pub program: String,
     /// This binary, for the session's MCP server (`forgecad mcp --root DIR --writable`).
     pub forgecad: PathBuf,
-    /// A page on another origin (case 2) may run a session in a bypass mode only with this.
-    pub allow_bypass: bool,
-    pub cross_origin: bool,
     s: Mutex<Session>,
     cv: Condvar,
 }
@@ -110,6 +107,7 @@ fn fields(body: &[u8], allowed: &[&str]) -> Result<Json, Answer> {
 /// The most pictures a message takes, and the most each may be (decoded), as the models take.
 const MAX_PICTURES: usize = 20;
 const MAX_PICTURE_BYTES: usize = 5 << 20;
+const MAX_MESSAGE_PICTURES: usize = 8 << 20;
 
 fn pictures(j: Option<&Json>) -> Result<Vec<(&'static str, String)>, String> {
     const MEDIA: [&str; 4] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
@@ -119,6 +117,15 @@ fn pictures(j: Option<&Json>) -> Result<Vec<(&'static str, String)>, String> {
     };
     if all.len() > MAX_PICTURES {
         return Err(format!("pictures: at most {MAX_PICTURES} with a message"));
+    }
+    // all of them, decoded: what a message's body (MAX_AGENT_BODY, base64's third more) holds
+    let total: usize = all
+        .iter()
+        .filter_map(|p| s(p, "data"))
+        .map(|d| d.len() / 4 * 3)
+        .sum();
+    if total > MAX_MESSAGE_PICTURES {
+        return Err("pictures: 8 MB at most with a message, all told".into());
     }
     all.iter()
         .map(|p| {
@@ -158,14 +165,12 @@ fn s<'a>(j: &'a Json, k: &str) -> Option<&'a str> {
 }
 
 impl Agent {
-    pub fn new(root: PathBuf, token: String, cross_origin: bool, allow_bypass: bool) -> Agent {
+    pub fn new(root: PathBuf, token: String) -> Agent {
         Agent {
             token,
             root,
             program: std::env::var("FORGECAD_CLAUDE").unwrap_or_else(|_| "claude".into()),
             forgecad: std::env::current_exe().unwrap_or_else(|_| PathBuf::from("forgecad")),
-            allow_bypass,
-            cross_origin,
             s: Mutex::new(Session::default()),
             cv: Condvar::new(),
         }
@@ -362,38 +367,18 @@ impl Agent {
             if st.run != run {
                 return;
             }
-            if let Some(j) = &j {
-                // a bypass on another origin's page, unless the bridge was started to allow it
-                let bypass = j.get("permissionMode").and_then(Json::str) == Some("bypassPermissions");
-                if bypass && self.cross_origin && !self.allow_bypass {
-                    self.push(&mut st, line.clone());
-                    self.push(
-                        &mut st,
-                        bridge_error(
-                            "Your Claude settings bypass permissions, and this page is on another origin: start forgecad web with --allow-bypass to allow that, or change your settings",
-                        ),
-                    );
-                    if let Some(c) = &mut st.child {
-                        let _ = c.kill();
-                    }
-                    st.child = None;
-                    st.stdin = None;
-                    st.busy = false;
-                    self.cv.notify_all();
-                    return;
-                }
-                if kind == "control_request"
-                    && let Some(r) = j.get("request")
-                    && s(r, "subtype") == Some("can_use_tool")
-                {
-                    let id = s(j, "request_id").unwrap_or("").to_string();
-                    let input = r.get("input").cloned().unwrap_or(Json::Obj(vec![]));
-                    let sugg = r
-                        .get("permission_suggestions")
-                        .cloned()
-                        .unwrap_or(Json::Arr(vec![]));
-                    st.asked.insert(id, (input, sugg));
-                }
+            if let Some(j) = &j
+                && kind == "control_request"
+                && let Some(r) = j.get("request")
+                && s(r, "subtype") == Some("can_use_tool")
+            {
+                let id = s(j, "request_id").unwrap_or("").to_string();
+                let input = r.get("input").cloned().unwrap_or(Json::Obj(vec![]));
+                let sugg = r
+                    .get("permission_suggestions")
+                    .cloned()
+                    .unwrap_or(Json::Arr(vec![]));
+                st.asked.insert(id, (input, sugg));
             }
             self.push(&mut st, line);
             // after a tool, and at a turn's end: what it changed in the project
@@ -683,10 +668,6 @@ impl Drop for Agent {
     }
 }
 
-fn bridge_error(e: &str) -> String {
-    Json::obj(vec![("type", "forge_bridge".into()), ("error", e.into())]).to_string()
-}
-
 /// The project's files (as the file API serves them: no dot files) changed since `seen`: each
 /// one's path, text and ETag; and what's seen now (`first`: only that). A file whose size and
 /// time are as seen isn't read again (one this fresh is: coarse times). Binary and large files
@@ -798,5 +779,7 @@ mod tests {
         assert!(list(vec![one(&five)]).is_ok());
         let more = "A".repeat(((5 << 20) / 3 + 1) * 4);
         assert!(list(vec![one(&more)]).unwrap_err().contains("5 MB"));
+        // all told, 8 MB: two of 5 MB don't go together
+        assert!(list(vec![one(&five), one(&five)]).unwrap_err().contains("8 MB"));
     }
 }
