@@ -639,6 +639,10 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                             max,
                         });
                     }
+                    // a manual change: the program stops for the operator
+                    if def.changer.as_ref().is_some_and(|c| c.manual) {
+                        mark(&mut tl, t, Happening::Stop { optional: false });
+                    }
                     mark(&mut tl, t, Happening::ToolChange { t: *tn, seconds: sec });
                     t += sec;
                     t_est += sec;
@@ -1366,7 +1370,7 @@ pub fn unchecked(def: &MachineDef, tl: &Timeline) -> Vec<Unchecked> {
                     );
                     note(
                         "changer.pockets".into(),
-                        c.pockets.is_some(),
+                        c.pockets.is_some() || c.manual,
                         m.line,
                         "pocket count",
                     );

@@ -242,3 +242,33 @@ fn entering_a_zone_is_a_violation_on_lines_and_arcs() {
         Vec::<usize>::new()
     );
 }
+
+#[test]
+fn a_manual_changer_has_no_pockets_and_stops_for_the_swap() {
+    let src = vmc3()
+        .replacen("pockets = 24\n", "kind = \"manual\"\n", 1)
+        .replacen("max_tool_kg = 8\n", "", 1);
+    let m = &MachineDef::parse_all(&src).unwrap()[0];
+    let c = m.changer.as_ref().unwrap();
+    assert!(c.manual && c.pockets.is_none() && c.max_tool_kg.is_none());
+    assert!(!m.cite_paths().iter().any(|p| p == "changer.pockets"));
+    let mut s = Setup::new(m, Control::for_dialect(m, "fanuc", 1).unwrap()).unwrap();
+    s.wcs = vec![(54, vec![0.0, 0.0, -500.0])];
+    let tl = sim::simulate("G0 X0 Y0 Z0\nT99 M6\n", &s).unwrap();
+    assert!(
+        !tl.violations
+            .iter()
+            .any(|v| matches!(v, Violation::Pocket { .. }))
+    );
+    assert!(
+        tl.marks
+            .iter()
+            .any(|mk| mk.line == 2 && mk.what == sim::Happening::Stop { optional: false })
+    );
+    assert!(!sim::unchecked(m, &tl).iter().any(|u| u.path == "changer.pockets"));
+    // an unknown kind is refused
+    assert!(
+        MachineDef::parse_all(&vmc3().replacen("pockets = 24\n", "pockets = 24\nkind = \"carousel\"\n", 1))
+            .is_err()
+    );
+}

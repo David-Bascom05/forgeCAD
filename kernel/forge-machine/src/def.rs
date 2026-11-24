@@ -211,6 +211,9 @@ pub struct Turret {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Changer {
+    /// A manual change (`kind = "manual"`): M6 stops the program and the operator swaps the
+    /// tool; there are no pockets (no pocket check). Automatic otherwise.
+    pub manual: bool,
     /// None: cited `unknown` (T numbers not checked).
     pub pockets: Option<u32>,
     /// Chip-to-chip tool change time, seconds. None: cited `unknown` (0 in t_min).
@@ -841,13 +844,34 @@ impl MachineDef {
             [] => None,
             [c] => {
                 let rec = format!("{m} changer");
+                let manual = match text(c, "kind") {
+                    None | Some("automatic") => false,
+                    Some("manual") => true,
+                    Some(other) => {
+                        return Err(DefError::Bad {
+                            record: rec,
+                            field: "kind",
+                            why: format!("`{other}`: automatic | manual"),
+                        });
+                    }
+                };
+                // a manual change has no pockets and no magazine weight limit
+                let unk_m: Vec<String> = if manual {
+                    let mut u = unk.clone();
+                    u.push("changer.pockets".into());
+                    u.push("changer.max_tool_kg".into());
+                    u
+                } else {
+                    unk.clone()
+                };
+                let unk = &unk_m;
                 let p = opt_num(
                     c,
                     &rec,
                     "pockets",
                     "give `pockets`, or cite it unknown",
                     "changer.pockets",
-                    &unk,
+                    unk,
                 )?;
                 if p.is_some_and(|p| p < 1.0 || p.fract() != 0.0) {
                     return Err(DefError::Bad {
@@ -874,6 +898,7 @@ impl MachineDef {
                     });
                 }
                 Some(Changer {
+                    manual,
                     position: pj.into_iter().zip(pv).collect(),
                     pockets: p.map(|p| p as u32),
                     change_s: pos(
@@ -884,7 +909,7 @@ impl MachineDef {
                             "change_s",
                             "give `change_s`, or cite it unknown",
                             "changer.change_s",
-                            &unk,
+                            unk,
                         )?,
                     )?,
                     max_tool_kg: pos(
@@ -895,7 +920,7 @@ impl MachineDef {
                             "max_tool_kg",
                             "give `max_tool_kg`, or cite it unknown",
                             "changer.max_tool_kg",
-                            &unk,
+                            unk,
                         )?,
                     )?,
                 })
@@ -1161,8 +1186,13 @@ impl MachineDef {
                 out.push(format!("turret.{}.{f}", t.name));
             }
         }
-        if self.changer.is_some() {
-            for f in ["pockets", "change_s", "max_tool_kg"] {
+        if let Some(c) = &self.changer {
+            let fs: &[&str] = if c.manual {
+                &["change_s"]
+            } else {
+                &["pockets", "change_s", "max_tool_kg"]
+            };
+            for f in fs {
                 out.push(format!("changer.{f}"));
             }
         }
