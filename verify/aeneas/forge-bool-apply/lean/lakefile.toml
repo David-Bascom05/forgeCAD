@@ -1,0 +1,24 @@
+name = "forgeboolapply"
+version = "0.1.0"
+defaultTargets = ["ForgeBoolApply"]
+# Mathlib and Aeneas's library shared with verify/forge-curved's checkout (same pins as
+# verify/forge-bool-proof, which this refines against).
+packagesDir = "../../../forge-curved/.lake/packages"
+
+[leanOptions]
+autoImplicit = false
+relaxedAutoImplicit = false
+
+[[require]]
+name = "aeneas"
+git = "https://github.com/AeneasVerif/aeneas"
+rev = "2e3d4488280bb8a95411db81019a7854a784861f"
+subDir = "backends/lean"
+
+# The statements the translation is proven against.
+[[require]]
+name = "forgeboolproof"
+path = "../../../forge-bool-proof"
+
+[[lean_lib]]
+name = "ForgeBoolApply"
