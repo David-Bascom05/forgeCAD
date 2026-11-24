@@ -2142,20 +2142,14 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
             drop_replaced(a, s, si, &mut new_outer);
         }
     }
-    let mut b_vertex: Vec<Option<VertexId>> = vec![None; b.vertex_count()];
-    let mut new_vertex: Vec<Option<VertexId>> = vec![None; points.len()];
+    let mut made = Made {
+        b_vertex: vec![None; b.vertex_count()],
+        new_vertex: vec![None; points.len()],
+    };
     let mut emap: Vec<Option<EdgeId>> = vec![None; pieces.len()];
-    let shell = a
-        .shells
-        .first()
-        .map(|_| forge_topo::ShellId(0))
-        .unwrap_or_else(|| a.add_shell());
+    let shell = if a.shells.is_empty() { a.add_shell() } else { forge_topo::ShellId(0) };
     let other_shell =
         a.shells.len() > 1 && specs.iter().any(|s| s.side == 0 && a.face(s.from).shell != shell);
-    let mut made = Made {
-        b_vertex: &mut b_vertex,
-        new_vertex: &mut new_vertex,
-    };
     for &(si, flip) in kept {
         if as_is[si] {
             continue;
@@ -2246,12 +2240,12 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
 }
 
 /// The vertices `apply` adds to A, as it first needs each: B's, and the new ones.
-struct Made<'m> {
-    b_vertex: &'m mut Vec<Option<VertexId>>,
-    new_vertex: &'m mut Vec<Option<VertexId>>,
+struct Made {
+    b_vertex: Vec<Option<VertexId>>,
+    new_vertex: Vec<Option<VertexId>>,
 }
 
-impl Made<'_> {
+impl Made {
     /// Vertex `v` of the plan in A (through its alias), added on first use.
     fn vertex<S: crate::imprint::Src>(&mut self, a: &mut Body, b: &S, plan: &Plan, v: VKey) -> VertexId {
         let mut v = v;
