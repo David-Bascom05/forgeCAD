@@ -30,6 +30,7 @@ fn usage() -> ExitCode {
          forgecad machine SETUP.toml [--json]   (posted G-code on a machine: timeline, collisions, removal)\n       \
          forgecad machine list [--json] | new NAME (--from M | --template T) [--project] | check FILE|NAME [--json]   (your own machines)\n       \
          forgecad vendor list | show ID | export ID [-o F] | import F | new ID [--from ID] | check F [--json]   (sheet-metal vendor profiles)\n       \
+         forgecad workholding list [KIND] | show NAME | schema | new NAME --from X [field=value ..] [--json]   (vises, clamps, plates, chucks, collets)\n       \
          forgecad demo <out.stl> [chord-mm] | preview <out.json>\nthe language: AGENTS.md, forgecad help forge"
     );
     ExitCode::from(2)
@@ -220,6 +221,27 @@ fn main() -> ExitCode {
             let rest: Vec<String> = args[2..].iter().filter(|a| *a != "--json").cloned().collect();
             let here = std::env::current_dir().ok();
             match forge_lang::vendor::tool(&rest, here.as_deref()) {
+                Ok((j, text)) => {
+                    if json {
+                        println!("{j}");
+                    } else {
+                        print!("{text}");
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    ExitCode::from(1)
+                }
+            }
+        }
+        Some("workholding") => {
+            let json = args.iter().any(|a| a == "--json");
+            let rest: Vec<String> = args[2..].iter().filter(|a| *a != "--json").cloned().collect();
+            let here = std::env::current_dir().ok();
+            // the user's libraries: <config>/forgecad/cam/<folder> (as forge-library keeps them)
+            let user = forge_dirs::config().map(|c| c.join("forgecad"));
+            match forge_workholding::cli::tool(&rest, user.as_deref(), here.as_deref()) {
                 Ok((j, text)) => {
                     if json {
                         println!("{j}");
