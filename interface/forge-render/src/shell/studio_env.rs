@@ -33,12 +33,48 @@ pub fn lights() -> Vec<String> {
     v
 }
 
-/// A render the user asked for, for the GUI to queue.
+/// A render the user asked for, for the GUI to queue; and what the result's card asks.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Ask {
     Image,
     Turntable,
     Cancel,
+    /// Show the render's file in its folder (native).
+    Reveal(String),
+}
+
+/// A final render under way, as the view's card shows it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Rendering {
+    /// "Rendering image", "Rendering turntable · frame 3 of 36".
+    pub what: String,
+    /// Samples done and to do, over the whole job (every frame of a turntable).
+    pub done: u64,
+    pub of: u64,
+    /// When it started and now, ms.
+    pub started_ms: f64,
+    pub now_ms: f64,
+}
+
+impl Rendering {
+    pub fn fraction(&self) -> f32 {
+        (self.done as f64 / self.of.max(1) as f64).clamp(0.0, 1.0) as f32
+    }
+
+    /// Seconds so far, and an estimate of the seconds left (once there is a rate to go by).
+    pub fn times(&self) -> (f64, Option<f64>) {
+        let elapsed = ((self.now_ms - self.started_ms) / 1000.0).max(0.0);
+        let left = (self.done > 0 && elapsed > 0.2)
+            .then(|| elapsed * (self.of.saturating_sub(self.done)) as f64 / self.done as f64);
+        (elapsed, left)
+    }
+}
+
+/// How the last render ended: its file, or why not; a texture of the picture to show.
+#[derive(Clone, Debug)]
+pub struct RenderResult {
+    pub said: Result<String, String>,
+    pub thumb: Option<(egui::TextureId, (u32, u32))>,
 }
 
 #[derive(Clone, Debug)]
@@ -64,6 +100,9 @@ pub struct StudioUi {
     pub more: bool,
     /// What the brush last did, for the view's line.
     pub said: String,
+    /// A final render under way; how the last one ended (until closed).
+    pub rendering: Option<Rendering>,
+    pub result: Option<RenderResult>,
     pub light: usize,
     pub hdri: String,
     pub turn_deg: f32,
@@ -106,6 +145,8 @@ impl Default for StudioUi {
             open: Default::default(),
             more: false,
             said: String::new(),
+            rendering: None,
+            result: None,
             // the bundled HDRI
             light: 1,
             hdri: String::new(),
@@ -149,7 +190,7 @@ fn tool(name: &'static str, icon: &'static str, c: u16, on: bool) -> Tool {
 
 pub(super) fn groups(s: &Shell) -> Vec<Group> {
     let st = &s.studio;
-    let busy = !st.queue.is_empty();
+    let busy = st.rendering.is_some();
     let g = |name, big, small| Group {
         name,
         big,
@@ -160,8 +201,19 @@ pub(super) fn groups(s: &Shell) -> Vec<Group> {
         g(
             "Render",
             vec![
-                tool("Render Image", "file", RENDER_IMAGE, false),
-                tool("Render Turntable", "rotate", TURNTABLE, false),
+                // while one renders, the commands say so and wait (Cancel stops it)
+                Tool {
+                    name: if busy { "Rendering…" } else { "Render Image" },
+                    icon: "file",
+                    action: (!busy).then_some(Action::Env(EnvId::RenderStudio, RENDER_IMAGE)),
+                    on: busy,
+                },
+                Tool {
+                    name: "Render Turntable",
+                    icon: "rotate",
+                    action: (!busy).then_some(Action::Env(EnvId::RenderStudio, TURNTABLE)),
+                    on: false,
+                },
             ],
             vec![Tool {
                 name: "Cancel",
@@ -407,6 +459,130 @@ pub(super) fn status(s: &Shell) -> String {
     format!("{live} · {} × {} output{queue}", st.size.0, st.size.1)
 }
 
+/// m:ss, or h:mm:ss.
+fn clock(secs: f64) -> String {
+    let s = secs.round() as u64;
+    if s >= 3600 {
+        format!("{}:{:02}:{:02}", s / 3600, s / 60 % 60, s % 60)
+    } else {
+        format!("{}:{:02}", s / 60, s % 60)
+    }
+}
+
+/// The words under a render's bar: percent, samples, elapsed, left.
+pub fn progress_words(r: &Rendering) -> String {
+    let (elapsed, left) = r.times();
+    let mut w = format!(
+        "{:.0}% · {} of {} samples · {} elapsed",
+        r.fraction() * 100.0,
+        r.done,
+        r.of,
+        clock(elapsed)
+    );
+    if let Some(l) = left {
+        w.push_str(&format!(" · about {} left", clock(l)));
+    }
+    w
+}
+
+/// The render's cards over the view: its progress with Cancel while it runs (from the first
+/// frame); then its result, the picture with its file (Open folder, Copy path) or why it failed,
+/// until closed.
+fn render_cards(s: &mut Shell, ui: &mut Ui, view: Rect) {
+    let t = s.theme;
+    if let Some(r) = s.studio.rendering.clone() {
+        let mut cancel = false;
+        // in the view's own layer, over the picture (as the sample count is)
+        let at = Rect::from_center_size(
+            view.center_top() + egui::vec2(0.0, 12.0 + 36.0),
+            egui::vec2(404.0, 72.0),
+        );
+        ui.scope_builder(egui::UiBuilder::new().max_rect(at), |ui| {
+            super::theme::panel_frame(&t)
+                .inner_margin(egui::vec2(12.0, 8.0))
+                .show(ui, |ui| {
+                    ui.set_width(380.0);
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(&r.what).font(super::theme::semi(13.0)).color(t.ink));
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let b = ui.button("Cancel");
+                            s.places.push(("studio:cancel".into(), b.rect));
+                            cancel = b.clicked();
+                        });
+                    });
+                    let (bar, _) = ui.allocate_exact_size(egui::vec2(380.0, 6.0), egui::Sense::hover());
+                    ui.painter().rect_filled(bar, 3.0, t.line);
+                    let mut fill = bar;
+                    fill.set_width(bar.width() * r.fraction());
+                    ui.painter().rect_filled(fill, 3.0, t.accent);
+                    ui.label(RichText::new(progress_words(&r)).small().color(t.ink2));
+                });
+        });
+        if cancel {
+            s.studio.asks.push(Ask::Cancel);
+        }
+        return;
+    }
+    let Some(res) = s.studio.result.clone() else {
+        return;
+    };
+    let mut close = false;
+    let mut reveal = None;
+    let at = Rect::from_center_size(
+        view.center_bottom() + egui::vec2(0.0, -14.0 - 76.0),
+        egui::vec2(520.0, 152.0),
+    );
+    ui.scope_builder(egui::UiBuilder::new().max_rect(at), |ui| {
+        super::theme::panel_frame(&t)
+            .inner_margin(egui::vec2(12.0, 8.0))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    if let Some((tex, (w, h))) = res.thumb {
+                        let k = (220.0 / w as f32).min(124.0 / h as f32);
+                        ui.image(egui::load::SizedTexture::new(
+                            tex,
+                            egui::vec2(w as f32 * k, h as f32 * k),
+                        ));
+                    }
+                    ui.vertical(|ui| match &res.said {
+                        Ok(path) => {
+                            ui.label(
+                                RichText::new("Render saved")
+                                    .font(super::theme::semi(13.0))
+                                    .color(t.ink),
+                            );
+                            ui.add(egui::Label::new(RichText::new(path).small().color(t.ink2)).truncate());
+                            ui.horizontal(|ui| {
+                                if !cfg!(target_arch = "wasm32") && ui.button("Open folder").clicked() {
+                                    reveal = Some(path.clone());
+                                }
+                                if ui.button("Copy path").clicked() {
+                                    ui.ctx().copy_text(path.clone());
+                                }
+                                close = ui.button("Close").clicked();
+                            });
+                        }
+                        Err(why) => {
+                            ui.label(
+                                RichText::new("Render failed")
+                                    .font(super::theme::semi(13.0))
+                                    .color(t.error),
+                            );
+                            ui.label(RichText::new(why).small().color(t.ink));
+                            close = ui.button("Close").clicked();
+                        }
+                    });
+                });
+            });
+    });
+    if let Some(p) = reveal {
+        s.studio.asks.push(Ask::Reveal(p));
+    }
+    if close {
+        s.studio.result = None;
+    }
+}
+
 /// The sample count over the view's lower left corner.
 pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
     let st = &s.studio;
@@ -425,6 +601,9 @@ pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
     let r = Rect::from_min_size(at, g.size()).expand2(egui::vec2(8.0, 4.0));
     p.rect_filled(r, 4.0, egui::Color32::from_black_alpha(140));
     p.galley(at, g, egui::Color32::WHITE);
+    render_cards(s, ui, view);
+    let st = &s.studio;
+    let p = ui.painter();
     // the brush at work: what it applies, how to stop, what it did last
     if st.painting
         && let Some(b) = &st.brush

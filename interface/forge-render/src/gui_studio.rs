@@ -6,7 +6,7 @@
 
 use super::{Gui, now_ms};
 use crate::shell::env::EnvId;
-use crate::shell::studio_env::Ask;
+use crate::shell::studio_env::{Ask, RenderResult, Rendering};
 use crate::studio::appearance::Appearance;
 use crate::studio::bsdf::{Bsdf, Lut};
 use crate::studio::env::{self, Env};
@@ -28,6 +28,10 @@ pub struct StudioHost {
     scene: Option<(Built, Vec<Bsdf>)>,
     /// When the last frame's samples went in, ms.
     last: f64,
+    /// The render under way began (ms); the picture it last wrote, to show; its texture.
+    render_started: Option<f64>,
+    written: Option<((u32, u32), Vec<u8>)>,
+    thumb: Option<egui::TextureHandle>,
 }
 
 /// A hash of the placements' poses and what's shown: the scene changed when it does.
@@ -108,6 +112,9 @@ impl Gui {
                 scene_key: None,
                 scene: None,
                 last: now_ms(),
+                render_started: None,
+                written: None,
+                thumb: None,
             });
         }
         let mut host = self.studio.take().expect("made above");
@@ -354,9 +361,17 @@ impl Gui {
         let tex = host.tex;
 
         // final renders
+        let mut written: Option<((u32, u32), Vec<u8>)> = None;
         for ask in std::mem::take(&mut st.asks) {
             match ask {
-                Ask::Cancel => host.queue.cancel(),
+                Ask::Cancel => {
+                    if host.queue.progress() != Progress::Idle {
+                        host.queue.cancel();
+                        status = Some("Render cancelled".into());
+                    }
+                    host.render_started = None;
+                }
+                Ask::Reveal(path) => super::gui_record::reveal(&path),
                 Ask::Image | Ask::Turntable => {
                     let (w, h) = st.size;
                     // the view's field, kept for the render's shape along its height
@@ -364,14 +379,29 @@ impl Gui {
                     if st.depth_of_field && !cam.parallel {
                         fview = fview.with_lens(view.focal_mm(), Some(st.f_number), cam.dist);
                     }
+                    // a file named alone goes beside the document, as photos do
+                    let out = {
+                        let p = std::path::Path::new(st.out.trim());
+                        let doc = self.shell.fg.as_ref().map(|f| f.path.clone());
+                        match doc.as_deref().map(std::path::Path::new).and_then(|d| d.parent()) {
+                            Some(dir) if p.is_relative() && !dir.as_os_str().is_empty() => {
+                                dir.join(p).to_string_lossy().into_owned()
+                            }
+                            _ => st.out.trim().to_string(),
+                        }
+                    };
                     let output = if ask == Ask::Image {
-                        Output::Image(st.out.clone())
+                        Output::Image(out)
                     } else {
                         Output::Turntable {
-                            stem: st.out.clone(),
+                            stem: out,
                             frames: st.frames,
                         }
                     };
+                    st.result = None;
+                    if host.render_started.is_none() {
+                        host.render_started = Some(now_ms());
+                    }
                     let pivot = built.bounds.map_or(cam.target, |b| ((b.min + b.max) * 0.5).arr());
                     host.queue.push(Job {
                         output,
@@ -390,8 +420,60 @@ impl Gui {
             &self.queue,
             || Some((built, mats, Lut::new(512))),
             &host.env,
-            |path, size, rgba| crate::studio::save_png(path, size, &rgba),
+            |path, size, rgba| {
+                let r = crate::studio::save_png(path, size, &rgba);
+                written = Some((size, rgba));
+                r
+            },
         );
+        if let Some(w) = written.take() {
+            host.written = Some(w);
+        }
+        // the cards over the view: the progress, from the frame it was asked; then the result
+        let was_running = st.rendering.is_some();
+        st.rendering = match host.queue.progress() {
+            Progress::Running { job, frame, done, of } => {
+                let frames = host.queue.jobs.get(job).map_or(1, Job::frames);
+                let what = if frames > 1 {
+                    format!("Rendering turntable · frame {} of {frames}", frame + 1)
+                } else {
+                    "Rendering image".to_string()
+                };
+                let per = of as u64;
+                let started = *host.render_started.get_or_insert(now_ms());
+                Some(Rendering {
+                    what,
+                    done: frame as u64 * per + done as u64,
+                    of: frames as u64 * per,
+                    started_ms: started,
+                    now_ms: now_ms(),
+                })
+            }
+            Progress::Idle => None,
+        };
+        if was_running
+            && st.rendering.is_none()
+            && let Some(last) = host.queue.log.last().cloned()
+        {
+            host.render_started = None;
+            let thumb = host.written.take().map(|((w, h), rgba)| {
+                let img = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &rgba);
+                let t = self
+                    .ctx
+                    .load_texture("studio-render", img, egui::TextureOptions::LINEAR);
+                let id = t.id();
+                host.thumb = Some(t);
+                (id, (w, h))
+            });
+            status = Some(match &last {
+                Ok(p) => format!("Render saved: {p}"),
+                Err(e) => format!("Render failed: {e}"),
+            });
+            st.result = Some(RenderResult {
+                said: last,
+                thumb: thumb.filter(|_| host.queue.log.last().is_some_and(Result::is_ok)),
+            });
+        }
         st.queue = match host.queue.progress() {
             Progress::Idle => match host.queue.log.last() {
                 Some(Ok(p)) => format!("Wrote {p}"),

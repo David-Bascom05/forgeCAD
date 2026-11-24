@@ -157,3 +157,71 @@ fn an_assemblys_parts_keep_their_own_materials() {
     assert!(st.counts.iter().sum::<usize>() > st.names.len());
     shot(&h, "rack");
 }
+
+/// Render Image answers at once: the next frame shows its progress (the card, the button saying
+/// "Rendering…"), within 100 ms; it ends in a result, the picture with its file; a failure says
+/// why. (David: "clicking Render image gives no visible feedback".)
+#[test]
+fn render_image_shows_its_progress_at_once_then_its_result() {
+    let Some(mut h) = studio("machined/flange.fg") else {
+        return;
+    };
+    let dir = std::env::temp_dir().join(format!("fg-studio-render-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let st = &mut h.gui.shell.studio;
+    st.size = (64, 48);
+    st.spp = 64;
+    st.out = dir.join("r.png").to_string_lossy().into_owned();
+    let t0 = std::time::Instant::now();
+    assert!(h.click("tool:Render Image"), "no Render Image on the ribbon");
+    h.step();
+    let first = t0.elapsed();
+    let r = h.gui.shell.studio.rendering.clone().expect("no progress shown");
+    assert!(first.as_millis() < 100 || cfg!(debug_assertions), "{first:?}");
+    assert!(r.of == 64 && r.what == "Rendering image", "{r:?}");
+    h.step();
+    assert!(
+        h.gui.shell.place("tool:Rendering…").is_some(),
+        "the button says it's rendering"
+    );
+    assert!(h.gui.shell.place("studio:cancel").is_some(), "Cancel on the card");
+    shot(&h, "rendering");
+    let start = std::time::Instant::now();
+    while h.gui.shell.studio.result.is_none() {
+        h.step();
+        assert!(start.elapsed().as_secs() < 120, "the render never ended");
+    }
+    let res = h.gui.shell.studio.result.clone().unwrap();
+    let path = res.said.clone().expect("it saved");
+    assert!(std::path::Path::new(&path).is_file(), "{path}");
+    assert_eq!(res.thumb.map(|t| t.1), Some((64, 48)), "the picture shown");
+    assert!(h.gui.shell.studio.rendering.is_none());
+    assert_eq!(h.gui.shell.status, format!("Render saved: {path}"));
+    h.step();
+    shot(&h, "rendered");
+    // a failure is said, not silent
+    h.gui.shell.studio.out = "/nonexistent-dir/x.png".into();
+    h.gui.shell.studio.size = (32, 24);
+    h.gui.shell.studio.spp = 8;
+    h.gui
+        .shell
+        .studio
+        .asks
+        .push(forge_render::shell::studio_env::Ask::Image);
+    let start = std::time::Instant::now();
+    loop {
+        h.step();
+        if let Some(r) = &h.gui.shell.studio.result
+            && r.said.is_err()
+        {
+            break;
+        }
+        assert!(start.elapsed().as_secs() < 120, "the failure was never said");
+    }
+    assert!(
+        h.gui.shell.status.starts_with("Render failed: "),
+        "{}",
+        h.gui.shell.status
+    );
+}
