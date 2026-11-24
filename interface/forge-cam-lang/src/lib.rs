@@ -2540,10 +2540,8 @@ impl Cam {
         if let Some(sp) = spot {
             let ti = add(self, sp, base_t)?;
             let t = &self.tools[ti];
-            let f = self
-                .feeds_for(su, t, t.tool.dc, 1.0)
-                .map(|x| 0.3 * x.vf)
-                .unwrap_or(100.0);
+            let fe = self.feeds_for(su, t, t.tool.dc, 1.0);
+            let f = fe.map(|x| 0.3 * x.vf).unwrap_or(100.0);
             // a 90° spot to just under the drill's radius: the chamfer ring the drill centres in
             let (sn, cs) = forge_math::dmath::sin_cos((0.5 * t.tool.angle).to_radians());
             let dspot = 0.45 * drill_d / (sn / cs).max(1e-9);
@@ -2564,18 +2562,18 @@ impl Cam {
                     *z = *r - 2.0 - dspot;
                 }
             }
+            // the speed the feed was set at (unset, the post's fallback S3000 ran it)
+            p.rpm = fe.map(|x| x.rpm).unwrap_or(0.0);
             plan.push(format!("spot {} to {:.2} mm", t.tool.id, dspot));
             paths.push(p);
         }
         let ti = add(self, drill, base_t + 1)?;
         let t = &self.tools[ti];
         let peck = depth > 3.0 * t.tool.dc;
-        let f = self
-            .feeds_for(su, t, t.tool.dc, t.tool.dc)
-            .map(|x| 0.1 * x.vf.min(2000.0))
-            .unwrap_or(100.0);
+        let fe = self.feeds_for(su, t, t.tool.dc, t.tool.dc);
+        let f = fe.map(|x| 0.1 * x.vf.min(2000.0)).unwrap_or(100.0);
         let kind = if peck { CycleKind::Peck } else { CycleKind::Drill };
-        paths.push(ops::holes(
+        let mut dp = ops::holes(
             &hole.places,
             kind,
             ops::Cut {
@@ -2586,7 +2584,9 @@ impl Cam {
             },
             depth,
             if peck { t.tool.dc } else { 0.0 },
-        ));
+        );
+        dp.rpm = fe.map(|x| x.rpm).unwrap_or(0.0);
+        paths.push(dp);
         // each hole's circle is cleared down to where the full diameter reaches
         for p in &hole.places {
             let r = 0.5 * t.tool.dc;

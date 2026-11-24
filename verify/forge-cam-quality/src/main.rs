@@ -30,7 +30,10 @@ fn main() {
                 for o in &cam.ops {
                     println!("{} {} {:?}", o.name, o.status, o.refusal);
                     for c in o.checks.iter().filter(|c| c.verdict != "pass") {
-                        println!("  {} {} value {} limit {} {}", c.rule, c.verdict, c.value, c.limit, c.other);
+                        println!(
+                            "  {} {} value {} limit {} {}",
+                            c.rule, c.verdict, c.value, c.limit, c.other
+                        );
                     }
                 }
                 return;

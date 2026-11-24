@@ -97,6 +97,9 @@ pub struct OpQ {
     pub p_avail: f64,
     /// Rapid pieces that met material (a certified path has none).
     pub rapid_cuts: usize,
+    /// Hole cycles: the feed per spindle revolution (mm/rev), the least over the op's tools
+    /// (spot, drill, tap).
+    pub f_rev: f64,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -315,8 +318,15 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
                     PMove::Rapid { .. } => (0.0, Phase::Rapid),
                     PMove::Line { f, phase, .. } => (f, phase),
                     PMove::Arc { f, .. } => (f, Phase::Cut),
-                    PMove::Cycle { holes, z, .. } => {
+                    PMove::Cycle { holes, z, f, .. } => {
                         q.cycles += 1;
+                        if rpm > 0.0 {
+                            q.f_rev = if q.f_rev > 0.0 {
+                                q.f_rev.min(f / rpm)
+                            } else {
+                                f / rpm
+                            };
+                        }
                         let top = [holes[0], holes[1], m.top(holes[0], holes[1]).max(z)];
                         q.removed += m.sweep(top, [holes[0], holes[1], z], &prof);
                         continue;
@@ -620,7 +630,7 @@ pub fn table(jobs: &[JobQ]) -> String {
     let mut o = String::new();
     let _ = writeln!(
         o,
-        "{:<22} {:<10} {:<8} {:>6} {:>7} {:>7} {:>5} {:>5} {:>4} {:>4} {:>4} {:>5} {:>5} {:>5} {:>5} {:>6} {:>6} {:>6} {:>6} {:>5} {:>5} {:>7} {:>6} {:>5}",
+        "{:<22} {:<10} {:<8} {:>6} {:>7} {:>7} {:>5} {:>5} {:>4} {:>4} {:>4} {:>5} {:>5} {:>5} {:>5} {:>6} {:>6} {:>6} {:>6} {:>5} {:>5} {:>7} {:>6} {:>5} {:>6}",
         "job/op",
         "kind",
         "tool",
@@ -644,7 +654,8 @@ pub fn table(jobs: &[JobQ]) -> String {
         "thick",
         "MRR",
         "Fc_N",
-        "P_kW"
+        "P_kW",
+        "f/rev"
     );
     for j in jobs {
         let stem = Path::new(&j.file)
@@ -660,7 +671,7 @@ pub fn table(jobs: &[JobQ]) -> String {
             };
             let _ = writeln!(
                 o,
-                "{:<22} {:<10} {:<8} {:>6} {:>7} {:>7} {:>5} {:>5} {:>4} {:>4} {:>4} {:>5} {:>5} {:>5} {:>5} {:>6} {:>6} {:>6} {:>6} {:>5} {:>5} {:>7} {:>6} {:>5}",
+                "{:<22} {:<10} {:<8} {:>6} {:>7} {:>7} {:>5} {:>5} {:>4} {:>4} {:>4} {:>5} {:>5} {:>5} {:>5} {:>6} {:>6} {:>6} {:>6} {:>5} {:>5} {:>7} {:>6} {:>5} {:>6}",
                 format!("{stem}/{}", q.name),
                 q.kind,
                 q.tool.chars().take(8).collect::<String>(),
@@ -685,6 +696,7 @@ pub fn table(jobs: &[JobQ]) -> String {
                 f(q.mrr, 0),
                 side(f(q.fc_max, 0)),
                 side(f(q.p_max, 2)),
+                if q.cycles > 0 { f(q.f_rev, 4) } else { "-".into() },
             );
         }
         for p in &j.progs {
@@ -769,7 +781,7 @@ pub fn json(jobs: &[JobQ]) -> String {
 \"retracts\":{},\"plunges\":{},\"ramps\":{},\"cycles\":{},\"corners30\":{},\"corners90\":{},\"turn_max\":{},\
 \"side\":{},\"phi_max\":{},\"phi_mean\":{},\"phi_hist\":[{}],\"climb\":{},\"conventional\":{},\"slotting\":{},\
 \"fz_target\":{},\"hex_min\":{},\"hex_mean\":{},\"hex_max\":{},\"hex_p99\":{},\"thin\":{},\"thick\":{},\"removed\":{},\"mrr\":{},\
-\"fc_max\":{},\"p_max\":{},\"p_avail\":{},\"rapid_cuts\":{}}}",
+\"fc_max\":{},\"p_max\":{},\"p_avail\":{},\"rapid_cuts\":{},\"f_rev\":{}}}",
                 js(&q.name),
                 js(&q.kind),
                 js(&q.status),
@@ -811,7 +823,8 @@ pub fn json(jobs: &[JobQ]) -> String {
                 jn(q.fc_max),
                 jn(q.p_max),
                 jn(q.p_avail),
-                q.rapid_cuts
+                q.rapid_cuts,
+                jn(q.f_rev)
             );
         }
         o.push_str("],\"programs\":[");
