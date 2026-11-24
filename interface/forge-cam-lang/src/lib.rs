@@ -3623,6 +3623,10 @@ impl Cam {
                                     ));
                                 }
                             },
+                            // links through cleared air just under the machine's feed limit
+                            // (G5 checks every posted F against it)
+                            link_feed: 0.999
+                                * self.lib.machine(&s.machine).map(|m| m.max_feed).unwrap_or(0.0),
                         };
                         let mut paths = vec![];
                         for rg in &regions {
