@@ -225,7 +225,7 @@ fn run(seed: u64, n: usize, steps: usize) -> (usize, usize, usize) {
         assert_eq!(body_hash(&r), want, "seed {seed}: client {k} body");
     }
     // the log replays to the head
-    assert_eq!(sim.room.seq.text_at(sim.room.seq.seq()).unwrap(), head);
+    assert_eq!(&*sim.room.seq.text_at(sim.room.seq.seq()).unwrap(), head.as_str());
     (edits, sim.refused, drops)
 }
 
@@ -389,10 +389,7 @@ fn reconnect_replays_and_dedups() {
 fn a_document_cannot_grow_past_its_limits() {
     let mut store = MemStore::default();
     let mut seq = Sequencer::open(&mut store, "part.fg", DOC, None).unwrap();
-    seq.limits = forge_sync::Limits {
-        max_text: DOC.len() + 60,
-        max_log: 2,
-    };
+    seq.limits.max_text = DOC.len() + 60;
     let add = |k: usize| Op::AddFeature {
         before: None,
         text: format!("shared big_{k} = {}", "1".repeat(30)),
@@ -402,11 +399,65 @@ fn a_document_cannot_grow_past_its_limits() {
         Err(forge_sync::Refusal::Invalid { why }) => assert!(why.contains("bytes"), "{why}"),
         x => panic!("{x:?}"),
     }
-    seq.limits.max_text = 1 << 20;
-    assert!(seq.submit(&mut store, "a", "a/c", 1, 3, &add(3)).is_ok());
-    match seq.submit(&mut store, "a", "a/c", 2, 4, &add(4)) {
-        Err(forge_sync::Refusal::Invalid { why }) => assert!(why.contains("log is full"), "{why}"),
-        x => panic!("{x:?}"),
+    assert_eq!(seq.seq(), 1, "nothing refused was written");
+}
+
+/// The review's E and D: the log is bounded by bytes (compacted to a snapshot), a retry of an op
+/// from before the snapshot is AlreadyCommitted (never applied twice), and a client far behind
+/// (here: behind the snapshot) takes the snapshot Welcome and matches the server.
+#[test]
+fn the_log_compacts_and_a_far_client_catches_up_by_snapshot() {
+    let mut sim = Sim::new(2);
+    sim.room.seq.limits.max_log_bytes = 4 << 10;
+    let mut rng = Rng(5);
+    for k in 0..2 {
+        sim.flush(k);
     }
-    assert_eq!(seq.seq(), 2, "nothing refused was written");
+    sim.drain(&mut rng);
+    // client 1 goes away; client 0 makes 300 edits
+    sim.room.leave(1);
+    sim.up[1].clear();
+    sim.down[1].clear();
+    for k in 0..300 {
+        let lit = Literal {
+            value: 10.0 + (k % 50) as f64,
+            dim: forge_lang::values::Dim::Length,
+        };
+        sim.clients[0]
+            .edit(Op::SetParam {
+                param: forge_lang::error::ParamKey::parse("w").unwrap(),
+                value: lit,
+            })
+            .unwrap();
+        sim.flush(0);
+        sim.deliver_up(0);
+        sim.deliver_down(0);
+    }
+    sim.drain(&mut rng);
+    assert!(sim.room.seq.compactions > 0, "the log was compacted");
+    assert!(sim.room.seq.log_bytes() <= 4 << 10);
+    // a retry of op 1 (before the snapshot) is not applied again
+    let mut st = MemStore::default();
+    let _ = &mut st;
+    let r = sim.room.seq.submit(
+        &mut sim.store,
+        "user0",
+        "c0",
+        0,
+        1,
+        &Op::Rename {
+            from: "post".into(),
+            to: "x".into(),
+        },
+    );
+    assert!(
+        matches!(r, Err(forge_sync::Refusal::AlreadyCommitted { .. })),
+        "{r:?}"
+    );
+    // client 1 comes back from seq 0+: behind the snapshot, it takes the snapshot
+    sim.clients[1].reconnect();
+    sim.flush(1);
+    sim.drain(&mut rng);
+    assert_eq!(sim.clients[1].seq(), sim.room.seq.seq());
+    assert_eq!(sim.clients[1].text(), sim.room.seq.head());
 }

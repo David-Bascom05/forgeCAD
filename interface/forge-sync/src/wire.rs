@@ -26,6 +26,10 @@ pub enum Up {
         client: String,
         token: String,
         seq: Option<u64>,
+        /// The client's protocol version ([`crate::PROTOCOL`]) and kernel build
+        /// ([`crate::KERNEL`]): a room holds one kernel, since bit-identity holds only there.
+        proto: u32,
+        kernel: String,
     },
     /// An op the client applied locally on top of the server's text at `base`.
     Op { base: u64, id: u64, op: Op },
@@ -35,6 +39,8 @@ pub enum Up {
     Version { name: String },
     /// Liveness (also measures the round trip).
     Ping { t: f64 },
+    /// The client's text differs from the server's: send a snapshot.
+    Resync,
 }
 
 /// Server → client.
@@ -46,6 +52,9 @@ pub enum Down {
         seq: u64,
         text: String,
         you: String,
+        /// True: `text` is the document at `seq`, replace yours. False: a catch-up of entries
+        /// follows (and `text` is empty).
+        snap: bool,
     },
     /// The client's own op `id` committed as `seq` (rebased: `op` is what was applied), with its
     /// inverse (for undo) and the hash of the text after it.
@@ -128,12 +137,16 @@ impl Up {
                 client,
                 token,
                 seq,
+                proto,
+                kernel,
             } => Json::obj(vec![
                 ("t", "hello".into()),
                 ("doc", doc.as_str().into()),
                 ("client", client.as_str().into()),
                 ("token", token.as_str().into()),
                 ("seq", seq.map_or(Json::Null, num)),
+                ("proto", num(*proto as u64)),
+                ("kernel", kernel.as_str().into()),
             ]),
             Up::Op { base, id, op } => Json::obj(vec![
                 ("t", "op".into()),
@@ -148,6 +161,7 @@ impl Up {
             ]),
             Up::Version { name } => Json::obj(vec![("t", "version".into()), ("name", name.as_str().into())]),
             Up::Ping { t } => Json::obj(vec![("t", "ping".into()), ("at", Json::Num(*t))]),
+            Up::Resync => Json::obj(vec![("t", "resync".into())]),
         }
     }
     pub fn from_json(j: &Json) -> Option<Up> {
@@ -160,6 +174,8 @@ impl Up {
                     Json::Null => None,
                     _ => Some(u(j, "seq")?),
                 },
+                proto: u32::try_from(u(j, "proto")?).ok()?,
+                kernel: s(j, "kernel")?,
             },
             "op" => Up::Op {
                 base: u(j, "base")?,
@@ -171,6 +187,7 @@ impl Up {
                 hash: unhex(j.get("hash")?)?,
             },
             "version" => Up::Version { name: s(j, "name")? },
+            "resync" => Up::Resync,
             "ping" => Up::Ping {
                 t: j.get("at")?.num()?,
             },
@@ -188,11 +205,12 @@ impl Up {
 impl Down {
     pub fn json(&self) -> Json {
         match self {
-            Down::Welcome { seq, text, you } => Json::obj(vec![
+            Down::Welcome { seq, text, you, snap } => Json::obj(vec![
                 ("t", "welcome".into()),
                 ("seq", num(*seq)),
                 ("text", text.as_str().into()),
                 ("you", you.as_str().into()),
+                ("snap", (*snap).into()),
             ]),
             Down::Ack { id, seq, op, inv, th } => Json::obj(vec![
                 ("t", "ack".into()),
@@ -243,6 +261,7 @@ impl Down {
                 seq: u(j, "seq")?,
                 text: s(j, "text")?,
                 you: s(j, "you")?,
+                snap: matches!(j.get("snap")?, Json::Bool(true)),
             },
             "ack" => Down::Ack {
                 id: u(j, "id")?,
@@ -454,12 +473,16 @@ mod tests {
                 client: "c1".into(),
                 token: "t".into(),
                 seq: None,
+                proto: 1,
+                kernel: "k".into(),
             },
             Up::Hello {
                 doc: "p.fg".into(),
                 client: "c1".into(),
                 token: "t".into(),
                 seq: Some(0),
+                proto: 1,
+                kernel: "k".into(),
             },
             Up::Op {
                 base: 1,
@@ -472,6 +495,7 @@ mod tests {
             },
             Up::Version { name: "v1".into() },
             Up::Ping { t: 12.5 },
+            Up::Resync,
         ] {
             assert_eq!(Up::parse(&m.text()).unwrap(), m);
         }
@@ -480,6 +504,7 @@ mod tests {
                 seq: 3,
                 text: "shared a = 1\n".into(),
                 you: "dev/c1".into(),
+                snap: true,
             },
             Down::Ack {
                 id: 2,
