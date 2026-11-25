@@ -31,6 +31,7 @@ pub mod life;
 /// The memos (kernel/forge-memo), by the path they had here.
 pub use forge_memo as memo;
 pub mod probing;
+pub mod prof;
 pub mod sim;
 pub mod toollog;
 pub mod toolstore;
@@ -98,9 +99,18 @@ fn adaptive_memo(
         ramp_feed,
         lead_feed,
     } = cut;
+    // of the tool, only what the generator reads: the cutter's record (`tool.tool`), not its
+    // number, holder, stickout or assembled shape (pinned by
+    // adaptive_reads_no_other_part_of_the_tool), so a stickout or holder edit reuses the path
     let key = format!(
-        "adaptive/1 {:?}",
-        (rg, (tool, tidx, h, feed, ramp_feed, lead_feed), span, ip, prm)
+        "adaptive/2 {:?}",
+        (
+            rg,
+            (&tool.tool, tidx, h, feed, ramp_feed, lead_feed),
+            span,
+            ip,
+            prm
+        )
     );
     ADAPTIVE.get_or(key, || {
         forge_cam::adaptive::adaptive(rg, cut, span, ip, prm)
@@ -108,6 +118,13 @@ fn adaptive_memo(
             .map_err(|e| e.refusal(""))
     })
 }
+
+/// An op's paths with their links hopped (`Cam::hop_links`), the setup's height map they left,
+/// and that map's identity: the number of the call that made it (`HOP_ID`), never reused, so a
+/// later op's key names the map it starts from exactly without printing it.
+type Hopped = (Vec<OpPath>, forge_cam::engage::HeightMap, u64);
+static HOPPED: memo::Memo<Hopped> = memo::Memo::new();
+static HOP_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 /// A 3-axis finishing op's paths (or refusal), the lines it adds to the plan, and its finish record.
 type Finished = (Result<Vec<OpPath>, String>, Vec<String>, Option<Finish>);
@@ -318,6 +335,7 @@ pub struct Finish {
     pub links: [usize; 3],
 }
 
+#[derive(Default)]
 pub struct OpOut {
     pub name: String,
     pub kind: &'static str,
@@ -1418,7 +1436,8 @@ pub struct Cam {
     /// op's moves swept into it (the map hops plan against, carried from op to op so a later op
     /// starts from what earlier ones cut, not only from the recorded voids). None until one ran,
     /// or after an op of the setup did not build.
-    hop_maps: Vec<Option<forge_cam::engage::HeightMap>>,
+    /// With each map its identity (`HOPPED`): the number of the call that made it.
+    hop_maps: Vec<Option<(forge_cam::engage::HeightMap, u64)>>,
     setups: Vec<SetupIn>,
     pub ops: Vec<OpOut>,
     pub programs: Vec<ProgramOut>,
@@ -1428,7 +1447,37 @@ pub struct Cam {
     /// of (`frames_wanted`): such a part is loaded with its anchors and those sketches asked,
     /// so the ops' sketch frames come from that run. Empty for most documents.
     frames: BTreeMap<String, Vec<String>>,
+    /// Set on the prefetch pass only (`prefetch`): the 3D ops' generator calls recorded, not
+    /// made; every op stops before its generation.
+    prefetch: Option<Vec<Prefetch>>,
 }
+
+/// A 3D op's generator call, as the prefetch pass found it: the arguments `surfacing` or
+/// `finish3d` takes (their memo keys are made of these and the setup's part, tool and stock
+/// box, none of which an earlier op changes).
+struct Prefetch {
+    su: usize,
+    kind: String,
+    a: BTreeMap<String, V>,
+    ti: usize,
+    h: Heights,
+    feed: (f64, f64),
+}
+
+/// The 3D generator kinds (`Cam::op`'s `surfacing` and `finish3d` arms).
+const GEN3D: &[&str] = &[
+    "parallel",
+    "waterline",
+    "zlevel",
+    "steep_shallow",
+    "spiral",
+    "radial",
+    "ramping",
+    "flat",
+    "scallop",
+    "pencil",
+    "rest",
+];
 
 impl PartIn {
     /// The part's answer to `frame SKETCH`: from its load's run where that was kept (and the
@@ -2351,16 +2400,9 @@ fn get_str(m: &BTreeMap<String, V>, k: &str, default: Option<&str>) -> Result<St
 
 /// Runs a machining document (its file's directory finds the part) on the built-in library.
 pub fn run(src: &str, dir: &Path) -> Cam {
-    // the built-in library, shared: read once (Library::builtin), and copied only if the
-    // document's project files add to it (run_with_library)
-    static BUILTIN: std::sync::OnceLock<std::sync::Arc<Library>> = std::sync::OnceLock::new();
-    run_shared(
-        src,
-        dir,
-        BUILTIN
-            .get_or_init(|| std::sync::Arc::new(Library::builtin()))
-            .clone(),
-    )
+    // the built-in library, shared: read once (Library::builtin_shared), and copied only if
+    // the document's project files add to it (run_with_library)
+    run_shared(src, dir, Library::builtin_shared())
 }
 
 /// Runs a machining document on a given tooling library: the one the user's levels make
@@ -2390,6 +2432,7 @@ fn run_shared(src: &str, dir: &Path, lib: std::sync::Arc<Library>) -> Cam {
         lib,
         jaws: vec![],
         frames: BTreeMap::new(),
+        prefetch: None,
     };
     let prog = match syntax::parse(src) {
         Ok(p) => p,
@@ -2426,87 +2469,8 @@ fn run_shared(src: &str, dir: &Path, lib: std::sync::Arc<Library>) -> Cam {
             }
         }
     }
-    let mut env: BTreeMap<String, V> = BTreeMap::new();
-    let mut params: BTreeMap<String, BTreeMap<String, Expr>> = BTreeMap::new();
-    for st in prog.iter().skip(1) {
-        let r: Result<(), String> = (|| {
-            match &st.kind {
-                StmtKind::Shared { name, value } => {
-                    let v = cam.eval(value, &env)?;
-                    env.insert(name.clone(), v);
-                }
-                StmtKind::Param { owner, name, value } => {
-                    // the owner's id as text (`a.b`, `a[0]`): a statement's id is its name
-                    let o = forge_lang::error::path_text(owner);
-                    params.entry(o).or_default().insert(name.clone(), value.clone());
-                }
-                StmtKind::Assign { name, value } => {
-                    let ExprKind::Call(f, args) = &value.kind else {
-                        let v = cam.eval(value, &env)?;
-                        env.insert(name.clone(), v);
-                        return Ok(());
-                    };
-                    let ExprKind::Name(fname) = &f.kind else {
-                        return Err("a call of a non-built-in".into());
-                    };
-                    // the statement's own params, by their short names
-                    let mut local = env.clone();
-                    // (its id exactly: `param xop1.d` is not `op1`'s)
-                    if let Some(ps) = params.get(name.as_str()) {
-                        for (k, e) in ps {
-                            let v = cam.eval(e, &env)?;
-                            local.insert(k.clone(), v);
-                        }
-                    }
-                    let a = cam.named_of(fname, args, &local)?;
-                    // the kernel's clock: std's Instant panics in a browser
-                    let t0 = std::env::var("FORGE_CAM_TIME")
-                        .is_ok()
-                        .then(forge_math::clock::Instant::now);
-                    let v = cam.call(name, fname, &a, dir)?;
-                    if let Some(t0) = t0 {
-                        eprintln!("{name}: {:?}", t0.elapsed());
-                    }
-                    env.insert(name.clone(), v);
-                }
-                // a bare statement after the header did nothing and said nothing: every
-                // statement of a machining document names what it makes
-                StmtKind::Expr(e) => {
-                    return Err(match &e.kind {
-                        ExprKind::Call(f, _) => match &f.kind {
-                            ExprKind::Name(n) => format!("an operation needs a name: `{n}1 = {n}(..)`"),
-                            _ => "a statement needs a name: `NAME = ..`".into(),
-                        },
-                        _ => "a statement needs a name: `NAME = ..`".into(),
-                    });
-                }
-                _ => return Err("a statement a machining document does not take".into()),
-            }
-            Ok(())
-        })();
-        if let Err(e) = r {
-            cam.ok = false;
-            // the statement by its name and its built-in: `bolts` (drill)
-            let who = match &st.kind {
-                StmtKind::Assign { name, value } => match &value.kind {
-                    ExprKind::Call(f, _) => match &f.kind {
-                        ExprKind::Name(fname) => format!(", `{name}` ({fname})"),
-                        _ => format!(", `{name}`"),
-                    },
-                    _ => format!(", `{name}`"),
-                },
-                _ => String::new(),
-            };
-            let (code, words) = split_code(&e);
-            if let Some(c) = code {
-                cam.error_codes.push((cam.errors.len(), c));
-            }
-            cam.errors.push(format!(
-                "line {}{who}: {words}",
-                line_of(src, st.span.lo as usize)
-            ));
-        }
-    }
+    cam.prefetch(&prog, src, dir);
+    cam.exec(&prog, src, dir);
     // each op was certified on the stock every earlier op of its setup, and every op of the
     // setup it continues, left: so those are posted before it (an earlier program, or earlier
     // in its own), or the program is refused
@@ -2563,7 +2527,10 @@ fn run_shared(src: &str, dir: &Path, lib: std::sync::Arc<Library>) -> Cam {
                 Some("not certified: no program(..) posts this op (checks run on the posted path)".into());
         }
     }
-    cam.leftover();
+    {
+        let _sp = prof::span(|| "leftover\t-\t-".to_string());
+        cam.leftover();
+    }
     for s in &cam.setups {
         if s.at.is_none() {
             cam.warnings.push(format!(
@@ -2577,6 +2544,157 @@ fn run_shared(src: &str, dir: &Path, lib: std::sync::Arc<Library>) -> Cam {
         cam.ok = false;
     }
     cam
+}
+
+impl Cam {
+    /// The 3D ops' generations made ahead, side by side, into their memos (`SURFACED`,
+    /// `FINISHED`): a pass over the statements in which every op stops before its generation
+    /// (and nothing is posted) records each 3D op's generator call, then those run on the
+    /// pool. Each is a function of its memo key alone, which no earlier op's result enters,
+    /// so the run that follows takes every one from its memo: the same values, in the same
+    /// order, as making them there. Only with two or more such ops and more than one thread.
+    fn prefetch(&self, prog: &[forge_lang::syntax::Stmt], src: &str, dir: &Path) {
+        let gen3d = prog
+            .iter()
+            .filter(|st| {
+                matches!(&st.kind, StmtKind::Assign { value, .. }
+                    if matches!(&value.kind, ExprKind::Call(f, _)
+                        if matches!(&f.kind, ExprKind::Name(n) if GEN3D.contains(&n.as_str()))))
+            })
+            .count();
+        if gen3d < 2 || forge_math::par::threads() <= 1 {
+            return;
+        }
+        let _sp = prof::span(|| "prefetch\t-\t-".to_string());
+        let mut pre = Cam {
+            leftover: vec![],
+            leftover_done: false,
+            hop_maps: vec![],
+            ok: true,
+            errors: vec![],
+            error_codes: vec![],
+            warnings: vec![],
+            parts: vec![],
+            tools: vec![],
+            tool_asks: vec![],
+            setups: vec![],
+            ops: vec![],
+            programs: vec![],
+            lib: self.lib.clone(),
+            jaws: vec![],
+            frames: self.frames.clone(),
+            prefetch: Some(Vec::new()),
+        };
+        prof::muted(|| pre.exec(prog, src, dir));
+        let jobs = pre.prefetch.take().unwrap_or_default();
+        if jobs.len() < 2 {
+            return;
+        }
+        let ctx = memo::context();
+        forge_math::par::map(jobs.len(), |i| {
+            ctx.enter(|| {
+                let j = &jobs[i];
+                match j.kind.as_str() {
+                    "parallel" | "waterline" | "zlevel" => {
+                        let _ = pre.surfacing(j.su, &j.kind, &j.a, j.ti, j.h, j.feed, &mut Vec::new());
+                    }
+                    _ => {
+                        let mut out = OpOut::default();
+                        let _ = pre.finish3d(j.su, &j.kind, &j.a, j.ti, j.h, j.feed, &mut out);
+                    }
+                }
+            })
+        });
+    }
+
+    /// The document's statements after its header, in order (`run`): each named value made,
+    /// each failure recorded against its line.
+    fn exec(&mut self, prog: &[forge_lang::syntax::Stmt], src: &str, dir: &Path) {
+        let mut env: BTreeMap<String, V> = BTreeMap::new();
+        let mut params: BTreeMap<String, BTreeMap<String, Expr>> = BTreeMap::new();
+        for st in prog.iter().skip(1) {
+            let r: Result<(), String> = (|| {
+                match &st.kind {
+                    StmtKind::Shared { name, value } => {
+                        let v = self.eval(value, &env)?;
+                        env.insert(name.clone(), v);
+                    }
+                    StmtKind::Param { owner, name, value } => {
+                        // the owner's id as text (`a.b`, `a[0]`): a statement's id is its name
+                        let o = forge_lang::error::path_text(owner);
+                        params.entry(o).or_default().insert(name.clone(), value.clone());
+                    }
+                    StmtKind::Assign { name, value } => {
+                        let ExprKind::Call(f, args) = &value.kind else {
+                            let v = self.eval(value, &env)?;
+                            env.insert(name.clone(), v);
+                            return Ok(());
+                        };
+                        let ExprKind::Name(fname) = &f.kind else {
+                            return Err("a call of a non-built-in".into());
+                        };
+                        // the statement's own params, by their short names
+                        let mut local = env.clone();
+                        // (its id exactly: `param xop1.d` is not `op1`'s)
+                        if let Some(ps) = params.get(name.as_str()) {
+                            for (k, e) in ps {
+                                let v = self.eval(e, &env)?;
+                                local.insert(k.clone(), v);
+                            }
+                        }
+                        let a = self.named_of(fname, args, &local)?;
+                        // the kernel's clock: std's Instant panics in a browser
+                        let t0 = std::env::var("FORGE_CAM_TIME")
+                            .is_ok()
+                            .then(forge_math::clock::Instant::now);
+                        let v = {
+                            let _sp = prof::span(|| format!("stmt\t{fname}\t{name}"));
+                            self.call(name, fname, &a, dir)?
+                        };
+                        if let Some(t0) = t0 {
+                            eprintln!("{name}: {:?}", t0.elapsed());
+                        }
+                        env.insert(name.clone(), v);
+                    }
+                    // a bare statement after the header did nothing and said nothing: every
+                    // statement of a machining document names what it makes
+                    StmtKind::Expr(e) => {
+                        return Err(match &e.kind {
+                            ExprKind::Call(f, _) => match &f.kind {
+                                ExprKind::Name(n) => format!("an operation needs a name: `{n}1 = {n}(..)`"),
+                                _ => "a statement needs a name: `NAME = ..`".into(),
+                            },
+                            _ => "a statement needs a name: `NAME = ..`".into(),
+                        });
+                    }
+                    _ => return Err("a statement a machining document does not take".into()),
+                }
+                Ok(())
+            })();
+            if let Err(e) = r {
+                self.ok = false;
+                // the statement by its name and its built-in: `bolts` (drill)
+                let who = match &st.kind {
+                    StmtKind::Assign { name, value } => match &value.kind {
+                        ExprKind::Call(f, _) => match &f.kind {
+                            ExprKind::Name(fname) => format!(", `{name}` ({fname})"),
+                            _ => format!(", `{name}`"),
+                        },
+                        _ => format!(", `{name}`"),
+                    },
+                    _ => String::new(),
+                };
+                let (code, words) = split_code(&e);
+                if let Some(c) = code {
+                    self.error_codes.push((self.errors.len(), c));
+                }
+                self.errors.push(format!(
+                    "line {}{who}: {words}",
+                    line_of(src, st.span.lo as usize)
+                ));
+            }
+        }
+    }
 }
 
 /// z-level's default floor over a bare support: one posting step above it (0.0001 in, the
@@ -3131,6 +3249,10 @@ impl Cam {
             }
             "probe_wcs" | "inspect" => self.probe_op(name, f, a),
             "program" => {
+                // the prefetch pass posts nothing (a program's value is 0 either way)
+                if self.prefetch.is_some() {
+                    return Ok(V::Num(0.0));
+                }
                 let su: Vec<usize> = match a.get("#0") {
                     Some(V::Setup(i)) => vec![*i],
                     Some(V::Tuple(t)) => t
@@ -4540,28 +4662,52 @@ impl Cam {
             .hop_maps
             .get(su)
             .and_then(|m| m.as_ref())
-            .filter(|m| m.h == cell && trusted)
-            .cloned();
-        let mut map = match carried {
-            Some(mut m) => {
-                m.lower_voids_under(&s.ip);
-                m
-            }
-            None if trusted => HeightMap::of_stock_under(&s.ip, cell),
-            None => HeightMap::new(s.ip.min, s.ip.max, cell),
-        };
-        let paths = paths
-            .into_iter()
-            .map(|mut p| {
-                let (moves, _) = forge_cam::hop::hops(&p.moves, p.start, &mut map, &prof, &bodies, feed);
-                p.moves = moves;
-                p
-            })
-            .collect();
+            .filter(|m| m.0.h == cell && trusted);
+        // from an earlier run when every input is the same (memo.rs): `hops` is a function of
+        // the moves, start, map, profile, bodies and feed alone, and the map of the one it
+        // starts from (by identity) or of the stock (by its full text), the trust and the cell
+        let key = format!(
+            "hop_links/2 {:?}",
+            (
+                carried.map(|m| m.1),
+                &s.ip,
+                trusted,
+                cell,
+                &paths,
+                &prof,
+                &bodies,
+                feed
+            )
+        );
+        let weigh = |v: &Hopped| v.1.z.len() * std::mem::size_of::<f64>();
+        let (paths, map, id) = HOPPED.get_or_weighed(key, weigh, || {
+            let mut map = match carried {
+                Some((m, _)) => {
+                    let mut m = m.clone();
+                    m.lower_voids_under(&s.ip);
+                    m
+                }
+                None if trusted => HeightMap::of_stock_under(&s.ip, cell),
+                None => HeightMap::new(s.ip.min, s.ip.max, cell),
+            };
+            let paths = paths
+                .into_iter()
+                .map(|mut p| {
+                    let (moves, _) = forge_cam::hop::hops(&p.moves, p.start, &mut map, &prof, &bodies, feed);
+                    p.moves = moves;
+                    p
+                })
+                .collect();
+            (
+                paths,
+                map,
+                HOP_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            )
+        });
         if self.hop_maps.len() <= su {
             self.hop_maps.resize(su + 1, None);
         }
-        self.hop_maps[su] = trusted.then_some(map);
+        self.hop_maps[su] = trusted.then_some((map, id));
         paths
     }
 
@@ -5634,8 +5780,24 @@ impl Cam {
                     self.ops.push(out);
                     return Ok(V::Op(self.ops.len() - 1));
                 }
-                let t = &self.tools[ti];
                 let h = s.heights;
+                if let Some(jobs) = self.prefetch.as_mut() {
+                    // the prefetch pass: a 3D generator's call recorded; nothing generated
+                    if GEN3D.contains(&kind) {
+                        jobs.push(Prefetch {
+                            su,
+                            kind: kind.to_string(),
+                            a: a.clone(),
+                            ti,
+                            h,
+                            feed: (vf, vp),
+                        });
+                    }
+                    out.status = "refused";
+                    self.ops.push(out);
+                    return Ok(V::Op(self.ops.len() - 1));
+                }
+                let t = &self.tools[ti];
                 match kind {
                     "engrave" => self.engrave(su, a, t, ti, h, (vf, vp), step, false, &mut voids),
                     "slot" => self.engrave(su, a, t, ti, h, (vf, vp), step, true, &mut voids),
@@ -6094,10 +6256,17 @@ impl Cam {
                 return Ok(V::Op(self.ops.len() - 1));
             }
         };
-        let paths = self.hop_links(su, kind, &out, paths);
-        let paths = self.feeds_from_engagement(su, kind, &out, paths);
+        let paths = {
+            let _sp = prof::span(|| format!("hops\t{kind}\t{name}"));
+            self.hop_links(su, kind, &out, paths)
+        };
+        let paths = {
+            let _sp = prof::span(|| format!("feeds\t{kind}\t{name}"));
+            self.feeds_from_engagement(su, kind, &out, paths)
+        };
         out.paths = paths;
         out.voids = voids.clone();
+        let _sp = prof::span(|| format!("stock\t{kind}\t{name}"));
         for (v, floor) in voids {
             match v {
                 None => self.setups[su].ip.face_to(floor),
@@ -9644,9 +9813,12 @@ impl Cam {
         // from an earlier run when the program and the dialect are the same (memo.rs): the
         // round trip prints, reads back and compares, a function of these alone; the key is
         // the quantised program (integers) and the dialect, each in full
-        let rt = ROUND_TRIPS.get_or(format!("round_trip/2 {:?}", (&q, &d)), || {
-            forge_post::round_trip(&q, &d)
-        });
+        let rt = {
+            let _sp = prof::span(|| format!("roundtrip\tprogram\t{name}"));
+            ROUND_TRIPS.get_or(format!("round_trip/2 {:?}", (&q, &d)), || {
+                forge_post::round_trip(&q, &d)
+            })
+        };
         match rt {
             Ok((txt, _)) => {
                 po.round_trip = true;
@@ -9962,10 +10134,16 @@ impl Cam {
                         low = low.min(to[2]);
                     }
                 }
-                let mut sum =
-                    self.certify_posted(oi, &posted, FULL_STOCK.load(std::sync::atomic::Ordering::Relaxed));
+                let mut sum = {
+                    let _sp = prof::span(|| format!("certify\t{}\t{}", self.ops[oi].kind, self.ops[oi].name));
+                    self.certify_posted(oi, &posted, FULL_STOCK.load(std::sync::atomic::Ordering::Relaxed))
+                };
                 // G5: every position the posted path reaches, as the machine's joints see it
-                if let Some(c) = self.axis_limits(oi, &posted) {
+                let axis = {
+                    let _sp = prof::span(|| format!("axis\t{}\t{}", self.ops[oi].kind, self.ops[oi].name));
+                    self.axis_limits(oi, &posted)
+                };
+                if let Some(c) = axis {
                     sum.clear = false;
                     sum.checks.insert(0, c);
                 }
@@ -11215,7 +11393,7 @@ mod finish3d_memo_tests {
         forge_dirs::fs::create_dir_all(&dir).unwrap();
         let part = forge_dirs::fs::read_to_string(src_dir.join("mold_core.fg")).unwrap();
         forge_dirs::fs::write(dir.join("mold_core.fg"), &part).unwrap();
-        let doc = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 40, holder: \"bt40-er32\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01)\nleft = rest(op1, tool: t2, after: t1, stepover: 3, area: (-30, -24, 30, 24), grid: 1.5)\n";
+        let doc = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 40, holder: \"bt40-er32\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01)\nleft = rest(op1, tool: t2, after: t1, stepover: 3, area: (-26, -20, -12, -6), grid: 1.5)\n";
         let run = |d: &str| {
             let before = super::FINISHED.computed();
             let cam = super::run(d, &dir);
@@ -11246,9 +11424,9 @@ mod finish3d_memo_tests {
             let r = run(&d);
             assert_eq!((r.0, &r.1), (0, &reply), "{what}: the paths were made again");
         }
-        for (what, d) in [
+        let cases = [
             ("stepover", doc.replace("stepover: 3", "stepover: 2.5")),
-            ("area", doc.replace("(-30, -24, 30, 24)", "(-30, -24, 30, 23)")),
+            ("area", doc.replace("(-26, -20, -12, -6)", "(-26, -20, -12, -7)")),
             ("cutter", doc.replace("\"ball-6\"", "\"bull-10-r1\"")),
             ("earlier cutter", doc.replace("\"flat-10\"", "\"flat-12\"")),
             ("tolerance", doc.replace("tol: 0.01", "tol: 0.02")),
@@ -11256,8 +11434,13 @@ mod finish3d_memo_tests {
                 "heights (the stock's top)",
                 doc.replace("margin: (0, 0, 2)", "margin: (0, 0, 3)"),
             ),
-        ] {
-            assert_eq!(run(&d).0, 1, "{what}: the paths were not made anew");
+        ];
+        // side by side (forge_math::par: in item order; inline where there are no threads):
+        // each case's count is taken around its own run on the thread running it (forge-memo
+        // counts per thread), and no two cases share a key
+        let made = forge_math::par::map(cases.len(), |i| run(&cases[i].1).0);
+        for ((what, _), n) in cases.iter().zip(made) {
+            assert_eq!(n, 1, "{what}: the paths were not made anew");
         }
         let edited = part.replacen("shared bw = 40", "shared bw = 38", 1);
         assert_ne!(edited, part);
@@ -11429,7 +11612,179 @@ mod frame_tests {
 }
 
 #[cfg(test)]
+mod prefetch_tests {
+    /// A document with several 3D ops has their generations made ahead, side by side
+    /// (`Cam::prefetch`), and the run then takes each from its memo: every generation is made
+    /// exactly once, and the reply and programs are the run made with every memo bypassed
+    /// (where nothing is made ahead or taken from a memo).
+    #[test]
+    fn the_3d_ops_made_ahead_are_the_run_made_fresh() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+        // three 3D ops on a corner of the mould core (small areas, coarse steps): two
+        // surfacing (zlevel, parallel) and one finish3d (pencil), so both arms are made ahead
+        let src = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 40, holder: \"bt40-er32\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01)\nrough = zlevel(op1, tool: t1, leave: 0.5, step: 3, stepover: 4, area: (-34, -28, -6, 0), grid: 1)\nfin = parallel(op1, tool: t2, stepover: 3, area: (-24, -18, -16, -10))\ncorner = pencil(op1, tool: t2, area: (-24, -18, -16, -10), grid: 1)\nprog = program(op1, post: \"fanuc\", number: 1002)\n";
+        let reply = |cam: &super::Cam| {
+            let mut t = cam.json().to_string();
+            for p in &cam.programs {
+                t.push_str(&format!("\n{:?}", p.text));
+            }
+            t
+        };
+        let (s0, f0) = (super::SURFACED.computed(), super::FINISHED.computed());
+        let cam = super::run(src, &dir);
+        assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+        assert!(
+            cam.ops.iter().all(|o| o.moves > 0 && o.status == "built"),
+            "an op not built: {:?}",
+            cam.ops
+                .iter()
+                .map(|o| (&o.name, o.moves, o.status, &o.refusal))
+                .collect::<Vec<_>>()
+        );
+        // zlevel, parallel (surfacing); pencil (finish3d): each made once
+        assert_eq!(
+            super::SURFACED.computed() - s0,
+            2,
+            "a surfacing op made twice or not at all"
+        );
+        assert_eq!(
+            super::FINISHED.computed() - f0,
+            1,
+            "a finishing op made twice or not at all"
+        );
+        super::memo::bypass(true);
+        let fresh = super::run(src, &dir);
+        super::memo::bypass(false);
+        assert_eq!(reply(&cam), reply(&fresh), "made ahead: not the fresh run");
+    }
+}
+
+#[cfg(test)]
+mod hop_memo_tests {
+    /// The hops are taken from an earlier run only when every input is the same, the map the
+    /// op starts from included (named by the number of the call that made it): an edit to an
+    /// earlier op of the setup, which changes the map a later op starts from, hops both anew,
+    /// and the run is the fresh one (every memo bypassed); the same text takes both from the
+    /// memo.
+    #[test]
+    fn an_earlier_op_edited_hops_the_later_anew() {
+        let src_dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../verify/forge-cam-quality/parts");
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/hop_memo_test");
+        forge_dirs::fs::create_dir_all(&dir).unwrap();
+        let part = forge_dirs::fs::read_to_string(src_dir.join("boss.fg")).unwrap();
+        forge_dirs::fs::write(dir.join("boss.fg"), &part).unwrap();
+        let doc = "machining\nf = part(\"boss.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 1)), origin: \"top-corner\", tol: 0.01)\nrough = clear(op1, tool: t1, from: 25, to: 10.5, step: 3)\nfin = contour(op1, tool: t1, side: \"outside\", from: 25, to: 10, step: 15)\nprog = program(op1, post: \"fanuc\", number: 5001)\n";
+        let reply = |cam: &super::Cam| {
+            let mut t = cam.json().to_string();
+            for p in &cam.programs {
+                t.push_str(&format!("\n{:?}", p.text));
+            }
+            t
+        };
+        let run = |d: &str| {
+            let before = super::HOPPED.computed();
+            let cam = super::run(d, &dir);
+            assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+            (super::HOPPED.computed() - before, reply(&cam))
+        };
+        let fresh = |d: &str| {
+            super::memo::bypass(true);
+            let cam = super::run(d, &dir);
+            super::memo::bypass(false);
+            reply(&cam)
+        };
+        let (n, first) = run(doc);
+        assert_eq!(n, 2, "both ops hopped");
+        assert_eq!(first, fresh(doc));
+        assert_eq!(run(doc), (0, first.clone()), "the same text hopped again");
+        let d = doc.replace("to: 10.5, step: 3)", "to: 10.5, step: 2.5)");
+        let (n, got) = run(&d);
+        assert_eq!(n, 2, "an earlier op edited: the later op's hops not made anew");
+        assert_eq!(got, fresh(&d), "not the fresh run");
+        let _ = forge_dirs::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
 mod adaptive_memo_tests {
+    /// `forge_cam::adaptive::adaptive` reads of its tool only the cutter's record
+    /// (`ToolUse::tool`): two tool uses alike in that and different in all else (number,
+    /// holder, stickout, assembled shape) clear alike. adaptive_memo's key holds no more of the
+    /// tool than that.
+    #[test]
+    fn adaptive_reads_no_other_part_of_the_tool() {
+        use forge_cam::ops::{Cut, Heights, Span, ToolUse};
+        use forge_cam_geom::region::{Loop, Region, Seg, p2};
+        let lib = forge_tooling::Library::builtin();
+        let tl = lib.tool("flat-6").unwrap().clone();
+        let a = ToolUse {
+            t: 1,
+            tool: tl.clone(),
+            holder: Some("bt40-er32".into()),
+            stickout: 30.0,
+            shape: tl.shape(30.0, Some(lib.holder("bt40-er32").unwrap())).unwrap(),
+            probe: false,
+        };
+        let b = ToolUse {
+            t: 7,
+            tool: tl.clone(),
+            holder: None,
+            stickout: 52.0,
+            shape: tl.shape(52.0, None).unwrap(),
+            probe: false,
+        };
+        let sq = |x0: f64, y0: f64, x1: f64, y1: f64| {
+            let p = [p2(x0, y0), p2(x1, y0), p2(x1, y1), p2(x0, y1)];
+            Loop {
+                segs: (0..4)
+                    .map(|i| Seg::Line {
+                        a: p[i],
+                        b: p[(i + 1) % 4],
+                    })
+                    .collect(),
+            }
+        };
+        let rg = Region {
+            loops: vec![sq(0.0, 0.0, 30.0, 20.0)],
+        };
+        let ip = forge_cam::stock::InProcess::new([-2.0, -2.0, 0.0], [32.0, 22.0, 10.0]);
+        let prm = forge_cam::adaptive::Adaptive {
+            phi_max: 40.0,
+            step: 0.0,
+            leave: 0.0,
+            wall_pass: false,
+            sweep: 0.0,
+            two_way: false,
+            link_feed: 0.0,
+        };
+        let cut = |t: &ToolUse| {
+            let c = Cut {
+                tool: t,
+                tidx: 0,
+                h: Heights {
+                    clear: 20.0,
+                    retract: 12.0,
+                },
+                feed: (1200.0, 400.0),
+                ramp_feed: None,
+                lead_feed: None,
+            };
+            let sp = Span {
+                top: 10.0,
+                bottom: 6.0,
+                step: 4.0,
+            };
+            format!(
+                "{:?}",
+                forge_cam::adaptive::adaptive(&rg, c, sp, &ip, &prm).map(|o| (o.path, o.voids, o.notes))
+            )
+        };
+        let (pa, pb) = (cut(&a), cut(&b));
+        assert!(pa.contains("moves"), "adaptive made no path: {pa}");
+        assert_eq!(pa, pb, "adaptive read the tool beyond its record");
+    }
+
     /// Every input class of an adaptive op is in its memo key: its engagement, levels (from,
     /// to, step), the tool, the in-process stock before it (the facing above it) and the part's
     /// section each cut it anew, and that run is the fresh one (every memo bypassed); the same
@@ -11469,6 +11824,16 @@ mod adaptive_memo_tests {
         assert_eq!(run(doc), (0, first.clone()), "the same text cut it again");
         let r = run(&doc.replace("number: 5008", "number: 5009"));
         assert_eq!(r.0, 0, "the program's number: cut again");
+        // the tool's stickout and holder: adaptive does not read them (only the certificate
+        // does), so the path is taken from the memo, and the run is still the fresh one
+        for (what, d) in [
+            ("stickout", doc.replace("stickout: 30", "stickout: 34")),
+            ("holder", doc.replace(", holder: \"bt40-er32\"", "")),
+        ] {
+            let (n, got) = run(&d);
+            assert_eq!(n, 0, "{what}: cut again");
+            assert_eq!(got, fresh(&d), "{what}: not the fresh run");
+        }
         for (what, d) in [
             ("engagement", doc.replace("engagement: 40", "engagement: 35")),
             // read only by adaptive itself (not the feeds, as engagement is)
