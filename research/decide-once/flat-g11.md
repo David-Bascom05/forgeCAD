@@ -242,3 +242,30 @@ seq), a point computed on two curved surfaces' meet taken onto a stored circle o
 9% of `LINEAR` each. So the budget on curved input is real, not rounding: an entity can take up to
 eleven such accepts before `ε + Σ τ` reaches δ, by the measured maximum. The proof of a T site on
 curved input owes the bound on that error (the closed-form meet's accuracy), not just the lemma.
+
+## The two sampler U sites measured (FLAT-SITES, 2026-11-25)
+
+Decisions-only counters (scratch, not shipped) on fuzz 1–300 and the 11 suite parts, seq and nary1
+(622 runs):
+
+- **trim_in's end skip** (boolean.rs:3521, both columns): never taken. The corpus does not exercise
+  it, so a parts sweep says nothing about it. Constructed instead
+  (interface/forge-lang/tests/trim_sampler_slivers.rs): a strip 1.05e-5 to 1e-4 mm wide on a block,
+  bored across, so the bore's circle crosses the strip's top in a stretch shorter than the skip's
+  reach. 21 such parts (7 widths, 3 bores; with and without the strip) take the skip 108 times,
+  on stretches 1.05e-5 to 1e-4 long. Every one that builds holds
+  the strip's analytic material to 1e-9. A dense recheck (63 samples, any point Inside both faces)
+  never finds a stretch the skip dropped. With the skip switched off, every answer is the same.
+  The narrower strips (1.05e-5 to 2e-5 mm on some bores) are refused with a typed `ZeroThickness`
+  at the strip's edge, with or without the skip: a refusal of a thin wedge, not this site's. Still
+  U as a proof; measured on the cases built to reach it.
+- **the n-ary interior probe** (nary.rs:3576): 4,531 probes accepted with another edge nearer than
+  the step (within the slack). 4,530 of these are the seam's other copy, the same edge as the
+  probe's own (cylinders, cones, other revolved faces): the shortfall, 1.6e-6 to 2.9e-5 of the
+  step, is the chord against the arc of a tangent step projected onto the curved face. 1
+  (fuzz54 nary1) is a parallel circle 2 steps off across a 1.56e-3 mm cylinder sliver; the way in,
+  sampled 65 times, keeps step − 2.2e-7 from it. The halfway fallback ("nothing clear") fires once
+  (fuzz228 nary1). fuzz54 and fuzz228 agree seq against nary1 (faces, volume to 1e-15, check
+  clean). No probe was seen crossing an edge. The open part narrows to the projection's shortfall,
+  R(θ − 2 sin(θ/2)) with θ = step/R (about step³/(24R²)), against the slack min(1e-3 step,
+  0.1 LINEAR), and the sliver case.
