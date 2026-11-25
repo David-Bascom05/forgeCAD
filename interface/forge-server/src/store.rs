@@ -7,10 +7,15 @@
 //! other store replaces it behind the same trait.
 //!
 //! Format, per document (`<dir>/<encoded name>.log`): records of
-//! `[b"FGL1"][u32 LE payload length][u64 LE FNV-1a of the payload][payload]`. The first record's
-//! payload is the document's first text (`{"first": TEXT}`), each next one an entry (forge-sync's
-//! `entry_json`). Each append is written whole and `sync_data`ed before it returns; a new log is
-//! made under a temporary name and renamed into place, so it is never seen empty.
+//! `[b"FGL1"][u32 LE payload length][u64 LE FNV-1a of the payload][payload]`. A record is a
+//! snapshot (`{"first": TEXT, "seq": N, "seen": [..], "refused": [..]}`; the first record is the
+//! document's first text) or an entry (forge-sync's `entry_json`). Each append is written whole
+//! and `sync_data`ed before it returns; a new log is made under a temporary name and renamed into
+//! place, so it is never seen empty.
+//!
+//! A snapshot is appended, never written over the log: the ops before it stay (the op log is the
+//! document's live history, DESIGN.md §5). An open starts from the latest snapshot record and
+//! replays the entries after it. Dropping old ops is a retention policy of its own, not this.
 //!
 //! On open: a record **cut short by the end of the file** with nothing valid after it (a crash
 //! mid-append: never acknowledged) is cut off. Anything else wrong (a bad checksum, a bad marker,
@@ -163,7 +168,8 @@ impl FileLogStore {
             let text = std::str::from_utf8(payload)
                 .map_err(|_| corrupt(format!("{}: not UTF-8 at {at}", p.display())))?;
             let j = read(text).map_err(|e| corrupt(format!("{}: {e} at {at}", p.display())))?;
-            if first.is_none() {
+            if j.get("first").is_some() {
+                // a snapshot: an open starts from the latest one
                 let text = j
                     .get("first")
                     .and_then(Json::str)
@@ -183,7 +189,27 @@ impl FileLogStore {
                         .collect(),
                     _ => vec![],
                 };
-                first = Some(Snapshot { seq, text, seen });
+                let refused = match j.get("refused") {
+                    Some(Json::Arr(a)) => a
+                        .iter()
+                        .filter_map(|x| match x {
+                            Json::Arr(t) if t.len() == 2 => {
+                                Some((t[0].str()?.to_string(), t[1].num()? as u64))
+                            }
+                            _ => None,
+                        })
+                        .collect(),
+                    _ => vec![],
+                };
+                first = Some(Snapshot {
+                    seq,
+                    text,
+                    seen,
+                    refused,
+                });
+                entries.clear();
+            } else if first.is_none() {
+                return Err(corrupt(format!("{}: no first text", p.display())));
             } else {
                 entries.push(
                     entry_from(&j).ok_or_else(|| corrupt(format!("{}: a bad entry at {at}", p.display())))?,
@@ -238,19 +264,20 @@ impl Store for FileLogStore {
             .iter()
             .map(|(c, i, s)| Json::Arr(vec![c.as_str().into(), (*i as f64).into(), (*s as f64).into()]))
             .collect();
+        let refused = snap
+            .refused
+            .iter()
+            .map(|(c, i)| Json::Arr(vec![c.as_str().into(), (*i as f64).into()]))
+            .collect();
         let j = Json::obj(vec![
             ("first", snap.text.as_str().into()),
             ("seq", (snap.seq as f64).into()),
             ("th", format!("{:016x}", text_hash(&snap.text)).into()),
             ("seen", Json::Arr(seen)),
+            ("refused", Json::Arr(refused)),
         ]);
-        // the new log replaces the old whole (renamed over it): after a crash, one or the other
-        self.open.remove(doc);
-        crate::fsx::put(&self.path(doc), &Self::bytes(write(&j).as_bytes()))?;
-        if let Ok(d) = File::open(&self.dir) {
-            let _ = d.sync_all();
-        }
-        Ok(())
+        // appended like an entry (whole and synced, or cut back): the ops before it stay
+        self.append_payload(doc, write(&j).as_bytes())
     }
 
     fn create(&mut self, doc: &str, text: &str) -> io::Result<()> {
@@ -272,7 +299,13 @@ impl Store for FileLogStore {
     }
 
     fn append(&mut self, doc: &str, e: &Entry) -> io::Result<()> {
-        let b = Self::bytes(write(&entry_json(e)).as_bytes());
+        self.append_payload(doc, write(&entry_json(e)).as_bytes())
+    }
+}
+
+impl FileLogStore {
+    fn append_payload(&mut self, doc: &str, payload: &[u8]) -> io::Result<()> {
+        let b = Self::bytes(payload);
         let f = self.file(doc)?;
         let before = f.metadata()?.len();
         let r = f.write_all(&b).and_then(|_| f.sync_data());
@@ -360,12 +393,39 @@ mod tests {
             seq: 3,
             text: "shared a4 = 1\n".into(),
             seen: vec![("ada/c".into(), 7, 2)],
+            refused: vec![("ada/c".into(), 5)],
         };
         s.compact("p/a.fg", &snap).unwrap();
         s.append("p/a.fg", &e(4)).unwrap();
         let mut s = FileLogStore::new(d.clone()).unwrap();
-        assert_eq!(s.latest_snapshot("p/a.fg").unwrap(), Some(snap), "the dedup keys survive");
+        assert_eq!(
+            s.latest_snapshot("p/a.fg").unwrap(),
+            Some(snap),
+            "the dedup marks survive"
+        );
         assert_eq!(s.read_since("p/a.fg", 3).unwrap(), vec![e(4)]);
+        // the snapshot was appended: the ops before it are still in the log (the history)
+        let b = std::fs::read(log_of(&d)).unwrap();
+        let (mut at, mut n) = (0, 0);
+        while let Some(r) = record_at(&b, at) {
+            at = r.end;
+            n += 1;
+        }
+        assert_eq!(
+            (n, at),
+            (6, b.len()),
+            "first text, 3 entries, the snapshot, 1 entry"
+        );
+        // a second snapshot: an open starts from the latest
+        let snap2 = Snapshot {
+            seq: 4,
+            text: "shared a5 = 1\n".into(),
+            ..Default::default()
+        };
+        s.compact("p/a.fg", &snap2).unwrap();
+        let mut s = FileLogStore::new(d.clone()).unwrap();
+        assert_eq!(s.latest_snapshot("p/a.fg").unwrap(), Some(snap2));
+        assert_eq!(s.read_since("p/a.fg", 4).unwrap(), vec![]);
         let _ = std::fs::remove_dir_all(&d);
     }
 

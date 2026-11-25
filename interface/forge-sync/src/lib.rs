@@ -130,8 +130,11 @@ impl Refusal {
 pub struct Snapshot {
     pub seq: u64,
     pub text: String,
-    /// (client key, op id, seq) of ops committed up to `seq`.
+    /// Per client key: (client, its highest committed op id, that op's seq). Its ids are sent in
+    /// order, so every lower id was committed too unless it is in `refused`.
     pub seen: Vec<(String, u64, u64)>,
+    /// (client key, op id) of ops refused (a retry of one is checked again).
+    pub refused: Vec<(String, u64)>,
 }
 
 pub trait Store {
@@ -187,6 +190,7 @@ impl Store for MemStore {
             seq: 0,
             text: text.into(),
             seen: vec![],
+            refused: vec![],
         };
         self.docs.insert(doc.into(), (snap, vec![]));
         Ok(())
@@ -205,8 +209,8 @@ impl Store for MemStore {
     }
     fn compact(&mut self, doc: &str, snap: &Snapshot) -> std::io::Result<()> {
         let d = self.docs.get_mut(doc).ok_or(std::io::ErrorKind::NotFound)?;
+        // the entries stay (the op log is the history); an open reads those after the snapshot
         d.0 = snap.clone();
-        d.1.retain(|e| e.seq > snap.seq);
         Ok(())
     }
 }

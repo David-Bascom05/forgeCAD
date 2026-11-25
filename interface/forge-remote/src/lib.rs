@@ -159,10 +159,15 @@ pub fn resolve_for(project: &str, user: &str, at: Option<&Path>) -> Result<Remot
         list.split(',')
             .map(str::trim)
             .filter(|p| !p.is_empty())
-            .any(|p| Path::new(p).is_absolute() && at.starts_with(p))
+            .filter(|p| Path::new(p).is_absolute())
+            // both sides canonical (`at` is): a symlinked projects folder still matches; a
+            // folder that does not exist matches only as written
+            .any(|p| at.starts_with(std::fs::canonicalize(p).unwrap_or_else(|_| p.into())))
     });
     if !inside {
-        return Err(format!("[remote.{name}] serves only the projects under {list:?}: this one is elsewhere"));
+        return Err(format!(
+            "[remote.{name}] serves only the projects under {list:?}: this one is elsewhere"
+        ));
     }
     let token = match (e.get("token"), e.get("token_env")) {
         (Some(t), _) => t.clone(),
@@ -481,12 +486,22 @@ mod tests {
                     [remote.open]\nurl = \"ws://127.0.0.1:7878/sync\"\ntoken = \"abc\"\n";
         let mine = Some(Path::new("/home/me/cad/p"));
         let r = resolve_for("remote = \"lab\"\n", user, mine).unwrap();
-        assert_eq!((r.url.as_str(), r.token.as_str()), ("ws://127.0.0.1:7878/sync", "abc"));
-        assert_eq!(split_url(&r.url).unwrap(), ("127.0.0.1:7878".into(), "/sync".into()));
+        assert_eq!(
+            (r.url.as_str(), r.token.as_str()),
+            ("ws://127.0.0.1:7878/sync", "abc")
+        );
+        assert_eq!(
+            split_url(&r.url).unwrap(),
+            ("127.0.0.1:7878".into(), "/sync".into())
+        );
         // the security reviews' cases: the project cannot choose the address or the token, and a
         // remote serves only the folders its entry lists (none listed: none)
         for (proj, at, why) in [
-            ("url = \"ws://evil.example/sync\"\ntoken_env = \"AWS_SECRET\"\n", mine, "nothing else"),
+            (
+                "url = \"ws://evil.example/sync\"\ntoken_env = \"AWS_SECRET\"\n",
+                mine,
+                "nothing else",
+            ),
             ("remote = \"lab\"\ntoken = \"x\"\n", mine, "nothing else"),
             ("remote = \"unknown\"\n", mine, "not in your remotes.toml"),
             ("remote = \"far\"\n", mine, "not this machine"),

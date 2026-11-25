@@ -55,9 +55,13 @@ pub struct Limits {
     /// Texts kept for hash checks: at most this many, and at most `recent_bytes` in all.
     pub recent: usize,
     pub recent_bytes: usize,
-    /// (client, op id) pairs remembered for retries, beyond compaction and restarts: per
-    /// account (one account's ops cannot push another's out).
+    /// Clients remembered for retries beyond compaction and restarts, per account (one
+    /// account's clients cannot push another's out). Each is a high-water mark plus its refused
+    /// ids ([`Mark`]), so this is O(clients), not O(ops).
     pub seen: usize,
+    /// Refused op ids remembered per client (the newest: a client resends only its pending ops,
+    /// which are its newest).
+    pub refused: usize,
 }
 
 impl Default for Limits {
@@ -67,7 +71,8 @@ impl Default for Limits {
             max_log_bytes: 16 << 20,
             recent: 64,
             recent_bytes: 16 << 20,
-            seen: 10_000,
+            seen: 1_000,
+            refused: 1_000,
         }
     }
 }
@@ -100,11 +105,31 @@ pub struct Sequencer {
     /// Recent texts by seq (hash checks build them).
     recent: VecDeque<(u64, Arc<str>)>,
     recent_bytes: usize,
-    /// (client, op id) → seq, for idempotent retries; oldest first for eviction.
-    seen: HashMap<(String, u64), u64>,
-    seen_order: HashMap<String, VecDeque<(String, u64)>>,
+    /// (client, op id) → seq of the entries in `log` (a retry gets the same entry again).
+    in_log: HashMap<(String, u64), u64>,
+    /// Per client: what it had committed, for retries of ops before the log (after a
+    /// compaction or a restart); least recently used last per account, for eviction.
+    marks: HashMap<String, Mark>,
+    mark_order: HashMap<String, VecDeque<String>>,
     /// Times the log was compacted (tests, stats).
     pub compactions: usize,
+}
+
+/// A client's committed ops, exactly, in O(1) per client: its op ids are sent in increasing order
+/// (`Client::next_id`), so every id up to `hwm` was committed unless it is in `refused`.
+#[derive(Clone, Debug, Default)]
+struct Mark {
+    /// The highest op id committed, and its seq.
+    hwm: u64,
+    seq: u64,
+    /// Ids refused (never committed); a retry of one is checked again, never "already
+    /// committed".
+    refused: std::collections::BTreeSet<u64>,
+}
+
+fn account_of(client: &str) -> String {
+    // the account is the client key's first part (`author/client`, as the server keys it)
+    client.split('/').next().unwrap_or("").to_string()
 }
 
 fn entry_bytes(e: &Entry) -> usize {
@@ -127,6 +152,7 @@ impl Sequencer {
                     seq: 0,
                     text: text.to_string(),
                     seen: vec![],
+                    refused: vec![],
                 }
             }
         };
@@ -145,12 +171,17 @@ impl Sequencer {
             log_bytes: 0,
             recent: VecDeque::new(),
             recent_bytes: 0,
-            seen: HashMap::new(),
-            seen_order: HashMap::new(),
+            in_log: HashMap::new(),
+            marks: HashMap::new(),
+            mark_order: HashMap::new(),
             compactions: 0,
         };
+        // (a log from before marks wrote one triple per op: the highest per client is its mark)
         for (client, id, seq) in snap.seen {
-            s.remember_key(client, id, seq);
+            s.mark_committed(&client, id, seq);
+        }
+        for (client, id) in snap.refused {
+            s.mark_refused(&client, id);
         }
         for e in store.read_since(doc, floor)? {
             if e.seq != s.seq() + 1 {
@@ -211,21 +242,42 @@ impl Sequencer {
     }
 
     fn remember(&mut self, e: &Entry) {
-        self.remember_key(e.client.clone(), e.id, e.seq);
+        self.in_log.insert((e.client.clone(), e.id), e.seq);
+        self.mark_committed(&e.client, e.id, e.seq);
     }
 
-    fn remember_key(&mut self, client: String, id: u64, seq: u64) {
-        // the account is the client key's first part (`author/client`, as the server keys it)
-        let account = client.split('/').next().unwrap_or("").to_string();
-        let k = (client, id);
-        if self.seen.insert(k.clone(), seq).is_none() {
-            let order = self.seen_order.entry(account).or_default();
-            order.push_back(k);
+    /// The client's mark, made most recently used (an account keeps its `limits.seen` newest).
+    fn mark(&mut self, client: &str) -> &mut Mark {
+        let order = self.mark_order.entry(account_of(client)).or_default();
+        if let Some(k) = order.iter().position(|c| c == client) {
+            let c = order.remove(k).expect("there");
+            order.push_back(c);
+        } else {
+            order.push_back(client.to_string());
             while order.len() > self.limits.seen {
                 if let Some(old) = order.pop_front() {
-                    self.seen.remove(&old);
+                    self.marks.remove(&old);
                 }
             }
+        }
+        self.marks.entry(client.to_string()).or_default()
+    }
+
+    fn mark_committed(&mut self, client: &str, id: u64, seq: u64) {
+        let m = self.mark(client);
+        m.refused.remove(&id);
+        if id > m.hwm {
+            m.hwm = id;
+            m.seq = seq;
+        }
+    }
+
+    fn mark_refused(&mut self, client: &str, id: u64) {
+        let keep = self.limits.refused;
+        let m = self.mark(client);
+        m.refused.insert(id);
+        while m.refused.len() > keep {
+            m.refused.pop_first();
         }
     }
 
@@ -259,19 +311,37 @@ impl Sequencer {
         id: u64,
         op: &Op,
     ) -> Result<Commit, Refusal> {
-        if let Some(&seq) = self.seen.get(&(client.to_string(), id)) {
-            let at = (seq > self.floor)
-                .then(|| self.log.get((seq - self.floor - 1) as usize))
-                .flatten();
-            return match at {
-                Some(e) => Ok(Commit {
-                    entry: e.clone(),
-                    duplicate: true,
-                }),
-                // committed before the latest snapshot: the client's snapshot holds it
-                None => Err(Refusal::AlreadyCommitted { seq }),
-            };
+        if let Some(&seq) = self.in_log.get(&(client.to_string(), id))
+            && let Some(e) = self.log.get((seq - self.floor - 1) as usize)
+        {
+            return Ok(Commit {
+                entry: e.clone(),
+                duplicate: true,
+            });
         }
+        if let Some(m) = self.marks.get(client)
+            && id <= m.hwm
+            && !m.refused.contains(&id)
+        {
+            // committed before the log's start: the client's snapshot holds it
+            return Err(Refusal::AlreadyCommitted { seq: m.seq });
+        }
+        let r = self.order(store, author, client, base, id, op);
+        if r.is_err() {
+            self.mark_refused(client, id);
+        }
+        r
+    }
+
+    fn order(
+        &mut self,
+        store: &mut dyn Store,
+        author: &str,
+        client: &str,
+        base: u64,
+        id: u64,
+        op: &Op,
+    ) -> Result<Commit, Refusal> {
         check_limits(op)?;
         let head = self.seq();
         if base > head {
@@ -342,16 +412,29 @@ impl Sequencer {
     /// The head becomes the store's snapshot; the entries before it go (clients behind it get a
     /// snapshot when they join; their retries of ops before it are `AlreadyCommitted`).
     pub fn compact(&mut self, store: &mut dyn Store) -> std::io::Result<()> {
-        let mut seen: Vec<(String, u64, u64)> = self.seen.iter().map(|((c, i), s)| (c.clone(), *i, *s)).collect();
+        let mut seen: Vec<(String, u64, u64)> = self
+            .marks
+            .iter()
+            .filter(|(_, m)| m.hwm > 0)
+            .map(|(c, m)| (c.clone(), m.hwm, m.seq))
+            .collect();
         seen.sort();
+        let mut refused: Vec<(String, u64)> = self
+            .marks
+            .iter()
+            .flat_map(|(c, m)| m.refused.iter().map(|i| (c.clone(), *i)))
+            .collect();
+        refused.sort();
         let snap = crate::Snapshot {
             seq: self.seq(),
             text: self.head.clone(),
             seen,
+            refused,
         };
         store.compact(&self.doc, &snap)?;
         self.floor = self.seq();
         self.log.clear();
+        self.in_log.clear();
         self.sizes.clear();
         self.log_bytes = 0;
         self.compactions += 1;
