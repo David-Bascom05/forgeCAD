@@ -47,12 +47,15 @@ struct Seeds {
 }
 
 #[allow(clippy::needless_range_loop)]
-/// The live basis functions at `t` and their first two derivatives, from Cox and de Boor's
-/// recurrence: `out[d][j]` is derivative d of function `span - p + j`.
-fn basis(knots: &[f64], p: usize, span: usize, t: f64, out: &mut [[f64; MAX_DEGREE + 1]; 3]) {
+/// The live basis functions at `t` and their first `want` (0, 1 or 2) derivatives, from Cox and
+/// de Boor's recurrence: `out[d][j]` is derivative d of function `span - p + j`. `N` is room for
+/// degree `N - 1` at most: sized to the degree, the work is not mostly zeroing arrays made for
+/// degree 15. Each number is made by the same operations in the same order at any `N` and `want`.
+#[inline(always)]
+fn basis<const N: usize>(knots: &[f64], p: usize, span: usize, t: f64, want: usize, out: &mut [[f64; N]; 3]) {
     // a triangle of values for each degree, kept for the derivative formulas
-    let mut ndu = [[0.0; MAX_DEGREE + 1]; MAX_DEGREE + 1];
-    let (mut left, mut right) = ([0.0; MAX_DEGREE + 1], [0.0; MAX_DEGREE + 1]);
+    let mut ndu = [[0.0; N]; N];
+    let (mut left, mut right) = ([0.0; N], [0.0; N]);
     ndu[0][0] = 1.0;
     for j in 1..=p {
         left[j] = t - knots[span + 1 - j];
@@ -72,6 +75,9 @@ fn basis(knots: &[f64], p: usize, span: usize, t: f64, out: &mut [[f64; MAX_DEGR
     }
     for (o, n) in out[0].iter_mut().zip(ndu.iter()).take(p + 1) {
         *o = n[p];
+    }
+    if want == 0 {
+        return;
     }
     // N'[i, k] = k (N[i, k - 1] / (u[i + k] - u[i]) - N[i + 1, k - 1] / (u[i + k + 1] - u[i + 1]));
     // the second derivative is the same over the degree below's first derivatives
@@ -95,14 +101,24 @@ fn basis(knots: &[f64], p: usize, span: usize, t: f64, out: &mut [[f64; MAX_DEGR
     };
     for j in 0..=p {
         out[1][j] = first(p, j);
+    }
+    if want == 1 {
+        return;
+    }
+    // the degree below's first derivatives, each once (each is used twice)
+    let mut below = [0.0; N];
+    for j in 0..p {
+        below[j] = first(p - 1, j);
+    }
+    for j in 0..=p {
         let i = span - p + j;
         let a = if j >= 1 && p >= 1 {
-            ratio(first(p - 1, j - 1), knots[i + p] - knots[i])
+            ratio(below[j - 1], knots[i + p] - knots[i])
         } else {
             0.0
         };
         let b = if j < p {
-            ratio(first(p - 1, j), knots[i + p + 1] - knots[i + 1])
+            ratio(below[j], knots[i + p + 1] - knots[i + 1])
         } else {
             0.0
         };
@@ -262,30 +278,47 @@ impl Nurbs {
     }
 
     fn point_at(&self, uv: Point2) -> Point3 {
-        self.eval_all(uv).p
+        self.eval(uv, 0).p
     }
 
     fn eval_all(&self, uv: Point2) -> SurfDeriv {
+        self.eval(uv, 2)
+    }
+
+    /// The point and its first `want` (0, 1 or 2) derivatives, those not wanted left zero; each
+    /// wanted one is the same bits whatever `want` is. One evaluation spent, at any `want`.
+    #[inline]
+    fn eval(&self, uv: Point2, want: usize) -> SurfDeriv {
+        match self.p.max(self.q) {
+            1 => self.eval_n::<2>(uv, want),
+            2 => self.eval_n::<3>(uv, want),
+            3 => self.eval_n::<4>(uv, want),
+            4 => self.eval_n::<5>(uv, want),
+            5 => self.eval_n::<6>(uv, want),
+            _ => self.eval_n::<{ MAX_DEGREE + 1 }>(uv, want),
+        }
+    }
+
+    #[inline(always)]
+    fn eval_n<const N: usize>(&self, uv: Point2, want: usize) -> SurfDeriv {
         forge_geom::budget::spend();
         let uv = self.wrap(uv);
         let (su, sv) = (
             span_of(&self.u, self.p, self.nu, uv.x),
             span_of(&self.v, self.q, self.nv, uv.y),
         );
-        let (mut bu, mut bv) = ([[0.0; MAX_DEGREE + 1]; 3], [[0.0; MAX_DEGREE + 1]; 3]);
-        basis(&self.u, self.p, su, uv.x, &mut bu);
-        basis(&self.v, self.q, sv, uv.y, &mut bv);
-        // homogeneous value and derivatives, A with weight w
+        let (mut bu, mut bv) = ([[0.0; N]; 3], [[0.0; N]; 3]);
+        basis::<N>(&self.u, self.p, su, uv.x, want, &mut bu);
+        basis::<N>(&self.v, self.q, sv, uv.y, want, &mut bv);
+        // homogeneous value and derivatives, A with weight w: each sum over the net in the
+        // same order, i then j
         let mut s = [[[0.0_f64; 4]; 3]; 3];
         for i in 0..=self.p {
             let row = (su - self.p + i) * self.nv;
             for j in 0..=self.q {
                 let c = self.net[row + sv - self.q + j];
-                for (du, b) in bu.iter().enumerate() {
-                    for (dv, a) in bv.iter().enumerate() {
-                        if du + dv > 2 {
-                            continue;
-                        }
+                for (du, b) in bu.iter().enumerate().take(want + 1) {
+                    for (dv, a) in bv.iter().enumerate().take(want + 1 - du) {
                         let k = b[i] * a[j];
                         for x in 0..4 {
                             s[du][dv][x] += k * c[x];
@@ -297,20 +330,28 @@ impl Nurbs {
         let v3 = |a: [f64; 4]| Vec3::new(a[0], a[1], a[2]);
         let w = s[0][0][3];
         let c = v3(s[0][0]) / w;
-        let (wu, wv) = (s[1][0][3], s[0][1][3]);
-        let du = (v3(s[1][0]) - c * wu) / w;
-        let dv = (v3(s[0][1]) - c * wv) / w;
-        let duu = (v3(s[2][0]) - du * (2.0 * wu) - c * s[2][0][3]) / w;
-        let duv = (v3(s[1][1]) - du * wv - dv * wu - c * s[1][1][3]) / w;
-        let dvv = (v3(s[0][2]) - dv * (2.0 * wv) - c * s[0][2][3]) / w;
-        SurfDeriv {
+        let mut d = SurfDeriv {
             p: Point3::ORIGIN + c,
-            du,
-            dv,
-            duu,
-            duv,
-            dvv,
+            du: Vec3::ZERO,
+            dv: Vec3::ZERO,
+            duu: Vec3::ZERO,
+            duv: Vec3::ZERO,
+            dvv: Vec3::ZERO,
+        };
+        if want == 0 {
+            return d;
         }
+        let (wu, wv) = (s[1][0][3], s[0][1][3]);
+        d.du = (v3(s[1][0]) - c * wu) / w;
+        d.dv = (v3(s[0][1]) - c * wv) / w;
+        if want == 1 {
+            return d;
+        }
+        let (du, dv) = (d.du, d.dv);
+        d.duu = (v3(s[2][0]) - du * (2.0 * wu) - c * s[2][0][3]) / w;
+        d.duv = (v3(s[1][1]) - du * wv - dv * wu - c * s[1][1][3]) / w;
+        d.dvv = (v3(s[0][2]) - dv * (2.0 * wv) - c * s[0][2][3]) / w;
+        d
     }
 
     fn seeds(&self) -> &Seeds {
@@ -378,12 +419,14 @@ impl Nurbs {
             let next = self.wrap(Point2::new(uv.x - x, uv.y - y));
             let moved = (next.x - uv.x).abs() / du.width() + (next.y - uv.y).abs() / dv.width();
             uv = next;
-            d = self.eval_all(uv);
+            // the last step's point is all that is used of it
+            let last = moved < 1e-13;
+            d = self.eval(uv, if last { 0 } else { 2 });
             let q = d.p.distance_sq(p);
             if q < best.1 {
                 best = (uv, q);
             }
-            if moved < 1e-13 {
+            if last {
                 break;
             }
         }
@@ -549,6 +592,12 @@ impl Procedural for Nurbs {
     }
     fn deriv(&self, uv: Point2) -> SurfDeriv {
         self.eval_all(uv)
+    }
+    fn deriv1(&self, uv: Point2) -> SurfDeriv {
+        self.eval(uv, 1)
+    }
+    fn point(&self, uv: Point2) -> Point3 {
+        self.eval(uv, 0).p
     }
     fn normal(&self, uv: Point2) -> Option<UnitVec3> {
         let d = self.eval_all(uv);
