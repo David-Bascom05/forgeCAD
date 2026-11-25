@@ -2240,6 +2240,30 @@ impl HandleTarget {
     pub fn spans(&self) -> &[usize] {
         &self.spans
     }
+    /// The body's box in the press frame (its section's box, its length along the bed), grown
+    /// past rounding.
+    pub fn bbox(&self) -> ([f64; 3], [f64; 3]) {
+        let (lo, hi) = self.el.sec.bbox();
+        let dz = if self.el.attach == Attach::Punch {
+            self.top
+        } else {
+            0.0
+        };
+        let e = 1e-6;
+        (
+            [lo.x - e, self.el.y.0 + self.oy - e, lo.y + dz - e],
+            [hi.x + e, self.el.y.1 + self.oy + e, hi.y + dz + e],
+        )
+    }
+    /// The same body, checked through fewer spans.
+    pub fn only(&self, spans: Vec<usize>) -> HandleTarget {
+        HandleTarget {
+            el: self.el.clone(),
+            oy: self.oy,
+            top: self.top,
+            spans,
+        }
+    }
     /// The signed distance from a press-frame point to the body.
     pub fn sd(&self, p: [f64; 3]) -> f64 {
         let z = if self.el.attach == Attach::Punch {

@@ -1986,9 +1986,10 @@ fn check(sh: &SheetOut, c: &Check) -> Json {
     if c.rule == Rule::Handling {
         f.push((
             "method",
-            "the part itself carried through the planned operator's move (lift, pull out, turn, push in, set down; the ram \
-             at top dead centre), against every body of the press, by the same certified search the bends use: a pass is \
-             proven clear, a fail a real point of the part proven to meet the body (value: its distance, negative inside)"
+            "the planned operator's move (lift, pull out, turn, push in, set down; the ram at top dead centre) against \
+             every body of the press: proven clear by the part's grown boxes and sphere when they clear, else the part \
+             itself carried through the move by the same certified search the bends use; a fail is a real point of the \
+             part proven to meet the body (value: its distance, negative inside)"
                 .into(),
         ));
     }

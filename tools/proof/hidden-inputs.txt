@@ -330,6 +330,9 @@ no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/s
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|selfs: HashMap<(u64, usize), Check>,  x 2
 no-output (looked up by key only: get, insert; also moved whole into Caches, never iterated)  @ forge-brake/src/plan.rs|hash-order|contacts: HashMap<(usize, usize, u64), Contact>,  x 2
 no-output (looked up by key only: get, insert; also moved whole into Caches, never iterated)  @ forge-brake/src/plan.rs|hash-order|fulls: HashMap<(u64, usize, Setup), Step>,  x 2
+no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-brake/src/scene.rs|float|gaps.iter().map(|g| g.max(0.0).powi(2)).sum::<f64>().sqrt()
+no-output (looked up by key only: get, insert, clear when full; never iterated)  @ forge-brake/src/scene.rs|hash-order|static KEPT: Mutex<Option<HashMap<String, Option<Tess>>>> = Mutex::new(None);
+speed (cache answering a function of its own key: the region's exact text and the chords)  @ forge-brake/src/scene.rs|static|static KEPT: Mutex<Option<HashMap<String, Option<Tess>>>> = Mutex::new(None);
 no-output (prints only)  @ forge-brake/src/sim.rs|clock|return Some(std::time::Instant::now());
 no-output (prints only)  @ forge-brake/src/sim.rs|env|if std::env::var_os("BENDSIM_TRACE").is_some() {  x 3
 no-output (prints only)  @ forge-brake/src/stage.rs|env|if std::env::var_os("BENDSIM_TRACE").is_some() {  x 2
