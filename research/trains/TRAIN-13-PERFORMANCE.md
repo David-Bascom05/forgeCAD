@@ -48,3 +48,17 @@ On `73513c86`, the strict total was −0.0202%. Both bracket app (−0.0378%) an
 Insert app still grew its edge vectors 66 times, down from 76 on main, but those growths cost 24,698 extra instructions. Chamfer copied the known source topology and then its corner solver added vertices, edges and patch faces. [Exact profile](https://github.com/David-Bascom05/forgeCAD/actions/runs/45695711876)
 
 Head `6c6d2d391305cd1ae253d582c93103dff416fdce` passes every exact hosted performance limit. The strict total fell from 20,017,033,325 to 19,993,876,616 instructions (−0.1157%); the largest increase was frame edit (+0.0075%). The edge-length check now streams the same 17 points in the same order, and a plane directly projects each loop sample using its existing projection method. A plane's two chart coordinates have no period and the surface has no singular points. Feature `forge-topo/reference_sampling` retains both previous paths for differential checks. All 84 hosted hashes matched main; the 84 local validity, area, volume and face-count rows matched the original Train 13. [Exact hosted profiles](https://github.com/David-Bascom05/forgeCAD/actions/runs/45697574462)
+
+### Remaining positive deltas on the passing candidate
+
+These were the only lines with higher counts. The first three are strict; the other four measure just the regeneration call and are diagnostic. Counts are self instructions, so the columns do not double-count time in callees. The allocator column includes glibc heap bookkeeping and its internal copies. The general Boolean column is the function containing the open-shell scan. The plane-key sort uses four 64-bit entries to group faces on identical planes. The remainder includes pair traversal, in-place loop rebuilding and sampling, plus offsetting savings. [Per-function profiles](https://github.com/David-Bascom05/forgeCAD/actions/runs/45697574462)
+
+| Benchmark | Net extra instructions | glibc allocation and copies | General Boolean | Plane-key sorting | All other functions, net |
+|---|---:|---:|---:|---:|---:|
+| frame edit | +51,611 | -63,123 | +42,012 | +49,258 | +23,464 |
+| jack edit | +24,377 | +48,236 | +5,638 | +0 | -29,497 |
+| mixed seq | +44,041 | -23,519 | +218,746 | +0 | -151,186 |
+| crank seq | +18,857 | +25,018 | +6,398 | +8,728 | -21,287 |
+| frame nary1 | +116,020 | +175,424 | +1,205 | +8,753 | -69,362 |
+| frame seq | +9,517 | -49,109 | +20,521 | +25,580 | +12,525 |
+| hub nary1 | +28,673 | +103,151 | +0 | +0 | -74,478 |
