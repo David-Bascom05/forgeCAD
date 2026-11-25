@@ -9,6 +9,7 @@
 | `cam/crazy-guards` | see WOUND DOWN | **train 8**. Contains `cam/hop-map-under`. The crazy-path guards: `forge_cam_quality::crazy`, `guards.rs` for the parts, a `corpus_guard_<doc>` per example. CAM-2D-FINISH (`cam/crazy-2d`) and CAM-3D-FINISH (`cam/rest-air`) build on it |
 | `cam/park-descent` | daa6c225 | CAM-CORE's to merge. The same two map commits plus `Field::park_clear`, on their pass-start WIP |
 | `cam/rings-cap` | this branch | **WIP, not for a train.** Rings within the cap, option B's ring half, behind switches. This file |
+| CAM-CORE's `cam/adaptive-pass-start` | f8fb1b4d | theirs: the pass-start / round-box fix. Needs `cam/hop-map-under` in main first (alone, boss_adaptive's links graze at the link feed) |
 | `cam/adaptive-loops` | 40df387a | parked: tangent loops between two-way passes (R 0.5 mm). Re-judge under a block-rate model (research/cam/toolpath-quality/adaptive-transitions.md) |
 
 The analysis branch `cam/ship-scurve` (S-curve harness switches) is not needed any more.
@@ -38,7 +39,8 @@ about 57 % of the volume, to the rings. The first ring into an untouched band is
 whatever the spacing. Plot: phi by position on deep_boss_n, made during the work, not kept.
 
 **What B still needs.**
-1. CAM-CORE's rounds loop: `for round in 0..2 { sweeps; rings k > 0; if left_area(f, f.r) <=
+1. CAM-CORE's rounds loop (not done: CAM-CORE wound down; the place is the `next_sweep!` macro
+   in adaptive.rs, which already decides "sweep again vs rings"; research/handoff/CAM-CORE.md): `for round in 0..2 { sweeps; rings k > 0; if left_area(f, f.r) <=
    threshold { break } }`, with every pass kept in round 2 and the wall pass (k = 0) only after
    the last round. Agreed with CAM-CORE; not landed.
 2. Then `FORGE_RING_CAP` as the default, with the material it leaves handed to round 2's passes.
