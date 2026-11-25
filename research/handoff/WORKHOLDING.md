@@ -11,7 +11,7 @@ its builder (`interface/forge-workholding-builder`), and how CAM holds a part.
 | `cam/workholding` | 9edad4f6 | merged in train 7 (the library, kinds, lathe, generators, vendor data) |
 | `cam/workholding-vise` | 28d0255d | contained in `-any2` |
 | `cam/workholding-haas` | 88923990 | contains `-vise`; real Haas models (05-0404, 05-0405) in the certified path; contained in `-any2` |
-| `cam/workholding-any2` | 3c4dfe0d | contains `-haas`; any geometry, user imports, the speed fix; its pre-verify line covers all three |
+| `cam/workholding-any2` | e53f6e78 | contains `-haas`; any geometry, user imports, the speed fix; its pre-verify line covers all three |
 | `cam/workholding-default2` | (this) | contains `-any2`; `generic-vise-150`/`-100` mean the real Haas vises. **HELD**: see "default2 is held" below |
 
 They land in that order; each line goes to TRAIN-CONDUCTOR as its pre-verify comes in.
