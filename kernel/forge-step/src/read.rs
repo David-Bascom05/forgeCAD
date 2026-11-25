@@ -2101,7 +2101,7 @@ const SPECK: &str = "a face laid out over a span of its parameters below 2^-433"
 /// `finish` as far as the body healed: what is checked of the file's edges and faces, the gaps
 /// measured, and the body made, under the read's budget (returned live: the rest spends it).
 fn healed(
-    mut proto: Proto,
+    proto: Proto,
     uncertainty: f64,
     lim: &Limits,
     stats: &mut Stats,
@@ -2131,23 +2131,43 @@ fn healed(
             return Err("a face's loops go along one edge twice the same way".into());
         }
     }
-    let gaps = measure_gaps(&proto, stats);
+    if let Some((fi, gap)) = far_face(&proto, stats) {
+        return Err(far_face_words(&proto, fi, gap));
+    }
+    heal_rest(proto, uncertainty, lim, stats)
+}
+
+/// The first face whose edges lie far off its surface (more than both `FAR_FACE_MM` and
+/// `FAR_FACE_PART` of the part), and how far, as `far_gap` measures it; the gaps measured
+/// on the way into `stats`.
+fn far_face(proto: &Proto, stats: &mut Stats) -> Option<(usize, f64)> {
+    let gaps = measure_gaps(proto, stats);
     // a face whose edges lie far off its surface has the wrong surface in the file (VS-3 #478011:
     // a B-spline patch 5 m from its face's edges): nothing in the file says where it is
     let size = Box3::from_points(proto.verts.iter().map(|v| v.0)).diagonal();
-    if let Some((fi, gap)) = gaps
-        .iter()
+    gaps.iter()
         .enumerate()
         .filter(|&(_, &g)| g > FAR_FACE_MM && g > FAR_FACE_PART * size)
-        .map(|(fi, _)| (fi, far_gap(&proto, fi)))
+        .map(|(fi, _)| (fi, far_gap(proto, fi)))
         .find(|&(_, g)| g > FAR_FACE_MM && g > FAR_FACE_PART * size)
-    {
-        let face = proto.face_ids.get(fi).map_or(String::new(), |id| format!(" #{id}"));
-        return Err(format!(
-            "face{face} can't be read: its surface lies {} from its own edges (the file disagrees with itself there; exporting it again may help)",
-            far(gap)
-        ));
-    }
+}
+
+/// The refusal of a solid whose face `fi` lies `gap` from its edges.
+fn far_face_words(proto: &Proto, fi: usize, gap: f64) -> String {
+    let face = proto.face_ids.get(fi).map_or(String::new(), |id| format!(" #{id}"));
+    format!(
+        "face{face} can't be read: its surface lies {} from its own edges (the file disagrees with itself there; exporting it again may help)",
+        far(gap)
+    )
+}
+
+/// `healed` after its checks of the file: the body healed and made, under the read's budget.
+fn heal_rest(
+    mut proto: Proto,
+    uncertainty: f64,
+    lim: &Limits,
+    stats: &mut Stats,
+) -> Result<(Body, forge_geom::budget::Budget), String> {
     let budget = forge_geom::budget::scoped(lim.max_evals);
     // a loop running out and back along two edges that lie on each other (a slit of no width)
     proto.cancel_slits(uncertainty.max(forge_math::tol::LINEAR));
@@ -2241,6 +2261,91 @@ pub fn import(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
         return crate::iges::import(text, lim);
     }
     read_file(text, lim, false)
+}
+
+/// A solid the read refused because one of its faces lies far off its edges ([`far_face`]),
+/// drawn for display only: its body healed as the read would have healed it without the far face
+/// (whose surface is not where the face is), drawn as [`Solid::display_mesh`] draws a body.
+/// Never a [`Solid`]: nothing of it is checked, and nothing but a viewer should use it.
+pub struct ShownRefused {
+    pub entity: u32,
+    pub name: String,
+    /// The refusal's words, as in [`Imported::refusals`].
+    pub why: String,
+    /// The far face's entity in the file, where it has one.
+    pub far_face: Option<u32>,
+    pub mesh: forge_mesh::TriMesh,
+}
+
+/// The solids of `imp` (a read of `text` under `lim`) refused for a face far off its edges, drawn
+/// for a viewer ([`ShownRefused`]). The read itself is not touched: the file is read again, as
+/// far as those solids, only when there is one. A body that cannot be drawn within what its
+/// healing left of `lim`'s budget is left out.
+pub fn draw_far_refused(text: &[u8], lim: &Limits, imp: &Imported) -> Vec<ShownRefused> {
+    let far: Vec<u32> = imp
+        .refusals
+        .iter()
+        .filter(|r| r.why.contains("can't be read: its surface lies"))
+        .map(|r| r.entity)
+        .collect();
+    if far.is_empty() || crate::brep::is_brep(text) || crate::iges::is_iges(text) {
+        return Vec::new();
+    }
+    let Ok(h) = head(text, lim, false) else {
+        return Vec::new();
+    };
+    let ks: Vec<usize> = (0..h.roots.len()).filter(|&k| far.contains(&h.roots[k].0)).collect();
+    let drawn = forge_math::par::map_eager(ks.len(), |i| {
+        let (id, r, ctx) = h.roots[ks[i]];
+        draw_far_root(&h, id, r, ctx, lim)
+    });
+    drawn.into_iter().flatten().collect()
+}
+
+fn draw_far_root(h: &Head<'_>, id: u32, r: Record, ctx: Option<u32>, lim: &Limits) -> Option<ShownRefused> {
+    let b = build_root(&h.f, id, r, ctx, h.assembly);
+    let (u, built) = b.built?;
+    let mut stats = Stats::default();
+    let mut proto = built.ok()?;
+    let mut void_flip = true;
+    let (fi, gap) = loop {
+        let (fi, gap) = far_face(&proto, &mut stats)?;
+        // files differ on what a void's .F. turns, as `finish_root` reads them: told from the
+        // whole body, healed as the read heals it
+        if void_flip && h.f.name(&r) == "BREP_WITH_VOIDS" {
+            let (body, healing) = heal_rest(proto, u.uncertainty, lim, &mut stats).ok()?;
+            drop(healing);
+            let inward = voids_inward(&body);
+            void_flip = inward;
+            proto = build_shell(&h.f, id, r, u, void_flip, &mut stats).ok()?;
+            if !inward {
+                continue;
+            }
+        }
+        break (fi, gap);
+    };
+    let why = far_face_words(&proto, fi, gap);
+    let far_id = proto.face_ids.get(fi).copied();
+    // drawn without the far face: its surface is not where the face is, and drawing it toward
+    // there is what takes long (VS-3 #478011: minutes, and nothing drawn)
+    proto.faces.remove(fi);
+    if fi < proto.face_ids.len() {
+        proto.face_ids.remove(fi);
+    }
+    // under the read's own budget, what healing left of it, as the read draws its check's mesh
+    let (mut body, healing) = heal_rest(proto, u.uncertainty, lim, &mut stats).ok()?;
+    // the edges' tolerances, as the read gives them before it draws: the mesher meets an edge off
+    // its faces by them (without them VS-3 #478011's first face spends minutes and fails)
+    record_deviations(&mut body, &mut stats);
+    let mesh = forge_mesh::tessellate::tessellate_tolerant(&body, &Solid::display_quality(&body)).ok();
+    drop(healing);
+    Some(ShownRefused {
+        entity: id,
+        name: b.name,
+        why,
+        far_face: far_id,
+        mesh: mesh?,
+    })
 }
 
 /// [`import`], and every solid drawn for display ([`Solid::display_mesh`], kept in
