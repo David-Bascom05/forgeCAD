@@ -4,6 +4,7 @@
 fn main() {
     for path in std::env::args().skip(1) {
         let text = std::fs::read(&path).expect("read");
+        forge_step::read::times::counting(std::env::var_os("STEPTIMES_OFF").is_none());
         let _ = forge_step::read::times::take();
         let t = std::time::Instant::now();
         let d = forge_step::Limits::default();

@@ -2557,6 +2557,18 @@ fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> Vec<Occurrence> {
 pub mod times {
     /// The phases, in the order `finish` runs them.
     pub const NAMES: [&str; 8] = ["parse", "topology", "heal", "speck", "deviations", "mass", "mesh check", "display mesh"];
+    /// Whether the clock is read at all (`counting`).
+    #[cfg(feature = "times")]
+    pub static ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+    /// Starts or stops counting (off until asked: the clock reads themselves cost something).
+    pub fn counting(on: bool) {
+        #[cfg(feature = "times")]
+        ON.store(on, std::sync::atomic::Ordering::Relaxed);
+        #[cfg(not(feature = "times"))]
+        let _ = on;
+    }
+
     #[cfg(feature = "times")]
     pub static NS: [std::sync::atomic::AtomicU64; 8] = [const { std::sync::atomic::AtomicU64::new(0) }; 8];
 
@@ -2565,6 +2577,9 @@ pub mod times {
     pub fn timed<T>(k: usize, f: impl FnOnce() -> T) -> T {
         #[cfg(feature = "times")]
         {
+            if !ON.load(std::sync::atomic::Ordering::Relaxed) {
+                return f();
+            }
             let t = std::time::Instant::now();
             let x = f();
             NS[k].fetch_add(t.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
