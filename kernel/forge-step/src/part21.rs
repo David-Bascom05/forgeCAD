@@ -195,7 +195,7 @@ fn parse_pieces<'a>(text: &'a [u8], lim: &Limits) -> Option<File<'a>> {
         lim: *lim,
         kw: BTreeMap::new(),
     };
-    let data = head.to_data().ok()??;
+    let data = head.read_to_data().ok()??;
     // the pieces' starts: the first instance start at or past each even split
     let n = (2 * threads).min(text.len() / (1 << 20)).max(2);
     let mut starts = vec![data];
@@ -424,7 +424,7 @@ impl<'a> P<'a> {
 
     /// One pass's start of a file, to the DATA section's first instance: where that is, or `None`
     /// where the file goes another way before it (one pass then reads it).
-    fn to_data(&mut self) -> Result<Option<usize>, ParseError> {
+    fn read_to_data(&mut self) -> Result<Option<usize>, ParseError> {
         let w = self.word()?;
         if w != b"ISO-10303-21" {
             return Ok(None);

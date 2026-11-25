@@ -344,6 +344,7 @@ fn line_curvatures(d: &forge_geom::surface::SurfDeriv) -> (f64, f64) {
 /// A procedural face's surface sampled at the nodes of an 8 x 8 split of its parameter box: per
 /// node the lengths per unit of u and of v, and the tightest radii along each (a blend bends
 /// across, hardly along; a corner patch curves tightly in a corner and gently elsewhere).
+#[derive(Clone)]
 struct Nodes {
     lo: Point2,
     hi: Point2,
@@ -556,6 +557,7 @@ type Counts = [[(usize, usize); G]; G];
 /// A procedural face's bounds on its bending over each cell of the G x G split of its parameter
 /// box (see `Bend`), over the cells round each (a point's nearest on the surface lies within a
 /// cell of it), and over the box grown by half each way.
+#[derive(Clone)]
 struct Cells {
     lo: Point2,
     hi: Point2,
@@ -1140,17 +1142,141 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
         on,
         edges,
     };
-    for (i, prep) in preps.into_iter().enumerate() {
-        let f = FaceId(i as u32);
-        let prep = prep.expect("every face drawn");
-        mesh_face(body, f, prep, &segments, q, mend, &mut mesh)
-            .map_err(|error| TessError::Face { face: f, error })?;
+    let preps: Vec<Box<Prep>> = preps.into_iter().map(|p| p.expect("every face drawn")).collect();
+    if mend && preps.len() >= PAR_FACES {
+        // a file's faces on all cores, each into its own part of the mesh (new vertices numbered
+        // after the mesh's), as face after face under the drawing's budget would draw them
+        // (`budget::map_until`: to the first face that fails), put together in face order with
+        // their new vertices numbered on from the faces' before: the mesh one by one makes
+        let nb = mesh.positions.len() as u32;
+        let base = &mesh.positions;
+        let outs = forge_geom::budget::map_until(
+            preps.len(),
+            |k| {
+                let mut out = FaceOut {
+                    base,
+                    part: TriMesh::default(),
+                };
+                mesh_face(
+                    body,
+                    FaceId(k as u32),
+                    preps[k].clone(),
+                    &segments,
+                    q,
+                    mend,
+                    &mut out,
+                )
+                .map(|()| out.part)
+            },
+            Result::is_err,
+        );
+        for (k, out) in outs.into_iter().enumerate() {
+            let part = out.map_err(|error| TessError::Face {
+                face: FaceId(k as u32),
+                error,
+            })?;
+            let shift = mesh.positions.len() as u32 - nb;
+            mesh.positions.extend(part.positions);
+            mesh.triangles.extend(
+                part.triangles
+                    .into_iter()
+                    .map(|t| t.map(|i| if i >= nb { i + shift } else { i })),
+            );
+            mesh.face_of.extend(part.face_of);
+            mesh.unsettled.extend(part.unsettled);
+        }
+    } else {
+        for (i, prep) in preps.into_iter().enumerate() {
+            let f = FaceId(i as u32);
+            mesh_face(body, f, prep, &segments, q, mend, &mut mesh)
+                .map_err(|error| TessError::Face { face: f, error })?;
+        }
     }
     mesh.edges = edge_samples
         .iter()
         .map(|s| s.iter().map(|&(_, v)| v).collect())
         .collect();
     Ok(mesh)
+}
+
+/// A file's body of at least this many faces has its faces drawn on all cores.
+const PAR_FACES: usize = 16;
+
+/// Where a face's triangles go ([`mesh_face`]): the whole mesh, or a face's own part of it.
+trait Out {
+    /// Vertex `i`'s position.
+    fn pos(&self, i: u32) -> forge_math::Point3;
+    /// How many vertices there are.
+    fn len(&self) -> usize;
+    fn add_vertex(&mut self, p: forge_math::Point3) -> u32;
+    /// Drops the vertices from `n` on (all added since there were `n`).
+    fn truncate(&mut self, n: usize);
+    fn reserve(&mut self, n: usize);
+    /// A triangle of face `f`.
+    fn tri(&mut self, t: [u32; 3], f: u32);
+    fn unsettled(&mut self, f: u32);
+}
+
+impl Out for TriMesh {
+    fn pos(&self, i: u32) -> forge_math::Point3 {
+        self.positions[i as usize]
+    }
+    fn len(&self) -> usize {
+        self.positions.len()
+    }
+    fn add_vertex(&mut self, p: forge_math::Point3) -> u32 {
+        TriMesh::add_vertex(self, p)
+    }
+    fn truncate(&mut self, n: usize) {
+        self.positions.truncate(n);
+    }
+    fn reserve(&mut self, n: usize) {
+        self.triangles.reserve(n);
+        self.face_of.reserve(n);
+    }
+    fn tri(&mut self, t: [u32; 3], f: u32) {
+        self.triangles.push(t);
+        self.face_of.push(f);
+    }
+    fn unsettled(&mut self, f: u32) {
+        self.unsettled.push(f);
+    }
+}
+
+/// A face's own part of a mesh: the mesh's vertices so far (`base`, shared), and the face's new
+/// vertices, numbered after them, and triangles, in `part`.
+struct FaceOut<'a> {
+    base: &'a [forge_math::Point3],
+    part: TriMesh,
+}
+
+impl Out for FaceOut<'_> {
+    fn pos(&self, i: u32) -> forge_math::Point3 {
+        let i = i as usize;
+        match i.checked_sub(self.base.len()) {
+            None => self.base[i],
+            Some(k) => self.part.positions[k],
+        }
+    }
+    fn len(&self) -> usize {
+        self.base.len() + self.part.positions.len()
+    }
+    fn add_vertex(&mut self, p: forge_math::Point3) -> u32 {
+        self.part.positions.push(p);
+        (self.len() - 1) as u32
+    }
+    fn truncate(&mut self, n: usize) {
+        self.part.positions.truncate(n - self.base.len());
+    }
+    fn reserve(&mut self, n: usize) {
+        Out::reserve(&mut self.part, n);
+    }
+    fn tri(&mut self, t: [u32; 3], f: u32) {
+        Out::tri(&mut self.part, t, f);
+    }
+    fn unsettled(&mut self, f: u32) {
+        self.part.unsettled.push(f);
+    }
 }
 
 /// A change to the edges' samples, so a face's boundary chords stop crossing.
@@ -1393,6 +1519,7 @@ fn crossing(body: &Body, samples: &Samples, mesh: &TriMesh, s: [u32; 2], t: [u32
 }
 
 /// A face's boundary drawn flat for its triangulation, and the layout it is drawn in.
+#[derive(Clone)]
 struct Prep {
     su: f64,
     sv: f64,
@@ -1605,7 +1732,7 @@ fn mesh_face(
     segments: &Segments,
     q: &Quality,
     mend: bool,
-    mesh: &mut TriMesh,
+    mesh: &mut impl Out,
 ) -> Result<(), CdtError> {
     let face = body.face(f);
     let surface = &face.surface;
@@ -1628,15 +1755,12 @@ fn mesh_face(
         && !matches!(surface, Surface::Procedural(_))
         && let Some(tris) = strips(surface, &uv, &global, q, mesh)
     {
-        mesh.triangles.reserve(tris.len());
-        mesh.face_of.reserve(tris.len());
+        mesh.reserve(tris.len());
         for [a, b, c] in tris {
             if a == b || b == c || c == a {
                 continue;
             }
-            mesh.triangles
-                .push(if face.same_sense { [a, b, c] } else { [a, c, b] });
-            mesh.face_of.push(f.0);
+            mesh.tri(if face.same_sense { [a, b, c] } else { [a, c, b] }, f.0);
         }
         return Ok(());
     }
@@ -1648,12 +1772,9 @@ fn mesh_face(
     {
         let off = |x, y, p| strays_from(surface, x, y, p, q.chord);
         if let Some(tris) = proc_strips(pr, &uv, &global, &n.want(surface, q, true), q.chord, &off, mesh) {
-            mesh.triangles.reserve(tris.len());
-            mesh.face_of.reserve(tris.len());
+            mesh.reserve(tris.len());
             for [a, b, c] in tris {
-                mesh.triangles
-                    .push(if face.same_sense { [a, b, c] } else { [a, c, b] });
-                mesh.face_of.push(f.0);
+                mesh.tri(if face.same_sense { [a, b, c] } else { [a, c, b] }, f.0);
             }
             return Ok(());
         }
@@ -1773,8 +1894,7 @@ fn mesh_face(
     // each point's position is worked out once, however many edges and rounds test it (the
     // boundary's and the grid's are known already)
     let mut node_index: Vec<u32> = Vec::new();
-    let mut known: Vec<Option<forge_math::Point3>> =
-        global.iter().map(|&g| Some(mesh.positions[g as usize])).collect();
+    let mut known: Vec<Option<forge_math::Point3>> = global.iter().map(|&g| Some(mesh.pos(g))).collect();
     if let Some(g) = &grid {
         node_index = g.place(surface, mesh);
         // a staircase runs over placed nodes only; on a file's face it can reach one that is not
@@ -1787,11 +1907,7 @@ fn mesh_face(
             return Err(CdtError::Internal(Fault::StaircaseOffNodes));
         }
         for cycle in g.cycles.borrow().iter() {
-            known.extend(
-                cycle
-                    .iter()
-                    .map(|&(i, j)| Some(mesh.positions[node_index[g.id(i, j)] as usize])),
-            );
+            known.extend(cycle.iter().map(|&(i, j)| Some(mesh.pos(node_index[g.id(i, j)]))));
         }
     }
     let cache = std::cell::RefCell::new(known);
@@ -2040,7 +2156,7 @@ fn mesh_face(
         }
     };
     if !settled {
-        mesh.unsettled.push(f.0);
+        mesh.unsettled(f.0);
     }
     let mut index = global;
     let known = cache.into_inner();
@@ -2059,14 +2175,12 @@ fn mesh_face(
                 [(i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1)].map(|(x, y)| node_index[g.id(x, y)]);
             for t in [[a, b, c], [a, c, d]] {
                 let t = if face.same_sense { t } else { [t[0], t[2], t[1]] };
-                mesh.triangles.push(t);
-                mesh.face_of.push(f.0);
+                mesh.tri(t, f.0);
             }
         }
     }
 
-    mesh.triangles.reserve(tri.triangles.len());
-    mesh.face_of.reserve(tri.triangles.len());
+    mesh.reserve(tri.triangles.len());
     for t in &tri.triangles {
         let [a, b, c] = t.map(|k| index[k as usize]);
         // two corners on one pole: the triangle collapses to the pole and is dropped
@@ -2075,8 +2189,7 @@ fn mesh_face(
         }
         // counter-clockwise in (u, v) faces along du x dv, the surface's natural normal
         let t = if face.same_sense { [a, b, c] } else { [a, c, b] };
-        mesh.triangles.push(t);
-        mesh.face_of.push(f.0);
+        mesh.tri(t, f.0);
     }
     Ok(())
 }
@@ -2429,7 +2542,7 @@ impl Grid {
     }
 
     /// Mesh vertices for every node an inner cell or the staircase uses, row by row.
-    fn place(&self, surface: &Surface, mesh: &mut TriMesh) -> Vec<u32> {
+    fn place(&self, surface: &Surface, mesh: &mut impl Out) -> Vec<u32> {
         let mut index = vec![u32::MAX; (self.nu + 1) * (self.nv + 1)];
         let (mut trig, mut pts) = (Vec::new(), Vec::new());
         for j in 1..self.nv {
@@ -2540,7 +2653,7 @@ fn proc_strips(
     want: &[[(f64, f64); G]; G],
     chord: f64,
     off: &dyn Fn(forge_math::Point3, forge_math::Point3, Point2) -> bool,
-    mesh: &mut TriMesh,
+    mesh: &mut impl Out,
 ) -> Option<Vec<[u32; 3]>> {
     let ([bottom, right, top, left], u0, u1) = rectangle(uv)?;
     let (v0, v1) = (uv[bottom[0]].y, uv[top[0]].y);
@@ -2578,7 +2691,7 @@ fn proc_strips(
         .chain(left[1..].iter().rev().map(|&i| (i, 3)));
     for (i, side) in round {
         outer.push((place(uv[i], side), pts.len()));
-        pts.push((uv[i], mesh.positions[global[i] as usize], i as u32));
+        pts.push((uv[i], mesh.pos(global[i]), i as u32));
     }
     let inner = pts.len();
     // each column of the grid with its chords' middles across, then between each two columns the
@@ -2739,7 +2852,7 @@ fn strips(
     uv: &[Point2],
     global: &[u32],
     q: &Quality,
-    mesh: &mut TriMesh,
+    mesh: &mut impl Out,
 ) -> Option<Vec<[u32; 3]>> {
     let ([bottom, right, top, left], u0, u1) = rectangle(uv)?;
     let eps = 1e-9 * (u1 - u0).max(uv[top[0]].y - uv[bottom[0]].y).max(1.0);
@@ -2776,7 +2889,7 @@ fn strips(
         ((u1 - u0) * len / (r * step)).ceil().max(2.0) as usize
     };
     // each row: (u, mesh index), increasing u
-    let added = mesh.positions.len();
+    let added = mesh.len();
     let mut rows: Vec<Vec<(f64, u32)>> = Vec::with_capacity(left.len());
     let (mut trig, mut pts) = (Vec::new(), Vec::new());
     rows.push(bottom.iter().map(|&i| (uv[i].x, global[i])).collect());
@@ -2818,7 +2931,7 @@ fn strips(
         Surface::Cone(c) => {
             let off = |x: forge_math::Point3| surface.implicit(x).abs() > q.chord;
             tris.iter().any(|t| {
-                let p = t.map(|i| mesh.positions[i as usize]);
+                let p = t.map(|i| mesh.pos(i));
                 off(p[0].lerp(p[1], 0.5).lerp(p[2], 1.0 / 3.0))
                     || (0..3).any(|k| {
                         let m = p[k].lerp(p[(k + 1) % 3], 0.5);
@@ -2838,7 +2951,7 @@ fn strips(
             };
             let sag = |x: forge_math::Point3| surface.implicit(x).abs();
             tris.iter().any(|t| {
-                let p = t.map(|i| mesh.positions[i as usize]);
+                let p = t.map(|i| mesh.pos(i));
                 (0..3).any(|k| sag(p[k].lerp(p[(k + 1) % 3], 0.5)) > q.chord) || {
                     let g = sag(p[0].lerp(p[1], 0.5).lerp(p[2], 1.0 / 3.0));
                     g > q.chord || (g + margin > q.chord && foot_sags(sp.frame.origin, sp.radius, p, q.chord))
@@ -2846,7 +2959,7 @@ fn strips(
             })
         }
         Surface::Torus(tor) => tris.iter().any(|t| {
-            let p = t.map(|i| mesh.positions[i as usize]);
+            let p = t.map(|i| mesh.pos(i));
             let sag = |x: forge_math::Point3| surface.implicit(x).abs();
             (0..3).any(|k| {
                 sag(p[k].lerp(p[(k + 1) % 3], 0.5)) > q.chord
@@ -2857,7 +2970,7 @@ fn strips(
         _ => false,
     };
     if strays {
-        mesh.positions.truncate(added);
+        mesh.truncate(added);
         return None;
     }
     Some(tris)

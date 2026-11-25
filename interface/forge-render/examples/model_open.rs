@@ -1,19 +1,21 @@
-//! A machine model file opened as the app opens it (`machine_model::read`), timed: the first time
-//! (or `FORGE_RENDER_CACHE` empty) reads the file, again it comes from the cache.
-//! `model_open FILE`.
+//! A machine model file opened as the app opens it (`machine_model::file_tris`), timed: when its
+//! triangles are first shown, and when its read's checks finish and the final ones replace them.
+//! The first time (or with `FORGE_RENDER_CACHE` empty) the file is read; again, it comes from the
+//! cache. `model_open FILE`.
 fn main() {
     let path = std::env::args().nth(1).expect("a model file");
     let t0 = std::time::Instant::now();
-    let bytes = std::fs::read(&path).expect("read");
-    let name = std::path::Path::new(&path)
-        .file_name()
-        .unwrap()
-        .to_string_lossy()
-        .into_owned();
-    let t = forge_render::machine_model::read(&name, &bytes).expect("a model");
+    let shown = forge_render::machine_model::file_tris(std::path::Path::new(&path)).expect("a model");
+    let t1 = t0.elapsed().as_secs_f64() * 1e3;
+    while forge_render::machine_model::pending() {
+        forge_render::machine_model::poll();
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    let t2 = t0.elapsed().as_secs_f64() * 1e3;
+    let done = forge_render::machine_model::file_tris(std::path::Path::new(&path)).expect("a model");
     println!(
-        "{path}: {} triangles in {:.0} ms",
-        t.tri.len(),
-        t0.elapsed().as_secs_f64() * 1e3
+        "{path}: shown at {t1:.0} ms ({} triangles), final at {t2:.0} ms ({} triangles)",
+        shown.tri.len(),
+        done.tri.len()
     );
 }

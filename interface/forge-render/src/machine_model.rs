@@ -8,16 +8,69 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 /// Read files, by path and (length, modified time): a file replaced is read again.
-type Read = Mutex<HashMap<(PathBuf, u64, Option<std::time::SystemTime>), Result<Arc<Tris>, String>>>;
+type Key = (PathBuf, u64, Option<std::time::SystemTime>);
+type Read = Mutex<HashMap<Key, Result<Arc<Tris>, String>>>;
 
-/// A model file's triangles in its own coordinates and units.
-pub fn file_tris(path: &Path) -> Result<Arc<Tris>, String> {
+fn read_files() -> &'static Read {
     static READ: OnceLock<Read> = OnceLock::new();
+    READ.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Files shown before their reads' checks finished (`forge_step::open`): their final triangles
+/// come through these, and replace what is shown ([`poll`]).
+type Pending = Mutex<Vec<(Key, std::sync::mpsc::Receiver<Result<Arc<Tris>, String>>)>>;
+
+fn pending_files() -> &'static Pending {
+    static PENDING: OnceLock<Pending> = OnceLock::new();
+    PENDING.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+/// Counts the files whose final triangles replaced what was shown: a view drawn from
+/// [`file_tris`] is drawn again when it moves.
+static FINISHED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How many shown files have been replaced by their final triangles so far (see [`poll`]).
+pub fn generation() -> u64 {
+    FINISHED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Whether a file shown is still being checked (its final triangles to come).
+pub fn pending() -> bool {
+    !pending_files().lock().expect("no panics while held").is_empty()
+}
+
+/// Takes in the final triangles of the files whose checks finished: whether any came (then
+/// [`generation`] moved, and [`file_tris`] gives them).
+pub fn poll() -> bool {
+    let mut p = pending_files().lock().expect("no panics while held");
+    let mut came = false;
+    p.retain(|(key, rx)| match rx.try_recv() {
+        Ok(r) => {
+            read_files()
+                .lock()
+                .expect("no panics while held")
+                .insert(key.clone(), r);
+            came = true;
+            false
+        }
+        Err(std::sync::mpsc::TryRecvError::Empty) => true,
+        Err(std::sync::mpsc::TryRecvError::Disconnected) => false,
+    });
+    if came {
+        FINISHED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+    came
+}
+
+/// A model file's triangles in its own coordinates and units. A STEP or IGES file not read before
+/// is shown as soon as its solids are drawn (`forge_step::open`): the checks that may still refuse
+/// some of them run on, and when they finish its final triangles replace these ([`poll`]).
+pub fn file_tris(path: &Path) -> Result<Arc<Tris>, String> {
+    poll();
     // through the app's filesystem: std's has no files in a page
     let meta = forge_dirs::fs::metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let key = (path.to_path_buf(), meta.len(), meta.modified().ok());
-    let c = READ.get_or_init(|| Mutex::new(HashMap::new()));
-    if let Some(r) = c.lock().expect("no panics while held").get(&key) {
+    if let Some(r) = read_files().lock().expect("no panics while held").get(&key) {
         return r.clone();
     }
     let name = path
@@ -25,10 +78,95 @@ pub fn file_tris(path: &Path) -> Result<Arc<Tris>, String> {
         .map_or(String::new(), |n| n.to_string_lossy().into_owned());
     let r = forge_dirs::fs::read(path)
         .map_err(|e| format!("{name}: {e}"))
-        .and_then(|bytes| read(&name, &bytes))
-        .map(Arc::new);
-    c.lock().expect("no panics while held").insert(key, r.clone());
+        .and_then(|bytes| match Format::of(&name)? {
+            Format::Step | Format::Iges => shown(&name, bytes, &key),
+            Format::Stl => read(&name, &bytes).map(Arc::new),
+        });
+    read_files()
+        .lock()
+        .expect("no panics while held")
+        .insert(key, r.clone());
     r
+}
+
+/// A STEP or IGES file's triangles as soon as they can be shown: from the cache, else from
+/// `forge_step::open`, its checks finishing on a job whose final triangles come through
+/// [`pending_files`] (where jobs run inline, the single-threaded page, the final ones at once).
+fn shown(name: &str, bytes: Vec<u8>, key: &Key) -> Result<Arc<Tris>, String> {
+    let ck = cached::key(&bytes);
+    if let Some((meshes, failed)) = cached::load(ck) {
+        return tris_of(name, meshes.iter(), failed).map(Arc::new);
+    }
+    let (shown_tx, shown_rx) = std::sync::mpsc::channel();
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    let owned = name.to_string();
+    crate::plat::spawn("model read", move || {
+        let name = owned;
+        let opened = match forge_step::open(&bytes, &forge_step::Limits::default()) {
+            Ok(o) => o,
+            Err(_) => {
+                let e = Err(format!("{name}: not a model this reads"));
+                let _ = shown_tx.send(Some(e.clone()));
+                let _ = done_tx.send(e);
+                return;
+            }
+        };
+        let now = opened.shown();
+        // nothing to show yet: the final triangles are what is shown
+        let _ = shown_tx.send(
+            (!now.is_empty()).then(|| tris_of(&name, now.into_iter().map(|(_, m)| m), 0).map(Arc::new)),
+        );
+        let done = match opened.finish() {
+            Ok(imp) => {
+                let (meshes, failed) = drawn(imp);
+                cached::store(ck, &meshes, failed);
+                tris_of(&name, meshes.iter(), failed).map(Arc::new)
+            }
+            Err(_) => Err(format!("{name}: not a model this reads")),
+        };
+        let _ = done_tx.send(done);
+    });
+    match shown_rx.recv() {
+        Ok(Some(now)) => {
+            // (finished already where the job ran inline)
+            match done_rx.try_recv() {
+                Ok(done) => done,
+                Err(_) => {
+                    pending_files()
+                        .lock()
+                        .expect("no panics while held")
+                        .push((key.clone(), done_rx));
+                    now
+                }
+            }
+        }
+        _ => done_rx
+            .recv()
+            .unwrap_or_else(|_| Err(format!("{name}: its read stopped"))),
+    }
+}
+
+/// A read's solids' display meshes (`import_drawn`'s: each solid's wherever it can be drawn), and
+/// how many could not be drawn.
+fn drawn(imp: forge_step::Imported) -> (Vec<forge_mesh::TriMesh>, usize) {
+    let failed = imp.solids.iter().filter(|s| s.mesh.is_none()).count();
+    (imp.solids.into_iter().filter_map(|s| s.mesh).collect(), failed)
+}
+
+/// Meshes to the app's triangles: an error where there are none.
+fn tris_of<'a>(
+    name: &str,
+    meshes: impl Iterator<Item = &'a forge_mesh::TriMesh>,
+    failed: usize,
+) -> Result<Tris, String> {
+    let mut t = Tris::default();
+    for m in meshes {
+        push(&mut t, &m.positions, &m.triangles, &m.edges);
+    }
+    if t.tri.is_empty() && failed > 0 {
+        return Err(format!("{name}: none of its {failed} solids could be meshed"));
+    }
+    done(t, name)
 }
 
 /// A model's bytes to triangles (`name` picks the format).
@@ -51,27 +189,12 @@ pub fn read(name: &str, bytes: &[u8]) -> Result<Tris, String> {
                 None => {
                     let imp = forge_step::import_drawn(bytes, &forge_step::Limits::default())
                         .map_err(|_| format!("{name}: not a model this reads"))?;
-                    let mut meshes = Vec::new();
-                    let mut failed = 0;
-                    for s in &imp.solids {
-                        // (the read's own drawing at this chord where it kept one: the same triangles)
-                        match s.display_mesh() {
-                            Ok(m) => meshes.push(m.into_owned()),
-                            Err(_) => failed += 1,
-                        }
-                    }
+                    let (meshes, failed) = drawn(imp);
                     cached::store(key, &meshes, failed);
                     (meshes, failed)
                 }
             };
-            let mut t = Tris::default();
-            for m in &meshes {
-                push(&mut t, &m.positions, &m.triangles, &m.edges);
-            }
-            if t.tri.is_empty() && failed > 0 {
-                return Err(format!("{name}: none of its {failed} solids could be meshed"));
-            }
-            done(t, name)
+            tris_of(name, meshes.iter(), failed)
         }
     }
 }

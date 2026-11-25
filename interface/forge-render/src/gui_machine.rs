@@ -16,6 +16,9 @@ pub struct MachHost {
     /// No view was open: the builder made one, and closing drops it.
     made_view: bool,
     geom: u64,
+    /// `machine_model::generation()` when the scene was built: an attached model shown before its
+    /// read's checks finished is drawn again when they do.
+    models: u64,
     pose: u64,
     fit: u64,
     /// Each placement's body name and link name.
@@ -147,7 +150,9 @@ fn machine_bounds(def: &forge_machine::def::MachineDef) -> Option<crate::frame::
         .flat_map(|p| match p {
             Prim::Box { min, max } => vec![*min, *max],
             Prim::Cyl { base, axis, r, h } => crate::shell::lib_form::cyl_pts(*base, *axis, *r, *h),
-            Prim::OBox { o, axes, size } => (0..8u8).map(|i| Prim::obox_at(o, axes, size, [i & 1, (i >> 1) & 1, (i >> 2) & 1].map(f64::from))).collect::<Vec<_>>(),
+            Prim::OBox { o, axes, size } => (0..8u8)
+                .map(|i| Prim::obox_at(o, axes, size, [i & 1, (i >> 1) & 1, (i >> 2) & 1].map(f64::from)))
+                .collect::<Vec<_>>(),
         });
     crate::frame::Bounds::of(pts.map(|p| p.map(|x| x as f32)))
 }
@@ -256,8 +261,15 @@ impl Gui {
             (None, Some(d)) => d,
             (None, None) => return,
         };
-        if m.geom != self.mach.geom {
+        // (a model shown before its read's checks finished: drawn again, final, when they do)
+        crate::machine_model::poll();
+        if crate::machine_model::pending() {
+            self.ctx
+                .request_repaint_after(std::time::Duration::from_millis(100));
+        }
+        if m.geom != self.mach.geom || crate::machine_model::generation() != self.mach.models {
             self.mach.geom = m.geom;
+            self.mach.models = crate::machine_model::generation();
             let preview = if tooling.is_some() {
                 m.library_preview()
             } else {
@@ -489,7 +501,9 @@ impl Gui {
                         })
                         .unwrap_or_default(),
                     Prim::OBox { o, axes, size } => (0..8u8)
-                        .map(|i| Prim::obox_at(o, axes, size, [i & 1, (i >> 1) & 1, (i >> 2) & 1].map(f64::from)))
+                        .map(|i| {
+                            Prim::obox_at(o, axes, size, [i & 1, (i >> 1) & 1, (i >> 2) & 1].map(f64::from))
+                        })
                         .collect(),
                 };
                 if let Some((lo, hi)) =
