@@ -618,6 +618,9 @@ pub struct Ctx {
     pub nodes: Vec<Node>,
     /// How many exact (big-float) evaluations were needed: for tracing the filter's rate.
     pub exact_evals: u64,
+    /// The precision, in bits, of every big-float evaluation made, summed: the work the exact
+    /// signs cost (deterministic: the same nodes take the same precisions everywhere).
+    pub refined_bits: u64,
     memo: Memo,
     keys: Vec<Key>,
 }
@@ -1142,6 +1145,7 @@ impl Ctx {
                 eprintln!("sign: node {a} radicals {k} bound {need} bits, p {p}");
             }
             let v = self.eval_in(&order, p);
+            self.refined_bits += p;
             if let Some(lo) = &v.lo
                 && !lo.is_zero()
                 && !lo.neg

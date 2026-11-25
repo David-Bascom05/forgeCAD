@@ -8101,8 +8101,10 @@ fn loop_band(
         lp = lp.reversed();
     }
     let rg = Region { loops: vec![lp] };
-    let (outer, _) = offset(&rg, -r).ok()?;
-    let (inner, _) = offset(&rg, r).ok()?;
+    let __t = std::time::Instant::now();
+    let (outer, so) = forge_cam_geom::offset::offset_within(&rg, -r, u64::MAX).ok()?;
+    let (inner, si) = forge_cam_geom::offset::offset_within(&rg, r, u64::MAX).ok()?;
+    if std::env::var_os("LBDBG").is_some() { eprintln!("LBDBG bits {} {} t {:?}", so.refined_bits, si.refined_bits, __t.elapsed()); }
     let band = boolean(&region_of(&outer), &region_of(&inner), Op::Diff).ok()?;
     if band.is_empty() {
         return None;

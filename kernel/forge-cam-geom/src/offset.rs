@@ -44,6 +44,33 @@ pub enum OffsetError {
     Region(RegionError),
     /// The kept pieces do not close into loops: a bug, never a result.
     Open,
+    /// `offset_within`'s budget of exact work spent before the offset was made (a caller that
+    /// can do without it, e.g. by crediting less, takes that way). Never cached.
+    Budget,
+}
+
+std::thread_local! {
+    /// The bits of exact refinement an `offset_within` on this thread may spend (None: no limit).
+    static BUDGET: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
+}
+
+/// Whether this thread's `offset_within` budget is spent by `cx`.
+fn spent(cx: &Ctx) -> bool {
+    BUDGET.with(|b| b.get().is_some_and(|m| cx.refined_bits > m))
+}
+
+/// `offset`, giving up with `OffsetError::Budget` once its exact signs have refined more than
+/// `max_bits` bits in all (Ctx::refined_bits: a sign the filter cannot settle is refined to its
+/// separation bound, and an exact tie between expressions of several square roots, which
+/// round-numbered input makes, can need a hundred thousand bits, many times over). Checked
+/// between the offset's steps, so it stops within a step of the budget. Deterministic: the same
+/// input spends the same bits on every machine. A result already made is returned as it is; a
+/// result made here is kept for both, a Budget never.
+pub fn offset_within(rg: &Region, r: f64, max_bits: u64) -> Offsets {
+    let prev = BUDGET.with(|b| b.replace(Some(max_bits)));
+    let o = offset(rg, r);
+    BUDGET.with(|b| b.set(prev));
+    o
 }
 
 /// Counters for the trace and the speed gate.
@@ -53,6 +80,8 @@ pub struct Stats {
     pub split: usize,
     pub kept: usize,
     pub exact_evals: u64,
+    /// The bits the exact signs refined, summed (Ctx::refined_bits).
+    pub refined_bits: u64,
 }
 
 type Offsets = Result<(Vec<OLoop>, Stats), OffsetError>;
@@ -80,6 +109,9 @@ pub fn offset(rg: &Region, r: f64) -> Offsets {
         return o;
     }
     let o = offset_anew(rg, r);
+    if matches!(o, Err(OffsetError::Budget)) {
+        return o;
+    }
     if let Ok(mut g) = MADE.lock() {
         let m = g.get_or_insert_with(HashMap::new);
         if m.len() >= MADE_MAX {
@@ -180,6 +212,9 @@ fn offset_anew(rg: &Region, r: f64) -> Offsets {
                 j += 1;
                 continue;
             }
+            if spent(&cx) {
+                return Err(OffsetError::Budget);
+            }
             let (mut a, mut b) = (Vec::new(), Vec::new());
             arr::meet(&mut cx, &raw[i], &raw[j], &mut a, &mut b);
             on[i].append(&mut a);
@@ -197,6 +232,9 @@ fn offset_anew(rg: &Region, r: f64) -> Offsets {
         let subs = split(&mut cx, &pc, &mut pts);
         let mut k = 0;
         while k < subs.len() {
+            if spent(&cx) {
+                return Err(OffsetError::Budget);
+            }
             st.split += 1;
             let sp = subs[k];
             let m = cx.mark();
@@ -233,6 +271,7 @@ fn offset_anew(rg: &Region, r: f64) -> Offsets {
         k += 1;
     }
     st.exact_evals = cx.exact_evals;
+    st.refined_bits = cx.refined_bits;
     Ok((out, st))
 }
 
@@ -605,6 +644,9 @@ pub(crate) fn link(cx: &mut Ctx, kept: &[Piece]) -> Result<Vec<OLoop>, OffsetErr
         if !kept[start].full {
             let mut cur = start;
             loop {
+                if spent(cx) {
+                    return Err(OffsetError::Budget);
+                }
                 if arr::same(cx, kept[cur].e, kept[start].s) && closes_here(cx, kept, &used, cur, start) {
                     break;
                 }
