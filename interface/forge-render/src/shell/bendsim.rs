@@ -98,6 +98,9 @@ pub struct BendSimUi {
     pub axes_was: Option<bool>,
     /// The press overview is shown (Press Overview): the stations' chips over the view.
     pub overview: bool,
+    /// Collisions: each failing or near step's contact regions drawn on the part (red where a
+    /// collision is proven, amber where near), the tool it meets red (David).
+    pub collisions: bool,
     /// Follow bend: each new step framed afresh (off: the eye is the user's).
     pub follow: bool,
     /// See-through: what stands between the eye and the bend being made drawn as a ghost, at
@@ -227,6 +230,7 @@ impl BendSimUi {
             pane: Pane::Program,
             axes_was: None,
             overview: false,
+            collisions: true,
             follow: false,
             see_through: true,
             opacity: 0.45,
@@ -295,6 +299,7 @@ impl BendSimUi {
             pane: Pane::Program,
             axes_was: None,
             overview: false,
+            collisions: true,
             follow: false,
             see_through: true,
             opacity: 0.45,
@@ -2040,7 +2045,12 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                     b.checks
                         .iter()
                         .map(|c| cards::rule_failed(c.rule))
-                        .collect::<Vec<_>>()
+                        .fold(Vec::new(), |mut v: Vec<&str>, w| {
+                            if !v.contains(&w) {
+                                v.push(w);
+                            }
+                            v
+                        })
                         .join("; ")
                 ))
                 .color(look::FAIL),
