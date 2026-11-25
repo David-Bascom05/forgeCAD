@@ -1,0 +1,60 @@
+name: Train 13 isolated item profiles
+on:
+  push:
+    branches: [diagnostics/train13-items]
+permissions:
+  contents: read
+jobs:
+  profiles:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        revision:
+          - 7b61ccae612c79c08a3e0f87c276e86044db2909
+          - c37bc7e4a13fe2670ec2c96a557193e4e5391610
+          - ca7739f3e9fd33c45f4c3683e5f8550aac5faf2d
+          - df38be77473dd1e8dd1968dcb9885bc6b2764e03
+          - 1786756086b5480922ae48586a4cb37db4d1843e
+          - d37b853f31a634ef43ce74ecc8fef0fdf7036e8d
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_RELEASE_DEBUG: 0
+      GATE_COUNTER: callgrind
+      GATE_EXACT: 1
+      GATE_JOBS: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 5a3f4875b4d57f23f8e1f653b4f43c84b5c01031
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Apply this item's changes on the same base
+        env:
+          ITEM: ${{ matrix.revision }}
+        shell: bash
+        run: |
+          git diff HEAD..."$ITEM" -- . ':(exclude)research/booleans/drift.md' | git apply
+          git status --short
+      - run: sudo apt-get update -q && sudo apt-get install -y -q valgrind
+      - name: Collect each benchmark's instruction profile
+        shell: bash
+        run: |
+          mkdir -p /tmp/train-profiles
+          export GATE_CPU=$(python3 -c 'import os; print(min(os.sched_getaffinity(0)))')
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('tools/speed/gate.sh')
+          s = p.read_text()
+          old = '--callgrind-out-file=/dev/null $only'
+          assert s.count(old) == 1
+          p.write_text(s.replace(old, '--callgrind-out-file="/tmp/train-profiles/$(basename "$1")-${2:-none}-${3:-none}-${4:-none}.cg" $only'))
+          PY
+          sh tools/speed/gate.sh --save
+          cp tools/speed/{baseline-valgrind,bits}.txt /tmp/train-profiles/
+          tar -czf "$RUNNER_TEMP/profiles.tgz" -C /tmp/train-profiles .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: profiles-${{ matrix.revision }}
+          path: ${{ runner.temp }}/profiles.tgz
