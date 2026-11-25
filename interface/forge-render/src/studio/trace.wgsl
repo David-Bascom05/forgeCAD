@@ -676,15 +676,17 @@ fn power(a: f32, b: f32) -> f32 {
 fn trace_main(@builtin(global_invocation_id) id: vec3u) {
     let w = P.size.x;
     let h = P.size.y;
-    if id.x >= w || id.y >= h {
+    // a band of rows from misc.w (the live view traces a sample a band at a time)
+    let y = id.y + P.misc.w;
+    if id.x >= w || y >= h {
         return;
     }
-    let pixel = id.y * w + id.x;
+    let pixel = y * w + id.x;
     var rng = Rng(pixel, P.size.z, 0u);
     let jx = next(&rng);
     let jy = next(&rng);
     let sx = 2.0 * (f32(id.x) + jx) / f32(w) - 1.0;
-    let sy = 1.0 - 2.0 * (f32(id.y) + jy) / f32(h);
+    let sy = 1.0 - 2.0 * (f32(y) + jy) / f32(h);
     var o: vec3f;
     var d: vec3f;
     let lu = vec2f(next(&rng), next(&rng));
