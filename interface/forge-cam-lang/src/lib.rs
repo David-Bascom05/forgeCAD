@@ -2363,16 +2363,9 @@ fn get_str(m: &BTreeMap<String, V>, k: &str, default: Option<&str>) -> Result<St
 
 /// Runs a machining document (its file's directory finds the part) on the built-in library.
 pub fn run(src: &str, dir: &Path) -> Cam {
-    // the built-in library, shared: read once (Library::builtin), and copied only if the
-    // document's project files add to it (run_with_library)
-    static BUILTIN: std::sync::OnceLock<std::sync::Arc<Library>> = std::sync::OnceLock::new();
-    run_shared(
-        src,
-        dir,
-        BUILTIN
-            .get_or_init(|| std::sync::Arc::new(Library::builtin()))
-            .clone(),
-    )
+    // the built-in library, shared: read once (Library::builtin_shared), and copied only if
+    // the document's project files add to it (run_with_library)
+    run_shared(src, dir, Library::builtin_shared())
 }
 
 /// Runs a machining document on a given tooling library: the one the user's levels make
