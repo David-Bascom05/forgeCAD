@@ -1310,7 +1310,7 @@ fn measures_agree<'a>(
 
 /// `measures_agree` past the integrals: the mesh's volume and area against them.
 /// With the mesh at 5e-4 of the diagonal where it is the one `display_mesh` asks for, bit for bit:
-/// made with no budget test true (some left after it), and on less than `budget::FILE` (what a
+/// made with no budget test true (some left after it), and on less than `tessellate::MESH` (what a
 /// mesh outside an import is drawn within), so drawn again within that, it would spend the same
 /// and meet no test true either: the same computation.
 type Checked<'a> = (Option<String>, Option<std::borrow::Cow<'a, forge_mesh::TriMesh>>);
@@ -1343,7 +1343,7 @@ fn mesh_agrees<'a>(
     let (mesh, chord, display) = match first {
         Ok(x) => {
             let left = forge_geom::budget::left();
-            let display = left > 0 && before - left < forge_geom::budget::FILE;
+            let display = left > 0 && before - left < forge_mesh::tessellate::MESH;
             (x, 5e-4 * diagonal, display)
         }
         Err(_) => match mesh_at(5e-3 * diagonal) {
@@ -1779,10 +1779,10 @@ pub(crate) fn finish_shown(
         u64::MAX - budget::left()
     };
     let (mesh, mesh_spent) = {
-        let _b = budget::scoped(budget::FILE);
+        let _b = budget::scoped(forge_mesh::tessellate::MESH);
         let m = forge_mesh::tessellate::tessellate_tolerant(&body, &Solid::display_quality(&body)).ok();
         let l = budget::left();
-        (m, (l > 0).then_some(budget::FILE - l))
+        (m, (l > 0).then_some(forge_mesh::tessellate::MESH - l))
     };
     Ok(Shown {
         body,
