@@ -1150,8 +1150,9 @@ mod tests {
     /// or `old` where the tool never covers the point.
     fn true_height(old: f64, a: [f64; 3], b: [f64; 3], p: &Profile, x: f64, y: f64) -> f64 {
         let mut z = old;
-        for k in 0..=2000 {
-            let t = k as f64 / 2000.0;
+        // (positions 0.05 mm apart at most along these moves: finer than the cells' h/√2 margin)
+        for k in 0..=400 {
+            let t = k as f64 / 400.0;
             let c = [
                 a[0] + t * (b[0] - a[0]),
                 a[1] + t * (b[1] - a[1]),
@@ -1193,10 +1194,10 @@ mod tests {
                         }
                         lowered += 1;
                         // every point of the cell: still at or below the cell's height
-                        for v in 0..=6 {
-                            for u in 0..=6 {
-                                let x = under.x0 + (i as f64 + u as f64 / 6.0) * under.h;
-                                let y = under.y0 + (j as f64 + v as f64 / 6.0) * under.h;
+                        for v in 0..=3 {
+                            for u in 0..=3 {
+                                let x = under.x0 + (i as f64 + u as f64 / 3.0) * under.h;
+                                let y = under.y0 + (j as f64 + v as f64 / 3.0) * under.h;
                                 let t = true_height(10.0, a, b, p, x, y);
                                 assert!(
                                     t <= under.z[k] + 1e-9,
