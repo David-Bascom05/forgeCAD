@@ -146,13 +146,25 @@ after each fix. Four causes:
 | A. a loop's slit of no width (out and back along two edges lying on each other within the file's uncertainty) | 1 (HRT160-2 #13299) | reader | **fixed**: `heal.rs cancel_slits`, 52c2877c; unit test incl. a 1e-3 slit left alone; HRT160-2 now 5 solids, 0 refused, app read 211 s -> 0.24 s; corpus differential queued |
 | B. a small-radius cylinder gridded to its radius (`interior_steps`: rows 2·r·du apart even when r ≪ chord: 50k–100k rows per fillet) | 10 (ST-30-35Y x2, GM-1-5AX, GM-1XT-5AX, DM-1, EC-1600ZT, HFL-3015D-6, HFL-6512T, HRP-2, cobot_pkg-7) | mesher | waiting on the coordinator's rigor ruling: the fix (no row spacing below the chord tolerance) changes every such fillet's mesh |
 | C. an intersection-curve edge sampled one point per chain link at least (`edge_segments`: 2,000 links over 6 mm -> 4,845 boundary points on a 1 mm-chord plane; CDT recovery thrashes) | 1 (VF-5_40_SS_TR #252821) | mesher | same family and same ruling as B |
-| D. a face whose surface the file puts 5 m from its edges (B-spline patch read correctly; edges 5,040 mm off it) | 1 (VS-3 #478011) | the file | not repairable exactly; proposed: refuse early with the true reason (today: "too long to measure") |
+| D. a face whose surface the file puts 5 m from its edges (B-spline patch read correctly; edges 5,040 mm off it) | 1 (VS-3 #478011) | the file | **done** on `import/faces`: refused before healing with the true reason (`FAR_FACE_MM`/`FAR_FACE_PART`, `far_gap`); see below |
 
 Tools: `tools/kernel-stress/extract.py FILE ENTITY OUT` takes one solid out of a file; then read it
 with the measures skipped (a scratch patch of `finish`, env `FORGE_NOCHECK`) and mesh it per solid
 to find its first failing face; log the interior grid sizes and per-stage spends in `tessellate.rs`
 to see where the budget goes. Whatever is fixed needs the full differential with the repository's
 fixtures and the app's 16x path, as above.
+
+### D's differential
+
+D refuses a solid when a face's edges lie farther than both 1 mm and 1% of the part's diagonal
+from its surface. The quick measure (`measure_gaps`, `surface.distance`) can be fooled: a NURBS
+nearest-point search may settle on a far sheet of the surface. So a face it calls far is measured
+again (`far_gap`: a 64 x 64 parameter grid, then a projection from the nearest grid point), and
+only that is believed (05c6e6d4). Corpus and fixtures: VS-3 #478011 (4.2 m; refused before, now
+saying why), VS-3 #738262 (3.9 m) and Cobot #226368 (face #1170897, 3.0 mm, the same on a
+600 x 600 grid: a thin strip with one edge's end 3 mm off it) newly refused; TRT100 #225539 (9.4 mm
+by the quick measure alone) was the false alarm that led to `far_gap`, and reads as before. Still
+to do: show a refused solid's other faces through the undrawn-face path (app model read only).
 
 ### Gap rule tier 2 (not written yet)
 
