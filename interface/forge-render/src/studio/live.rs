@@ -232,11 +232,13 @@ impl Queue {
     }
 
     pub fn progress(&self) -> Progress {
+        // a job asked and not yet begun is under way at none of its samples (its tracer is made
+        // on the next tick, after the frame that shows it)
         match (&self.tracer, self.jobs.get(self.at.0)) {
-            (Some(t), Some(j)) => Progress::Running {
+            (t, Some(j)) => Progress::Running {
                 job: self.at.0,
                 frame: self.at.1,
-                done: t.samples,
+                done: t.as_ref().map_or(0, |t| t.samples),
                 of: j.spp,
             },
             _ => Progress::Idle,

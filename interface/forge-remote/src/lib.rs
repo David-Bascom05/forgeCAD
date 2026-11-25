@@ -474,7 +474,8 @@ fn run(addr: &str, path: &str, shared: &Mutex<Shared>, stop: &AtomicBool, waker:
     }
 }
 
-#[cfg(test)]
+// sockets, threads, links and file locks: not in WASI (the wasm suite runs the workspace there)
+#[cfg(all(test, not(target_os = "wasi")))]
 mod tests {
     use super::*;
 

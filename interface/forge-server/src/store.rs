@@ -319,7 +319,8 @@ impl FileLogStore {
     }
 }
 
-#[cfg(test)]
+// sockets, threads, links and file locks: not in WASI (the wasm suite runs the workspace there)
+#[cfg(all(test, not(target_os = "wasi")))]
 mod tests {
     use super::*;
     use forge_lang::error::Op;

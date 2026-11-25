@@ -117,6 +117,8 @@ pub struct Config {
     pub cap_loopback: bool,
     /// After this long with no op, a document's head is saved as a git commit (no version).
     pub checkpoint_idle: Duration,
+    /// The upgrade and the Hello must be done within this (absolute): [`HANDSHAKE`] by default.
+    pub handshake: Duration,
     /// Serve on a non-loopback address with no TLS (the token and every op in clear): a LAN demo
     /// only, said loudly.
     pub insecure_lan: bool,
@@ -136,6 +138,7 @@ impl Config {
             per_ip: 32,
             cap_loopback: false,
             checkpoint_idle: Duration::from_secs(300),
+            handshake: HANDSHAKE,
             insecure_lan: false,
         }
     }
@@ -676,16 +679,26 @@ fn connection(
     deadlines: &Deadlines,
     mut slot: Slot,
 ) {
-    let _ = s.set_read_timeout(Some(HANDSHAKE));
+    let _ = s.set_read_timeout(Some(c.handshake));
     let _ = s.set_write_timeout(Some(WRITE));
     let _ = s.set_nodelay(true);
     // the upgrade and the Hello: done by the deadline, or the socket is shut
     let done = Arc::new(AtomicBool::new(false));
     let Ok(s2) = s.try_clone() else { return };
-    deadlines
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .push((Instant::now() + HANDSHAKE, s2, done.clone()));
+    deadlines.lock().unwrap_or_else(|e| e.into_inner()).push((
+        Instant::now() + c.handshake,
+        s2,
+        done.clone(),
+    ));
+    // however this connection ends, the watchdog lets go of its clone of the socket at once (so
+    // a refused connection closes now, not at the deadline)
+    struct Done(Arc<AtomicBool>);
+    impl Drop for Done {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::SeqCst);
+        }
+    }
+    let _done = Done(done.clone());
     let accepted = forge_ws::accept(s, PRE_HELLO_MAX, |q| {
         if q.path != "/sync" {
             return Err(forge_ws::Refuse(404, "the sync endpoint is /sync"));

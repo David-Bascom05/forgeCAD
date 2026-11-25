@@ -1,5 +1,6 @@
 //! Regression tests for the security review of hosted/server @4e64707d: each reproduces a
 //! finding against the fixed server (the PoCs as they were sent).
+#![cfg(not(target_os = "wasi"))] // sockets, threads and file locks: not in WASI
 
 use forge_lang::error::{Literal, Op, ParamKey};
 use forge_server::{Config, StoreKind, start_on};
@@ -131,6 +132,7 @@ fn slow_upgrades_are_cut_and_one_address_is_capped() {
     let (addr, h) = serve_with(&root, |c| {
         c.cap_loopback = true;
         c.per_ip = 3;
+        c.handshake = Duration::from_secs(1);
     });
     let t0 = Instant::now();
     let mut s = TcpStream::connect(&addr).unwrap();

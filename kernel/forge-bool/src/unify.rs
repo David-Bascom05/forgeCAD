@@ -70,9 +70,20 @@ pub fn unify(body: &mut Body) {
     faces.retain(|&f| body.face(f).alive);
     faces.sort_unstable();
     faces.dedup();
-    // a loop left walking edges there and back (a slit between faces now one) bounds nothing
+    // a loop left walking edges there and back (a slit between faces now one) bounds nothing; a
+    // face that is nothing but such loops (zero area: a boolean left a tree of edges as a face of
+    // its own, research/booleans/drift.md §10) goes with them, never left with no loop at all
     for &f in &faces {
         let ls: Vec<LoopId> = body.face(f).loops.iter().copied().collect();
+        let slit = |l: LoopId| {
+            body.lp(l)
+                .coedges()
+                .all(|c| body.partner(c).is_some_and(|p| body.coedge(p).lp == l))
+        };
+        if !ls.is_empty() && ls.iter().all(|&l| slit(l)) {
+            body.kill_face(f);
+            continue;
+        }
         for l in ls {
             let cs = body.lp(l).coedges();
             if cs
@@ -85,6 +96,7 @@ pub fn unify(body: &mut Body) {
             }
         }
     }
+    faces.retain(|&f| body.face(f).alive);
     let joined = join_through(body);
     rename_wholes(body, &merged, &joined);
     for f in faces {

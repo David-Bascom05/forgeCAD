@@ -7,6 +7,12 @@ use egui::{Align2, Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 const W: f32 = 360.0;
 const BUTTON_H: f32 = 34.0;
 
+/// What the page says while a link's file waits for the project: the status line's words, and
+/// the empty view's beside its spinner.
+pub fn waiting_words(file: &str) -> String {
+    format!("Loading project \u{b7} opening {file} when it's in")
+}
+
 impl Shell {
     /// No part, no drawing: a heading, a sentence, New part as the primary, New sheet metal part
     /// and Open beside it, and the shortcuts that do the same.
@@ -19,6 +25,20 @@ impl Shell {
         let p = ui.painter().clone();
         let mut y = v.center().y - 120.0;
         let x = v.center().x - W * 0.5;
+        // a link's file on its way: a spinner and what is coming, above where to start (which
+        // still works meanwhile)
+        if let Some(file) = &self.waiting {
+            let g = ui.fonts_mut(|f| f.layout_no_wrap(waiting_words(file), theme::body(), t.ink2));
+            let w = 16.0 + S2 + g.size().x;
+            let left = v.center().x - w * 0.5;
+            let cy = y - 48.0;
+            egui::Spinner::new()
+                .size(16.0)
+                .color(t.ink2)
+                .paint_at(ui, Rect::from_center_size(pos2(left + 8.0, cy), vec2(16.0, 16.0)));
+            p.galley(pos2(left + 16.0 + S2, cy - g.size().y * 0.5), g, t.ink2);
+            ui.ctx().request_repaint();
+        }
         p.text(
             pos2(v.center().x, y),
             Align2::CENTER_TOP,
