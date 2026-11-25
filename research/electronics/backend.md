@@ -184,6 +184,8 @@ The [per-frame performance gates](live-checks.md#performance-gates-that-can-chan
 
 **Dependency order and exit criteria**
 
+The first milestone is the [cross-view design-intent study and representation decision](design-intent.md). The implementation sequence below begins after that contract is reviewed.
+
 Begin each increment with its graphical/textual authoring equivalence, applicability and typed failures, proof ledger rows, cold oracle, and drag replay. The [end-to-end acceptance scenario](design.md#first-acceptance-test) is the first vertical slice.
 
 1. **Document, IDs, transforms and import.** Parse a versioned KiCad corpus, reload native files and reproduce hierarchy, pin/pad bindings, board inventory, drill records and cross-document identities. Produce an explicit loss report for unsupported constructs. Stable IDs and frame conventions gate all later work.

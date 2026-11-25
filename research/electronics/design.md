@@ -4,6 +4,10 @@ Design proposal · 25 November 2026
 
 A designer draws a circuit, places it on a board, installs the board in an assembly and connects a harness. Throughout that work ForgeCAD can answer three questions about a selected object: what it is connected to, why it is placed there, and what the last edit changed. The native document is `.fg`. The graphical editor, text editor, CLI and MCP share the same typed model and edit operations. This record describes the proposed electronics tools and the evidence needed to ship them.
 
+## First milestone
+
+Study how code-first and drawing-first tools encode intent across source, schematic and physical board. Decide which facts each view owns, how graphical edits write back to generated code, and what survives regeneration, synchronization and import. The deliverable is a reviewed representation and edit contract grounded in real designs. The acceptance fixture below follows that decision. [Prior art, traced records, edit matrix and exit criteria](design-intent.md)
+
 ## Design decisions
 
 - **Drawing is sufficient.** Placing a symbol records its library identity, occurrence, pin roles and sheet geometry. Drawing a wire records its electrical attachments and visible path. A designer who never opens the text editor gets the same diagnostics, soft placement links, undo and save/reopen behavior as a designer editing source. A gesture produces a targeted source patch and preserves unrelated comments and formatting. [Authoring and placement](schematic-and-placement.md)
