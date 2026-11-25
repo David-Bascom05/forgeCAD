@@ -35,17 +35,24 @@ use crate::check::{Face, Move, Surf, V3, Verdict};
 use crate::ival::Ival;
 use crate::tool::{Body, PSeg};
 
-/// The capsule containing a body: core from (0, 0, zc) to (0, 0, z1), radius rho.
+/// The capsule containing a body: the points within rho of its core, the solid cylinder of
+/// radius `a` about the axis from (0, 0, zc) to (0, 0, z1). `a` = 0: the core is the axis
+/// segment (a ball cutter's capsule); `a` > 0, a disc capsule: a bull-nose cutter (radius R,
+/// corner r) is exactly the points within r of the cylinder of radius R − r from z0 + r up.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Capsule {
     pub zc: f64,
     pub z1: f64,
     pub rho: f64,
+    pub a: f64,
 }
 
 /// Whether (r, z) in the (ρ, z) half-plane is proven within c.rho of the core segment: beside the
 /// core (zc ≤ z ≤ z1) an exact comparison r ≤ ρ; beyond its ends, r² + dz² ≤ ρ² in intervals.
 fn within(c: &Capsule, r: f64, z: f64) -> bool {
+    if c.a > 0.0 {
+        return within_disc(c, r, z);
+    }
     if z >= c.zc && z <= c.z1 {
         return r.abs() <= c.rho;
     }
@@ -57,6 +64,46 @@ fn within(c: &Capsule, r: f64, z: f64) -> bool {
     Ival::pt(r).sqr().add(dz.sqr()).hi <= Ival::pt(c.rho).sqr().lo
 }
 
+/// x − y when it is exact (Knuth's two-sum: its rounding error is computed exactly and is 0),
+/// else None.
+fn exact_diff(x: f64, y: f64) -> Option<f64> {
+    let s = x - y;
+    let ny = -y;
+    let bv = s - x;
+    let av = s - bv;
+    let e = (x - av) + (ny - bv);
+    (s.is_finite() && e == 0.0).then_some(s)
+}
+
+/// `within` for a disc capsule: (r, z)'s distance to the core's half-section, the rectangle
+/// [0, a] × [zc, z1], proven at most rho. Beside the rectangle (zc ≤ z ≤ z1, or |r| ≤ a) the
+/// distance is one difference, compared exactly where it is exact (a bull-nose's profile lies
+/// on its capsule's boundary: an interval's widening would refuse it); at its corners
+/// (max(|r| − a, 0))² + dz² ≤ rho² in intervals.
+fn within_disc(c: &Capsule, r: f64, z: f64) -> bool {
+    let r = r.abs();
+    let beside_z = z >= c.zc && z <= c.z1;
+    if beside_z && r <= c.a {
+        return true;
+    }
+    if beside_z {
+        return match exact_diff(r, c.a) {
+            Some(d) => d <= c.rho,
+            None => Ival::pt(r).sub(Ival::pt(c.a)).hi <= c.rho,
+        };
+    }
+    let dz = if z < c.zc { (c.zc, z) } else { (z, c.z1) };
+    if r <= c.a {
+        return match exact_diff(dz.0, dz.1) {
+            Some(d) => d <= c.rho,
+            None => Ival::pt(dz.0).sub(Ival::pt(dz.1)).hi <= c.rho,
+        };
+    }
+    let dr = Ival::pt(r).sub(Ival::pt(c.a));
+    let dzi = Ival::pt(dz.0).sub(Ival::pt(dz.1));
+    dr.sqr().add(dzi.sqr()).hi <= Ival::pt(c.rho).sqr().lo
+}
+
 /// The capsule of a body, when its whole chain lies within its largest radius of the axis
 /// segment from z0 + rmax to z1 (a ball end mill's cutter body; not a flat or bull nose).
 pub fn capsule(b: &Body) -> Option<Capsule> {
@@ -65,7 +112,13 @@ pub fn capsule(b: &Body) -> Option<Capsule> {
         zc: b.z0 + b.rmax,
         z1: b.z1,
         rho: b.rmax,
+        a: 0.0,
     };
+    axis_capsule(b, c).or_else(|| disc_capsule(b))
+}
+
+/// A body within the axis capsule `c` (every piece checked), or None.
+fn axis_capsule(b: &Body, c: Capsule) -> Option<Capsule> {
     if !(c.zc <= c.z1 && c.rho > 0.0) {
         return None;
     }
@@ -84,6 +137,41 @@ pub fn capsule(b: &Body) -> Option<Capsule> {
             }
         }
         i += 1;
+    }
+    Some(c)
+}
+
+/// A disc capsule for a body with a corner arc off the axis (a bull-nose): radius rho the
+/// arc's, core radius a its centre's distance from the axis, from the centre's height up; every
+/// piece proven within it (a line by its ends: the distance to the core, a convex set, is convex
+/// along it; an arc by its centre in the core and its radius at most rho). None otherwise.
+fn disc_capsule(b: &Body) -> Option<Capsule> {
+    let (ac, r) = b.chain.iter().find_map(|s| match *s {
+        PSeg::Arc { c, r, .. } if c[0] > 0.0 => Some((c, r)),
+        _ => None,
+    })?;
+    let c = Capsule {
+        zc: ac[1],
+        z1: b.z1,
+        rho: r,
+        a: ac[0],
+    };
+    if !(c.zc <= c.z1 && c.rho > 0.0 && c.a > 0.0 && c.a.is_finite()) {
+        return None;
+    }
+    for s in &b.chain {
+        match *s {
+            PSeg::Line { a, b: e } => {
+                if !within_disc(&c, a[0], a[1]) || !within_disc(&c, e[0], e[1]) {
+                    return None;
+                }
+            }
+            PSeg::Arc { c: k, r, .. } => {
+                if !(k[0] >= 0.0 && k[0] <= c.a && k[1] >= c.zc && k[1] <= c.z1 && r <= c.rho) {
+                    return None;
+                }
+            }
+        }
     }
     Some(c)
 }
@@ -289,6 +377,69 @@ pub(crate) fn shell(q_lo: f64, q_hi: f64, s_lo: f64, s_hi: f64) -> Option<f64> {
     })
 }
 
+/// `shell` for a disc capsule against a cylinder about the line through the origin along `ax`:
+/// P is P0 (the parallelogram `q` is of) swept by the horizontal disc of radius a. Each point of
+/// P is within a of P0, so its distance to the axis lies in [d_min(P0) − a, d_max(P0) + a]; and
+/// for the unit k = â × h (h = ẑ × â, horizontal, ⊥ â), k ⊥ â, so a point's distance to the axis
+/// is at least |w·k|, linear over P: its range is P0's corners' (a parallelogram's extremes are
+/// at corners) widened by the disc's reach along k, a·|k_xy|. The larger of the two lower
+/// bounds is one. (A horizontal axis: k is vertical, the disc adds nothing, and the bound is
+/// the core's height over or under the axis: tight for a cutter riding over the cylinder.)
+fn disc_shell(q: &Quad, ai: [Ival; 3], a: f64, s_lo: f64, s_hi: f64) -> Option<f64> {
+    let (q_lo, q_hi) = (q.min_lo()?, q.max_hi()?);
+    if !(q_lo.is_finite() && q_hi.is_finite() && s_lo.is_finite() && s_hi.is_finite()) {
+        return None;
+    }
+    let ai_ = Ival::pt(a);
+    let mut dmin = Ival::pt(q_lo).sqrt().sub(ai_).lo;
+    let dmax = Ival::pt(q_hi).sqrt().add(ai_).hi;
+    // h = ẑ × ax, k = ax × h
+    let h = [ai[1].neg(), ai[0], Ival::pt(0.0)];
+    let k = [
+        ai[1].mul(h[2]).sub(ai[2].mul(h[1])),
+        ai[2].mul(h[0]).sub(ai[0].mul(h[2])),
+        ai[0].mul(h[1]).sub(ai[1].mul(h[0])),
+    ];
+    let kk = dot(k, k).sqrt();
+    if kk.lo > 0.0 {
+        let kxy = k[0].sqr().add(k[1].sqr()).sqrt();
+        let reach = ai_.mul(kxy).div(kk);
+        let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+        let mut j = 0;
+        while j < 4 {
+            let (s, t) = CORNERS[j];
+            j += 1;
+            let w = add(add(q.w0, scl(q.d, Ival::pt(s))), scl(q.e, Ival::pt(t)));
+            let v = dot(w, k).div(kk);
+            if !(fin(v) && fin(reach)) {
+                return None;
+            }
+            lo = lo.min(v.lo);
+            hi = hi.max(v.hi);
+        }
+        let lo = Ival::pt(lo).sub(Ival::pt(reach.hi)).lo;
+        let hi = Ival::pt(hi).add(Ival::pt(reach.hi)).hi;
+        let vmin = if lo > 0.0 {
+            lo
+        } else if hi < 0.0 {
+            -hi
+        } else {
+            0.0
+        };
+        if vmin > dmin {
+            dmin = vmin;
+        }
+    }
+    let dmin = if dmin > 0.0 { dmin } else { 0.0 };
+    Some(if dmin > s_hi {
+        Ival::pt(dmin).sub(Ival::pt(s_hi)).lo.max(0.0)
+    } else if dmax < s_lo {
+        Ival::pt(s_lo).sub(Ival::pt(dmax)).lo.max(0.0)
+    } else {
+        0.0
+    })
+}
+
 /// The proven lower bound on min sd_body over the face's full surface and the line a → b, or
 /// None when no closed form applies.
 pub fn lower(c: &Capsule, f: &Face, a: V3, b: V3) -> Option<f64> {
@@ -339,7 +490,11 @@ pub fn lower(c: &Capsule, f: &Face, a: V3, b: V3) -> Option<f64> {
             let rhi = ri.mul(Ival::pt(khi));
             let rlo2 = ri.mul(Ival::pt(klo)).sqr().sub(rhi.mul(along).sqr());
             let rlo = if rlo2.lo > 0.0 { rlo2.sqrt().lo } else { 0.0 };
-            shell(q.min_lo()?, q.max_hi()?, rlo, rhi.hi)?
+            if c.a > 0.0 {
+                disc_shell(&q, ai, c.a, rlo, rhi.hi)?
+            } else {
+                shell(q.min_lo()?, q.max_hi()?, rlo, rhi.hi)?
+            }
         }
         Surf::Plane { o, u, v } => {
             let (ui, vi) = (iv(u), iv(v));
@@ -367,6 +522,17 @@ pub fn lower(c: &Capsule, f: &Face, a: V3, b: V3) -> Option<f64> {
                 lo = lo.min(h.lo);
                 hi = hi.max(h.hi);
             }
+            // a disc capsule: P is the parallelogram swept by the horizontal disc of radius a,
+            // whose points reach a·|n_xy|/|n| either way along the normal
+            if c.a > 0.0 {
+                let nxy = n[0].sqr().add(n[1].sqr()).sqrt();
+                let w = Ival::pt(c.a).mul(nxy).div(nn);
+                if !fin(w) {
+                    return None;
+                }
+                lo = Ival::pt(lo).sub(Ival::pt(w.hi)).lo;
+                hi = Ival::pt(hi).add(Ival::pt(w.hi)).hi;
+            }
             if lo > 0.0 {
                 lo
             } else if hi < 0.0 {
@@ -377,6 +543,14 @@ pub fn lower(c: &Capsule, f: &Face, a: V3, b: V3) -> Option<f64> {
         }
         // tori and cones: contact_rev.rs
         Surf::Torus { o, .. } | Surf::Cone { o, .. } => crate::contact_rev::dist(f, sub(base, iv(o)), d, e)?,
+    };
+    // a disc capsule's P is the parallelogram P0 above swept by the horizontal disc of radius
+    // a: every point of P is within a of P0, so dist(F, P) ≥ dist(F, P0) − a (planes take the
+    // disc exactly, above)
+    let dist = if c.a > 0.0 && !matches!(f.surf, Surf::Plane { .. } | Surf::Cyl { .. }) {
+        Ival::pt(dist).sub(Ival::pt(c.a)).lo
+    } else {
+        dist
     };
     Some(Ival::pt(dist).sub(Ival::pt(c.rho)).lo)
 }
@@ -428,6 +602,7 @@ fn inputs_ok(c: &Capsule, f: &Face, a: V3, b: V3) -> bool {
         && small(c.zc)
         && small(c.z1)
         && small(c.rho)
+        && small(c.a)
         && small(f.mu)
         && small(f.p.lo)
         && small(f.p.hi)
@@ -600,9 +775,36 @@ mod tests {
     /// minimum sampled densely.
     #[test]
     fn never_above_the_true_minimum() {
-        let b = ball(6.0);
+        never_above(&ball(6.0), 0x9e3779b97f4a7c15u64);
+    }
+
+    /// The same for a bull-nose cutter (its disc capsule): the bound never exceeds the sampled
+    /// true minimum, and never clears where the branch and bound finds a Hit.
+    #[test]
+    fn a_bull_noses_bound_is_never_above_the_true_minimum() {
+        let b = assemble(&Cutter::Bull { d: 10.0, re: 1.0 }, 30.0, 10.0, 40.0, None)
+            .unwrap()
+            .bodies[0]
+            .clone();
+        never_above(&b, 0x2545f4914f6cdd1du64);
+    }
+
+    /// A bull-nose's body has a disc capsule: its corner's radius, its corner centre's distance
+    /// from the axis as the core's radius, from the corner centre's height up.
+    #[test]
+    fn a_bull_nose_has_a_disc_capsule() {
+        let b = assemble(&Cutter::Bull { d: 10.0, re: 1.0 }, 30.0, 10.0, 40.0, None)
+            .unwrap()
+            .bodies[0]
+            .clone();
         let c = capsule(&b).unwrap();
-        let mut seed = 0x9e3779b97f4a7c15u64;
+        assert_eq!((c.zc, c.rho, c.a), (b.z0 + 1.0, 1.0, 4.0));
+    }
+
+    fn never_above(b: &Body, seed0: u64) {
+        let b = b.clone();
+        let c = capsule(&b).unwrap();
+        let mut seed = seed0;
         let mut rnd = || {
             seed ^= seed << 13;
             seed ^= seed >> 7;
