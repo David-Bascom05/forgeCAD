@@ -6,39 +6,43 @@ forge-cam-lang plumbing around them. This note covers what was in flight when th
 the branches, their state, what is unmerged, what to do next, and the risks.
 Shas are as pushed, on main c135b274 (train 7) unless said.
 
-## Branches for train 9 (merge-ready, pre-verified or being)
-
-Train 8 closed before these were ready; TRAIN-CONDUCTOR takes them in train 9 (lines made on
-c135b274 with tools/preverify 13d78f06 stand). `cam/adaptive-cap-warning` went in train 8.
+## Branches and where they stand
 
 | branch @ sha | what | state |
 |---|---|---|
-| `cam/adaptive-cap-warning` @ 38e413d4 | forge-cam-lang warns when adaptive's level cutting goes over its `engagement:` cap (UX-LEAD's wording); forge-cam-quality guard over every benchmark part with 17 known violations (folded into `chip_load_and_equal_work`'s measure; arcs measured whole) | PRE-VERIFY GREEN, sent |
-| `cam/engage-conservative` @ 11eb7fcb | the engagement read of the feeds never under-reads (each edge point dilated by half a cell); flange/plate_break .nc regenerated (feed words only, all lower) | re-running (first run: a forge-render timing test under load) |
-| `cam/adaptive-ties` @ edc2f3d8 | adaptive reports stock left after every pass and ring | queued |
-| `cam/fixture-box-mu` @ f357f65f | a shaped fixture piece's box grows by its faces' mu (it shrank: the machine-sim collision boxes were not conservative); test fails on the old signs | running |
-| `cam/clear-degenerate` @ d9c8ddaa | rptu1 `nut` (clear): a line cut again the other way is air (ends matched within 1e-5 mm, not by bits), and same-height rapids go straight. Re-cut 161 → 1 mm; rapids 593 → 397 mm | queued. **Lands after TQ's `cam/crazy-guards` in train 9**; TRAIN-CONDUCTOR applies the KNOWN edit as a fix-up in train 9's assembly (the coordinator's ruling; merge-main-only stands): in verify/forge-cam-quality/src/crazy.rs drop `("rptu1_clear_cam", "nut", "recut", …)` (a listed entry no longer broken fails guards.rs) and set the nut `rapids` entry to 397.0, why "clear round the nut: the slot's far-end trips for the islands' corner arcs (trim_air's box test cannot see they remove nothing; a stock-aware air test)" |
+| `cam/adaptive-cap-warning` @ 38e413d4 | forge-cam-lang warns when adaptive's level cutting goes over its `engagement:` cap (UX-LEAD's wording); forge-cam-quality guard over every benchmark part (`CAP_KNOWN`, folded into `chip_load_and_equal_work`'s measure; arcs measured whole) | landed, train 8 |
+| `cam/fixture-box-mu` @ f357f65f | a shaped fixture piece's box grows by its faces' mu (it shrank: the machine-sim collision boxes were not conservative) | landed, train 9 |
+| `cam/clear-degenerate` @ 56ca6ad8 | rptu1 `nut` (clear): a line cut again the other way is air, same-height rapids go straight. Re-cut 161 → 1 mm; rapids 593 → 397 mm (crazy.rs KNOWN edited on the branch, after main brought crazy-guards) | PRE-VERIFY GREEN, train 10 |
+| `cam/engage-conservative` @ 11eb7fcb | the engagement read of the feeds never under-reads (each edge point dilated by half a cell); flange/plate_break .nc regenerated (feed words only, all lower) | PRE-VERIFY GREEN, train 10 |
+| `cam/adaptive-ties` @ edc2f3d8 | adaptive reports stock left after every pass and ring | accepted GREEN for train 12 (full run RED on one forge-render bend-sim test main passed, `a_ghost_is_drawn_at_its_opacity`; 5/5 clean reruns and the tool's render-only rerun GREEN; TRAIN-CONDUCTOR took it as a suspected bendsim test race) |
+| `cam/adaptive-pass-start` @ 9c2afe11 (+ this note) | the round-box fix, below | on main 10d87778; pre-verify after 9c2afe11, for train 12 |
 
 ## Unmerged and not ready
 
-- **`cam/adaptive-pass-start` @ f8fb1b4d**: the round-box fix. A level is cleared whatever the
-  stock box's numbers:
-  - In air, the heading turns by a look-ahead engagement.
-  - A level sweeps again while material more than 4r from the walls exceeds 4 cells.
-  - Stock left is reported.
-  - Tests: interface/forge-cam-lang/tests/adaptive_round_boxes.rs (12 cases, fails on the old code).
+- **`cam/adaptive-pass-start`**: the round-box fix. A level is cleared whatever the stock box's
+  numbers:
+  - In air, a start's heading is the first of 10°, 5° and straight on (toward the material)
+    whose engagement ahead (out to a radius past first contact, at most 4r) keeps the cap; none:
+    the one meeting least. It never turns away: the first version also tried −5° to −20°, and
+    those passes ended where no link at depth reached the next start (deep_open_slot 61 retracts
+    for 64 passes, main 12; adaptive's time doubled there). Without the look-ahead the round
+    boxes do not finish in 600 s.
+  - A level sweeps again while material more than 4r from the walls exceeds 4 cells (main: 10r²).
+    This is what clears deep_boss (over the cap 893 → 77 mm) and costs adaptive CPU (more sweeps:
+    real clearing main left undone).
+  - Stock left is reported (`left_uncut`).
+  - `retract_link`'s crossing-height scan stops once the height reaches the stock's highest cell
+    (+ CLEAR) or the retract height (it cannot change after): paths identical over every adaptive
+    document in the repo (17), 12 round-box cases and the memo test; adaptive CPU over the
+    benchmark 142 → 114 s.
+  - Tests: interface/forge-cam-lang/tests/adaptive_round_boxes.rs, 6 cases (each a whole deep_boss
+    clearing, under 3.3 s alone). The over-round boxes and zigzag's off-round ones (3.8–4.8 s alone,
+    over the test budget) are left out; making adaptive faster brings them back (one line each).
+  - CAP_KNOWN re-listed at the figures this branch measures.
 
-  **It needs TOOLPATH-QUALITY's `cam/hop-map-under` in main first**: without it, boss_adaptive's
-  links graze stock at the link feed (chip-load guard, hex 1.50 against fz 0.129); with it,
-  forge-cam-quality passes. Once that is in main: merge main, pre-verify, send.
-
-  Cost, reported not targeted: deep_boss_n_adaptive t_stop 648 → about 1045 s, same volume removed.
-  It is the cap's honest price: holding 40° with r = 3 needs at least ~6,960 mm of cutting where
-  main fits 4,333 mm only by breaking the cap, its rings slotting at up to 180°.
-
-  Check the engagement-cap guard's figures (`cam/adaptive-cap-warning`'s CAP_KNOWN) once both are in
-  main: this branch moves the adaptive paths. Lower figures should be re-listed, and a higher one
-  explained.
+  Cost, reported not targeted: deep_boss_n_adaptive t_stop 648 → about 1045 s (measured on f8fb1b4d),
+  same volume removed. It is the cap's honest price: holding 40° with r = 3 needs at least ~6,960 mm
+  of cutting where main fits 4,333 mm only by breaking the cap, its rings slotting at up to 180°.
 - **`cam/adaptive-pass-start-wip` @ 67bf955d**: the pass step-read fix, with a differential test,
   `passes_hold_the_cap_by_an_independent_measure`.
   - The planner read each step's engagement at its end along the chord. The posted path is arcs
