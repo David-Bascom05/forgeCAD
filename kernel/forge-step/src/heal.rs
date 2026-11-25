@@ -1189,7 +1189,7 @@ fn kind(s: &Surface) -> &'static str {
     }
 }
 
-fn unwrap(uv: Point2, near: Point2, du: Domain1, dv: Domain1) -> Point2 {
+pub(crate) fn unwrap(uv: Point2, near: Point2, du: Domain1, dv: Domain1) -> Point2 {
     let fix = |x: f64, r: f64, p: Option<f64>| p.map_or(x, |p| x + p * ((r - x) / p).round());
     Point2::new(fix(uv.x, near.x, du.period), fix(uv.y, near.y, dv.period))
 }

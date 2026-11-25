@@ -714,3 +714,17 @@ speed (lazy field or constant table)  @ forge-vendor/src/lib.rs|lazy|use std::sy
 speed (lazy field or constant table)  @ forge-vendor/src/lib.rs|static|static B: OnceLock<Vec<Vendor>> = OnceLock::new();
 speed (cache answering a function of its own key)  @ forge-vendor/src/lib.rs|static|static CACHE: OnceLock<Cache> = OnceLock::new();
 keyed (declared: the library files cached() used, path and hash of the bytes its key holds; Run::libraries)  @ forge-vendor/src/lib.rs|static|static PROFILE_SOURCES: forge_material::SourceTable = std::sync::Mutex::new(Vec::new());
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-step/src/xt/build.rs|hash-order|edges: HashMap<u32, (Vec<usize>, bool)>,
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-step/src/xt/build.rs|hash-order|let mut uses: HashMap<usize, Vec<usize>> = HashMap::new();
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-step/src/xt/build.rs|hash-order|let unsure: std::collections::HashSet<usize> = blends.iter().copied().collect();
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-step/src/xt/build.rs|hash-order|seen: &mut std::collections::HashSet<u32>,
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-step/src/xt/build.rs|hash-order|verts: HashMap<u32, usize>,
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-step/src/xt/geom.rs|hash-order|blends: HashMap<u32, Blend>,
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-step/src/xt/geom.rs|hash-order|curves: HashMap<u32, Curve>,
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-step/src/xt/geom.rs|hash-order|surfaces: HashMap<u32, (Surface, bool)>,
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-step/src/xt/nodes.rs|hash-order|declared: HashMap<u16, u16>,
+no-output (collected, then sorted before use: a survey's counts)  @ forge-step/src/xt/nodes.rs|hash-order|let mut census: HashMap<u16, usize> = HashMap::new();
+no-output (prints only: FORGE_CAM_DEBUG traces each sign refinement to stderr)  @ forge-num/src/real.rs|env|let dbg = *DBG.get_or_init(|| std::env::var("FORGE_CAM_DEBUG").is_ok());
+no-output (prints only: the FORGE_CAM_DEBUG flag, read once)  @ forge-num/src/real.rs|lazy|static DBG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+no-output (prints only: the FORGE_CAM_DEBUG flag, read once)  @ forge-num/src/real.rs|static|static DBG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+no-output (lookups only: get/insert/remove, never iterated; a fixed unseeded hasher, Fx)  @ forge-num/src/real.rs|hash-order|struct Memo(std::collections::HashMap<Key, R, std::hash::BuildHasherDefault<Fx>>);
