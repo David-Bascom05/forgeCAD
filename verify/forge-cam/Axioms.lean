@@ -148,6 +148,10 @@ import ForgeCam
 #print axioms ForgeCam.Rational.sub_quot
 #print axioms ForgeCam.Rational.mul_quot
 #print axioms ForgeCam.Rational.div_quot
+#print axioms ForgeCam.AxisPlane.sep_le_dist
+#print axioms ForgeCam.AxisPlane.lin_ge_min
+#print axioms ForgeCam.AxisPlane.axisplane_clear
+#print axioms ForgeCam.AxisPlane.axisplane_clear_below
 #print axioms ForgeCam.IvalZero.add_zero_encl
 #print axioms ForgeCam.IvalZero.zero_add_encl
 #print axioms ForgeCam.IvalZero.mul_zero_encl

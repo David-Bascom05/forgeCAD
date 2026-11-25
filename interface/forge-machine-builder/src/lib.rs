@@ -10,5 +10,6 @@ pub mod catalog;
 pub mod check;
 pub mod cli;
 pub mod make;
+pub mod model_files;
 pub mod models;
 pub mod write;
