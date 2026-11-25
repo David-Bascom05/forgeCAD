@@ -58,3 +58,5 @@ mod webapp;
 mod webdwg;
 #[cfg(target_arch = "wasm32")]
 mod webinput;
+#[cfg(target_arch = "wasm32")]
+mod websync;

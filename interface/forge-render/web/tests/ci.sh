@@ -7,7 +7,7 @@
 set -e
 root=$(pwd)
 out=${1:-$root/target/web}
-cargo build --release --locked -p forge-cli
+cargo build --release --locked -p forge-cli -p forge-server
 cd interface/forge-render
 rustup target add wasm32-unknown-unknown
 command -v wasm-bindgen >/dev/null || cargo install wasm-bindgen-cli --version 0.2.130 --locked
@@ -31,6 +31,8 @@ node web/tests/chrome.cjs "$out"
 node web/tests/wall.cjs "$out"
 node web/tests/deeplink.cjs "$out"
 node web/tests/import.cjs "$out"
+# hosted collaboration: two tabs on one part served by forge-server
+node web/tests/served.cjs "$out"
 if [ -n "$PARITY_EXAMPLES" ]; then
   node web/tests/parity.cjs "$out" --examples "$PARITY_EXAMPLES"
 else

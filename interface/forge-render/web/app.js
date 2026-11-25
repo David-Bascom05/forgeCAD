@@ -10,6 +10,11 @@
 //                    WebGPU can't show a canvas); forgecad.pixels() reads them
 //   ?threads=0       the single-threaded build even where the page is cross-origin isolated
 //   ?noapp           no canvas: the kernel and files only (the parity test)
+//   ?sync=ws://127.0.0.1:7878/sync&sync_token=T
+//                    the project is SERVED by forge-server (research/hosted/DESIGN.md): a part
+//                    opened is edited live with everyone on it. This machine's server only
+//                    (phase 1 has no TLS); kept for the tab. forge-server must accept this page's
+//                    origin (--origin). Without it the page is LOCAL, exactly as before.
 
 import { Mirror, ServerBackend, localBackend, cleanPath } from "./storage.js";
 import { zip, unzip } from "./zip.js";
@@ -136,6 +141,21 @@ await fc.default();
 if (threaded) (await import("./threads/threads.js")).threadsOn(() => fc.app_wake());
 say(threaded ? "the threaded build: builds on a Web Worker" : "the single-threaded build");
 fc.app_init();
+// a served project: the server's address and token, for this tab only (as ?token=)
+{
+  const url = q.get("sync") ?? sessionStorage.getItem("forgecad-sync");
+  const tok = q.get("sync_token") ?? sessionStorage.getItem("forgecad-sync-token") ?? "";
+  if (url) {
+    try {
+      fc.app_sync_config(url, tok);
+      sessionStorage.setItem("forgecad-sync", url);
+      sessionStorage.setItem("forgecad-sync-token", tok);
+      say(`served: ${url}`);
+    } catch (e) {
+      say(`not served: ${e}`);
+    }
+  }
+}
 const store = await backend();
 let mirror = null;
 const problems = [];

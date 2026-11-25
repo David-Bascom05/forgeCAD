@@ -92,8 +92,8 @@ pub fn open(path: &str, waker: Arc<dyn Fn() + Send + Sync>) -> Option<Result<Box
     Some(forge_remote::Session::start(&remote, &doc, Some(waker)).map(|s| Box::new(s) as Box<dyn Link>))
 }
 
-/// The browser build's link is made by the page (it owns the WebSocket): see `web.rs`.
+/// The browser build's link: the page's WebSocket, if the page said this tab is served.
 #[cfg(target_arch = "wasm32")]
-pub fn open(_path: &str, _waker: Arc<dyn Fn() + Send + Sync>) -> Option<Result<Box<dyn Link>, String>> {
-    None
+pub fn open(path: &str, waker: Arc<dyn Fn() + Send + Sync>) -> Option<Result<Box<dyn Link>, String>> {
+    crate::websync::open(path, waker)
 }

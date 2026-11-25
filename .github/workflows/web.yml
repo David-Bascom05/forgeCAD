@@ -50,11 +50,13 @@ jobs:
         with:
           workspaces: . -> target
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
-      - run: cargo build --release --locked -p forge-cli
+      - run: cargo build --release --locked -p forge-cli -p forge-server
       - uses: actions/upload-artifact@v4
         with:
           name: forgecad
-          path: target/release/forgecad
+          path: |
+            target/release/forgecad
+            target/release/forge-server
           retention-days: 1
 
   parity:
@@ -177,6 +179,7 @@ jobs:
     env:
       THREADED: ${{ matrix.threaded }}
       FORGECAD: ${{ github.workspace }}/bin/forgecad
+      FORGE_SERVER: ${{ github.workspace }}/bin/forge-server
       FORGE_PARITY: ${{ github.workspace }}/bin/forge-parity
     steps:
       - uses: actions/checkout@v4
@@ -210,7 +213,7 @@ jobs:
         with:
           name: web-threads
           path: target/web/threads
-      - run: chmod +x bin/forgecad bin/forge-parity
+      - run: chmod +x bin/forgecad bin/forge-parity bin/forge-server
       - name: end to end
         if: matrix.test == 'e2e'
         working-directory: interface/forge-render
@@ -241,6 +244,11 @@ jobs:
           node web/tests/wall.cjs "$GITHUB_WORKSPACE/target/web"
           node web/tests/deeplink.cjs "$GITHUB_WORKSPACE/target/web"
           node web/tests/import.cjs "$GITHUB_WORKSPACE/target/web"
+      # hosted collaboration: two tabs on one part served by forge-server (research/hosted)
+      - name: served
+        if: matrix.test == 'e2e'
+        working-directory: interface/forge-render
+        run: node web/tests/served.cjs "$GITHUB_WORKSPACE/target/web"
       # Photo and Record: a PNG, and an MP4 by WebCodecs into the app's muxer, ffprobe'd
       - name: record
         if: matrix.test == 'e2e' && !matrix.threaded

@@ -145,6 +145,13 @@ The kernel stays at zero third-party crates. The interface may use a limited set
 (wgpu, winit, a QUIC library), each pinned, and each replaced by our own if it can't hit the
 speed targets.
 
+Hosted collaboration (research/hosted/DESIGN.md, phase 1) adds **no crates**. The WebSocket is
+our own (interface/forge-ws, RFC 6455 on std::net, SHA-1 from forge-git), the server has no
+async runtime, and the durable store is our own file log. The browser build turns on three more
+features of the web-sys it already pins (=0.3.107): `WebSocket`, `MessageEvent` and
+`BinaryType`, for a served project's link (interface/forge-render/src/websync.rs). The
+coordinator approved this on 2026-11-25.
+
 ## Milestone 1: viewer and protocol
 
 No modeling UI yet. A really good viewer, on all four of:
