@@ -889,6 +889,37 @@ fn dragging_the_browsers_edge_resizes_it_and_the_view_follows_and_a_double_click
     assert_eq!(h.gui.shell.side_w(), w0);
 }
 
+/// A phone-wide window: the browser's default narrows (to its floor), so the view beside it keeps
+/// room; a width the user drags it to stands, narrow window or not.
+#[test]
+fn a_narrow_windows_browser_narrows_unless_the_user_sized_it() {
+    let Ok(mut h) = Headless::new((480.0, 860.0), 1.0) else { return };
+    h.step();
+    h.gui.open("bracket");
+    assert!(h.until(built), "{}", h.gui.shell.status);
+    h.step();
+    h.step();
+    let side = h.gui.shell.view_rect.left() - 1.0;
+    assert!((side - 180.0).abs() < 1.0, "the browser at 480 px: {side}");
+    assert!(h.gui.shell.view_rect.width() >= 290.0, "{:?}", h.gui.shell.view_rect);
+    if let Ok(dir) = std::env::var("FORGE_UI_SHOTS") {
+        for _ in 0..12 {
+            h.step();
+        }
+        std::fs::create_dir_all(&dir).unwrap();
+        if let Ok(png) = h.png() {
+            std::fs::write(std::path::Path::new(&dir).join("narrow-browser-480.png"), png).unwrap();
+        }
+    }
+    // at a desktop width it is its default, as ever
+    assert!(h.gui.shell.side_w_in(1200.0) == h.gui.shell.side_w());
+    // dragged wider, it keeps the user's width
+    h.gui.shell.side_px = Some(260.0);
+    h.step();
+    h.step();
+    assert!((h.gui.shell.view_rect.left() - 261.0).abs() < 1.0, "{:?}", h.gui.shell.view_rect);
+}
+
 #[test]
 fn appearance_cards_and_the_view_tab_change_the_look_the_view_draws() {
     let Some(mut h) = app() else { return };

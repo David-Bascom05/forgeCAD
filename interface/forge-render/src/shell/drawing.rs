@@ -1680,7 +1680,10 @@ impl Shell {
         let s = ctx.content_rect();
         let top = super::TITLE_H + super::TABS_H + super::RIBBON_H;
         let bottom = s.height() - super::DOCS_H - super::STATUS_H;
-        let side_w = self.side_px.unwrap_or(super::SIDE_W + 30.0);
+        // narrowed in a narrow window, as a part's browser is (Shell::side_w_in)
+        let side_w = self
+            .side_px
+            .unwrap_or((super::SIDE_W + 30.0).min((s.width() * super::NARROW_SIDE).max(super::SIDE_MIN_W)));
         let side = Rect::from_min_max(pos2(0.0, top), pos2(side_w, bottom));
         let canvas = Rect::from_min_max(pos2(side.right() + 1.0, top), pos2(s.width(), bottom));
         self.view_rect = canvas;

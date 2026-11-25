@@ -110,6 +110,8 @@ const SIDE_W: f32 = 270.0;
 /// An assembly's browser: wider, for what each relationship ties.
 const ASM_SIDE_W: f32 = 340.0;
 const SIDE_MIN_W: f32 = 180.0;
+/// The most of a window's width the browser takes by default (it is ~0.19 of a 1400 px one).
+const NARROW_SIDE: f32 = 0.375;
 const HEAD_H: f32 = 30.0;
 const ROW_H: f32 = 26.0;
 const DOCS_H: f32 = 28.0;
@@ -523,6 +525,16 @@ impl Shell {
             .unwrap_or(if self.is_asm() { ASM_SIDE_W } else { SIDE_W })
     }
 
+    /// The browser's width in a window `window_w` wide: a width the user dragged it to, else its
+    /// default, narrowed in a narrow window (a phone-wide one) to `NARROW_SIDE` of it, down to
+    /// its floor, so the view or the properties column beside it keeps room to be read.
+    pub fn side_w_in(&self, window_w: f32) -> f32 {
+        if self.side_px.is_some() {
+            return self.side_w();
+        }
+        self.side_w().min((window_w * NARROW_SIDE).max(SIDE_MIN_W))
+    }
+
     /// A ribbon command for a Forge file: its dialog up or down.
     pub fn fg_command(&mut self, c: FgCmd) {
         if c == FgCmd::ContentCenter {
@@ -779,7 +791,7 @@ impl Shell {
 
         let top = TITLE_H + TABS_H + RIBBON_H;
         let bottom = s.height() - DOCS_H - STATUS_H;
-        let side_w = self.side_w();
+        let side_w = self.side_w_in(s.width());
         let side = Rect::from_min_max(pos2(0.0, top), pos2(side_w, bottom));
         let ppp = ctx.pixels_per_point();
         let snap = |v: f32| (v * ppp).round() / ppp;
