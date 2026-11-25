@@ -49,6 +49,11 @@ pub const INKS: [(&str, Color32); 4] = [
 const WIDE: f32 = 3.0;
 const TEXT_PT: f32 = 15.0;
 
+/// What markup is, said under its strip until the first mark.
+pub const MARKUP_HINT: &str = "Draw on the window to show the agent what you mean: drag with the \
+pen, arrow, ellipse or rectangle, or pick Text and click to place a label. Your marks and a picture of the window go \
+with your next message. Done or Esc leaves.";
+
 /// One mark, in window points: a pen's points, an arrow's tail and head, a shape's or a label's
 /// two corners.
 #[derive(Clone, Debug, PartialEq)]
@@ -608,6 +613,24 @@ impl Shell {
                     m.toggle();
                 }
             });
+        // until the first mark, what this is and how to start, in words
+        if m.marks.is_empty() && m.drawing.is_none() && m.typing.is_none() {
+            let hint = egui::Area::new(Id::unique("markup-hint"))
+                .order(Order::Foreground)
+                .fixed_pos(pos2(at.x, at.y + B + 8.0 + 6.0))
+                .show(ctx, |ui| {
+                    egui::Frame::new()
+                        .fill(t.raised)
+                        .stroke(Stroke::new(1.0, t.line))
+                        .corner_radius(5)
+                        .inner_margin(egui::Margin::symmetric(10, 6))
+                        .show(ui, |ui| {
+                            ui.set_max_width(w - 20.0);
+                            ui.label(egui::RichText::new(MARKUP_HINT).color(t.ink2).font(medium(12.0)));
+                        });
+                });
+            places.push(("markup:hint".into(), hint.response.rect));
+        }
         self.places.extend(places);
     }
 

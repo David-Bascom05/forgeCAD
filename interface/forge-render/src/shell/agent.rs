@@ -957,6 +957,11 @@ impl AgentTab {
             self.voice.out.push(super::voice::VoiceAct::Cancel);
             return true;
         }
+        // the Resume window and the backend's switcher close first, as their Cancel and Close
+        if std::mem::take(&mut self.resume_open) || std::mem::take(&mut self.switcher) {
+            ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape));
+            return true;
+        }
         // the mode's menu closes first
         if std::mem::take(&mut self.mode_menu) {
             ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape));
@@ -1985,6 +1990,7 @@ impl Shell {
         let mut open = true;
         let mut selected = None;
         let mut new = false;
+        let mut cancelled = false;
         let mut places = Vec::new();
         let theme = self.theme;
         egui::Window::new("Resume conversation")
@@ -2030,13 +2036,20 @@ impl Shell {
                         }
                     });
                 ui.separator();
-                let button = ui.button("New conversation");
-                places.push(("agent:resume:new".into(), button.rect));
-                if button.clicked() {
-                    new = true;
-                }
+                ui.horizontal(|ui| {
+                    let button = ui.button("New conversation");
+                    places.push(("agent:resume:new".into(), button.rect));
+                    if button.clicked() {
+                        new = true;
+                    }
+                    let cancel = ui.button("Cancel").on_hover_text("Close this window (Esc)");
+                    places.push(("agent:resume:cancel".into(), cancel.rect));
+                    if cancel.clicked() {
+                        cancelled = true;
+                    }
+                });
             });
-        self.agent.resume_open = open;
+        self.agent.resume_open = open && !cancelled;
         self.places.extend(places);
         if let Some(id) = selected {
             self.agent.out.push(AgentAct::ResumeConversation(id));
@@ -2105,6 +2118,13 @@ impl Shell {
                         rows.push(("agent:switch:settings", b.rect));
                         if b.clicked() {
                             open_settings = true;
+                            close = true;
+                        }
+                        let x = ui
+                            .add(egui::Button::new(egui::RichText::new("Close").color(t.ink2)).frame(false));
+                        let x = x.on_hover_text("Close this menu (Esc)");
+                        rows.push(("agent:switch:close", x.rect));
+                        if x.clicked() {
                             close = true;
                         }
                     });
