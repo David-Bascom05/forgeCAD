@@ -399,8 +399,15 @@ pub fn geometry(
     if st.fixture
         && let Some(s) = st.sim.setups.get(setup)
     {
-        for (_, lo, hi) in &s.fixture {
-            draw::solid_box(*lo, *hi, draw::look::FIXTURE, &mut solid);
+        // what the checks hold, as they hold it (what is drawn is what is checked): the device's
+        // body (painted iron), its jaws and parallels (steel)
+        for (k, (_, lo, hi)) in s.fixture.iter().enumerate() {
+            let c = if s.fixture_body.get(k) == Some(&true) {
+                draw::look::VISE_BODY
+            } else {
+                draw::look::FIXTURE
+            };
+            draw::solid_box(*lo, *hi, c, &mut solid);
         }
     }
     // the tool at the time shown, red where a failed check's move now names it
@@ -588,6 +595,14 @@ impl Gui {
                                 [1.0; 3],
                                 &mut tris,
                             );
+                        }
+                        // the stock and what holds it (the vise on the table)
+                        "holding" => {
+                            let s = st.sim.setups.get(st.setup_now()).ok_or("no setup")?;
+                            draw::solid_box(s.stock.min, s.stock.max, [1.0; 3], &mut tris);
+                            for (_, lo, hi) in &s.fixture {
+                                draw::solid_box(*lo, *hi, [1.0; 3], &mut tris);
+                            }
                         }
                         _ => {
                             let s = st.sim.setups.get(st.setup_now()).ok_or("no setup")?;

@@ -888,11 +888,160 @@ fn the_detail_window_is_fine_and_quick() {
         shown += usize::from(sim.detail_near(tt, false).is_some());
     }
     let playing = t2.elapsed().as_secs_f64() * 1e3 / steps as f64;
-    eprintln!("while playing: {playing:.1} ms a frame (stock and window), the window shown in {shown} of {steps}");
+    eprintln!(
+        "while playing: {playing:.1} ms a frame (stock and window), the window shown in {shown} of {steps}"
+    );
     eprintln!(
         "detail window: {n} cells of {cell:.3} mm, columns {cols:?}: {first:.0} ms from nothing, {step:.1} ms a frame after (stock and window)"
     );
     assert!(cell <= 0.035, "fine: {cell}");
     let coarse = sim.stock_shown().unwrap().0.cell;
     assert!(coarse > 4.0 * cell, "finer than the whole grid ({coarse})");
+}
+
+/// The flange on the Haas VF-2, held in a vise (`vise` given) and placed by `at` (the setup's
+/// own work offset, e.g. ", at: (-381, -203, -400)"; empty: none, so the sim places it).
+fn flange_on_vf2(at: &str, vise: bool) -> Sim {
+    let dir = machined();
+    let holding = if vise {
+        ", fixture: vise(\"generic-vise-150\", across: \"y\", clamp: 3)"
+    } else {
+        ""
+    };
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg"))
+        .unwrap()
+        .replace("machine(\"generic-vmc3\")", "machine(\"haas-vf-2\")")
+        .replace("post: \"fanuc\"", "post: \"haas\"")
+        // 6 below the part, 3 of it in the jaws: the profile's 0.5 mm break-through stays 2.5
+        // above them
+        .replace("below: 3)", "below: 6)")
+        .replace(", at: (0, 0, -250))", &format!("{at}{holding})"));
+    Sim::open(&src, &dir)
+}
+
+/// The vise on the VF-2 (David: "why no vise? it's floating"): with no `at:` the sim seats the
+/// vise's base (the workholding library's table plane) on the table, measured against the
+/// table the machine checks (its record's envelope, at the run's start, in the part's frame;
+/// the drawn part sits 1 mm inside it, reported to CAM-MACHINE: what's drawn is to be what's
+/// checked), and derives the work offset from that; the stock
+/// sits between the jaws, its bottom gripped below their top; the posted path lines up with
+/// the part in the vise (the tool's tip on it at every feed). Given that offset as `at:`, the
+/// same; given one that leaves the vise off the table, a check says by how much.
+#[test]
+fn the_vise_sits_on_the_vf2s_table() {
+    use forge_machine::kin;
+    let sim = flange_on_vf2("", true);
+    assert!(
+        sim.cam.ok,
+        "{:?} {:?}",
+        sim.cam.errors,
+        sim.markers.iter().map(|m| &m.text).collect::<Vec<_>>()
+    );
+    let mv = sim.machines[0].as_ref().expect("the VF-2 runs it");
+    let run = &mv.run;
+    assert!(!run.wcs_given);
+    let (lo, hi) = run.holding.expect("the vise");
+    assert!(run.seat.unwrap().abs() < 1e-9, "seated: {:?}", run.seat);
+    assert!(
+        !mv.markers.iter().any(|m| m.rule == "workholding_off_table"),
+        "{:?}",
+        mv.markers.iter().map(|m| &m.text).collect::<Vec<_>>()
+    );
+    // the table as checked: its top under the vise's footprint, in the document's part frame
+    let def = &run.def;
+    let q = mv.q_at(0.0);
+    let pose = kin::pose(def, &q);
+    let w = mv.to_part(&q);
+    let table = def
+        .bodies
+        .iter()
+        .find(|b| b.name.contains("table"))
+        .expect("a table body");
+    let m = w.then(kin::link(def, &pose, &table.link));
+    let tris = forge_render::machine_mesh::prims_tris(&table.prims);
+    let top = tris
+        .pos
+        .iter()
+        .map(|p| m.apply(*p))
+        .filter(|p| p[0] >= lo[0] - 1.0 && p[0] <= hi[0] + 1.0 && p[1] >= lo[1] - 1.0 && p[1] <= hi[1] + 1.0)
+        .map(|p| p[2])
+        .fold(f64::NEG_INFINITY, f64::max);
+    let top = if top.is_finite() {
+        top
+    } else {
+        // the footprint holds no vertex of the table (its top is one big face): the highest
+        tris.pos
+            .iter()
+            .map(|p| m.apply(*p)[2])
+            .fold(f64::NEG_INFINITY, f64::max)
+    };
+    assert!(
+        (top - lo[2]).abs() < 0.05,
+        "the vise's base at z {:.3}, the table's top at {top:.3}",
+        lo[2]
+    );
+    // the stock between the jaws, gripped
+    let s = &sim.setups[0];
+    let jaw = |n: &str| s.fixture.iter().find(|f| f.0 == n).unwrap().clone();
+    let (fixed, moving) = (jaw("fixed jaw"), jaw("moving jaw"));
+    // drawn as checked, coloured by the library's roles: the base is the device's body
+    let body: Vec<&str> = s
+        .fixture
+        .iter()
+        .zip(&s.fixture_body)
+        .filter(|(_, b)| **b)
+        .map(|(f, _)| f.0.as_str())
+        .collect();
+    assert_eq!(
+        body,
+        ["base"],
+        "{:?}",
+        s.fixture.iter().map(|f| &f.0).collect::<Vec<_>>()
+    );
+    let k = (0..2)
+        .find(|&k| (fixed.2[k] - s.stock.min[k]).abs() < 1e-6)
+        .expect("the fixed jaw on a side of the stock");
+    assert!(
+        (moving.1[k] - s.stock.max[k]).abs() < 1e-6,
+        "the moving jaw on the other"
+    );
+    assert!(s.stock.min[2] < fixed.2[2] && s.stock.min[2] >= lo[2]);
+    // the posted path on the part in the vise: every feed's tip in the document's frame
+    let ends: Vec<[f64; 3]> = sim.tl.segs.iter().map(|g| g.b).collect();
+    for g in mv.tl.segs.iter().filter(|g| g.kind != Kind::Rapid) {
+        let d = ends
+            .iter()
+            .map(|e| (0..3).map(|k| (e[k] - g.b[k]).powi(2)).sum::<f64>().sqrt())
+            .fold(f64::INFINITY, f64::min);
+        assert!(d < 1e-6, "a machine motion ends {d} from the posted path");
+    }
+    // the offset it derived, given as the setup's own: seated the same
+    // (the work offset is per control letter, in the control's order)
+    let axis = |l: char| {
+        let k = run.control.letters.iter().position(|c| *c == l).unwrap();
+        run.wcs[k]
+    };
+    let (wx, wy, wz) = (axis('X'), axis('Y'), axis('Z'));
+    let at = format!(", at: ({wx}, {wy}, {wz})");
+    let given = flange_on_vf2(&at, true);
+    let g = given.machines[0]
+        .as_ref()
+        .unwrap_or_else(|e| panic!("{at}: {e}; {:?} {:?}", given.cam.errors, given.cam.warnings));
+    assert!(g.run.wcs_given);
+    assert!(g.run.seat.unwrap().abs() < 1e-6, "{at}: {:?}", g.run.seat);
+    // one that leaves it in the air: said, by how much
+    let high = format!(", at: ({wx}, {wy}, {})", wz + 2.5);
+    let off = flange_on_vf2(&high, true);
+    let o = off.machines[0].as_ref().unwrap();
+    let m = o
+        .markers
+        .iter()
+        .find(|m| m.rule == "workholding_off_table")
+        .expect("the vise off the table, said");
+    assert!((o.run.seat.unwrap() - 2.5).abs() < 1e-6, "{:?}", o.run.seat);
+    assert!(m.text.contains("2.50 mm above the table"), "{}", m.text);
+    // no workholding: nothing seated, nothing made up (the view says the part is unclamped)
+    let bare = flange_on_vf2("", false);
+    let b = bare.machines[0].as_ref().unwrap();
+    assert!(b.run.holding.is_none() && b.run.seat.is_none());
 }

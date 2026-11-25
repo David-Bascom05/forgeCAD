@@ -17,6 +17,9 @@ use forge_machine::kin::{self, Rigid};
 use forge_machine::sim::{Happening, Path, SegKind, Violation};
 use forge_math::dmath;
 
+/// How far the workholding's base may sit off the table before it is a check's failure, mm.
+pub const SEAT_TOL: f64 = 0.01;
+
 /// A setup's program on its machine, as the simulation plays it.
 pub struct MachineView {
     pub run: MachineRun,
@@ -364,6 +367,36 @@ impl MachineView {
                 t,
                 row: text.clone(),
                 text,
+                tool: String::new(),
+                part: String::new(),
+                region: None,
+                planned: false,
+            });
+        }
+        // the workholding off the table: the work offset (`at:`) puts its base above the table
+        // (the part held in the air) or into it. Placed (no `at:`), it is seated
+        if let Some(g) = self.run.seat
+            && g.abs() > SEAT_TOL
+        {
+            let (lo, hi) = self.run.holding.unwrap_or_default();
+            let words = if g > 0.0 {
+                format!("{g:.2} mm above the table: the part is held in the air")
+            } else {
+                format!("{:.2} mm into the table", -g)
+            };
+            let t = self.tl.ops.first().map_or(0.0, |o| o.t0);
+            out.push(Marker {
+                op: self.tl.ops.first().map(|_| 0),
+                setup: self.setup,
+                rule: "workholding_off_table".into(),
+                verdict: "fail".into(),
+                at: [0.5 * (lo[0] + hi[0]), 0.5 * (lo[1] + hi[1]), lo[2]],
+                t,
+                text: format!(
+                    "The workholding's base is {words} on {} (the setup's work offset, `at:`, puts it there)",
+                    self.run.def.name
+                ),
+                row: format!("its base {words}"),
                 tool: String::new(),
                 part: String::new(),
                 region: None,

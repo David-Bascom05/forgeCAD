@@ -470,11 +470,7 @@ impl Shell {
         st.keys(ctx);
         // the timeline: across the view's bottom, short of the panel
         let panel_w = covered_w(&st);
-        let extra = if st.sim.machine().is_some_and(|m| !m.run.wcs_given) {
-            18.0
-        } else {
-            0.0
-        };
+        let extra = 18.0 * machine_notes(&st).len() as f32;
         let bar = Rect::from_min_max(
             pos2(v.left() + 8.0, v.bottom() - TIMELINE_H - extra - 8.0),
             pos2(v.right() - panel_w - 16.0, v.bottom() - 8.0),
@@ -675,6 +671,36 @@ impl Shell {
     }
 }
 
+/// What the view of a machine run says under the timeline, a line each: the placement it
+/// assumed (the setup gives no `at:`), a part held by nothing (no workholding: drawn
+/// unclamped, never a vise made up for it), and a workholding whose table plane is unknown.
+pub fn machine_notes(st: &CamSimUi) -> Vec<String> {
+    let Some(mv) = st.sim.machine() else {
+        return vec![];
+    };
+    let mut out = vec![];
+    if !mv.run.wcs_given {
+        out.push(format!(
+            "Posted code on {}: placement assumed ({} centred on the table datum; the setup gives no `at:`)",
+            mv.run.def.name,
+            if mv.run.holding.is_some() {
+                "the workholding"
+            } else {
+                "the stock"
+            }
+        ));
+    }
+    if mv.run.holding.is_none() {
+        out.push("No workholding defined: the part is shown unclamped".into());
+    } else if mv.run.seat.is_none() {
+        out.push(
+            "This workholding's record has no body down to the table: where it stands on the table is unknown"
+                .into(),
+        );
+    }
+    out
+}
+
 /// The timeline: transport, the bands, markers and the playhead.
 fn timeline(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme, w: f32) {
     let total = st.total();
@@ -797,18 +823,9 @@ fn timeline(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme, w: f
                 .on_hover_text(&s);
         }
     });
-    // a machine run's placement, while the document gives none
-    if let Some(mv) = st.sim.machine()
-        && !mv.run.wcs_given
-    {
-        ui.label(
-            egui::RichText::new(format!(
-                "Posted code on {}: stock placement assumed (centred on the table datum; the setup gives no `at:`)",
-                mv.run.def.name
-            ))
-            .size(11.0)
-            .color(t.warn),
-        );
+    // a machine run's placement, while the document gives none; a part held by nothing
+    for n in machine_notes(st) {
+        ui.label(egui::RichText::new(n).size(11.0).color(t.warn));
     }
     // the bands
     let (rect, resp) = ui.allocate_exact_size(vec2(w, 34.0), Sense::click_and_drag());
@@ -1008,7 +1025,16 @@ fn verdict(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
     if s.is_empty() {
         // certified: the workspace's words (a rule left unchecked named, its meaning on hover)
         let (words, hover, amber) = crate::shell::cam::certified_words(cam.certification());
-        let r = ui.colored_label(if amber { t.warn } else if hover.is_some() { t.ink2 } else { c }, words);
+        let r = ui.colored_label(
+            if amber {
+                t.warn
+            } else if hover.is_some() {
+                t.ink2
+            } else {
+                c
+            },
+            words,
+        );
         if let Some(h) = hover {
             r.on_hover_text(h);
         }
@@ -1682,6 +1708,7 @@ pub fn checked_line(markers: &[Marker], leftover_done: bool) -> (String, bool) {
             "fixture_collision",
             "holder_into_stock",
             "machine_collision",
+            "workholding_off_table",
         ],
         "holder and fixture clear",
     );
@@ -1759,6 +1786,7 @@ fn rule_title(rule: &str) -> String {
         "rapid_into_workholding" => "Rapids into the workholding".into(),
         "holder_into_stock" => "Holder into the stock".into(),
         "machine_collision" => "Machine collisions".into(),
+        "workholding_off_table" => "Workholding off the table".into(),
         "refused" => "Refused ops".into(),
         "overtravel" => "Beyond the machine's travel".into(),
         r => {

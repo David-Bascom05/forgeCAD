@@ -459,8 +459,16 @@ fn the_flange_on_a_haas_vf2() {
     let src = std::fs::read_to_string(machined().join("flange_cam.fg"))
         .unwrap()
         .replace("machine(\"generic-vmc3\")", "machine(\"haas-vf-2\")")
-        .replace("at: (0, 0, -250)", "at: (-381, -203, -400)")
-        .replace("post: \"fanuc\"", "post: \"haas\"");
+        // held in a vise, and placed by the sim: the vise's base on the table, the work offset
+        // from that (David: "why no vise? it's floating")
+        .replace(
+            ", at: (0, 0, -250))",
+            ", fixture: vise(\"generic-vise-150\", across: \"y\", clamp: 3))",
+        )
+        .replace("post: \"fanuc\"", "post: \"haas\"")
+        // 6 below the part, 3 of it in the jaws: the profile's 0.5 mm break-through stays 2.5
+        // above them
+        .replace("below: 3)", "below: 6)");
     std::fs::write(dir.join("flange_vf2_cam.fg"), src).unwrap();
     let Some(mut h) = open(&dir.join("flange_vf2_cam.fg"), (1400.0, 860.0), true) else {
         return;
@@ -484,7 +492,21 @@ fn the_flange_on_a_haas_vf2() {
         .expect("the VF-2 runs it");
     assert_eq!(mv.run.def.name, "haas-vf-2");
     assert!(mv.markers.is_empty(), "{:?}", mv.markers.first().map(|m| &m.text));
+    assert_eq!(mv.run.seat, Some(0.0), "the vise on the table");
+    let notes = forge_render::gui_camsim_panel::machine_notes(h.gui.shell.camsim.as_ref().unwrap());
+    assert!(notes.iter().all(|n| !n.contains("No workholding")), "{notes:?}");
     shot(&mut h, "native-machine-01-vf2-flange-1400x860");
+    // close on the vise: the stock in its jaws, the vise on the table
+    h.gui
+        .camsim_command("at=0;part=solid;paths=0;fixture=1;machine=1;follow=0;fit=holding")
+        .unwrap();
+    // low and from the front: the vise's base on the table's top
+    if let Some(v) = h.gui.view.as_mut() {
+        v.nav.camera.pitch = 8f32.to_radians();
+        v.nav.camera.dist *= 1.6;
+        v.mark_dirty();
+    }
+    shot(&mut h, "native-machine-04-vf2-vise-1400x860");
     // the operator's view: the eye stays put in the machine, so as the table carries the part
     // the target moves in the part's frame by just the table's travel
     let target = |h: &Headless| h.gui.view.as_ref().unwrap().nav.camera.target;
