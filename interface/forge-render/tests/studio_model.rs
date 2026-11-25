@@ -7,6 +7,13 @@ use forge_render::gui::{Gui, Headless};
 use forge_render::render::Entity;
 use forge_render::shell::studio_model::{Row, apply, rows, select};
 
+/// The tests here one at a time: they share one (often software) GPU, and two at once time each
+/// other's frames.
+fn one_at_a_time() -> std::sync::MutexGuard<'static, ()> {
+    static GPU: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    GPU.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 fn settled(g: &Gui) -> bool {
     g.view.is_some() && g.fg.as_ref().is_some_and(|s| s.done == s.seq) && !g.loading()
 }
@@ -51,6 +58,7 @@ fn shot(h: &Headless, name: &str) {
 
 #[test]
 fn a_click_in_the_view_paints_the_part_with_the_brush() {
+    let _gpu = one_at_a_time();
     let Some(mut h) = studio("robot/arm2.fg") else {
         return;
     };
@@ -118,6 +126,7 @@ fn a_click_in_the_view_paints_the_part_with_the_brush() {
 
 #[test]
 fn many_parts_take_one_look_and_the_filter_finds_them() {
+    let _gpu = one_at_a_time();
     let Some(mut h) = studio("robot/arm2.fg") else {
         return;
     };
@@ -166,6 +175,7 @@ fn many_parts_take_one_look_and_the_filter_finds_them() {
 /// steel, nylon, rubber, ... (each `props(material:)`), and the Studio reads each.
 #[test]
 fn an_assemblys_parts_keep_their_own_materials() {
+    let _gpu = one_at_a_time();
     let Some(h) = studio("rack18u/asm/rack.fg") else {
         return;
     };
@@ -186,6 +196,7 @@ fn an_assemblys_parts_keep_their_own_materials() {
 /// why. (David: "clicking Render image gives no visible feedback".)
 #[test]
 fn render_image_shows_its_progress_at_once_then_its_result() {
+    let _gpu = one_at_a_time();
     let Some(mut h) = studio("machined/flange.fg") else {
         return;
     };
@@ -196,14 +207,46 @@ fn render_image_shows_its_progress_at_once_then_its_result() {
     st.size = (64, 48);
     st.spp = 64;
     st.out = dir.join("r.png").to_string_lossy().into_owned();
-    // `click` hovers and presses (two frames, the live trace still running); the click lands on
-    // the release, the frame timed here
+    // a plain Studio frame, the same view with nothing traced (the live view stopped), for the
+    // click frame to be measured against
+    let l = h.gui.studio_live().unwrap();
+    l.target = l.samples();
+    h.step();
+    let plain = (0..5)
+        .map(|_| {
+            let t = std::time::Instant::now();
+            h.step();
+            t.elapsed()
+        })
+        .min()
+        .unwrap();
+    // `click` hovers and presses (two frames); the click lands on the release, the frame timed
     assert!(h.click("tool:Render Image"), "no Render Image on the ribbon");
     let t0 = std::time::Instant::now();
     h.step();
     let first = t0.elapsed();
+    // progress in that same frame
     let r = h.gui.shell.studio.rendering.clone().expect("no progress shown");
-    assert!(first.as_millis() < 100 || cfg!(debug_assertions), "{first:?}");
+    let info = h.gui.adapter();
+    let software = info.device_type == wgpu::DeviceType::Cpu
+        || ["llvmpipe", "lavapipe", "swiftshader", "warp"]
+            .iter()
+            .any(|s| info.name.to_lowercase().contains(s) || info.driver.to_lowercase().contains(s));
+    eprintln!(
+        "click frame {first:?}, plain frame {plain:?} ({}, {:?}{})",
+        info.name,
+        info.device_type,
+        if software { ", software" } else { "" }
+    );
+    if !cfg!(debug_assertions) {
+        // no more than a plain frame: the click adds no work of its own
+        assert!(
+            first <= plain + std::time::Duration::from_millis(20),
+            "the click frame {first:?}, a plain frame {plain:?}"
+        );
+        // and at once where the GPU isn't a software rasteriser (whose every frame is slow)
+        assert!(software || first.as_millis() < 100, "{first:?}");
+    }
     assert!(r.of == 64 && r.what == "Rendering image", "{r:?}");
     h.step();
     assert!(
@@ -255,6 +298,7 @@ fn render_image_shows_its_progress_at_once_then_its_result() {
 /// typed, applying with the pointer over a part, Overrides open.
 #[test]
 fn shots_for_review() {
+    let _gpu = one_at_a_time();
     let Ok(dir) = std::env::var("STUDIO_MODEL_SHOTS") else {
         return;
     };
