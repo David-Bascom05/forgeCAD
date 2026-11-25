@@ -31,6 +31,7 @@ pub mod life;
 /// The memos (kernel/forge-memo), by the path they had here.
 pub use forge_memo as memo;
 pub mod probing;
+pub mod prof;
 pub mod sim;
 pub mod toollog;
 pub mod toolstore;
@@ -2463,7 +2464,10 @@ fn run_shared(src: &str, dir: &Path, lib: std::sync::Arc<Library>) -> Cam {
                     let t0 = std::env::var("FORGE_CAM_TIME")
                         .is_ok()
                         .then(forge_math::clock::Instant::now);
-                    let v = cam.call(name, fname, &a, dir)?;
+                    let v = {
+                        let _sp = prof::span(|| format!("stmt\t{fname}\t{name}"));
+                        cam.call(name, fname, &a, dir)?
+                    };
                     if let Some(t0) = t0 {
                         eprintln!("{name}: {:?}", t0.elapsed());
                     }
@@ -2563,7 +2567,10 @@ fn run_shared(src: &str, dir: &Path, lib: std::sync::Arc<Library>) -> Cam {
                 Some("not certified: no program(..) posts this op (checks run on the posted path)".into());
         }
     }
-    cam.leftover();
+    {
+        let _sp = prof::span(|| "leftover\t-\t-".to_string());
+        cam.leftover();
+    }
     for s in &cam.setups {
         if s.at.is_none() {
             cam.warnings.push(format!(
@@ -6093,10 +6100,17 @@ impl Cam {
                 return Ok(V::Op(self.ops.len() - 1));
             }
         };
-        let paths = self.hop_links(su, kind, &out, paths);
-        let paths = self.feeds_from_engagement(su, kind, &out, paths);
+        let paths = {
+            let _sp = prof::span(|| format!("hops\t{kind}\t{name}"));
+            self.hop_links(su, kind, &out, paths)
+        };
+        let paths = {
+            let _sp = prof::span(|| format!("feeds\t{kind}\t{name}"));
+            self.feeds_from_engagement(su, kind, &out, paths)
+        };
         out.paths = paths;
         out.voids = voids.clone();
+        let _sp = prof::span(|| format!("stock\t{kind}\t{name}"));
         for (v, floor) in voids {
             match v {
                 None => self.setups[su].ip.face_to(floor),
@@ -9643,9 +9657,10 @@ impl Cam {
         // from an earlier run when the program and the dialect are the same (memo.rs): the
         // round trip prints, reads back and compares, a function of these alone; the key is
         // the quantised program (integers) and the dialect, each in full
-        let rt = ROUND_TRIPS.get_or(format!("round_trip/2 {:?}", (&q, &d)), || {
-            forge_post::round_trip(&q, &d)
-        });
+        let rt = {
+            let _sp = prof::span(|| format!("roundtrip\tprogram\t{name}"));
+            ROUND_TRIPS.get_or(format!("round_trip/2 {:?}", (&q, &d)), || forge_post::round_trip(&q, &d))
+        };
         match rt {
             Ok((txt, _)) => {
                 po.round_trip = true;
@@ -9961,10 +9976,16 @@ impl Cam {
                         low = low.min(to[2]);
                     }
                 }
-                let mut sum =
-                    self.certify_posted(oi, &posted, FULL_STOCK.load(std::sync::atomic::Ordering::Relaxed));
+                let mut sum = {
+                    let _sp = prof::span(|| format!("certify\t{}\t{}", self.ops[oi].kind, self.ops[oi].name));
+                    self.certify_posted(oi, &posted, FULL_STOCK.load(std::sync::atomic::Ordering::Relaxed))
+                };
                 // G5: every position the posted path reaches, as the machine's joints see it
-                if let Some(c) = self.axis_limits(oi, &posted) {
+                let axis = {
+                    let _sp = prof::span(|| format!("axis\t{}\t{}", self.ops[oi].kind, self.ops[oi].name));
+                    self.axis_limits(oi, &posted)
+                };
+                if let Some(c) = axis {
                     sum.clear = false;
                     sum.checks.insert(0, c);
                 }
