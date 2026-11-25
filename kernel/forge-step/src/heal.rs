@@ -965,9 +965,7 @@ impl Proto {
         for k in 0..count {
             let t = ed.range.lo + w * k as f64 / n as f64;
             let d = ed.curve.deriv(t);
-            let Some(p) = refine(&a, &b, d.p) else {
-                return None;
-            };
+            let p = refine(&a, &b, d.p)?;
             if p.distance(d.p) > limit {
                 return None;
             }
@@ -976,9 +974,7 @@ impl Proto {
             if na.cross(nb).length() < 0.02 * na.length() * nb.length() {
                 return None;
             }
-            let Some(g) = direction(&a, &b, p) else {
-                return None;
-            };
+            let g = direction(&a, &b, p)?;
             let g = if g.dot(d.d1) < 0.0 { -g } else { g };
             if let Some(&q) = pts.last()
                 && g.dot(p - q) <= 0.0
