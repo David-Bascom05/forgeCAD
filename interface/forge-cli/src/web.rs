@@ -68,22 +68,67 @@ pub fn csp(sync: Option<&str>) -> String {
     }
 }
 
-/// `--sync`'s URL as a CSP origin (`ws://HOST:PORT`, `wss://HOST:PORT`): a WebSocket URL only,
-/// and only the characters of a host and port (nothing that could end or add a directive).
+/// `--sync`'s URL as a CSP origin (`ws://HOST:PORT`, `wss://HOST:PORT`), parsed strictly: a
+/// ws:// or wss:// scheme; a host that is a DNS name (letters, digits, '-', dot-separated labels),
+/// an IPv4 address or a bracketed IPv6 one; an optional port of 1-65535; nothing else (nothing
+/// that could end or add a directive). Cleartext ws:// only to a loopback host: elsewhere the sync
+/// traffic, and any `?sync=` token, would cross the network unencrypted (the security review).
 fn sync_origin(url: &str) -> Result<String, String> {
     let (scheme, rest) = url
         .split_once("://")
         .filter(|(s, _)| *s == "ws" || *s == "wss")
         .ok_or("--sync: a ws:// or wss:// URL")?;
-    let host = rest.split('/').next().unwrap_or("");
-    let ok = !host.is_empty()
-        && host
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | ':' | '-' | '[' | ']'));
-    if !ok {
-        return Err("--sync: a URL's host and port only".into());
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let bad = || format!("--sync: {authority:?} is not HOST or HOST:PORT");
+    // the host, and what follows it
+    let (host, after, loopback) = if let Some(v6) = authority.strip_prefix('[') {
+        let (ip, after) = v6.split_once(']').ok_or_else(bad)?;
+        let ip: std::net::Ipv6Addr = ip.parse().map_err(|_| bad())?;
+        (format!("[{ip}]"), after, ip.is_loopback())
+    } else {
+        let (h, after) = match authority.find(':') {
+            Some(k) => (&authority[..k], &authority[k..]),
+            None => (authority, ""),
+        };
+        let name_ok = !h.is_empty()
+            && h.len() <= 253
+            && h.split('.').all(|l| {
+                !l.is_empty()
+                    && l.len() <= 63
+                    && !l.starts_with('-')
+                    && !l.ends_with('-')
+                    && l.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+            });
+        if !name_ok {
+            return Err(bad());
+        }
+        let loopback =
+            h.eq_ignore_ascii_case("localhost") || h.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback());
+        (h.to_ascii_lowercase(), after, loopback)
+    };
+    // the port: none, or ':' and 1-65535 in digits only
+    let port = match after {
+        "" => String::new(),
+        p => {
+            let digits = p.strip_prefix(':').ok_or_else(bad)?;
+            let ok = !digits.is_empty()
+                && digits.len() <= 5
+                && digits.chars().all(|c| c.is_ascii_digit())
+                && digits.parse::<u32>().is_ok_and(|n| (1..=65535).contains(&n));
+            if !ok {
+                return Err(bad());
+            }
+            format!(":{digits}")
+        }
+    };
+    if scheme == "ws" && !loopback {
+        return Err(
+            "--sync: wss:// for a server on another host (ws:// would send the sync traffic and its \
+                    token in clear); ws:// is for this machine (localhost, 127.0.0.1, [::1])"
+                .into(),
+        );
     }
-    Ok(format!("{scheme}://{host}"))
+    Ok(format!("{scheme}://{host}{port}"))
 }
 
 pub struct Config {
@@ -1257,10 +1302,63 @@ mod tests {
     /// end or add a directive.
     #[test]
     fn sync_adds_one_origin_to_connect_src() {
-        assert_eq!(sync_origin("ws://127.0.0.1:7878/sync").unwrap(), "ws://127.0.0.1:7878");
-        assert_eq!(sync_origin("wss://cad.example:443/sync").unwrap(), "wss://cad.example:443");
-        for bad in ["http://x/sync", "ws://", "ws://a;script-src *", "ws://a b", "ws://a'/x", "javascript:x"] {
+        assert_eq!(
+            sync_origin("ws://127.0.0.1:7878/sync").unwrap(),
+            "ws://127.0.0.1:7878"
+        );
+        assert_eq!(
+            sync_origin("ws://localhost:7878/sync").unwrap(),
+            "ws://localhost:7878"
+        );
+        assert_eq!(sync_origin("ws://[::1]:7878/sync").unwrap(), "ws://[::1]:7878");
+        assert_eq!(
+            sync_origin("wss://cad.example:443/sync").unwrap(),
+            "wss://cad.example:443"
+        );
+        assert_eq!(
+            sync_origin("wss://cad.example/sync").unwrap(),
+            "wss://cad.example"
+        );
+        assert_eq!(
+            sync_origin("wss://[2001:db8::1]:8443/sync").unwrap(),
+            "wss://[2001:db8::1]:8443"
+        );
+        for bad in [
+            "http://x/sync",
+            "ws://",
+            "ws://a;script-src *",
+            "ws://a b",
+            "ws://a'/x",
+            "javascript:x",
+        ] {
             assert!(sync_origin(bad).is_err(), "{bad}");
+        }
+        // strict: a numeric port 1-65535, a well-formed host or [IPv6] (the security review)
+        for bad in [
+            "wss://a:b:c",
+            "wss://:80",
+            "wss://a:",
+            "wss://[",
+            "wss://[::1",
+            "wss://[nope]:1",
+            "wss://a:0",
+            "wss://a:65536",
+            "wss://a:+80",
+            "wss://a..b",
+            "wss://-a.b",
+            "wss://a:80x",
+            "wss://[::1]x",
+        ] {
+            assert!(sync_origin(bad).is_err(), "{bad}");
+        }
+        // cleartext only to this machine
+        for remote in [
+            "ws://cad.example:7878/sync",
+            "ws://10.0.0.9:7878/sync",
+            "ws://[2001:db8::1]:1/sync",
+        ] {
+            let e = sync_origin(remote).unwrap_err();
+            assert!(e.contains("wss://"), "{remote}: {e}");
         }
         let c = csp(Some("ws://127.0.0.1:7878"));
         assert!(c.contains("connect-src 'self' ws://127.0.0.1:7878;"), "{c}");
