@@ -818,6 +818,13 @@ fn manufacture_opens_in_a_phone_wide_window() {
         h.step();
     }
     assert!(h.gui.shell.view_rect.width() < 300.0, "a narrow view: {:?}", h.gui.shell.view_rect);
+    // folded, and the framing agrees: no timeline drawn, and nothing kept for it at the view's
+    // bottom (UX-LEAD: the fold and the free rect must not disagree)
+    let timeline = egui::LayerId::new(egui::Order::Middle, egui::Id::unique("camsim:timeline"));
+    assert!(!h.gui.ctx.memory(|m| m.areas().visible_last_frame(&timeline)), "the timeline folded");
+    assert_eq!(h.gui.shell.cam.as_ref().unwrap().view_cover, 0.0, "no room kept for a timeline not drawn");
+    // its way to play stays: the panel's Program tab
+    assert!(h.gui.shell.camsim.is_some());
     shot(&mut h, "cam-480");
 }
 
@@ -851,6 +858,30 @@ fn a_new_ops_dialog_is_cancelled_by_esc() {
     let w = h.gui.shell.cam.as_ref().unwrap();
     assert!(w.op_dlg.is_none(), "Esc cancels it");
     assert_eq!(text(&h), before, "nothing written");
+}
+
+/// The tool library at a laptop's height: the tool's table runs under the footer, and the
+/// detail pane's scroll bar is drawn, so it is seen to scroll (UX-LEAD's shot).
+#[test]
+fn the_tool_library_scrolls_at_a_laptops_height() {
+    let Some((mut h, _)) = open_sized("tools-laptop", false, (1400.0, 860.0)) else { return };
+    tap(&mut h, "tool:Tool Library");
+    h.step();
+    assert!(h.gui.shell.cam.as_ref().unwrap().tools_open);
+    shot(&mut h, "cam-tools-1400x860");
+    let view = h.gui.shell.place("cam:tools:detail:view").expect("the detail pane");
+    let content = h.gui.shell.place("cam:tools:detail:content").unwrap();
+    let apply = h.gui.shell.place("cam:tools:apply").expect("the footer");
+    // the pane ends at the footer, its content runs past it, and its bar is drawn (the theme's
+    // solid handle was the page's own colour: there, and not seen)
+    assert!(view.bottom() <= apply.top(), "the pane {view:?} under the footer {apply:?}");
+    assert!(content.bottom() > view.bottom() + 1.0, "the table runs past the pane here: {content:?} in {view:?}");
+    let px = h.gui_pixels();
+    let bar = (view.top() as usize + 4..view.bottom() as usize - 4)
+        // (the bar is beside the viewport, outside its inner rect, at the pane's edge)
+        .filter(|&y| (view.right() as usize..(view.right() as usize + 14).min(1399)).any(|x| px.at(x, y).iter().all(|&c| c > 120)))
+        .count();
+    assert!(bar > 20, "the scroll bar drawn ({bar} rows)");
 }
 
 /// A cycle time is the lower bound and the estimate together (never the estimate alone), and the

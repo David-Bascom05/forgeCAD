@@ -2427,6 +2427,7 @@ fn finder(
     }
     ui.add_space(4.0);
     let mut pick: Option<String> = None;
+    ui.spacing_mut().scroll = egui::style::ScrollStyle { foreground_color: true, ..egui::style::ScrollStyle::solid() };
     egui::ScrollArea::vertical()
         .id_salt("cam-tools-list")
         .auto_shrink([false, false])
@@ -2582,8 +2583,14 @@ fn detail_pane(
     ui.scope_builder(egui::UiBuilder::new().max_rect(body), |ui| {
         // its bar always shown: what is below the pane's edge (the tool's table runs under the
         // footer on a laptop's screen) is seen to be there (BUTTON-AUDITOR: "Material" cut)
-        egui::ScrollArea::vertical()
+        // a solid bar, its handle in the ink (the floating one is not drawn at rest; a solid one's
+        // handle takes the fields' fill, the page's own in the dark theme)
+        ui.spacing_mut().scroll = egui::style::ScrollStyle { foreground_color: true, ..egui::style::ScrollStyle::solid() };
+        let out = egui::ScrollArea::vertical()
             .id_salt("cam-tools-detail")
+            // its own height, the footer's top: the scroll area ran under the footer (cut there,
+            // and no bar: it did not know it was taller than what showed)
+            .max_height(body.height())
             .auto_shrink([false, false])
             .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
             .show(ui, |ui| {
@@ -2673,6 +2680,9 @@ fn detail_pane(
             });
             ui.add_space(12.0);
         });
+        // its viewport and its content, by name: a test reads that the pane scrolls
+        places.push(("cam:tools:detail:view".into(), out.inner_rect));
+        places.push(("cam:tools:detail:content".into(), Rect::from_min_size(out.inner_rect.min, out.content_size)));
     });
 }
 
