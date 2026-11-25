@@ -145,10 +145,12 @@ pub fn chamfer_with(
     }
 
     let mut out = Body::new();
-    // All source entities are copied below. Each bevel also adds one face and two contact edges.
-    out.vertices.reserve(src.vertices.len());
-    out.faces.reserve(src.faces.len() + bevels.len());
-    out.edges.reserve(src.edges.len() + 2 * bevels.len());
+    // The copied topology and contact edges are known now. Leave the usual arena growth room
+    // for the additional vertices, edges and patch faces that the corner solver chooses below.
+    let room = forge_topo::body::room;
+    out.vertices.reserve_exact(room(src.vertices.len()));
+    out.faces.reserve_exact(room(src.faces.len() + bevels.len()));
+    out.edges.reserve_exact(room(src.edges.len() + 2 * bevels.len()));
     out.joins = src.joins.clone();
     for v in &src.vertices {
         out.add_vertex(v.point, v.name);
