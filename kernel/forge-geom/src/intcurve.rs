@@ -939,6 +939,9 @@ fn walk(
                 // edge there is met, not missed by the hair the march stopped short)
                 if let Some(q) = rim_point(a, b, p, step).or_else(|| rim_point(b, a, p, step)) {
                     pts.push(q);
+                    // an op past a branch it once stopped at may go on a long way and still not
+                    // answer: bounded (see CARRIED)
+                    crate::budget::cap_total(CARRIED);
                 }
                 return Some((pts, false));
             }
@@ -1067,6 +1070,15 @@ fn ends(s: &Surface, p: Point3, d: Vec3, h: f64) -> bool {
     let dom = crate::surface::SurfaceGeom::domain(s);
     off > tol::LINEAR && (rim(dom.u, uv.x) || rim(dom.v, uv.y))
 }
+
+/// What an op may spend in all once one of its branches is carried onto a spline patch's rim
+/// (`rim_point`): past its old stall, an op goes on to trim and trace the rest of its NURBS faces,
+/// and may still be refused further on. The Haas sweep (st-28l, umc-500_ss, TR160 with op-budget,
+/// 2026-11-25): the ops the carry lets answer spend at most 5.6M (UMC-500 #87260 box_sub) but for
+/// UMC-500 #264610's four (21M, given up); those refused after it spend 5.3M to 359M (up to 33 s,
+/// refused in 0.03 to 1.6 s before). 6 * 2^20: the answers kept, a refusal stopped near its old
+/// time (`budget::cap_total`: deterministic, the same on any thread or order).
+pub const CARRIED: u64 = 6 << 20;
 
 /// Where the curve of `s` and `other` near `p` meets the rim of `s`'s parameters (a spline
 /// patch's edge, its face's): on the domain edge nearest `p` (not a wrapping one), along it, the
