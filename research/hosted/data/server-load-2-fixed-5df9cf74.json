@@ -1,0 +1,10 @@
+{
+  "server": "hosted/server-hardening 5df9cf74",
+  "rss_idle_kb": 4360,,
+  "rss_docs_kb": [[0, 4360], [60, 18424], [240, 56276]],,
+  "rss_per_doc_and_conn_kb": 210.3,,
+  "rss_per_extra_conn_kb": 43.2,,
+  "load_1_per_s": {"docs": 240, "sent": 4800, "wall_s": 20.0, "ops_per_s": 240, "server_cpu_s": 4.11, "cpu_ms_per_op": 0.856, "ack_p50_ms": 3.60, "ack_p99_ms": 63.56, "still_pending": 0},,
+  "load_4_per_s": {"docs": 240, "sent": 19200, "wall_s": 20.0, "ops_per_s": 960, "server_cpu_s": 15.29, "cpu_ms_per_op": 0.796, "ack_p50_ms": 5.88, "ack_p99_ms": 46.61, "still_pending": 0},,
+  "rss_end_kb": 154180
+}

@@ -31,7 +31,9 @@ param lid.t = 2
 lid = extrude(tab, t, new: true)
 post = extrude(tab, 9, new: true)
 ";
-const DOCS: usize = 240;
+fn docs() -> usize {
+    std::env::var("FORGE_LOAD_DOCS").ok().and_then(|v| v.parse().ok()).unwrap_or(240)
+}
 const USERS: usize = 8;
 
 fn token(u: usize) -> String {
@@ -60,7 +62,15 @@ fn settle_rss(pid: u32) -> u64 {
 
 fn server(root: &Path, port: u16) -> Child {
     let bin = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/release/forge-server");
-    let mut c = Command::new(bin);
+    // FORGE_LOAD_HEAPTRACK=OUT: the server under heaptrack (its pid is then heaptrack's child's)
+    let mut c = match std::env::var("FORGE_LOAD_HEAPTRACK") {
+        Ok(out) => {
+            let mut h = Command::new("heaptrack");
+            h.args(["-o", &out]).arg(&bin);
+            h
+        }
+        Err(_) => Command::new(&bin),
+    };
     c.arg(root).args(["--port", &port.to_string(), "--store", "file", "--checkpoint", "3600"]);
     for u in 0..USERS {
         c.args(["--user", &format!("u{u}:{}", token(u))]);
@@ -99,7 +109,8 @@ fn server_memory_and_cpu_per_op() {
     let root = std::env::temp_dir().join(format!("forge-load-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
-    for d in 0..DOCS {
+    let docs = docs();
+    for d in 0..docs {
         std::fs::write(root.join(format!("d{d}.fg")), DOC).unwrap();
     }
     let port = 47_000 + (std::process::id() % 1000) as u16;
@@ -112,21 +123,21 @@ fn server_memory_and_cpu_per_op() {
     // documents: one connection each, 0 -> 60 -> 240 documents open
     let mut sessions = vec![];
     let mut points = vec![(0usize, base)];
-    for &n in &[60usize, 240] {
+    for &n in &[docs / 4, docs] {
         while sessions.len() < n {
             let d = sessions.len();
             sessions.push(open(port, d, d % USERS));
         }
         points.push((n, settle_rss(pid)));
     }
-    let per_doc = (points[2].1 as f64 - points[1].1 as f64) / 180.0;
+    let per_doc = (points[2].1 as f64 - points[1].1 as f64) / (docs - docs / 4) as f64;
     report.push(format!("\"rss_docs_kb\": {:?}", points));
     report.push(format!("\"rss_per_doc_and_conn_kb\": {per_doc:.1}"));
 
     // connections: 16 more on documents already open (no new actor)
     let before = settle_rss(pid);
     let mut extra = vec![];
-    for k in 0..15 {
+    for k in 0..15.min(docs) {
         extra.push(open(port, k, (k + 1) % USERS));
     }
     let after = settle_rss(pid);
