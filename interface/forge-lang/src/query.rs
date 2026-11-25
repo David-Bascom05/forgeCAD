@@ -1156,6 +1156,7 @@ fn answer(s: &Scene, req: &Request) -> Result<Answer, QueryError> {
                 .collect();
             let mut list = Vec::new();
             let mut volume = 0.0;
+            let mut unconfirmed = 0usize;
             for (x, y) in pairs {
                 if !boxes[x].overlaps(&boxes[y]) {
                     continue;
@@ -1166,14 +1167,50 @@ fn answer(s: &Scene, req: &Request) -> Result<Answer, QueryError> {
                     }
                 }
                 let (bx, by) = (world[x].as_ref().expect("made"), world[y].as_ref().expect("made"));
-                let c = match features::clash(bx, by) {
+                let c = match clash_or_refusal(&s.items[x].occ, &s.items[y].occ, || features::clash(bx, by)) {
                     Ok(Some(c)) => c,
                     Ok(None) => continue,
+                    // one pair's boolean refusing is that pair's answer, not the query's: the
+                    // pair is listed as unconfirmed (no volume, the refusal as its reason), placed
+                    // where the two boxes meet, and the other pairs go on
                     Err(e) => {
-                        return Err(qe(
-                            "BooleanFailed",
-                            format!("{} and {}: {e}", s.items[x].occ, s.items[y].occ),
+                        let (ix, iy) = (&s.items[x], &s.items[y]);
+                        let meet = |p: forge_math::Interval, q: forge_math::Interval| {
+                            (p.lo.max(q.lo), p.hi.min(q.hi))
+                        };
+                        let (bx, by) = (boxes[x], boxes[y]);
+                        let ((x0, x1), (y0, y1), (z0, z1)) =
+                            (meet(bx.x, by.x), meet(bx.y, by.y), meet(bx.z, by.z));
+                        let (lo, hi) = (
+                            to.point_to_world(Point3::new(x0, y0, z0)),
+                            to.point_to_world(Point3::new(x1, y1, z1)),
+                        );
+                        let (lo, hi) = (
+                            Point3::new(lo.x.min(hi.x), lo.y.min(hi.y), lo.z.min(hi.z)),
+                            Point3::new(lo.x.max(hi.x), lo.y.max(hi.y), lo.z.max(hi.z)),
+                        );
+                        let cen = Point3::new((lo.x + hi.x) / 2.0, (lo.y + hi.y) / 2.0, (lo.z + hi.z) / 2.0);
+                        unconfirmed += 1;
+                        text.push_str(&format!(
+                            "{} x {}: unconfirmed, the exact intersection failed ({e}); their boxes meet {}..{}\n",
+                            ix.occ,
+                            iy.occ,
+                            pts(lo),
+                            pts(hi)
                         ));
+                        list.push(Json::obj(vec![
+                            ("a", ix.occ.as_str().into()),
+                            ("b", iy.occ.as_str().into()),
+                            ("confirmed", false.into()),
+                            ("volume", Json::Null),
+                            ("boolean_failed", e.to_string().into()),
+                            ("centre", pt(cen)),
+                            ("min", pt(lo)),
+                            ("max", pt(hi)),
+                            ("faces_a", Json::Arr(vec![])),
+                            ("faces_b", Json::Arr(vec![])),
+                        ]));
+                        continue;
                     }
                 };
                 let (ix, iy) = (&s.items[x], &s.items[y]);
@@ -1214,6 +1251,7 @@ fn answer(s: &Scene, req: &Request) -> Result<Answer, QueryError> {
                 list.push(Json::obj(vec![
                     ("a", ix.occ.as_str().into()),
                     ("b", iy.occ.as_str().into()),
+                    ("confirmed", true.into()),
                     ("volume", r9(c.volume).into()),
                     ("centre", pt(cen)),
                     ("min", pt(lo)),
@@ -1225,13 +1263,19 @@ fn answer(s: &Scene, req: &Request) -> Result<Answer, QueryError> {
             text.insert_str(
                 0,
                 &format!(
-                    "{} interferences, volume {} ({frame_name} frame)\n",
+                    "{} interferences{}, volume {} ({frame_name} frame)\n",
                     list.len(),
+                    if unconfirmed > 0 {
+                        format!(" ({unconfirmed} unconfirmed: their volume is not in the total)")
+                    } else {
+                        String::new()
+                    },
                     sh(volume)
                 ),
             );
             fields.push(("query", "interference".into()));
             fields.push(("volume", r9(volume).into()));
+            fields.push(("unconfirmed", (unconfirmed as f64).into()));
             fields.push(("interferences", Json::Arr(list)));
         }
         Query::Frame { what, of } => {
@@ -1656,6 +1700,35 @@ fn curve_points(c: &forge_sheet::Curve2) -> Vec<forge_math::Point2> {
             vec![a, b]
         }
     }
+}
+
+thread_local! {
+    /// Test only: occurrence pairs whose clash boolean this thread's interference query takes as
+    /// refused, to show one refusal does not end the query.
+    static REFUSE: std::cell::RefCell<Vec<(String, String)>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Test only: this thread's interference queries take the clash of `a` and `b` (occurrence names,
+/// either order) as refused by the kernel.
+#[doc(hidden)]
+pub fn refuse_clash_for_test(a: &str, b: &str) {
+    REFUSE.with(|r| r.borrow_mut().push((a.to_string(), b.to_string())));
+}
+
+fn clash_or_refusal(
+    a: &str,
+    b: &str,
+    clash: impl FnOnce() -> Result<Option<features::Clash>, String>,
+) -> Result<Option<features::Clash>, String> {
+    let refused = REFUSE.with(|r| {
+        r.borrow()
+            .iter()
+            .any(|(x, y)| (x == a && y == b) || (x == b && y == a))
+    });
+    if refused {
+        return Err("refused (forced by a test)".into());
+    }
+    clash()
 }
 
 /// Where two placed bodies clash, in the world: `features::clash` of their rigid copies.
