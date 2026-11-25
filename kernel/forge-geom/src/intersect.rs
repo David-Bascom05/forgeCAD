@@ -176,8 +176,35 @@ pub fn line_cone(line: &Line, c: &Cone) -> LineSurface {
     line_implicit(line, &Surface::Cone(*c), &coeffs, -span, span, upper)
 }
 
+/// `line_torus` of `line` re-anchored at parameter `t0`, its hits' parameters shifted back.
+#[cold]
+#[inline(never)]
+fn far_line_torus(line: &Line, t: &Torus, t0: f64) -> LineSurface {
+    let near = Line::new(line.eval(t0), line.dir);
+    let (o, d) = local_line(&near, &t.frame);
+    match torus_quartic(&near, t, o, d) {
+        LineSurface::Hits(hits) => {
+            LineSurface::Hits(hits.into_iter().map(|h| LineHit { t: h.t + t0, ..h }).collect())
+        }
+        on => on,
+    }
+}
+
 pub fn line_torus(line: &Line, t: &Torus) -> LineSurface {
     let (o, d) = local_line(line, &t.frame);
+    // a line from an origin far off (a plane across a cylinder half a kilometre in radius, its
+    // lines anchored on the axis): the quartic's terms reach 1e22 and cancel, and its roots are
+    // lost. Solved from its point nearest the centre instead, the roots shifted back
+    let span = t.major.abs() + t.minor + 1.0;
+    if o.length_sq() > (64.0 * span) * (64.0 * span) {
+        return far_line_torus(line, t, -o.dot(d));
+    }
+    torus_quartic(line, t, o, d)
+}
+
+/// The quartic of `line` (from `o` along `d`, in the torus's frame) on torus `t`, solved.
+fn torus_quartic(line: &Line, t: &Torus, o: Vec3, d: Vec3) -> LineSurface {
+    let span = t.major.abs() + t.minor + 1.0;
     let big2 = 4.0 * t.major * t.major;
     let s = o.dot(d);
     let a0 = o.length_sq() + t.major * t.major - t.minor * t.minor;
@@ -192,7 +219,6 @@ pub fn line_torus(line: &Line, t: &Torus) -> LineSurface {
         4.0 * s,
         1.0,
     ];
-    let span = t.major.abs() + t.minor + 1.0;
     let surface = Surface::Torus(*t);
     // the quartic holds a spindle's other sheet too (apple for lemon), which is not on the surface
     let used = |h: f64| !t.is_spindle() || surface.distance(line.eval(h)) <= tol::LINEAR;

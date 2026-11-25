@@ -140,3 +140,13 @@ fn copy_at(b: &Body, k: f64) {
 fn a_spline_part_with_a_copy_half_over_it() {
     copy_at(&one("nurbs_part_80156.step"), 0.5);
 }
+
+/// UMC-500 (20-station PP) #69561 (2613 faces): a face on a cylinder half a kilometre in radius,
+/// all but flat, and a torus fillet across a crease from it. The quarter box's plane meets the
+/// cylinder in a line anchored on its axis, 495 m off; that line's quartic on the torus lost the
+/// crossing at the crease (terms to 1e22), so the cylinder was not split there: both ops refused,
+/// Internal(InconsistentClassification).
+#[test]
+fn a_box_across_a_nearly_flat_cylinder_and_its_fillet() {
+    quarter_box(&one("umc500_69561.step"));
+}
