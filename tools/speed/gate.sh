@@ -131,10 +131,12 @@ if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
   mkdir "$src"
   git ls-files -co --exclude-standard -z | tar --null -T - -cf - | tar -xf - -C "$src"
   (cd "$src" && cargo build -q --release -p forge-model --example regen1 --example bits \
-    && cargo build -q --release -p forge-lang --example benchparts) || exit 1
+    && cargo build -q --release -p forge-lang --example benchparts \
+    && cargo build -q --release -p forge-step --example stepop1) || exit 1
 else
   cargo build -q --release -p forge-model --example regen1 --example bits
   cargo build -q --release -p forge-lang --example benchparts
+  cargo build -q --release -p forge-step --example stepop1
 fi
 bin="$target/release/examples"
 if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
@@ -144,7 +146,7 @@ if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
   # FORGE_BENCH_PARTS: its LENGTH moves the counts (tour seq: 9,441,701 from a 22-character
   # directory, 9,436,604 from 14, 9,437,129 from 41), its letters do not. Always this one form)
   fill() {
-    cp "$bin/regen1" "$bin/bits" "$bin/benchparts" "$1/"
+    cp "$bin/regen1" "$bin/bits" "$bin/benchparts" "$bin/stepop1" "$1/"
     # (benchparts' font folder made here: a counted run that had to create it paid 564 fewer
     # instructions than one finding it there, so the first part counted differed from the rest)
     mkdir -p "$1/parts" "$1/tmp/forge-benchparts"
@@ -205,6 +207,13 @@ now=$(mktemp)
 # lines; with counts from before this gate (start-up included) it is what keeps them comparable
 echo "noop regen1 $(count "$bin/regen1" noop)" >> "$now"
 echo "noop benchparts $(count "$bin/benchparts" noop)" >> "$now"
+echo "noop stepop1 $(count "$bin/stepop1" noop)" >> "$now"
+# a boolean on a file's NURBS solid (examples/stepop1.rs): the tracer's spline paths, which the
+# parts above, all made by the kernel, never reach
+for c in k018-box ring-box; do
+  n=$(count "$bin/stepop1" $c)
+  echo "$c op ${n:-FAIL}" >> "$now"
+done
 for p in torture plate shaft housing coplanar patterns mixed hole-grid tour upto upto-flat; do
   for m in seq nary1; do
     n=$(count "$bin/regen1" $p $m)

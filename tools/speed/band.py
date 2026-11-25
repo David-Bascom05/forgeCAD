@@ -19,6 +19,7 @@ def startup(d, k):
     if k[0] == "noop": return None
     if k[0] in syn: return d.get(("noop", "regen1"))
     if k[1] in ("app", "edit", "cli"): return d.get(("noop", "benchparts"))
+    if k[1] == "op": return d.get(("noop", "stepop1"))
     return None
 for d in (b, n):
     for k in list(d):
@@ -26,11 +27,12 @@ for d in (b, n):
         if s0 is not None and s0 != "FAIL" and d[k] != "FAIL" and startup(b, k) is not None and startup(n, k) is not None:
             d[k] = str(int(d[k]) - int(s0))
 for d in (b, n):
-    d.pop(("noop", "regen1"), None); d.pop(("noop", "benchparts"), None)
+    d.pop(("noop", "regen1"), None); d.pop(("noop", "benchparts"), None); d.pop(("noop", "stepop1"), None)
 print("start-up taken off:", "yes" if ("noop", "regen1") in load(sys.argv[1]) and ("noop", "regen1") in load(sys.argv[2]) else "no (a side has no noop lines)")
 bad = False; sb = sn = 0; worst = (-1e9, None)
 for k in sorted(n):
     o, v = b.get(k), n[k]
+    # (a file's boolean, stepop1's `op` lines, is strict like the synthetic parts)
     diag = k[0] not in syn and k[1] in ("seq", "nary1")
     if v == "FAIL" or o in (None, "FAIL"):
         print(*k, v, "base", o, "FAIL"); bad = True; continue
