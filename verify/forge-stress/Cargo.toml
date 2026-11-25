@@ -18,5 +18,10 @@ forge-step = { path = "../../kernel/forge-step" }
 forge-asm = { path = "../../kernel/forge-asm" }
 forge-agent = { path = "../../interface/forge-agent" }
 
+[features]
+# forge-bool's decision log: with FORGE_DECISIONS_SITES set, each hit of a named decisions site is
+# written on stderr, and run.sh (KS_DECISIONS=1) keeps it as a `site` event under the op in flight
+decisions = ["forge-bool/decisions"]
+
 [lints]
 workspace = true
