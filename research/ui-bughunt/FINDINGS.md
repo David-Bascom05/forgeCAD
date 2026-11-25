@@ -352,6 +352,21 @@ list on main: this branch's new strings add none).
 - Swept fine in the page: Markup (draw, text with typing, Esc, Done); DWG open (layers,
   properties, its command line).
 
+## 22. Copy in the page: a refused clipboard was a page error and said nothing (ui/bughunt-3)
+
+- Measure's Copy / Copy all (and every egui copy) went to `navigator.clipboard.writeText`, its
+  promise dropped. Where the browser refuses (no permission, the page not focused: a headless
+  browser always), that was an unhandled rejection ("PAGEERROR Failed to execute 'writeText' on
+  'Clipboard': Write permission denied", seen in the driver on Measure > Copy all), and the
+  person was told nothing. The promise is awaited now; refused, the status says "Couldn't copy:
+  the browser didn't allow it."
+- Test: `web/tests/clipboard.cjs` (refused: said, no page error; allowed with permission: the
+  measurement is on the clipboard, "Area 1800.000 mm²…").
+- Swept fine: Inspect > Measure in the page (face to the XY plane: 6.000 mm; the readout in the
+  view).
+- Reported to CAM-UI (not mine): Manufacture > Export NC / Setup Sheet / Post Process on the
+  bundled flange_cam.fg do nothing visible: refused as "certified except G5", the reason only in
+  the CAM state's `said`, never on screen.
 
 ## 23. Placing a dimension in a drawing file hung the app (ui/bughunt-3)
 
@@ -378,6 +393,63 @@ list on main: this branch's new strings add none).
   (Playwright route on /api/bundle): says "Loading project…", and no generation is seen that
   is not certified in full. Before: "flange_cam.fg · 0/5 ops certified" on the way.
   `lib.cjs`'s `page()` takes an optional `prepare(p)` run before the page loads.
+- UX-LEAD's follow-ups: the words name what is coming ("Loading project · opening FILE when
+  it's in", no "…", which §5 keeps for commands that open a dialog); the empty view shows them
+  beside a spinner above Start a part (`shots/page-link-waiting.png`); and what the person opens
+  or makes from the empty view meanwhile is kept: the app, not the page, decides when the files
+  are in (`Ask::OpenLinked`), and says "FILE not opened: you opened NAME". deeplink.cjs covers it
+  (New part during a held load: kept, no machining workspace, the link said not opened).
+
+## 25. A double click in a busy page was two single clicks (ui/bughunt-3, ui/dblclick)
+
+- `inputcut::frame_cut` (§14's LAG fix) ended a frame at every button release, so a double click
+  queued whole (the tests' `app_click`, or a person's on a page behind its GPU) went to two
+  frames. egui counts a click as double only within 0.3 s of the one before by `RawInput.time`, and
+  with frames paced to the GPU the second frame came later: two single clicks. CI's cam.cjs:134
+  ("the op dialog, by a double click") timed out right after a dialog's close, with the row
+  selected and no dialog.
+- A release followed by a press of the same button within 6 px no longer ends the frame.
+- Tests: `inputcut::tests::a_double_click_is_one_frame`; in the page, under CDP CPU throttling
+  (8x, 20x), a double click on cam:row:prof right after a dialog's close missed on the first try
+  before, never after (6 tries each).
+
+## 26. In a narrow window the status line ran under Markup and the issues (ui/bughunt-3)
+
+- Reported by AGENT-TAB (main 0de84ac1, native window 480 px wide). The status line was painted
+  whole from the left; Markup sits at a fixed `width - 330` and the issues chip at the right, so
+  "volume 57600 mm³ · 6 faces · valid · rebuilt 0, reused 2 · 0.3 ms" (10 to 357 px) ran under
+  Markup (150 px), both drawn over it.
+- It is laid out on one row now, cut with "…" short of Markup, and the whole of it shows on hover
+  when cut (`shots/status-480-after.png`).
+- Test: `tests/status_narrow.rs` (480×860: the status line, noted as `status:said`, ends before
+  Markup). Before (the width limit lifted): fails, the line's rect ending at 357.5 past Markup's
+  150.
+- UX-LEAD's P2 on it: the short state first, so the cut takes the details, and the volume in
+  sensible units (`ux::Qty::Volume`: cm³, or in³ for an inch part): "valid · 57.6 cm³ · 6 faces ·
+  rebuilt 0, reused 2 · 0.3 ms" (the volume, which people check, before the face count), cut
+  between its parts ("valid · 57.6 cm³ · …" at 480 px), never
+  inside one unless the first part alone doesn't fit. `status_narrow.rs` checks the order and
+  the cut; `fg_gaps.rs`'s two checks of the old "volume N mm³" read the new words.
+- Combined with CAM-UI's release-refusal fix button (train 6, cam/ui-turn-words): the button sits
+  right after the words, the words are cut to leave it room short of Markup, and the hover gives
+  the whole line and the refusal's detail. Where not even a few words fit beside it (480 px), the
+  fix stands alone, led by the issues' amber warning so it reads as the fix for a problem
+  (UX-LEAD), with the words on its hover (a lone "…" said nothing):
+  `shots/status-480-refusal.png`, `shots/status-760-refusal.png`; `status_narrow.rs` checks both.
+
+## 27. A small window crashed the app: two clamps whose bounds crossed (ui/bughunt-3)
+
+- AGENT-TAB's report (main 0de84ac1): in a 480 px wide window, a feature selected (an extrude)
+  panicked in `shell/fgdim.rs`: the dimension field's `at.x.clamp(view.left() + 4 + word_w,
+  view.right() - FIELD_W - 60)` had min 376.2 > max 328.0 (`f32::clamp` panics on that). Its
+  y clamp had the same shape for a view under 64 px tall.
+- Swept every clamp with bounds from the window: `shell/harness_look.rs`'s properties list,
+  `clamp(80, max_h - 150)` with `max_h` the view's height less 120, panicked under 350 px:
+  a harness wire's Properties in a 1280×480 window crashed the app (min 80 > max -16).
+- Both now take the lower bound when they cross (the field at the view's left, the field running
+  on past the right; the list at least 80 px tall).
+- Tests: `tests/fgdim_narrow.rs` (480×860, extrude1 selected) and `tests/harness_short.rs`
+  (1280×480, a loom wire's Properties); each panicked before.
 
 ## Open (reported, not fixed here)
 

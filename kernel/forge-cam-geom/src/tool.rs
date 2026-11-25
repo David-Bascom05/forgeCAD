@@ -144,6 +144,17 @@ impl Body {
             if b[0] > rmax {
                 rmax = b[0];
             }
+            // an arc reaching its centre's height passes its widest point there (ρ = c + r), which
+            // may lie beyond both its ends (a bulge); taken whenever its heights include the
+            // centre's, so rmax bounds every point of the body (the cutters' own arcs end at their
+            // widest, so it is their end's ρ)
+            if let PSeg::Arc { a, b, c, r, .. } = chain[i]
+                && a[1].min(b[1]) <= c[1]
+                && c[1] <= a[1].max(b[1])
+                && c[0] + r > rmax
+            {
+                rmax = c[0] + r;
+            }
             i += 1;
         }
         let pre = chain.iter().map(pre_of).collect();
