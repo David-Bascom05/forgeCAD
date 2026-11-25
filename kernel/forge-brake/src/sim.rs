@@ -3835,4 +3835,60 @@ mod offset_plan_tests {
             );
         }
     }
+    /// A flange standing on the base, under a wide offset punch holder: the offset's tool check
+    /// proves the hit and names the punch.
+    /// The scene draws a Z's offset stroke at every instant, the far wall ending the offset below
+    /// the base.
+    #[test]
+    fn an_offset_meets_a_flange_and_the_scene_draws_one() {
+        use forge_sheet::WallId;
+        let m0 = Model::new(&super::offset_tests_zed(8.0)).unwrap();
+        let z = drop_of(&m0);
+        let tl = with_offset(z, None);
+        let su = Setup {
+            punch: tl.punches.len() - 1,
+            die: tl.dies.len() - 1,
+            rotate: false,
+        };
+        // the scene of a Z made in one stroke
+        let p = plan(&m0, &tl, &Options::default());
+        assert_eq!(p.steps.len(), 1);
+        let mut sc = crate::scene::Scene::new(&m0, &tl, &p);
+        for t in [0.0, 0.2, 0.3, 0.5, 0.7, 0.8, 1.0] {
+            assert!(sc.bodies(0, t).iter().any(|b| b.look.is_sheet()), "t {t}");
+        }
+        let lo = sc
+            .bodies(0, 0.84)
+            .iter()
+            .filter(|b| b.look.is_sheet())
+            .map(|b| b.mesh.bounds().unwrap().0[2])
+            .fold(f32::MAX, f32::min);
+        assert!((f64::from(lo) + z).abs() < 1e-3, "{lo} vs {z}");
+        // a 40 high flange on the base's far edge, 60 from the web, bent first, and a punch
+        // holder 150 wide reaching over it
+        let mut s = super::offset_tests_zed(8.0);
+        s.flange(WallId(0), 3, dmath::PI / 2.0, 40.0).unwrap();
+        let mut tl = tl;
+        tl.punches.last_mut().unwrap().width = 150.0;
+        let m = Model::new(&s).unwrap();
+        let (j, k) = (0, 1);
+        let f = 2;
+        let mut done = vec![false; 3];
+        done[f] = true;
+        let mut ctx = StepCtx::new(&m, &tl, &done, j, su, 0.0);
+        assert!(ctx.set_offset(k));
+        let mut checks = Vec::new();
+        ctx.collisions(Phase::Bend, None, &mut checks, false);
+        // proven: the flange within the clearance of the punch (the check stops at its first
+        // proven failure)
+        let fails: Vec<&Check> = checks.iter().filter(|c| !c.pass).collect();
+        assert!(!fails.is_empty(), "{checks:?}");
+        for c in &fails {
+            assert!(c.certified && c.value < c.limit, "{c:?}");
+            assert!(
+                c.tool.as_deref().is_some_and(|t| t.contains("test/offset-top")),
+                "{c:?}"
+            );
+        }
+    }
 }
