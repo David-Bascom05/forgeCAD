@@ -1,0 +1,129 @@
+name: train gates
+
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: train-gates-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preverify:
+    name: pre-verify / ${{ matrix.check }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [guards, hidden, clippy, native, render, wasm, gate]
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_RELEASE_DEBUG: 0
+      BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+      CANDIDATE_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Verify comparison revisions
+        run: |
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          git merge-base --is-ancestor "$BASE_SHA" "$CANDIDATE_SHA"
+          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            test "$(git rev-parse HEAD^1)" = "$BASE_SHA"
+          fi
+          printf 'Candidate %s\nBase %s\n' "$CANDIDATE_SHA" "$BASE_SHA"
+      - name: Install pinned Rust targets
+        run: rustup target add wasm32-unknown-unknown wasm32-wasip1
+      - uses: actions/setup-node@v4
+        if: matrix.check == 'wasm'
+        with:
+          node-version: 22
+      - name: Install software Vulkan
+        if: matrix.check == 'render'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q mesa-vulkan-drivers
+      - name: Prepare exact Callgrind runner
+        if: matrix.check == 'gate'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q valgrind
+          cpu=$(python3 -c 'import os; print(min(os.sched_getaffinity(0)))')
+          taskset -c "$cpu" setarch -R valgrind --version
+          printf 'GATE_CPU=%s\nGATE_JOBS=1\nGATE_EXACT=1\n' "$cpu" >> "$GITHUB_ENV"
+      - name: Run repository pre-verify
+        env:
+          CHECK: ${{ matrix.check }}
+          PREVERIFY_CACHE: ${{ runner.temp }}/forge-preverify
+          PREVERIFY_LOG_DIR: ${{ runner.temp }}/forge-preverify-logs
+        run: |
+          mkdir -p "$PREVERIFY_LOG_DIR"
+          args=(--ci --base "$BASE_SHA" --only "$CHECK")
+          if [[ "$CHECK" == gate ]]; then
+            args+=(--always-gate)
+          fi
+          python3 tools/preverify/run.py "${args[@]}" | tee "$PREVERIFY_LOG_DIR/summary.txt"
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: preverify-${{ matrix.check }}-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/forge-preverify/record-*.json
+            ${{ runner.temp }}/forge-preverify-logs/
+          if-no-files-found: ignore
+
+  geometry-reference:
+    name: geometry reference / ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+      FORGECAD_CACHE: "off"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Verify new reference hashes on this platform
+        shell: bash
+        run: |
+          if git diff --quiet "$BASE_SHA" HEAD -- tools/speed/bits.txt; then
+            echo 'The committed reference did not change.'
+            exit 0
+          fi
+          cargo build --release --locked -p forge-model --example bits
+          cargo build --release --locked -p forge-lang --example benchparts
+          {
+            target/release/examples/bits
+            FORGE_BENCH_PARTS="$PWD/interface/forge-lang/parts/bench" \
+              target/release/examples/benchparts bits
+          } > "$RUNNER_TEMP/geometry-bits.txt"
+          diff -u tools/speed/bits.txt "$RUNNER_TEMP/geometry-bits.txt"
+
+  required:
+    name: train gates / required
+    runs-on: ubuntu-24.04
+    needs: [preverify, geometry-reference]
+    if: always()
+    timeout-minutes: 5
+    steps:
+      - name: Require every pre-verify job to pass
+        env:
+          PREVERIFY_RESULT: ${{ needs.preverify.result }}
+          REFERENCE_RESULT: ${{ needs.geometry-reference.result }}
+        run: test "$PREVERIFY_RESULT" = success && test "$REFERENCE_RESULT" = success
