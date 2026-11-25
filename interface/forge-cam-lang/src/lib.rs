@@ -6340,7 +6340,11 @@ impl Cam {
         );
         // rest reads the stock the setup's earlier ops left (`earlier_cuts`): their paths too
         let key = if kind == "rest" {
-            format!("{key} {:?}", (&s.ip, self.earlier_cuts(su)))
+            // (of the stock, what its model reads: its bottom, top and voids)
+            format!(
+                "{key} {:?}",
+                ((s.ip.min[2], s.ip.max[2], &s.ip.voids), self.earlier_cuts(su))
+            )
         } else {
             key
         };
@@ -6693,8 +6697,10 @@ impl Cam {
                 };
                 fin.stepover = so;
                 // and only where the stock as the setup's earlier ops left it stands above what
-                // this tool leaves: their paths swept over the stock box less its voids, on cells
-                // centred on the grid's nodes (a model for where to cut, not for safety)
+                // this tool leaves: their paths swept over the stock's top less its voids, on
+                // cells centred on the grid's nodes (a model for where to cut, not for safety;
+                // the region is within the part's footprint, so within the stock's box: its
+                // sides are not read)
                 let [lo, hi] = forge_cam_3d::drop::DropCutter::extent(&dc);
                 let hc = grid / (grid / 0.1).ceil();
                 let ip = &s.ip;
@@ -6703,13 +6709,6 @@ impl Cam {
                     [hi[0] + 0.5 * hc, hi[1] + 0.5 * hc, ip.max[2]],
                     hc,
                 );
-                for k in 0..sm.z.len() {
-                    let x = sm.x0 + (0.5 + (k % sm.nx) as f64) * hc;
-                    let y = sm.y0 + (0.5 + (k / sm.nx) as f64) * hc;
-                    if x < ip.min[0] || x > ip.max[0] || y < ip.min[1] || y > ip.max[1] {
-                        sm.z[k] = sm.bottom;
-                    }
-                }
                 sm.lower_voids(ip);
                 for (pr, p) in self.earlier_cuts(su) {
                     sm.sweep_path(p.start, &p.moves, &pr);
