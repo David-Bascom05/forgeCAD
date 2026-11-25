@@ -316,8 +316,6 @@ impl Build<'_, '_> {
                 Err(r) => return Err(r),
             },
         };
-        // an intersection as the cubic a STEP file would give it (measures ask it for every point)
-        let curve = super::geom::splined(&curve).unwrap_or(curve);
         let name = self.salt.with(u64::from(idx));
         if start == 0 && end == 0 {
             let d = curve.domain();
