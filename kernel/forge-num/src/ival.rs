@@ -352,7 +352,7 @@ mod tests {
             s ^= s << 17;
             s
         };
-        let mut val = |k: u64, r: u64| match k % 4 {
+        let val = |k: u64, r: u64| match k % 4 {
             0 => f64::from_bits(r),
             1 => (r % 2001) as f64 / 16.0 - 62.5,
             2 => ((r % 1_000_003) as f64 - 500_000.0) * 1e-7,
