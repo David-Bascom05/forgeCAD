@@ -153,6 +153,13 @@ impl Piece {
 /// A model file's pieces (its own coordinates and units): a STEP solid each; an STL's parts that
 /// share no corner each.
 pub fn read(name: &str, bytes: &[u8]) -> Result<Vec<Piece>, String> {
+    read_noting(name, bytes).map(|(p, _)| p)
+}
+
+/// [`read`], and what the user should be told of how it was drawn: a solid drawn without a face
+/// the file puts far from its edges, in the read's own words.
+pub fn read_noting(name: &str, bytes: &[u8]) -> Result<(Vec<Piece>, Vec<String>), String> {
+    let mut notes = Vec::new();
     if models::is_lfs_pointer(&bytes[..bytes.len().min(64)]) {
         return Err(format!(
             "{name}: not downloaded (a Git LFS pointer): `forgecad machine model fetch MACHINE`"
@@ -203,6 +210,27 @@ pub fn read(name: &str, bytes: &[u8]) -> Result<Vec<Piece>, String> {
                 failed += usize::from(m.is_none());
                 meshed.insert(s.entity, m);
             }
+            // a solid refused for one face its file puts far from its edges is still drawn here,
+            // less that face (never a checked solid: a viewer's model only)
+            for s in forge_step::draw_far_refused(bytes, &lim, &imp) {
+                let part = if s.name.trim().is_empty() {
+                    format!("solid #{}", s.entity)
+                } else {
+                    s.name.clone()
+                };
+                notes.push(format!(
+                    "{part} is drawn without {}",
+                    s.why.replacen(" can't be read", ", which can't be read", 1)
+                ));
+                meshed.insert(
+                    s.entity,
+                    Some(Piece {
+                        pos: s.mesh.positions.iter().map(|p| [p.x, p.y, p.z]).collect(),
+                        tri: s.mesh.triangles,
+                        name: s.name,
+                    }),
+                );
+            }
             let mut v = Vec::new();
             let mut placed = std::collections::BTreeSet::new();
             let mut uses: Vec<&forge_step::Occurrence> = imp.occurrences.iter().collect();
@@ -240,7 +268,7 @@ pub fn read(name: &str, bytes: &[u8]) -> Result<Vec<Piece>, String> {
     if out.iter().all(|p| p.tri.is_empty()) {
         return Err(format!("{name}: no solid or triangle in it"));
     }
-    Ok(out)
+    Ok((out, notes))
 }
 
 /// A file's pieces, read through the app's filesystem.
@@ -250,6 +278,15 @@ pub fn read_file(path: &Path) -> Result<Vec<Piece>, String> {
         .map_or(String::new(), |n| n.to_string_lossy().into_owned());
     let bytes = forge_dirs::fs::read(path).map_err(|e| format!("{name}: {e}"))?;
     read(&name, &bytes)
+}
+
+/// [`read_file`], with [`read_noting`]'s notes.
+pub fn read_file_noting(path: &Path) -> Result<(Vec<Piece>, Vec<String>), String> {
+    let name = path
+        .file_name()
+        .map_or(String::new(), |n| n.to_string_lossy().into_owned());
+    let bytes = forge_dirs::fs::read(path).map_err(|e| format!("{name}: {e}"))?;
+    read_noting(&name, &bytes)
 }
 
 /// The note required with every model: where it came from and the user's right to use it.
@@ -315,7 +352,7 @@ pub fn attach(
     require_from(from)?;
     let target = target(def, body)?;
     let name = models::copy_in(dir, file, taken)?;
-    let pieces = match read_file(&dir.join(&name)) {
+    let (pieces, notes) = match read_file_noting(&dir.join(&name)) {
         Ok(p) => p,
         Err(e) => {
             let _ = forge_dirs::fs::remove_file(dir.join(&name));
@@ -325,7 +362,7 @@ pub fn attach(
     let all = Piece::join(&pieces);
     let mut m = Model::new(body.map(str::to_string), name.clone());
     m.from = from.trim().to_string();
-    let mut said = Vec::new();
+    let mut said = notes;
     match how.scale {
         Some(s) => m.scale = s,
         None => {
