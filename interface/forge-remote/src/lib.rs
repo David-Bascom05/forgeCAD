@@ -150,18 +150,19 @@ pub fn resolve_for(project: &str, user: &str, at: Option<&Path>) -> Result<Remot
              in clear (insecure_lan = true to send it anyway)"
         ));
     }
-    if let Some(list) = e.get("projects") {
-        let inside = at.is_some_and(|at| {
-            list.split(',')
-                .map(str::trim)
-                .filter(|p| !p.is_empty())
-                .any(|p| Path::new(p).is_absolute() && at.starts_with(p))
-        });
-        if !inside {
-            return Err(format!(
-                "[remote.{name}] serves only the projects under {list:?}: this one is elsewhere"
-            ));
-        }
+    // the user's trust in a remote is for their own projects: an entry names the folders it
+    // serves, and a project elsewhere naming it is refused (by default: no list, no project)
+    let list = e.get("projects").ok_or(format!(
+        "[remote.{name}] lists no projects: add projects = \"/path/to/your/cad\" (the folders it may serve)"
+    ))?;
+    let inside = at.is_some_and(|at| {
+        list.split(',')
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+            .any(|p| Path::new(p).is_absolute() && at.starts_with(p))
+    });
+    if !inside {
+        return Err(format!("[remote.{name}] serves only the projects under {list:?}: this one is elsewhere"));
     }
     let token = match (e.get("token"), e.get("token_env")) {
         (Some(t), _) => t.clone(),
@@ -474,39 +475,31 @@ mod tests {
 
     #[test]
     fn remote_toml() {
-        let user = "[remote.lab]\nurl = \"ws://127.0.0.1:7878/sync\"\ntoken = \"abc\"\n\
-                    [remote.far]\nurl = \"ws://10.0.0.9:7878/sync\"\ntoken = \"abc\"\n\
-                    [remote.envy]\nurl = \"ws://localhost:7878/sync\"\ntoken_env = \"GITHUB_TOKEN\"\n";
-        let r = resolve("remote = \"lab\"\n", user).unwrap();
-        assert_eq!(
-            (r.url.as_str(), r.token.as_str()),
-            ("ws://127.0.0.1:7878/sync", "abc")
-        );
-        assert_eq!(
-            split_url(&r.url).unwrap(),
-            ("127.0.0.1:7878".into(), "/sync".into())
-        );
-        // the security review's case: the project cannot choose the address or the token
-        for (proj, why) in [
-            (
-                "url = \"ws://evil.example/sync\"\ntoken_env = \"AWS_SECRET\"\n",
-                "nothing else",
-            ),
-            ("remote = \"lab\"\ntoken = \"x\"\n", "nothing else"),
-            ("remote = \"unknown\"\n", "not in your remotes.toml"),
-            ("remote = \"far\"\n", "not this machine"),
-            ("remote = \"envy\"\n", "FORGECAD_"),
+        let user = "[remote.lab]\nurl = \"ws://127.0.0.1:7878/sync\"\ntoken = \"abc\"\nprojects = \"/home/me/cad\"\n\
+                    [remote.far]\nurl = \"ws://10.0.0.9:7878/sync\"\ntoken = \"abc\"\nprojects = \"/home/me/cad\"\n\
+                    [remote.envy]\nurl = \"ws://localhost:7878/sync\"\ntoken_env = \"GITHUB_TOKEN\"\nprojects = \"/home/me/cad\"\n\
+                    [remote.open]\nurl = \"ws://127.0.0.1:7878/sync\"\ntoken = \"abc\"\n";
+        let mine = Some(Path::new("/home/me/cad/p"));
+        let r = resolve_for("remote = \"lab\"\n", user, mine).unwrap();
+        assert_eq!((r.url.as_str(), r.token.as_str()), ("ws://127.0.0.1:7878/sync", "abc"));
+        assert_eq!(split_url(&r.url).unwrap(), ("127.0.0.1:7878".into(), "/sync".into()));
+        // the security reviews' cases: the project cannot choose the address or the token, and a
+        // remote serves only the folders its entry lists (none listed: none)
+        for (proj, at, why) in [
+            ("url = \"ws://evil.example/sync\"\ntoken_env = \"AWS_SECRET\"\n", mine, "nothing else"),
+            ("remote = \"lab\"\ntoken = \"x\"\n", mine, "nothing else"),
+            ("remote = \"unknown\"\n", mine, "not in your remotes.toml"),
+            ("remote = \"far\"\n", mine, "not this machine"),
+            ("remote = \"envy\"\n", mine, "FORGECAD_"),
+            ("remote = \"open\"\n", mine, "lists no projects"),
+            ("remote = \"lab\"\n", Some(Path::new("/tmp/cloned")), "elsewhere"),
+            ("remote = \"lab\"\n", None, "elsewhere"),
         ] {
-            let e = resolve(proj, user).unwrap_err();
+            let e = resolve_for(proj, user, at).unwrap_err();
             assert!(e.contains(why), "{proj}: {e}");
         }
-        // a remote bound to the user's projects serves no project elsewhere
-        let bound = "[remote.lab]\nurl = \"ws://127.0.0.1:7878/sync\"\ntoken = \"abc\"\nprojects = \"/home/me/cad\"\n";
-        assert!(resolve_for("remote = \"lab\"\n", bound, Some(Path::new("/home/me/cad/x"))).is_ok());
-        let e = resolve_for("remote = \"lab\"\n", bound, Some(Path::new("/tmp/cloned"))).unwrap_err();
-        assert!(e.contains("elsewhere"), "{e}");
         let lan = user.replace("[remote.far]\n", "[remote.far]\ninsecure_lan = true\n");
-        assert!(resolve("remote = \"far\"\n", &lan).is_ok());
+        assert!(resolve_for("remote = \"far\"\n", &lan, mine).is_ok());
         let d = std::env::temp_dir().join(format!("forge-remote-{}", std::process::id()));
         std::fs::create_dir_all(&d).unwrap();
         assert!(remote(&d).is_none(), "no file: LOCAL");

@@ -84,6 +84,8 @@ pub const VERSION_GAP: Duration = Duration::from_secs(2);
 pub const HASH_BUILD_GAP: Duration = Duration::from_secs(10);
 pub const BUILD_BUDGET: Duration = Duration::from_secs(30);
 pub const BUILDS: usize = 2;
+/// One connection's snapshot requests: at most one this often.
+pub const RESYNC_GAP: Duration = Duration::from_secs(2);
 /// Kept timings (a ring).
 const STATS_KEPT: usize = 10_000;
 
@@ -306,9 +308,11 @@ enum Ev {
     Leave {
         conn: Conn,
     },
-    /// A document's actor ended on a panic.
-    Quarantine {
+    /// A document's actor ended: `why` when it never opened or was quarantined (a panic).
+    Ended {
         doc: String,
+        generation: u64,
+        why: Option<String>,
     },
 }
 
@@ -375,8 +379,14 @@ fn watchdog(list: Deadlines, stop: Arc<AtomicBool>, dead: Arc<AtomicBool>) {
 /// still running, its edits are refused until they end. (A step and memory budget inside
 /// forge-lang, so a run can be stopped, is the kernel's to give: KERNEL-STRESS's op budget.)
 struct Timed {
+    /// This document's abandoned runs (kept by name across its actors' lifetimes: leaving and
+    /// rejoining does not reset it) and the whole server's.
     abandoned: Arc<AtomicUsize>,
+    all: Arc<AtomicUsize>,
 }
+
+/// Abandoned validations the whole server allows still running.
+pub const MAX_ABANDONED_ALL: usize = 16;
 
 impl Check for Timed {
     fn check(
@@ -387,20 +397,21 @@ impl Check for Timed {
         dir: Option<PathBuf>,
         root: Option<PathBuf>,
     ) -> Result<(String, Counts), Refusal> {
-        if self.abandoned.load(Ordering::SeqCst) >= MAX_ABANDONED {
+        if self.abandoned.load(Ordering::SeqCst) >= MAX_ABANDONED || self.all.load(Ordering::SeqCst) >= MAX_ABANDONED_ALL {
             return Err(Refusal::Invalid {
-                why: "this document is busy with edits that took too long: try again later".into(),
+                why: "the server is busy with edits that took too long: try again later".into(),
             });
         }
         // 0 running, 1 finished in time, 2 abandoned: whichever side moves it from 0 decides
         // who counts, so a run ending right at the deadline is never counted twice or lost
         let (tx, rx) = std::sync::mpsc::channel();
         let state = Arc::new(AtomicU8::new(0));
-        let (head, counts, op, gone, st) = (
+        let (head, counts, op, gone, all, st) = (
             head.to_string(),
             counts.cloned(),
             op.clone(),
             self.abandoned.clone(),
+            self.all.clone(),
             state.clone(),
         );
         std::thread::Builder::new()
@@ -419,6 +430,7 @@ impl Check for Timed {
                     .is_err()
                 {
                     gone.fetch_sub(1, Ordering::SeqCst);
+                    all.fetch_sub(1, Ordering::SeqCst);
                 }
                 let _ = tx.send(r);
             })
@@ -437,6 +449,7 @@ impl Check for Timed {
                     });
                 }
                 self.abandoned.fetch_add(1, Ordering::SeqCst);
+                self.all.fetch_add(1, Ordering::SeqCst);
                 Err(Refusal::Invalid {
                     why: format!("checking this edit took over {} s", VALIDATE_BUDGET.as_secs()),
                 })
@@ -449,7 +462,7 @@ impl Check for Timed {
 struct SharedMem(Arc<Mutex<MemStore>>);
 
 impl Store for SharedMem {
-    fn latest_snapshot(&mut self, doc: &str) -> std::io::Result<Option<(u64, String)>> {
+    fn latest_snapshot(&mut self, doc: &str) -> std::io::Result<Option<forge_sync::Snapshot>> {
         self.0
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -467,11 +480,8 @@ impl Store for SharedMem {
     fn append(&mut self, doc: &str, e: &forge_sync::Entry) -> std::io::Result<()> {
         self.0.lock().unwrap_or_else(|e| e.into_inner()).append(doc, e)
     }
-    fn compact(&mut self, doc: &str, seq: u64, text: &str) -> std::io::Result<()> {
-        self.0
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .compact(doc, seq, text)
+    fn compact(&mut self, doc: &str, snap: &forge_sync::Snapshot) -> std::io::Result<()> {
+        self.0.lock().unwrap_or_else(|e| e.into_inner()).compact(doc, snap)
     }
 }
 
@@ -485,6 +495,9 @@ struct Shared {
     versions: Mutex<HashMap<String, Instant>>,
     /// Hash-check builds running in the whole server.
     builds: Arc<AtomicUsize>,
+    /// Abandoned validations still running: per document name, and in all.
+    abandoned: Mutex<HashMap<String, Arc<AtomicUsize>>>,
+    abandoned_all: Arc<AtomicUsize>,
 }
 
 impl Shared {
@@ -536,6 +549,8 @@ pub fn start_on(l: TcpListener, c: Config) -> Result<Handle, String> {
         mem: Arc::new(Mutex::new(MemStore::default())),
         versions: Mutex::new(HashMap::new()),
         builds: Arc::new(AtomicUsize::new(0)),
+        abandoned: Mutex::new(HashMap::new()),
+        abandoned_all: Arc::new(AtomicUsize::new(0)),
     });
     let (tx, rx) = sync_channel::<Ev>(INBOX);
     let stop = Arc::new(AtomicBool::new(false));
@@ -769,6 +784,7 @@ fn connection(
         return;
     }
     let (mut tokens, mut last, mut frames) = (BURST, Instant::now(), r.frames);
+    let mut last_resync: Option<Instant> = None;
     loop {
         let got = r.read();
         // every frame costs, pings and empty continuations too
@@ -790,7 +806,12 @@ fn connection(
             Ok(forge_ws::Msg::Close) | Err(_) => break,
         };
         match Up::parse(&m) {
+            // a snapshot is the document's whole text: at most one per RESYNC_GAP
+            Ok(Up::Resync) if last_resync.is_some_and(|t: Instant| t.elapsed() < RESYNC_GAP) => continue,
             Ok(up) => {
+                if matches!(up, Up::Resync) {
+                    last_resync = Some(Instant::now());
+                }
                 if tx.send(Ev::Up { conn, up }).is_err() {
                     break;
                 }
@@ -833,18 +854,34 @@ enum DocEv {
 
 struct DocHandle {
     tx: SyncSender<DocEv>,
+    /// Which actor this is: a message from an older actor of the same document is ignored.
+    generation: u64,
     thread: std::thread::JoinHandle<()>,
     members: usize,
 }
 
+/// A document whose actor is ending: joins wait for it (two actors of one document would fork
+/// its log), then a new actor starts.
+struct Closing {
+    generation: u64,
+    thread: std::thread::JoinHandle<()>,
+    joins: Vec<DocEv>,
+}
+
+/// The hub never blocks on a document: every send to an actor is a try_send, and it never joins
+/// an actor's thread while serving (only when the server stops).
 fn hub(shared: &Arc<Shared>, rx: Receiver<Ev>, tx: SyncSender<Ev>, stop: &AtomicBool) {
     let mut docs: HashMap<String, DocHandle> = HashMap::new();
+    let mut closing: HashMap<String, Closing> = HashMap::new();
     let mut conns: HashMap<Conn, (String, Outbox)> = HashMap::new();
     let mut quarantined: HashSet<String> = HashSet::new();
-    let close = |docs: &mut HashMap<String, DocHandle>, doc: &str| {
-        if let Some(d) = docs.remove(doc) {
-            let _ = d.tx.send(DocEv::Close);
-            let _ = d.thread.join();
+    let mut generation: u64 = 0;
+    let drop_doc_conns = |conns: &mut HashMap<Conn, (String, Outbox)>, doc: &str, why: &str| {
+        let gone: Vec<Conn> = conns.iter().filter(|(_, v)| v.0 == doc).map(|(k, _)| *k).collect();
+        for k in gone {
+            if let Some((_, out)) = conns.remove(&k) {
+                out.close(Some(why));
+            }
         }
     };
     loop {
@@ -852,9 +889,14 @@ fn hub(shared: &Arc<Shared>, rx: Receiver<Ev>, tx: SyncSender<Ev>, stop: &Atomic
             for (_, (_, out)) in conns.drain() {
                 out.close(Some("the server is stopping"));
             }
-            let all: Vec<String> = docs.keys().cloned().collect();
-            for d in all {
-                close(&mut docs, &d);
+            // stopping: each document's head saved before the folder is let go
+            for (_, d) in docs.drain() {
+                let _ = d.tx.try_send(DocEv::Close);
+                drop(d.tx);
+                let _ = d.thread.join();
+            }
+            for (_, c) in closing.drain() {
+                let _ = c.thread.join();
             }
             return;
         }
@@ -880,8 +922,26 @@ fn hub(shared: &Arc<Shared>, rx: Receiver<Ev>, tx: SyncSender<Ev>, stop: &Atomic
                     out.close(Some("this document is quarantined after a server error"));
                     continue;
                 }
+                let j = DocEv::Join {
+                    conn,
+                    client,
+                    author,
+                    seq,
+                    out: out.clone(),
+                };
+                if let Some(c) = closing.get_mut(&doc) {
+                    // its last actor is still saving: the join waits for it
+                    if c.joins.len() >= shared.c.max_per_doc {
+                        out.close(Some("this document is too busy: try again"));
+                        continue;
+                    }
+                    c.joins.push(j);
+                    conns.insert(conn, (doc, out));
+                    continue;
+                }
                 if !docs.contains_key(&doc) {
-                    match open_actor(shared, &doc, tx.clone()) {
+                    generation += 1;
+                    match open_actor(shared, &doc, generation, tx.clone()) {
                         Ok(h) => {
                             docs.insert(doc.clone(), h);
                         }
@@ -896,13 +956,6 @@ fn hub(shared: &Arc<Shared>, rx: Receiver<Ev>, tx: SyncSender<Ev>, stop: &Atomic
                     out.close(Some("too many people in this document"));
                     continue;
                 }
-                let j = DocEv::Join {
-                    conn,
-                    client,
-                    author,
-                    seq,
-                    out: out.clone(),
-                };
                 if d.tx.try_send(j).is_err() {
                     out.close(Some("this document is too busy: try again"));
                     continue;
@@ -911,9 +964,7 @@ fn hub(shared: &Arc<Shared>, rx: Receiver<Ev>, tx: SyncSender<Ev>, stop: &Atomic
                 conns.insert(conn, (doc, out));
             }
             Ev::Up { conn, up } => {
-                let Some((doc, out)) = conns.get(&conn) else {
-                    continue;
-                };
+                let Some((doc, out)) = conns.get(&conn) else { continue };
                 if let Some(d) = docs.get(doc)
                     && d.tx.try_send(DocEv::Up { conn, up }).is_err()
                 {
@@ -922,46 +973,107 @@ fn hub(shared: &Arc<Shared>, rx: Receiver<Ev>, tx: SyncSender<Ev>, stop: &Atomic
                 }
             }
             Ev::Leave { conn } => {
-                if let Some((doc, _)) = conns.remove(&conn)
-                    && let Some(d) = docs.get_mut(&doc)
-                {
-                    let _ = d.tx.send(DocEv::Leave { conn });
-                    d.members -= 1;
-                    if d.members == 0 {
-                        // no one left: its head saved, its actor ended (its log stays)
-                        close(&mut docs, &doc);
-                    }
+                let Some((doc, _)) = conns.remove(&conn) else { continue };
+                if let Some(c) = closing.get_mut(&doc) {
+                    c.joins.retain(|j| !matches!(j, DocEv::Join { conn: k, .. } if *k == conn));
+                    continue;
+                }
+                let Some(d) = docs.get_mut(&doc) else { continue };
+                // (a full inbox: the actor finds the connection gone when it next writes to it)
+                let _ = d.tx.try_send(DocEv::Leave { conn });
+                d.members = d.members.saturating_sub(1);
+                if d.members == 0 {
+                    // no one left: it saves, snapshots and ends on its own; joins wait for that
+                    let d = docs.remove(&doc).expect("there");
+                    let _ = d.tx.try_send(DocEv::Close);
+                    // (its inbox dropped with the handle: a full one still ends the actor)
+                    closing.insert(
+                        doc,
+                        Closing {
+                            generation: d.generation,
+                            thread: d.thread,
+                            joins: vec![],
+                        },
+                    );
                 }
             }
-            Ev::Quarantine { doc } => {
-                quarantined.insert(doc.clone());
-                if let Some(d) = docs.remove(&doc) {
-                    let _ = d.thread.join();
+            Ev::Ended { doc, generation: g, why } => {
+                if let Some(why) = why {
+                    // never opened, or quarantined: everyone on it is told
+                    if why.contains("quarantined") {
+                        quarantined.insert(doc.clone());
+                        shared.stats().quarantined += 1;
+                    }
+                    if docs.get(&doc).is_some_and(|d| d.generation == g) {
+                        docs.remove(&doc);
+                    }
+                    if closing.get(&doc).is_some_and(|c| c.generation == g) {
+                        closing.remove(&doc);
+                    }
+                    drop_doc_conns(&mut conns, &doc, &why);
+                    continue;
                 }
-                let gone: Vec<Conn> = conns
-                    .iter()
-                    .filter(|(_, v)| v.0 == doc)
-                    .map(|(k, _)| *k)
-                    .collect();
-                for k in gone {
-                    if let Some((_, out)) = conns.remove(&k) {
-                        out.close(Some("this document is quarantined after a server error"));
+                if closing.get(&doc).is_some_and(|c| c.generation == g) {
+                    let c = closing.remove(&doc).expect("there");
+                    if !c.joins.is_empty() {
+                        // those who came while it was saving: a new actor for them
+                        generation += 1;
+                        match open_actor(shared, &doc, generation, tx.clone()) {
+                            Ok(mut h) => {
+                                for j in c.joins {
+                                    if h.tx.try_send(j).is_ok() {
+                                        h.members += 1;
+                                    }
+                                }
+                                docs.insert(doc.clone(), h);
+                            }
+                            Err(e) => drop_doc_conns(&mut conns, &doc, &e),
+                        }
                     }
                 }
-                shared.stats().quarantined += 1;
             }
         }
         shared.stats().open_docs = docs.len();
     }
 }
 
-fn open_actor(shared: &Arc<Shared>, doc: &str, hub: SyncSender<Ev>) -> Result<DocHandle, String> {
-    let room = open_doc(shared, doc)?;
+/// Starts a document's actor: it opens the document on its own thread (a long log replays
+/// there, never on the hub), then serves the joins queued meanwhile.
+fn open_actor(shared: &Arc<Shared>, doc: &str, generation: u64, hub: SyncSender<Ev>) -> Result<DocHandle, String> {
     let (tx, rx) = sync_channel::<DocEv>(DOC_INBOX);
     let (shared2, doc2, self_tx) = (shared.clone(), doc.to_string(), tx.clone());
     let thread = std::thread::Builder::new()
         .name(format!("forge-server doc {doc}"))
         .spawn(move || {
+            let ended = |why: Option<String>| {
+                // the hub is never blocked on: if its inbox is full, wait a little, then give up
+                let mut ev = Ev::Ended {
+                    doc: doc2.clone(),
+                    generation,
+                    why,
+                };
+                for _ in 0..600 {
+                    match hub.try_send(ev) {
+                        Ok(()) => return,
+                        Err(TrySendError::Full(e)) => ev = e,
+                        Err(TrySendError::Disconnected(_)) => return,
+                    }
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+            };
+            let room = match catch_unwind(AssertUnwindSafe(|| open_doc(&shared2, &doc2))) {
+                Ok(Ok(r)) => r,
+                Ok(Err(e)) => {
+                    // the joins queued meanwhile hear why
+                    while let Ok(ev) = rx.try_recv() {
+                        if let DocEv::Join { out, .. } = ev {
+                            out.close(Some(&e));
+                        }
+                    }
+                    return ended(Some(e));
+                }
+                Err(_) => return ended(Some(format!("{doc2}: this document is quarantined after a server error"))),
+            };
             let saved = room.seq.seq();
             let store = shared2.store().ok();
             let mut a = Actor {
@@ -984,12 +1096,17 @@ fn open_actor(shared: &Arc<Shared>, doc: &str, hub: SyncSender<Ev>) -> Result<Do
                 for out in a.outs.values() {
                     out.close(Some("this document is quarantined after a server error"));
                 }
-                let _ = hub.send(Ev::Quarantine { doc: doc2 });
+                if let Some((_, _, st)) = a.building.take() {
+                    a.free_build(&st);
+                }
+                return ended(Some("this document is quarantined after a server error".into()));
             }
+            ended(None);
         })
         .map_err(|e| e.to_string())?;
     Ok(DocHandle {
         tx,
+        generation,
         thread,
         members: 0,
     })
@@ -1018,8 +1135,16 @@ fn open_doc(shared: &Shared, doc: &str) -> Result<Room, String> {
     let mut seq = Sequencer::open(store.as_mut(), doc, &text, path.parent().map(Path::to_path_buf))
         .map_err(|e| e.to_string())?;
     seq.root = Some(c.root.clone());
+    let mine = shared
+        .abandoned
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .entry(doc.to_string())
+        .or_default()
+        .clone();
     seq.checker = Box::new(Timed {
-        abandoned: Arc::new(AtomicUsize::new(0)),
+        abandoned: mine,
+        all: shared.abandoned_all.clone(),
     });
     Ok(Room::new(seq))
 }
@@ -1038,7 +1163,9 @@ struct Actor {
     /// flight (its seq, when it started).
     built: std::collections::BTreeMap<u64, Option<u64>>,
     waiting: Vec<(u64, u64, String, Conn)>,
-    building: Option<(u64, Instant)>,
+    /// (seq, started, state: 0 running, 1 done, 2 abandoned: whichever side leaves 0 frees the
+    /// server's build slot, once).
+    building: Option<(u64, Instant, Arc<AtomicU8>)>,
     last_build: Option<Instant>,
     /// Why the file is not written any more (changed on disk outside the server).
     paused: Option<String>,
@@ -1068,6 +1195,16 @@ impl Actor {
             match rx.recv_timeout(Duration::from_millis(200)) {
                 Ok(DocEv::Close) | Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
                     self.checkpoint();
+                    // the next open replays nothing: the head becomes the snapshot
+                    if self.room.seq.seq() > self.room.seq.floor()
+                        && let Some(st) = self.store.as_mut()
+                        && let Err(e) = self.room.seq.compact(st.as_mut())
+                    {
+                        eprintln!("forge-server: {}: snapshot on close failed: {e}", self.doc);
+                    }
+                    if let Some((_, _, st)) = self.building.take() {
+                        self.free_build(&st);
+                    }
                     return;
                 }
                 Ok(ev) => self.event(ev),
@@ -1146,7 +1283,7 @@ impl Actor {
                 }
             }
             DocEv::Built { seq, hash } => {
-                if self.building.is_some_and(|b| b.0 == seq) {
+                if self.building.as_ref().is_some_and(|b| b.0 == seq) {
                     self.building = None;
                 }
                 self.built.insert(seq, hash);
@@ -1236,7 +1373,7 @@ impl Actor {
                 if self.waiting.len() >= 64 {
                     return;
                 }
-                if self.building.is_some_and(|b| b.0 == seq) {
+                if self.building.as_ref().is_some_and(|b| b.0 == seq) {
                     self.waiting.push((seq, hash, author, conn));
                     return;
                 }
@@ -1250,11 +1387,13 @@ impl Actor {
                     self.s.builds.fetch_sub(1, Ordering::SeqCst);
                     return;
                 }
-                let (dir, root, tx, builds) = (
+                let state = Arc::new(AtomicU8::new(0));
+                let (dir, root, tx, builds, st) = (
                     self.room.seq.dir.clone(),
                     self.s.c.root.clone(),
                     self.self_tx.clone(),
                     self.s.builds.clone(),
+                    state.clone(),
                 );
                 let spawned = std::thread::Builder::new()
                     .name("forge-server hash build".into())
@@ -1273,14 +1412,17 @@ impl Actor {
                         }))
                         .ok()
                         .flatten();
-                        builds.fetch_sub(1, Ordering::SeqCst);
+                        // in time: this side frees the slot (late: the actor already did)
+                        if st.compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+                            builds.fetch_sub(1, Ordering::SeqCst);
+                        }
                         let _ = tx.try_send(DocEv::Built { seq, hash });
                     });
                 if spawned.is_err() {
                     self.s.builds.fetch_sub(1, Ordering::SeqCst);
                     return;
                 }
-                self.building = Some((seq, Instant::now()));
+                self.building = Some((seq, Instant::now(), state));
                 self.last_build = Some(Instant::now());
                 self.waiting.push((seq, hash, author, conn));
             }
@@ -1311,6 +1453,14 @@ impl Actor {
         Ok(path)
     }
 
+    /// A build given up on: its server slot freed now (the build, still running, will not free
+    /// it again).
+    fn free_build(&self, st: &AtomicU8) {
+        if st.compare_exchange(0, 2, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+            self.s.builds.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+
     fn checkpoint(&mut self) {
         let seq = self.room.seq.seq();
         if seq <= self.saved {
@@ -1328,10 +1478,13 @@ impl Actor {
 
     fn idle(&mut self) {
         // a hash-check build past its budget: abandoned, its reports dropped
-        if let Some((seq, t)) = self.building
+        if let Some((seq, t, _)) = &self.building
             && t.elapsed() > BUILD_BUDGET
         {
-            self.building = None;
+            let seq = *seq;
+            if let Some((_, _, st)) = self.building.take() {
+                self.free_build(&st);
+            }
             self.waiting.retain(|w| w.0 != seq);
         }
         if self.room.seq.seq() > self.saved && self.last_op.elapsed() >= self.s.c.checkpoint_idle {

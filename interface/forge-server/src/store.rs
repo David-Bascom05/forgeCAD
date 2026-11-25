@@ -19,7 +19,7 @@
 
 use forge_agent::json::Json;
 use forge_sync::wire::{entry_from, entry_json, read, write};
-use forge_sync::{Entry, Store, text_hash};
+use forge_sync::{Entry, Snapshot, Store, text_hash};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
@@ -131,7 +131,7 @@ fn any_record_after(bytes: &[u8], from: usize) -> bool {
 
 impl FileLogStore {
     /// The whole log: (snapshot seq, its text, the entries after it).
-    fn load(&mut self, doc: &str) -> io::Result<Option<(u64, String, Vec<Entry>)>> {
+    fn load(&mut self, doc: &str) -> io::Result<Option<(Snapshot, Vec<Entry>)>> {
         let p = self.path(doc);
         let mut f = match OpenOptions::new().read(true).write(true).open(&p) {
             Ok(f) => f,
@@ -170,7 +170,20 @@ impl FileLogStore {
                     .ok_or_else(|| corrupt(format!("{}: no first text", p.display())))?
                     .to_string();
                 let seq = j.get("seq").and_then(Json::num).map_or(0, |x| x as u64);
-                first = Some((seq, text));
+                // the op ids committed before it: (client, id, seq) triples
+                let seen = match j.get("seen") {
+                    Some(Json::Arr(a)) => a
+                        .iter()
+                        .filter_map(|x| match x {
+                            Json::Arr(t) if t.len() == 3 => {
+                                Some((t[0].str()?.to_string(), t[1].num()? as u64, t[2].num()? as u64))
+                            }
+                            _ => None,
+                        })
+                        .collect(),
+                    _ => vec![],
+                };
+                first = Some(Snapshot { seq, text, seen });
             } else {
                 entries.push(
                     entry_from(&j).ok_or_else(|| corrupt(format!("{}: a bad entry at {at}", p.display())))?,
@@ -190,7 +203,7 @@ impl FileLogStore {
         }
         f.seek(SeekFrom::End(0))?;
         match first {
-            Some((seq, text)) => Ok(Some((seq, text, entries))),
+            Some(snap) => Ok(Some((snap, entries))),
             // never written whole (a log from before atomic creation): no document yet
             None => {
                 drop(f);
@@ -202,29 +215,34 @@ impl FileLogStore {
 }
 
 impl Store for FileLogStore {
-    fn latest_snapshot(&mut self, doc: &str) -> io::Result<Option<(u64, String)>> {
+    fn latest_snapshot(&mut self, doc: &str) -> io::Result<Option<Snapshot>> {
         let got = self.load(doc)?;
-        let snap = got.as_ref().map(|(s, t, _)| (*s, t.clone()));
-        // kept for the read_since that follows (an open reads both)
-        if let Some((s, _, es)) = got {
-            self.loaded.insert(doc.to_string(), (s, es));
-        }
-        Ok(snap)
+        // the entries kept for the read_since that follows (an open reads both)
+        Ok(got.map(|(snap, es)| {
+            self.loaded.insert(doc.to_string(), (snap.seq, es));
+            snap
+        }))
     }
 
     fn read_since(&mut self, doc: &str, seq: u64) -> io::Result<Vec<Entry>> {
         let es = match self.loaded.remove(doc) {
             Some((_, es)) => es,
-            None => self.load(doc)?.map(|x| x.2).unwrap_or_default(),
+            None => self.load(doc)?.map(|x| x.1).unwrap_or_default(),
         };
         Ok(es.into_iter().filter(|e| e.seq > seq).collect())
     }
 
-    fn compact(&mut self, doc: &str, seq: u64, text: &str) -> io::Result<()> {
+    fn compact(&mut self, doc: &str, snap: &Snapshot) -> io::Result<()> {
+        let seen = snap
+            .seen
+            .iter()
+            .map(|(c, i, s)| Json::Arr(vec![c.as_str().into(), (*i as f64).into(), (*s as f64).into()]))
+            .collect();
         let j = Json::obj(vec![
-            ("first", text.into()),
-            ("seq", (seq as f64).into()),
-            ("th", format!("{:016x}", text_hash(text)).into()),
+            ("first", snap.text.as_str().into()),
+            ("seq", (snap.seq as f64).into()),
+            ("th", format!("{:016x}", text_hash(&snap.text)).into()),
+            ("seen", Json::Arr(seen)),
         ]);
         // the new log replaces the old whole (renamed over it): after a crash, one or the other
         self.open.remove(doc);
@@ -320,12 +338,12 @@ mod tests {
         f.write_all(&whole[..HEAD + 3]).unwrap();
         drop(f);
         let mut s = FileLogStore::new(d.clone()).unwrap();
-        let (_, first, es) = s.load("p/a.fg").unwrap().unwrap();
-        assert_eq!(first, "shared a1 = 1\n");
+        let (snap, es) = s.load("p/a.fg").unwrap().unwrap();
+        assert_eq!(snap.text, "shared a1 = 1\n");
         assert_eq!(es, vec![e(1), e(2), e(3)]);
         s.append("p/a.fg", &e(4)).unwrap();
         let mut s = FileLogStore::new(d.clone()).unwrap();
-        assert_eq!(s.load("p/a.fg").unwrap().unwrap().2.len(), 4);
+        assert_eq!(s.load("p/a.fg").unwrap().unwrap().1.len(), 4);
         let _ = std::fs::remove_dir_all(&d);
     }
 
@@ -337,14 +355,16 @@ mod tests {
         f.write_all(&[0; 300]).unwrap();
         drop(f);
         let mut s = FileLogStore::new(d.clone()).unwrap();
-        assert_eq!(s.load("p/a.fg").unwrap().unwrap().2.len(), 3);
-        s.compact("p/a.fg", 3, "shared a4 = 1\n").unwrap();
+        assert_eq!(s.load("p/a.fg").unwrap().unwrap().1.len(), 3);
+        let snap = Snapshot {
+            seq: 3,
+            text: "shared a4 = 1\n".into(),
+            seen: vec![("ada/c".into(), 7, 2)],
+        };
+        s.compact("p/a.fg", &snap).unwrap();
         s.append("p/a.fg", &e(4)).unwrap();
         let mut s = FileLogStore::new(d.clone()).unwrap();
-        assert_eq!(
-            s.latest_snapshot("p/a.fg").unwrap(),
-            Some((3, "shared a4 = 1\n".into()))
-        );
+        assert_eq!(s.latest_snapshot("p/a.fg").unwrap(), Some(snap), "the dedup keys survive");
         assert_eq!(s.read_since("p/a.fg", 3).unwrap(), vec![e(4)]);
         let _ = std::fs::remove_dir_all(&d);
     }

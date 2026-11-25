@@ -55,7 +55,8 @@ pub struct Limits {
     /// Texts kept for hash checks: at most this many, and at most `recent_bytes` in all.
     pub recent: usize,
     pub recent_bytes: usize,
-    /// (client, op id) pairs remembered for retries, beyond compaction.
+    /// (client, op id) pairs remembered for retries, beyond compaction and restarts: per
+    /// account (one account's ops cannot push another's out).
     pub seen: usize,
 }
 
@@ -66,7 +67,7 @@ impl Default for Limits {
             max_log_bytes: 16 << 20,
             recent: 64,
             recent_bytes: 16 << 20,
-            seen: 100_000,
+            seen: 10_000,
         }
     }
 }
@@ -101,7 +102,7 @@ pub struct Sequencer {
     recent_bytes: usize,
     /// (client, op id) → seq, for idempotent retries; oldest first for eviction.
     seen: HashMap<(String, u64), u64>,
-    seen_order: VecDeque<(String, u64)>,
+    seen_order: HashMap<String, VecDeque<(String, u64)>>,
     /// Times the log was compacted (tests, stats).
     pub compactions: usize,
 }
@@ -118,13 +119,18 @@ impl Sequencer {
         text: &str,
         dir: Option<PathBuf>,
     ) -> std::io::Result<Sequencer> {
-        let (floor, base) = match store.latest_snapshot(doc)? {
+        let snap = match store.latest_snapshot(doc)? {
             Some(x) => x,
             None => {
                 store.create(doc, text)?;
-                (0, text.to_string())
+                crate::Snapshot {
+                    seq: 0,
+                    text: text.to_string(),
+                    seen: vec![],
+                }
             }
         };
+        let (floor, base) = (snap.seq, snap.text);
         let mut s = Sequencer {
             doc: doc.into(),
             dir,
@@ -140,9 +146,12 @@ impl Sequencer {
             recent: VecDeque::new(),
             recent_bytes: 0,
             seen: HashMap::new(),
-            seen_order: VecDeque::new(),
+            seen_order: HashMap::new(),
             compactions: 0,
         };
+        for (client, id, seq) in snap.seen {
+            s.remember_key(client, id, seq);
+        }
         for e in store.read_since(doc, floor)? {
             if e.seq != s.seq() + 1 {
                 return Err(std::io::Error::other(format!(
@@ -202,13 +211,20 @@ impl Sequencer {
     }
 
     fn remember(&mut self, e: &Entry) {
-        let k = (e.client.clone(), e.id);
-        if self.seen.insert(k.clone(), e.seq).is_none() {
-            self.seen_order.push_back(k);
-        }
-        while self.seen_order.len() > self.limits.seen {
-            if let Some(old) = self.seen_order.pop_front() {
-                self.seen.remove(&old);
+        self.remember_key(e.client.clone(), e.id, e.seq);
+    }
+
+    fn remember_key(&mut self, client: String, id: u64, seq: u64) {
+        // the account is the client key's first part (`author/client`, as the server keys it)
+        let account = client.split('/').next().unwrap_or("").to_string();
+        let k = (client, id);
+        if self.seen.insert(k.clone(), seq).is_none() {
+            let order = self.seen_order.entry(account).or_default();
+            order.push_back(k);
+            while order.len() > self.limits.seen {
+                if let Some(old) = order.pop_front() {
+                    self.seen.remove(&old);
+                }
             }
         }
     }
@@ -326,7 +342,14 @@ impl Sequencer {
     /// The head becomes the store's snapshot; the entries before it go (clients behind it get a
     /// snapshot when they join; their retries of ops before it are `AlreadyCommitted`).
     pub fn compact(&mut self, store: &mut dyn Store) -> std::io::Result<()> {
-        store.compact(&self.doc, self.seq(), &self.head)?;
+        let mut seen: Vec<(String, u64, u64)> = self.seen.iter().map(|((c, i), s)| (c.clone(), *i, *s)).collect();
+        seen.sort();
+        let snap = crate::Snapshot {
+            seq: self.seq(),
+            text: self.head.clone(),
+            seen,
+        };
+        store.compact(&self.doc, &snap)?;
         self.floor = self.seq();
         self.log.clear();
         self.sizes.clear();
