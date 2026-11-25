@@ -927,8 +927,7 @@ fn nary_body(
     }
     // each tool's faces' boxes grown to all its faces on their very planes (`plane_boxes`), made the
     // first time a pair of all but parallel planes needs them, once per tool for every pair
-    let plane_groups: Vec<std::sync::OnceLock<Vec<forge_math::Box3>>> =
-        (0..n).map(|_| Default::default()).collect();
+    let plane_groups = std::sync::OnceLock::new();
     let outs = par_map(pairs.len(), threads, 2, |pi| -> R<PairOut> {
         let (i, j) = pairs[pi];
         let (a, b) = (tools[i], tools[j]);
@@ -937,16 +936,20 @@ fn nary_body(
         // a face surely clear of the other tool's solid meets none of its faces
         let clear = |f: &forge_math::Box3, k: Side| shapes.is_some_and(|sh| sh[k].box_out(f, SHAPE_MARGIN));
         let (ba, bb) = (ia.boxes(), ib.boxes());
-        let b_clear: Vec<bool> = b
+        // Reject B's faces once for this pair of tools. Keep the live face ids in arena order.
+        let candidates: Vec<_> = b
             .face_ids()
-            .map(|fb| bb[fb.index()].overlaps(&ia.bbox) && (clear(&bb[fb.index()], i) || dead(j, fb)))
+            .filter(|&fb| {
+                let bx = &bb[fb.index()];
+                bx.overlaps(&ia.bbox) && !clear(bx, i) && !dead(j, fb)
+            })
             .collect();
         for fa in a.face_ids() {
             if !ba[fa.index()].overlaps(&ib.bbox) || clear(&ba[fa.index()], j) || dead(i, fa) {
                 continue;
             }
-            for fb in b.face_ids() {
-                if !ba[fa.index()].overlaps(&bb[fb.index()]) || b_clear[fb.index()] {
+            for &fb in &candidates {
+                if !ba[fa.index()].overlaps(&bb[fb.index()]) {
                     continue;
                 }
                 let region = overlap(&ba[fa.index()], &bb[fb.index()]).grow(tol::LINEAR);
@@ -979,8 +982,10 @@ fn nary_body(
                         // two planes all but parallel are judged flush or crossing over where the
                         // whole of each plane's faces meet: one verdict for every face pair of them
                         // (planes parallel to the bit are judged without a region, ssi.rs)
-                        let ga = plane_groups[i].get_or_init(|| plane_boxes(a, ba))[fa.index()];
-                        let gb = plane_groups[j].get_or_init(|| plane_boxes(b, bb))[fb.index()];
+                        let groups = plane_groups
+                            .get_or_init(|| (0..n).map(|_| std::sync::OnceLock::new()).collect::<Vec<_>>());
+                        let ga = groups[i].get_or_init(|| plane_boxes(a, ba))[fa.index()];
+                        let gb = groups[j].get_or_init(|| plane_boxes(b, bb))[fb.index()];
                         overlap(&ga, &gb).grow(tol::LINEAR)
                     }
                     _ => region,

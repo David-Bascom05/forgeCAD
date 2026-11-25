@@ -2231,24 +2231,13 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
             a.vertices[id.index()].name = n;
         }
     }
-    let mut as_is = vec![false; specs.len()];
+    let mut staying = untouched_kept.clone();
     for &(si, flip) in kept {
-        if specs[si].side == 0 && specs[si].whole && !flip {
-            as_is[si] = true;
+        let s = &specs[si];
+        if !flip && (s.extend || s.side == 0 && s.whole) {
+            staying.push(s.from);
         }
     }
-    let mut staying: Vec<FaceId> = specs
-        .iter()
-        .zip(&as_is)
-        .filter(|(_, k)| **k)
-        .map(|(s, _)| s.from)
-        .collect();
-    staying.extend(
-        kept.iter()
-            .filter(|&&(si, flip)| specs[si].extend && !flip)
-            .map(|&(si, _)| specs[si].from),
-    );
-    staying.extend(untouched_kept.iter().copied());
     staying.sort_unstable();
     staying.dedup();
     for &f in involved {
@@ -2279,11 +2268,12 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
     let shell = if a.shells.is_empty() { a.add_shell() } else { forge_topo::ShellId(0) };
     let other_shell =
         a.shells.len() > 1 && specs.iter().any(|s| s.side == 0 && a.face(s.from).shell != shell);
+    let mut uses = Vec::new();
     for &(si, flip) in kept {
-        if as_is[si] {
+        let s = &specs[si];
+        if s.side == 0 && s.whole && !flip {
             continue;
         }
-        let s = &specs[si];
         // (read by reference: a clone of the face would share its point-in-face index, which
         // the next boolean then finds shared and rebuilds)
         let (sense, bx) = if s.side == 0 {
@@ -2309,7 +2299,8 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
             a.faces[face.index()].bbox.set(bx);
         }
         for lp in &s.loops {
-            let mut uses: Vec<(EdgeId, bool)> = Vec::with_capacity(lp.len());
+            uses.clear();
+            uses.reserve(lp.len());
             for &(p, fwd) in lp {
                 let e = match emap[p] {
                     Some(e) => e,
@@ -2330,10 +2321,10 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
                         e
                     }
                 };
-                uses.push((e, fwd));
+                uses.push((e, fwd != flip));
             }
             if flip {
-                uses = reversed(uses);
+                uses.reverse();
             }
             let lp = a.add_loop(face, &uses);
             if s.extend && !flip {
@@ -2460,13 +2451,6 @@ impl Made {
 /// The name vertex `v` takes: from the flush list (sorted by vertex), else `n`.
 fn renamed(flush: &[(VKey, Name)], v: VKey, n: Name) -> Name {
     flush.binary_search_by_key(&v, |f| f.0).map_or(n, |k| flush[k].1)
-}
-
-/// A loop's uses run the other way: reversed, each use flipped (in place: the collect reuses
-/// the allocation).
-#[inline(always)]
-fn reversed(uses: Vec<(EdgeId, bool)>) -> Vec<(EdgeId, bool)> {
-    uses.into_iter().rev().map(|(e, f)| (e, !f)).collect()
 }
 
 /// An edge imprinted on a face of the other body lies on that face's surface only within
