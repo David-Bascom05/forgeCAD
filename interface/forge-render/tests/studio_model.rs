@@ -198,8 +198,10 @@ fn render_image_shows_its_progress_at_once_then_its_result() {
     st.spp = 64;
     // no file named: a fresh one where captures go (BUTTON-AUDITOR: not the process's folder)
     assert!(st.out.is_empty());
-    let t0 = std::time::Instant::now();
+    // `click` hovers and presses (two frames, the live trace still running); the click lands on
+    // the release, the frame timed here
     assert!(h.click("tool:Render Image"), "no Render Image on the ribbon");
+    let t0 = std::time::Instant::now();
     h.step();
     let first = t0.elapsed();
     let r = h.gui.shell.studio.rendering.clone().expect("no progress shown");
