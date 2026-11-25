@@ -917,7 +917,11 @@ pub struct Body {
     /// The tool keeps this much further away than the fixture clearance (a stud's thread, a
     /// clamp's screw head).
     pub keepout: f64,
+    /// The real `.fg` part this body envelopes (relative to the library's parts directory).
     pub part: Option<String>,
+    /// Where that part sits: the rigid pose from the part file's own frame into the setup's
+    /// part frame (None: no part, or none placed: draw the prims).
+    pub part_pose: Option<Pose>,
 }
 
 impl Body {
@@ -928,6 +932,7 @@ impl Body {
             prims,
             keepout: 0.0,
             part: None,
+            part_pose: None,
         }
     }
     pub fn bounds(&self) -> (V3, V3) {
