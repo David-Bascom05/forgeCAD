@@ -144,6 +144,98 @@ pub fn map_until<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync, stop: impl Fn
     out
 }
 
+/// `f` of each of `0..n` on all cores, where together they spend less than this thread's budget
+/// has left (then no item, nor any order of them one by one, ran it out: the answers are those of
+/// any such order), and `accept` (the caller's own test of the answers together) holds, this
+/// thread charged what they spent; else `None`, nothing charged. With no budget set, the items
+/// just run on all cores.
+pub fn map_all<T: Send>(
+    n: usize,
+    f: impl Fn(usize) -> T + Sync,
+    accept: impl FnOnce(&[T]) -> bool,
+) -> Option<Vec<T>> {
+    let (got, limit, left) = each_within(n, f);
+    let mut out = Vec::with_capacity(n);
+    let mut spent = 0u64;
+    for g in got {
+        let (t, s) = g?;
+        spent = spent.saturating_add(s);
+        out.push(t);
+    }
+    if (limit && spent >= left) || !accept(&out) {
+        return None;
+    }
+    if limit {
+        spend_many(spent);
+    }
+    Some(out)
+}
+
+/// The longest start of `f(0..n)` that one by one on this thread under its budget would give
+/// alike, worked out on all cores, where `take` (asked in item order, of the answers so far
+/// taken) also accepts each: the caller's own test that an item's answer holds after the ones
+/// before it. The budget is charged what the taken items spent; the caller works the rest out
+/// one by one. Each item runs under what was left less what finished items spent, and is taken
+/// only while the spends summed in item order stay below what was left (as [`map`]).
+pub fn map_prefix<T: Send>(
+    n: usize,
+    f: impl Fn(usize) -> T + Sync,
+    mut take: impl FnMut(&T) -> bool,
+) -> Vec<T> {
+    let (got, limit, left) = each_within(n, f);
+    let mut out = Vec::with_capacity(n);
+    let mut spent = 0u64;
+    for g in got {
+        match g {
+            Some((t, s)) if (!limit || spent + s < left) && take(&t) => {
+                spent += s;
+                out.push(t);
+            }
+            _ => break,
+        }
+    }
+    if limit {
+        spend_many(spent);
+    }
+    out
+}
+
+/// Each item on all cores under a budget of what this thread has left less what finished items
+/// spent, with what it spent; None where it ran that out. Whether a budget lives, and what it left.
+#[allow(clippy::type_complexity)]
+fn each_within<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync) -> (Vec<Option<(T, u64)>>, bool, u64) {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    let limit = limited();
+    let left = if limit { left() } else { u64::MAX };
+    let done = AtomicU64::new(0);
+    let got = forge_math::par::map(n, |k| {
+        if !limit {
+            return Some((f(k), 0));
+        }
+        let own = left.saturating_sub(done.load(Ordering::Relaxed));
+        if own == 0 {
+            return None;
+        }
+        // this thread's own budget put back after, unwinding too (the caller's thread runs items)
+        struct Put(u64, bool);
+        impl Drop for Put {
+            fn drop(&mut self) {
+                LEFT.set(self.0);
+                LIMITED.set(self.1);
+            }
+        }
+        let _put = Put(LEFT.get(), LIMITED.get());
+        LEFT.set(own);
+        LIMITED.set(true);
+        let t = f(k);
+        let rest = LEFT.get();
+        let spent = own - rest;
+        done.fetch_add(spent, Ordering::Relaxed);
+        (rest > 0).then_some((t, spent))
+    });
+    (got, limit, left)
+}
+
 #[cfg(test)]
 mod tests {
     // catches the panic it causes: under WASI a panic aborts (no unwinding), so native only
@@ -190,6 +282,41 @@ mod tests {
         assert_eq!(got, (0..21).map(|k| (k, k >= 13)).collect::<Vec<_>>());
         drop(b);
         assert!(!super::limited());
+    }
+
+    /// The start taken is the one one by one gives, stopped where the caller's test or the budget
+    /// stops it, and only it is charged.
+    #[test]
+    fn map_prefix_takes_the_start_one_by_one_gives() {
+        let one = |k: usize| {
+            super::spend_many(k as u64);
+            (k, super::over())
+        };
+        let b = super::scoped(100);
+        // the caller's test stops it at 5: 0..5 taken, 10 spent
+        let mut seen = 0;
+        let got = super::map_prefix(10, one, |&(k, _)| {
+            seen += 1;
+            k < 5
+        });
+        assert_eq!(got, (0..5).map(|k| (k, false)).collect::<Vec<_>>());
+        assert_eq!(super::left(), 90);
+        // the budget stops it: 0..=12 spend 78 < 90, 13 would run it out
+        let got = super::map_prefix(30, one, |_| true);
+        assert_eq!(got, (0..13).map(|k| (k, false)).collect::<Vec<_>>());
+        assert_eq!(super::left(), 12);
+        // all or none: 0..10 spend 45 of the 12 left, so none, nothing charged; 0..4 spend 6
+        assert!(super::map_all(10, one, |_| true).is_none());
+        assert_eq!(super::left(), 12);
+        assert!(super::map_all(4, one, |_| false).is_none());
+        assert_eq!(super::left(), 12);
+        assert_eq!(
+            super::map_all(4, one, |_| true),
+            Some((0..4).map(|k| (k, false)).collect())
+        );
+        assert_eq!(super::left(), 6);
+        drop(b);
+        let _ = seen;
     }
 
     #[test]
