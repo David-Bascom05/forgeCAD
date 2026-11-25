@@ -439,3 +439,66 @@ fn the_live_trace_keeps_studio_frames_within_budget() {
         at(&idle, 0.5)
     );
 }
+
+/// The pictures UX-LEAD reviews (research/render/studio/11-13), only with STUDIO_UX_SHOTS=DIR, at
+/// 1400×860 in the dark theme: the live view still refining between its denoise steps (the badge
+/// says so), the Output fold's File field empty with its hint, the recording pill.
+#[test]
+fn shots_for_ux() {
+    let Ok(dir) = std::env::var("STUDIO_UX_SHOTS") else {
+        return;
+    };
+    let _gpu = one_at_a_time();
+    let Some(mut h) = studio("machined/flange.fg") else {
+        return;
+    };
+    let tmp = std::env::temp_dir().join(format!("fg-studio-ux-{}", std::process::id()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    h.gui.shell.capture.folder = tmp.to_string_lossy().into_owned();
+    let save =
+        |h: &Headless, name: &str| std::fs::write(format!("{dir}/{name}.png"), h.png().unwrap()).unwrap();
+    // 1. a picture shown (16 samples), more going in
+    let start = std::time::Instant::now();
+    while !(h.gui.shell.studio.samples >= 16 && h.gui.shell.studio.traced > h.gui.shell.studio.samples + 4) {
+        h.step();
+        assert!(
+            start.elapsed().as_secs() < 180,
+            "the live view never refined past 16"
+        );
+    }
+    assert!(forge_render::shell::studio_env::refining(&h.gui.shell.studio));
+    let words = forge_render::shell::studio_env::live_words(&h.gui.shell.studio);
+    assert!(words.starts_with("Tracing · "), "{words}");
+    // the pointer over the badge: its hover says what it does
+    let v = h.gui.shell.view_rect;
+    h.move_to(v.left() + 40.0, v.bottom() - 24.0);
+    // (a tooltip waits for the pointer to rest: 1.5 s of the frames' clock)
+    for _ in 0..90 {
+        h.step();
+    }
+    save(&h, "11-live-refining");
+    // 2. Output open: the File field empty, its hint
+    h.move_to(v.center().x, v.center().y);
+    assert!(h.gui.shell.studio.out.is_empty());
+    assert!(h.click("studio:fold:output"), "no Output fold");
+    // (the fold opens over a few frames)
+    for _ in 0..30 {
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    save(&h, "12-render-file-hint");
+    // 3. a recording under way: its pill, Cancel and Esc
+    h.gui
+        .capture_command("record 320x200 fps=10 seconds=8 frames")
+        .unwrap();
+    // (the pill fades in)
+    for _ in 0..10 {
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(30));
+    }
+    assert!(h.gui.shell.place("capture:stop").is_some(), "no recording pill");
+    save(&h, "13-recording-pill");
+    assert!(h.click("capture:stop"));
+    h.step();
+    let _ = std::fs::remove_dir_all(&tmp);
+}

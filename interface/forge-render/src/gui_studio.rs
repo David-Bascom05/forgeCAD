@@ -458,6 +458,8 @@ impl Gui {
             host.tex_size = host.live.tracer.size;
         }
         st.samples = host.live.samples();
+        st.traced = host.live.traced();
+        st.target = host.live.target;
         // the view cube over the picture, as the shaded view has it
         if host.cube_tex == egui::TextureId::default()
             || host.cube.texture.size().width != size.0
