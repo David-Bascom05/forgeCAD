@@ -49,11 +49,8 @@ pub fn read(name: &str, bytes: &[u8]) -> Result<Tris, String> {
             let mut t = Tris::default();
             let mut failed = 0;
             for s in &imp.solids {
-                let q = forge_mesh::Quality {
-                    chord: 5e-4 * s.body.faces_box().diagonal(),
-                    ..forge_mesh::Quality::default()
-                };
-                match forge_mesh::tessellate::tessellate_tolerant(&s.body, &q) {
+                // (the read's own drawing at this chord where it kept one: the same triangles)
+                match s.display_mesh() {
                     Ok(m) => push(&mut t, &m.positions, &m.triangles, &m.edges),
                     Err(_) => failed += 1,
                 }

@@ -1242,11 +1242,12 @@ pub fn import(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
         }
         let proto = std::mem::take(&mut r.p);
         match finish(proto, 1e-3, lim, &mut r.stats) {
-            Ok((body, mass)) => solids.push(Solid {
+            Ok((body, mass, mesh)) => solids.push(Solid {
                 entity: c.shape as u32,
                 name: String::new(),
                 body,
                 mass,
+                mesh,
             }),
             Err(why) => refusals.push(Refusal {
                 entity: c.shape as u32,

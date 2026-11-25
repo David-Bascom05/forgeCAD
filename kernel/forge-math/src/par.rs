@@ -177,6 +177,43 @@ pub fn map_adaptive_for<T: Send>(
     })
 }
 
+/// `f` of each of `0..n`, in order, on up to [`threads`] threads, all started at once: for a few
+/// items known to be long (a file's solids, the longest first), where waiting for the first to
+/// finish before starting helpers ([`map_adaptive`]) would leave it alone. Items are taken one at
+/// a time; the answers are collected by item index, so they are the same, and in the same order,
+/// whatever the thread count or the scheduling.
+pub fn map_eager<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let threads = threads().min(n);
+    if threads <= 1 {
+        return (0..n).map(f).collect();
+    }
+    let next = AtomicUsize::new(0);
+    let work = || {
+        let mut got = Vec::new();
+        loop {
+            let i = next.fetch_add(1, Ordering::Relaxed);
+            if i >= n {
+                break got;
+            }
+            got.push((i, f(i)));
+        }
+    };
+    scope(|s| {
+        let helpers: Vec<_> = (1..threads).map(|_| s.spawn(work)).collect();
+        let mut all: Vec<Option<T>> = (0..n).map(|_| None).collect();
+        for (i, t) in work() {
+            all[i] = Some(t);
+        }
+        for h in helpers {
+            for (i, t) in h.join().unwrap_or_else(|p| std::panic::resume_unwind(p)) {
+                all[i] = Some(t);
+            }
+        }
+        all.into_iter().map(|t| t.expect("every item done")).collect()
+    })
+}
+
 /// `f` of each of `0..n`, in order, on up to [`threads`] threads, which join only where the
 /// work pays for them ([`map_adaptive`]).
 pub fn map<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
@@ -185,6 +222,12 @@ pub fn map<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn eager_answers_come_in_item_order() {
+        let v = super::map_eager(100, |i| i * i);
+        assert_eq!(v, (0..100).map(|i| i * i).collect::<Vec<_>>());
+    }
+
     #[test]
     fn answers_come_in_item_order() {
         let v = super::map(100, |i| i * i);

@@ -66,11 +66,17 @@ fn main() {
         let mut all = std::collections::hash_map::DefaultHasher::new();
         let mut lines = Vec::new();
         for s in &imp.solids {
-            let q = forge_mesh::Quality {
-                chord: 5e-4 * s.body.faces_box().diagonal(),
-                ..forge_mesh::Quality::default()
+            // as the app draws it: the read's own drawing where it kept one (`STEPDIGEST_REDRAW`:
+            // drawn again regardless, to check the kept one is the same)
+            let mesh = if std::env::var_os("STEPDIGEST_REDRAW").is_some() {
+                forge_mesh::tessellate::tessellate_tolerant(
+                    &s.body,
+                    &forge_step::Solid::display_quality(&s.body),
+                )
+                .map(std::borrow::Cow::Owned)
+            } else {
+                s.display_mesh()
             };
-            let mesh = forge_mesh::tessellate::tessellate_tolerant(&s.body, &q);
             let b = hash(&without_caches(&format!("{:?}", s.body)));
             let m = hash(&format!("{:?}", s.mass));
             let me = hash(&format!("{mesh:?}"));

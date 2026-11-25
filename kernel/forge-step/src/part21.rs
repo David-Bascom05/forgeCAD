@@ -139,7 +139,11 @@ pub fn parse<'a>(text: &'a [u8], lim: &Limits) -> Result<File<'a>, ParseError> {
         lim: *lim,
         kw: BTreeMap::new(),
     };
-    p.file()?;
+    // a big file's instances read in pieces on all cores, where that reads them as one pass would
+    match parse_pieces(text, lim) {
+        Some(f) => p.f = f,
+        None => p.file()?,
+    }
     let mut ids = std::mem::take(&mut p.f.ids);
     // stable: the first of two instances with an id stays first
     ids.sort_by_key(|x| x.0);
@@ -153,6 +157,140 @@ pub fn parse<'a>(text: &'a [u8], lim: &Limits) -> Result<File<'a>, ParseError> {
     }
     p.f.ids = out;
     Ok(p.f)
+}
+
+/// Below this many bytes a file is read in one pass.
+const PIECES_FROM: usize = 4 << 20;
+
+/// The file read in pieces, on all cores, where that gives what one pass ([`P::file`]) gives
+/// before its ids are sorted; `None` (then one pass reads it) otherwise, or where one pass would
+/// fail (one pass then says where and why).
+///
+/// One pass reads up to the DATA section's first instance; the instances are cut into pieces at
+/// guessed instance starts (`;`, a line end, `#`); each piece is read from its start as one pass
+/// reads instances, keywords and values numbered from 0. A piece read from a place one pass
+/// reaches, to the next piece's start exactly, between instances, is what one pass reads there, so
+/// the next piece starts at a place one pass reaches too: when every piece ends at the next's
+/// start, the pieces are one pass's reading cut up. Put together in order, with each piece's
+/// keywords numbered as one pass first meets them and its values after those before it, they
+/// are one pass's file. The limits one pass holds to are held to on the totals, which only grow.
+fn parse_pieces<'a>(text: &'a [u8], lim: &Limits) -> Option<File<'a>> {
+    let threads = forge_math::par::threads();
+    if text.len() < PIECES_FROM || threads < 2 {
+        return None;
+    }
+    let mut head = P {
+        b: text,
+        i: 0,
+        f: File {
+            text,
+            values: Vec::new(),
+            names: Vec::new(),
+            ids: Vec::new(),
+            records: Vec::new(),
+            duplicates: Vec::new(),
+            schema: String::new(),
+            system: String::new(),
+        },
+        lim: *lim,
+        kw: BTreeMap::new(),
+    };
+    let data = head.to_data().ok()??;
+    // the pieces' starts: the first instance start at or past each even split
+    let n = (2 * threads).min(text.len() / (1 << 20)).max(2);
+    let mut starts = vec![data];
+    for k in 1..n {
+        let at = (data + (text.len() - data) * k / n).max(*starts.last()? + 1);
+        let s = find_start(text, at)?;
+        if s > *starts.last()? {
+            starts.push(s);
+        }
+    }
+    let last = starts.len() - 1;
+    let pieces = forge_math::par::map_eager(starts.len(), |k| {
+        let mut p = P {
+            b: text,
+            i: starts[k],
+            f: File {
+                text,
+                values: Vec::new(),
+                names: Vec::new(),
+                ids: Vec::new(),
+                records: Vec::new(),
+                duplicates: Vec::new(),
+                schema: String::new(),
+                system: String::new(),
+            },
+            lim: *lim,
+            kw: BTreeMap::new(),
+        };
+        let ok = if k == last {
+            p.data().is_ok() && p.after_data().unwrap_or(false)
+        } else {
+            p.instances_to(starts[k + 1]).unwrap_or(false)
+        };
+        ok.then_some(p.f)
+    });
+    let mut f = head.f;
+    let mut kw: BTreeMap<&'a str, u16> = f.names.iter().enumerate().map(|(i, &n)| (n, i as u16)).collect();
+    for piece in pieces {
+        let piece = piece?;
+        // the piece's keywords as one pass numbers them: in the order first met, after all before
+        let mut map = Vec::with_capacity(piece.names.len());
+        for &name in &piece.names {
+            let k = match kw.get(name) {
+                Some(&k) => k,
+                None => {
+                    let k = f.names.len();
+                    if k >= u16::MAX as usize {
+                        return None;
+                    }
+                    f.names.push(name);
+                    kw.insert(name, k as u16);
+                    k as u16
+                }
+            };
+            map.push(k);
+        }
+        let (vb, rb) = (f.values.len() as u32, f.records.len() as u32);
+        if f.values.len() + piece.values.len() > lim.max_values
+            || f.ids.len() + piece.ids.len() > lim.max_instances
+            || f.values.len() + piece.values.len() > u32::MAX as usize
+        {
+            return None;
+        }
+        f.values.extend(piece.values.iter().map(|v| match *v {
+            Value::List(a, n) => Value::List(a + vb, n),
+            Value::Typed(k, a) => Value::Typed(map[k as usize], a + vb),
+            v => v,
+        }));
+        f.records.extend(piece.records.iter().map(|r| Record {
+            kw: map[r.kw as usize],
+            args: (r.args.0 + vb, r.args.1),
+        }));
+        f.ids.extend(piece.ids.iter().map(|&(id, a, n)| (id, a + rb, n)));
+    }
+    if f.ids.is_empty() {
+        return None;
+    }
+    Some(f)
+}
+
+/// The first instance start at or past `at`: a `#` beginning a line that follows a `;`.
+fn find_start(text: &[u8], at: usize) -> Option<usize> {
+    let mut i = at;
+    while i < text.len() {
+        let j = i + text.get(i..)?.iter().position(|&c| c == b'#')?;
+        let before = &text[..j];
+        let line = before
+            .strip_suffix(b"\n")
+            .map(|b| b.strip_suffix(b"\r").unwrap_or(b));
+        if line.is_some_and(|b| b.ends_with(b";")) {
+            return Some(j);
+        }
+        i = j + 1;
+    }
+    None
 }
 
 impl<'a> P<'a> {
@@ -280,6 +418,73 @@ impl<'a> P<'a> {
                 b"" if self.peek().is_none() && !self.f.ids.is_empty() => return Ok(()),
                 b"" if self.peek().is_none() => return self.err("the file ends with no data"),
                 _ => return self.err("expected HEADER, DATA or END-ISO-10303-21"),
+            }
+        }
+    }
+
+    /// One pass's start of a file, to the DATA section's first instance: where that is, or `None`
+    /// where the file goes another way before it (one pass then reads it).
+    fn to_data(&mut self) -> Result<Option<usize>, ParseError> {
+        let w = self.word()?;
+        if w != b"ISO-10303-21" {
+            return Ok(None);
+        }
+        self.expect(b';')?;
+        loop {
+            let w = self.word()?;
+            match w {
+                b"HEADER" => {
+                    self.expect(b';')?;
+                    self.header()?;
+                }
+                b"DATA" => {
+                    self.space()?;
+                    if self.peek() == Some(b'(') {
+                        let mut sink = Vec::new();
+                        self.value(&mut sink, 0)?;
+                    }
+                    self.expect(b';')?;
+                    self.space()?;
+                    return Ok((self.peek() == Some(b'#')).then_some(self.i));
+                }
+                b"ANCHOR" | b"REFERENCE" | b"SIGNATURE" => {
+                    self.skip_section()?;
+                }
+                _ => return Ok(None),
+            }
+        }
+    }
+
+    /// Instances, as `data` reads them, up to `end`: whether they end there exactly.
+    fn instances_to(&mut self, end: usize) -> Result<bool, ParseError> {
+        let mut scratch = Vec::new();
+        loop {
+            self.space()?;
+            if self.i >= end {
+                return Ok(self.i == end);
+            }
+            if self.peek() != Some(b'#') {
+                return Ok(false);
+            }
+            self.instance(&mut scratch)?;
+        }
+    }
+
+    /// What follows the DATA section, as `file` reads it, where it is only other sections and the
+    /// end: whether it is.
+    fn after_data(&mut self) -> Result<bool, ParseError> {
+        loop {
+            let w = self.word()?;
+            match w {
+                b"ANCHOR" | b"REFERENCE" | b"SIGNATURE" => {
+                    self.skip_section()?;
+                }
+                b"END-ISO-10303-21" => {
+                    self.expect(b';')?;
+                    return Ok(true);
+                }
+                b"" if self.peek().is_none() && !self.f.ids.is_empty() => return Ok(true),
+                _ => return Ok(false),
             }
         }
     }
@@ -606,6 +811,84 @@ mod tests {
         /* a comment */\n#1=CARTESIAN_POINT('',(1.,-2.5E-1,3));\n#2=DIRECTION('a;b',(0.,0.,1.));\n\
         #3=(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(.MILLI.,.METRE.));\n\
         #4=X(#1,$,*,.T.,LENGTH_MEASURE(1.E-3),((1,2),(3,4)));\nENDSEC;\nEND-ISO-10303-21;\n";
+
+    /// One pass over a file, as `parse` reads one too small for pieces.
+    fn one_pass(text: &[u8]) -> Result<File<'_>, ParseError> {
+        let mut p = P {
+            b: text,
+            i: 0,
+            f: File {
+                text,
+                values: Vec::new(),
+                names: Vec::new(),
+                ids: Vec::new(),
+                records: Vec::new(),
+                duplicates: Vec::new(),
+                schema: String::new(),
+                system: String::new(),
+            },
+            lim: Limits::default(),
+            kw: BTreeMap::new(),
+        };
+        p.file().map(|()| p.f)
+    }
+
+    /// A big file: every `fake`th instance a string holding what looks like an instance start.
+    fn big(fake: usize) -> Vec<u8> {
+        let mut text =
+            b"ISO-10303-21;\nHEADER;\nFILE_SCHEMA(('CONFIG_CONTROL_DESIGN'));\nENDSEC;\nDATA;\n".to_vec();
+        let mut k = 0;
+        while text.len() < PIECES_FROM + (1 << 20) {
+            k += 1;
+            let line = match k % 4 {
+                _ if k % fake == 0 => format!("#{k}=LABEL('a;\n#{k}=FAKE(1);\n');\n"),
+                0 => format!("#{k}=CARTESIAN_POINT('p{k}',({k}.5,-2.E-1,3));\n"),
+                1 => format!(
+                    "#{k}=(A_{}()B(#{},$,*,.T.)C(LENGTH_MEASURE({k}.)));\n",
+                    k % 7,
+                    k - 1
+                ),
+                2 => format!("#{k}=DIRECTION('',(0.,0.,1.));\n"),
+                _ => format!(
+                    "#{k}=KW_{}(#{},((1,2),(3,4)),T_{}(1.,2.));\n",
+                    k % 101,
+                    k - 2,
+                    k % 13
+                ),
+            };
+            text.extend_from_slice(line.as_bytes());
+        }
+        text.extend_from_slice(b"ENDSEC;\nEND-ISO-10303-21;\n");
+        text
+    }
+
+    /// `parse` gives one pass's file, its ids sorted.
+    fn parse_is_one_pass(text: &[u8]) {
+        let mut whole = one_pass(text).unwrap();
+        let mut ids = std::mem::take(&mut whole.ids);
+        ids.sort_by_key(|x| x.0);
+        whole.ids = ids;
+        let got = parse(text, &Limits::default()).unwrap();
+        assert_eq!(format!("{got:?}"), format!("{whole:?}"));
+    }
+
+    /// A big file read in pieces is what one pass reads, keyword numbers and value places too;
+    /// where a guessed piece start is inside a string, one pass reads the file.
+    #[test]
+    fn pieces_read_as_one_pass() {
+        let text = big(1 << 30);
+        if forge_math::par::threads() >= 2 {
+            let pieces = parse_pieces(&text, &Limits::default()).expect("read in pieces");
+            assert_eq!(format!("{pieces:?}"), format!("{:?}", one_pass(&text).unwrap()));
+        }
+        parse_is_one_pass(&text);
+        // a fake start on every other line: a guess lands in a string, and one pass reads it
+        let text = big(2);
+        if forge_math::par::threads() >= 2 {
+            assert!(parse_pieces(&text, &Limits::default()).is_none());
+        }
+        parse_is_one_pass(&text);
+    }
 
     #[test]
     fn reads_a_small_file() {

@@ -66,6 +66,84 @@ pub fn left() -> u64 {
     LEFT.get()
 }
 
+/// `f` of each of `0..n`, as one after another on this thread under its budget would give them,
+/// worked out on all cores (`forge_math::par::map`) as far as that is the same.
+///
+/// Each item runs under a budget of its own: what was left, less what the items done so far
+/// spent. An item that ran its own out is not taken. Then, in item order, the answers are taken
+/// while the items' spends summed in order stay below what was left: such an item, one by one,
+/// would have started with more than it spent, as it had here, so no `over` was true in either
+/// run (and nothing else of a budget changes what an item computes): the same answer. The items
+/// from the first not taken on are run one by one on this thread, as before, and this thread is
+/// charged what the taken ones spent. With no budget set, the items just run on all cores.
+pub fn map<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
+    map_until(n, f, |_| false)
+}
+
+/// [`map`] for a caller that, one by one, stops after the first answer `stop` holds of: the
+/// answers up to and including it (the others are not wanted), and the budget charged what the
+/// items up to it spent, as one by one. (With no budget set, every item runs.)
+pub fn map_until<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync, stop: impl Fn(&T) -> bool) -> Vec<T> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    if !limited() {
+        let mut all = forge_math::par::map(n, f);
+        if let Some(k) = all.iter().position(&stop) {
+            all.truncate(k + 1);
+        }
+        return all;
+    }
+    let left = left();
+    let done = AtomicU64::new(0);
+    let got = forge_math::par::map(n, |k| {
+        let own = left.saturating_sub(done.load(Ordering::Relaxed));
+        if own == 0 {
+            return None;
+        }
+        // this thread's own budget put back after, unwinding too (the caller's thread runs items)
+        struct Put(u64, bool);
+        impl Drop for Put {
+            fn drop(&mut self) {
+                LEFT.set(self.0);
+                LIMITED.set(self.1);
+            }
+        }
+        let _put = Put(LEFT.get(), LIMITED.get());
+        LEFT.set(own);
+        LIMITED.set(true);
+        let t = f(k);
+        let rest = LEFT.get();
+        let spent = own - rest;
+        done.fetch_add(spent, Ordering::Relaxed);
+        (rest > 0).then_some((t, spent))
+    });
+    let mut out = Vec::with_capacity(n);
+    let mut spent = 0u64;
+    for g in got {
+        match g {
+            Some((t, s)) if spent + s < left => {
+                spent += s;
+                let last = stop(&t);
+                out.push(t);
+                if last {
+                    spend_many(spent);
+                    return out;
+                }
+            }
+            _ => break,
+        }
+    }
+    spend_many(spent);
+    for k in out.len()..n {
+        let t = f(k);
+        let last = stop(&t);
+        out.push(t);
+        if last {
+            break;
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     // catches the panic it causes: under WASI a panic aborts (no unwinding), so native only
@@ -79,6 +157,38 @@ mod tests {
         });
         assert!(r.is_err());
         assert_eq!(super::left(), u64::MAX);
+        assert!(!super::limited());
+    }
+
+    /// Items that spend less than is left together: their answers, the budget charged their sum,
+    /// as one after another; more: the answers one by one would give, the budget run out where
+    /// one by one runs it out.
+    #[test]
+    fn map_answers_as_one_by_one() {
+        let one = |k: usize| {
+            super::spend_many(k as u64);
+            (k, super::over())
+        };
+        let b = super::scoped(100);
+        let got = super::map(10, one);
+        assert_eq!(got, (0..10).map(|k| (k, false)).collect::<Vec<_>>());
+        assert_eq!(super::left(), 55);
+        // 0 + 1 + .. + 9 = 45 < 55; item 10 runs it out
+        let got = super::map(12, one);
+        let want: Vec<_> = (0..12).map(|k| (k, k >= 10)).collect();
+        assert_eq!(got, want);
+        assert_eq!(super::left(), 0);
+        assert!(super::limited());
+        drop(b);
+        // stopped at the first answer asked for: charged up to it, as one by one
+        let b = super::scoped(100);
+        let got = super::map_until(10, one, |&(k, _)| k == 4);
+        assert_eq!(got, (0..5).map(|k| (k, false)).collect::<Vec<_>>());
+        assert_eq!(super::left(), 90);
+        let got = super::map_until(30, one, |&(k, _)| k == 20);
+        // 0..=12 spend 78 of the 90; 13 runs it out, and every one after finds it out
+        assert_eq!(got, (0..21).map(|k| (k, k >= 13)).collect::<Vec<_>>());
+        drop(b);
         assert!(!super::limited());
     }
 

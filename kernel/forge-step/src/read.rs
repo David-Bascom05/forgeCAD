@@ -21,6 +21,31 @@ pub struct Solid {
     pub body: Body,
     /// The body's integrals as the read worked them out to check it (to 1e-6), where it could.
     pub mass: Option<forge_topo::mass::MassProps>,
+    /// The body drawn as [`Solid::display_mesh`] draws it, where the read's own check drew
+    /// exactly that (the same bits): kept, so it is not drawn twice.
+    pub mesh: Option<forge_mesh::TriMesh>,
+}
+
+impl Solid {
+    /// The chord a file's body is drawn to for display: 5e-4 of its diagonal.
+    pub fn display_quality(body: &Body) -> forge_mesh::Quality {
+        forge_mesh::Quality {
+            chord: 5e-4 * body.faces_box().diagonal(),
+            ..forge_mesh::Quality::default()
+        }
+    }
+
+    /// The body drawn as the app draws a file's body (`tessellate_tolerant` at
+    /// [`Solid::display_quality`]): the read's own drawing where it kept it, else drawn now.
+    pub fn display_mesh(&self) -> Result<std::borrow::Cow<'_, forge_mesh::TriMesh>, forge_mesh::TessError> {
+        match &self.mesh {
+            Some(m) => Ok(std::borrow::Cow::Borrowed(m)),
+            None => {
+                forge_mesh::tessellate::tessellate_tolerant(&self.body, &Self::display_quality(&self.body))
+                    .map(std::borrow::Cow::Owned)
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1180,46 +1205,59 @@ pub(crate) fn edge_range(c: &Curve, a: Point3, b: Point3, closed: bool) -> (Inte
 /// at the points `check` and `certify` will ask about, so they read what was measured here.
 fn record_deviations(body: &mut Body, stats: &mut Stats) {
     use forge_math::tol::LINEAR;
-    for e in body.edge_ids().collect::<Vec<_>>() {
-        let faces: Vec<_> = body
-            .edge(e)
-            .coedges
-            .iter()
-            .map(|&c| body.coedge_face(c))
-            .collect();
-        let free_form = matches!(body.edge(e).curve, Curve::Procedural(_) | Curve::Intersection(_))
-            || faces
-                .iter()
-                .any(|&f| matches!(body.face(f).surface, Surface::Procedural(_)));
-        let measure = |n: usize| {
-            let pts = body.edge_points(e, n);
-            faces
-                .iter()
-                .map(|&f| {
-                    let s = &body.face(f).surface;
-                    // each point from the one before, where the walk holds
-                    let mut near = None;
-                    let mut worst = 0.0_f64;
-                    for &p in &pts {
-                        let uv = near.map_or_else(|| s.project(p), |uv| s.project_near(p, uv));
-                        near = Some(uv);
-                        worst = worst.max(s.eval(uv).distance(p));
-                    }
-                    worst
-                })
-                .fold(0.0, f64::max)
-        };
-        let dev = measure(16);
-        let dev = if free_form || dev > LINEAR {
-            dev.max(measure(256))
-        } else {
-            dev
-        };
+    let ids: Vec<forge_topo::EdgeId> = body.edge_ids().collect();
+    // each edge's measure reads no edge's tolerance: all of them on all cores, as edge by edge
+    // (`budget::map`), then the tolerances set in edge order
+    let devs = {
+        let body = &*body;
+        forge_geom::budget::map(ids.len(), |k| edge_deviation(body, ids[k]))
+    };
+    for (e, dev) in ids.into_iter().zip(devs) {
         if dev > LINEAR {
             body.edges[e.index()].tol = dev;
             stats.tolerant_edges += 1;
             stats.max_edge_tol = stats.max_edge_tol.max(dev);
         }
+    }
+}
+
+/// How far an edge's points lie off its faces: 16 points, or 256 where its curve or a face is
+/// free-form or the 16 find it off by more than LINEAR.
+fn edge_deviation(body: &Body, e: forge_topo::EdgeId) -> f64 {
+    use forge_math::tol::LINEAR;
+    let faces: Vec<_> = body
+        .edge(e)
+        .coedges
+        .iter()
+        .map(|&c| body.coedge_face(c))
+        .collect();
+    let free_form = matches!(body.edge(e).curve, Curve::Procedural(_) | Curve::Intersection(_))
+        || faces
+            .iter()
+            .any(|&f| matches!(body.face(f).surface, Surface::Procedural(_)));
+    let measure = |n: usize| {
+        let pts = body.edge_points(e, n);
+        faces
+            .iter()
+            .map(|&f| {
+                let s = &body.face(f).surface;
+                // each point from the one before, where the walk holds
+                let mut near = None;
+                let mut worst = 0.0_f64;
+                for &p in &pts {
+                    let uv = near.map_or_else(|| s.project(p), |uv| s.project_near(p, uv));
+                    near = Some(uv);
+                    worst = worst.max(s.eval(uv).distance(p));
+                }
+                worst
+            })
+            .fold(0.0, f64::max)
+    };
+    let dev = measure(16);
+    if free_form || dev > LINEAR {
+        dev.max(measure(256))
+    } else {
+        dev
     }
 }
 
@@ -1236,7 +1274,13 @@ const TOO_LONG: &str = "its surfaces would take too long to measure";
 /// file's geometry the integrals can go wrong with nothing to show for it, `research/step/README.md`),
 /// or one of them cannot be worked out. Such a body is imported with the warning, not refused; only a
 /// budget run out refuses it.
-fn measures_agree(body: &Body) -> Result<(Option<String>, Option<forge_topo::mass::MassProps>), String> {
+type Measured = (
+    Option<String>,
+    Option<forge_topo::mass::MassProps>,
+    Option<forge_mesh::TriMesh>,
+);
+
+fn measures_agree(body: &Body) -> Result<Measured, String> {
     let m = forge_topo::mass::mass_rel(body, 1e-6);
     if forge_geom::budget::over() {
         return Err(TOO_LONG.into());
@@ -1250,15 +1294,22 @@ fn measures_agree(body: &Body) -> Result<(Option<String>, Option<forge_topo::mas
                     e.why
                 )),
                 None,
+                None,
             ));
         }
     };
-    let warning = mesh_agrees(body, &m)?;
-    Ok((warning, Some(m)))
+    let (warning, mesh) = mesh_agrees(body, &m)?;
+    Ok((warning, Some(m), mesh))
 }
 
 /// `measures_agree` past the integrals: the mesh's volume and area against them.
-fn mesh_agrees(body: &Body, m: &forge_topo::mass::MassProps) -> Result<Option<String>, String> {
+/// With the mesh at 5e-4 of the diagonal where it is the one `display_mesh` asks for, bit for bit:
+/// made with no budget test true (some left after it), and on less than `budget::FILE` (what a
+/// mesh outside an import is drawn within), so drawn again within that, it would spend the same
+/// and meet no test true either: the same computation.
+type Checked = (Option<String>, Option<forge_mesh::TriMesh>);
+
+fn mesh_agrees(body: &Body, m: &forge_topo::mass::MassProps) -> Result<Checked, String> {
     let mesh_at = |chord: f64| {
         forge_mesh::tessellate::tessellate_tolerant(
             body,
@@ -1269,10 +1320,15 @@ fn mesh_agrees(body: &Body, m: &forge_topo::mass::MassProps) -> Result<Option<St
         )
     };
     let diagonal = body.faces_box().diagonal();
-    let (mesh, chord) = match mesh_at(5e-4 * diagonal) {
-        Ok(x) => (x, 5e-4 * diagonal),
+    let before = forge_geom::budget::left();
+    let (mesh, chord, display) = match mesh_at(5e-4 * diagonal) {
+        Ok(x) => {
+            let left = forge_geom::budget::left();
+            let display = left > 0 && before - left < forge_geom::budget::FILE;
+            (x, 5e-4 * diagonal, display)
+        }
         Err(_) => match mesh_at(5e-3 * diagonal) {
-            Ok(x) => (x, 5e-3 * diagonal),
+            Ok(x) => (x, 5e-3 * diagonal, false),
             Err(_) if forge_geom::budget::over() => return Err(TOO_LONG.into()),
             Err(forge_mesh::TessError::Face { error, .. }) => {
                 use forge_mesh::CdtError as E;
@@ -1283,9 +1339,12 @@ fn mesh_agrees(body: &Body, m: &forge_topo::mass::MassProps) -> Result<Option<St
                     E::BadLoop { .. } => "a loop of it has no area",
                     _ => "its boundary does not close",
                 };
-                return Ok(Some(format!(
-                    "a face of it cannot be drawn ({why}), so its volume is not checked against a drawing"
-                )));
+                return Ok((
+                    Some(format!(
+                        "a face of it cannot be drawn ({why}), so its volume is not checked against a drawing"
+                    )),
+                    None,
+                ));
             }
         },
     };
@@ -1303,16 +1362,20 @@ fn mesh_agrees(body: &Body, m: &forge_topo::mass::MassProps) -> Result<Option<St
         .filter(|(f, _)| !matches!(body.face(*f).surface, forge_geom::Surface::Plane(_)))
         .map(|x| x.1)
         .sum();
+    let mesh = display.then_some(mesh);
     if (m.volume - volume).abs() > 0.01 * volume.abs() + 0.5 * curved * chord
         || (m.area - area).abs() > 0.01 * area
     {
-        return Ok(Some(format!(
-            "its volume and area work out to {:.6e} and {:.6e}, but drawn they come to {volume:.6e} \
-             and {area:.6e}: one of the two is wrong, and which is not known",
-            m.volume, m.area
-        )));
+        return Ok((
+            Some(format!(
+                "its volume and area work out to {:.6e} and {:.6e}, but drawn they come to {volume:.6e} \
+                 and {area:.6e}: one of the two is wrong, and which is not known",
+                m.volume, m.area
+            )),
+            mesh,
+        ));
     }
-    Ok(None)
+    Ok((None, mesh))
 }
 
 /// How many placements a file gives that move a part, and how many extra uses of a part or of a
@@ -1415,12 +1478,191 @@ fn voids_inward(body: &Body) -> bool {
     v.iter().filter(|x| x.abs() < most).all(|&x| x < 0.0)
 }
 
+/// What reading one solid root gave: the solid or its refusal (none: only measured), what it
+/// added to the stats, its units, and whether a `finish` ran (which ends its thread's budget).
+struct RootOut {
+    got: Option<Result<Solid, Refusal>>,
+    stats: Stats,
+    units: Option<Units>,
+    finished: bool,
+}
+
+impl Stats {
+    /// Adds what one solid's read counted (`assembly`, `uncertainty` and `units_mm` are the
+    /// file's, set by the caller).
+    fn add(&mut self, o: &Stats) {
+        self.faces += o.faces;
+        self.edges += o.edges;
+        self.vertex_off_curve = self.vertex_off_curve.max(o.vertex_off_curve);
+        self.curve_off_surface = self.curve_off_surface.max(o.curve_off_surface);
+        self.vertices_off += o.vertices_off;
+        self.edges_off += o.edges_off;
+        for (k, v) in &o.pairs {
+            let en = self.pairs.entry(k.clone()).or_insert((0, 0, 0.0));
+            en.0 += v.0;
+            en.1 += v.1;
+            en.2 = en.2.max(v.2);
+        }
+        self.tangent_off += o.tangent_off;
+        self.tolerant_edges += o.tolerant_edges;
+        self.max_edge_tol = self.max_edge_tol.max(o.max_edge_tol);
+    }
+}
+
+/// One solid root of a file read, as far as its topology: its units and the proto body its
+/// shell makes (voids as they stand), with what that counted. Then [`finish_root`].
+struct Built {
+    out: RootOut,
+    name: String,
+    /// `None` where the units could not be read (the refusal is in `out`).
+    built: Option<(Units, Result<Proto, Refusal>)>,
+}
+
+impl Built {
+    /// How long the rest will take, about: its faces.
+    fn size(&self) -> usize {
+        match &self.built {
+            Some((_, Ok(p))) => p.faces.len(),
+            _ => 0,
+        }
+    }
+}
+
+/// A root's shell (and voids, each `void_flip` or as it stands) to a proto body.
+fn build_shell(
+    f: &File<'_>,
+    id: u32,
+    r: Record,
+    u: Units,
+    void_flip: bool,
+    stats: &mut Stats,
+) -> Result<Proto, Refusal> {
+    let mut reader = Reader { f, u, depth: 0 };
+    let mut b = Build {
+        r: &mut reader,
+        p: Proto {
+            salt: Name::feature(u64::from(id)).with_str("step"),
+            ..Proto::default()
+        },
+        verts: BTreeMap::new(),
+        edges: BTreeMap::new(),
+        stats,
+        salt: Name::feature(u64::from(id)).with_str("step"),
+    };
+    let built = (|| {
+        let a = f.args(&r);
+        let outer = b.r.reference(id, "solid", a.get(1))?;
+        b.shell(outer, false)?;
+        if f.name(&r) == "BREP_WITH_VOIDS" {
+            for v in b.r.list(id, "solid", a.get(2))? {
+                let vid = b.r.reference(id, "solid", Some(v))?;
+                b.shell(vid, void_flip)?;
+            }
+        }
+        Ok(())
+    })();
+    built.map(|()| b.p)
+}
+
+/// One solid root of a file read, as far as its topology (as `read_file` did each in turn).
+fn build_root(f: &File<'_>, id: u32, r: Record, ctx: Option<u32>, assembly: usize) -> Built {
+    let mut out = RootOut {
+        got: None,
+        stats: Stats::default(),
+        units: None,
+        finished: false,
+    };
+    out.stats.assembly = assembly;
+    let Some(u) = ctx.and_then(|c| units_of(f, c)) else {
+        out.got = Some(Err(Refusal {
+            entity: id,
+            kind: f.name(&r).to_string(),
+            why: "its units cannot be read".into(),
+        }));
+        return Built {
+            out,
+            name: String::new(),
+            built: None,
+        };
+    };
+    out.units = Some(u);
+    let name = match f.args(&r).first() {
+        Some(Value::Str(a, n)) => f.str_of(*a, *n).to_string(),
+        _ => String::new(),
+    };
+    // a void's faces first as they stand (the files of every system measured, research/step-voids)
+    let built = build_shell(f, id, r, u, true, &mut out.stats);
+    Built {
+        out,
+        name,
+        built: Some((u, built)),
+    }
+}
+
+/// The rest of a root's read after [`build_root`]: the body finished and checked.
+fn finish_root(f: &File<'_>, id: u32, r: Record, b: Built, lim: &Limits, only_measure: bool) -> RootOut {
+    let Built { mut out, name, built } = b;
+    let Some((u, mut built)) = built else {
+        return out;
+    };
+    let stats = &mut out.stats;
+    let mut void_flip = true;
+    loop {
+        match built {
+            Ok(proto) => {
+                if only_measure {
+                    measure_gaps(&proto, stats);
+                    break;
+                }
+                out.finished = true;
+                let done = finish(proto, u.uncertainty, lim, stats);
+                // files differ on what a void's .F. turns: a void must bound negative volume
+                if void_flip
+                    && f.name(&r) == "BREP_WITH_VOIDS"
+                    && !done.as_ref().is_ok_and(|(b, _, _)| voids_inward(b))
+                {
+                    void_flip = false;
+                    built = build_shell(f, id, r, u, void_flip, stats);
+                    continue;
+                }
+                out.got = Some(match done {
+                    Ok((mut body, mass, mesh)) => {
+                        body.unplaced = stats.assembly > 0;
+                        Ok(Solid {
+                            entity: id,
+                            name,
+                            body,
+                            mass,
+                            mesh,
+                        })
+                    }
+                    Err(why) => Err(Refusal {
+                        entity: id,
+                        kind: f.name(&r).to_string(),
+                        why,
+                    }),
+                });
+            }
+            Err(x) => out.got = Some(Err(x)),
+        }
+        break;
+    }
+    out
+}
+
+/// A body read, its integrals where worked out, and its display mesh where the check drew it.
+pub(crate) type Finished = (
+    Body,
+    Option<forge_topo::mass::MassProps>,
+    Option<forge_mesh::TriMesh>,
+);
+
 pub(crate) fn finish(
     mut proto: Proto,
     uncertainty: f64,
     lim: &Limits,
     stats: &mut Stats,
-) -> Result<(Body, Option<forge_topo::mass::MassProps>), String> {
+) -> Result<Finished, String> {
     if proto.faces.is_empty() {
         return Err("a solid with no faces".into());
     }
@@ -1462,9 +1704,9 @@ pub(crate) fn finish(
     record_deviations(&mut body, stats);
     let agree = measures_agree(&body);
     drop(budget);
-    let (unverified, mass) = agree?;
+    let (unverified, mass, mesh) = agree?;
     body.unverified = unverified;
-    Ok((body, mass))
+    Ok((body, mass, mesh))
 }
 
 /// Whether a face's parameter loops, drawn as finely as `forge_topo::check` draws them, hold a
@@ -1478,11 +1720,16 @@ fn laid_out_in_a_speck(body: &Body) -> bool {
     // 2^-433, exactly
     const SPECK: f64 = f64::from_bits(((1023 - 433) as u64) << 52);
     let tiny = |x: f64| x != 0.0 && x.abs() < SPECK;
-    body.face_ids().any(|f| {
+    let speck = |f: forge_topo::FaceId| {
         forge_topo::uv::face_uv_loops_with(body, f, |e| 8 * forge_topo::uv::default_segments(e))
             .iter()
             .any(|l| l.points.iter().any(|p| tiny(p.x) || tiny(p.y)))
-    })
+    };
+    // every face on all cores, as face by face to the first speck (`budget::map_until`)
+    let ids: Vec<forge_topo::FaceId> = body.face_ids().collect();
+    forge_geom::budget::map_until(ids.len(), |k| speck(ids[k]), |&x| x)
+        .into_iter()
+        .any(|x| x)
 }
 
 /// Reads a whole file. Parts that cannot be read become refusals; the others are returned.
@@ -1534,86 +1781,65 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
     if let Some(u) = any_ctx.and_then(|c| units_of(&f, c)) {
         stats.assembly = assembly_asks(&f, &Reader { f: &f, u, depth: 0 });
     }
-    for (id, r) in roots {
-        let ctx = ctx_of.get(&id).copied().or(any_ctx);
-        let Some(u) = ctx.and_then(|c| units_of(&f, c)) else {
-            refusals.push(Refusal {
-                entity: id,
-                kind: f.name(&r).to_string(),
-                why: "its units cannot be read".into(),
-            });
-            continue;
-        };
-        stats.uncertainty = u.uncertainty;
-        stats.units_mm = u.mm;
-        let mut reader = Reader { f: &f, u, depth: 0 };
-        let name = match f.args(&r).first() {
-            Some(Value::Str(a, n)) => f.str_of(*a, *n).to_string(),
-            _ => String::new(),
-        };
-        // a void's faces first as they stand (the files of every system measured, research/step-voids)
-        let mut void_flip = true;
-        loop {
-            let mut b = Build {
-                r: &mut reader,
-                p: Proto {
-                    salt: Name::feature(u64::from(id)).with_str("step"),
-                    ..Proto::default()
-                },
-                verts: BTreeMap::new(),
-                edges: BTreeMap::new(),
-                stats: &mut stats,
-                salt: Name::feature(u64::from(id)).with_str("step"),
-            };
-            let built = (|| {
-                let a = f.args(&r);
-                let outer = b.r.reference(id, "solid", a.get(1))?;
-                b.shell(outer, false)?;
-                if f.name(&r) == "BREP_WITH_VOIDS" {
-                    for v in b.r.list(id, "solid", a.get(2))? {
-                        let vid = b.r.reference(id, "solid", Some(v))?;
-                        b.shell(vid, void_flip)?;
-                    }
-                }
-                Ok(())
-            })();
-            let proto = b.p;
-            match built {
-                Ok(()) => {
-                    if only_measure {
-                        measure_gaps(&proto, &mut stats);
-                        break;
-                    }
-                    let done = finish(proto, u.uncertainty, lim, &mut stats);
-                    // files differ on what a void's .F. turns: a void must bound negative volume
-                    if void_flip
-                        && f.name(&r) == "BREP_WITH_VOIDS"
-                        && !done.as_ref().is_ok_and(|(b, _)| voids_inward(b))
-                    {
-                        void_flip = false;
-                        continue;
-                    }
-                    match done {
-                        Ok((mut body, mass)) => {
-                            body.unplaced = stats.assembly > 0;
-                            solids.push(Solid {
-                                entity: id,
-                                name,
-                                body,
-                                mass,
-                            })
-                        }
-                        Err(why) => refusals.push(Refusal {
-                            entity: id,
-                            kind: f.name(&r).to_string(),
-                            why,
-                        }),
-                    }
-                }
-                Err(x) => refusals.push(x),
-            }
-            break;
+    // each solid read on its own (its own stats, its own budget in `finish`), on all cores, and
+    // put together in the file's order: the same as reading them one after another
+    // (topologies first, then the rest largest first: the largest is the longest, and started
+    // last it would run alone at the end)
+    let built = forge_math::par::map(roots.len(), |k| {
+        let (id, r) = roots[k];
+        std::sync::Mutex::new(Some(build_root(
+            &f,
+            id,
+            r,
+            ctx_of.get(&id).copied().or(any_ctx),
+            stats.assembly,
+        )))
+    });
+    let take = |k: usize| {
+        built[k]
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+            .expect("each root finished once")
+    };
+    let mut order: Vec<usize> = (0..roots.len()).collect();
+    let size = |k: usize| {
+        built[k]
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map_or(0, Built::size)
+    };
+    let sizes: Vec<usize> = order.iter().map(|&k| size(k)).collect();
+    order.sort_by_key(|&k| std::cmp::Reverse(sizes[k]));
+    let done = forge_math::par::map_eager(roots.len(), |i| {
+        let k = order[i];
+        let (id, r) = roots[k];
+        (k, finish_root(&f, id, r, take(k), lim, only_measure))
+    });
+    let mut outs: Vec<Option<RootOut>> = (0..roots.len()).map(|_| None).collect();
+    for (k, out) in done {
+        outs[k] = Some(out);
+    }
+    let outs = outs.into_iter().map(|o| o.expect("every root read"));
+    let mut finished = false;
+    for out in outs {
+        if let Some(u) = out.units {
+            stats.uncertainty = u.uncertainty;
+            stats.units_mm = u.mm;
         }
+        stats.add(&out.stats);
+        finished |= out.finished;
+        match out.got {
+            Some(Ok(s)) => solids.push(s),
+            Some(Err(x)) => refusals.push(x),
+            None => {}
+        }
+    }
+    // a `finish` ends the budget of the thread it runs on: so it ends here, as it did when every
+    // solid was read on this thread
+    if finished {
+        drop(forge_geom::budget::scoped(0));
     }
     if solids.is_empty() && refusals.is_empty() && !only_measure {
         return Err(ImportError::NoSolids);

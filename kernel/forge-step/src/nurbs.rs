@@ -286,37 +286,56 @@ impl Nurbs {
     }
 
     /// The point and its first `want` (0, 1 or 2) derivatives, those not wanted left zero; each
-    /// wanted one is the same bits whatever `want` is. One evaluation spent, at any `want`.
+    /// wanted one is the same bits whatever `want` is. One evaluation spent, at any `want`. The
+    /// degrees up to 3 each way, and `want`, are made constants (the loops then unrolled): the
+    /// same operations in the same order as the general path.
     #[inline]
     fn eval(&self, uv: Point2, want: usize) -> SurfDeriv {
-        match self.p.max(self.q) {
-            1 => self.eval_n::<2>(uv, want),
-            2 => self.eval_n::<3>(uv, want),
-            3 => self.eval_n::<4>(uv, want),
-            4 => self.eval_n::<5>(uv, want),
-            5 => self.eval_n::<6>(uv, want),
-            _ => self.eval_n::<{ MAX_DEGREE + 1 }>(uv, want),
+        macro_rules! by_want {
+            ($p:literal, $q:literal) => {
+                match want {
+                    0 => self.eval_n::<4>(uv, $p, $q, 0),
+                    1 => self.eval_n::<4>(uv, $p, $q, 1),
+                    _ => self.eval_n::<4>(uv, $p, $q, 2),
+                }
+            };
+        }
+        match (self.p, self.q) {
+            (1, 1) => by_want!(1, 1),
+            (1, 2) => by_want!(1, 2),
+            (1, 3) => by_want!(1, 3),
+            (2, 1) => by_want!(2, 1),
+            (2, 2) => by_want!(2, 2),
+            (2, 3) => by_want!(2, 3),
+            (3, 1) => by_want!(3, 1),
+            (3, 2) => by_want!(3, 2),
+            (3, 3) => by_want!(3, 3),
+            (p, q) => match p.max(q) {
+                4 => self.eval_n::<5>(uv, p, q, want),
+                5 => self.eval_n::<6>(uv, p, q, want),
+                _ => self.eval_n::<{ MAX_DEGREE + 1 }>(uv, p, q, want),
+            },
         }
     }
 
     #[inline(always)]
-    fn eval_n<const N: usize>(&self, uv: Point2, want: usize) -> SurfDeriv {
+    fn eval_n<const N: usize>(&self, uv: Point2, p: usize, q: usize, want: usize) -> SurfDeriv {
         forge_geom::budget::spend();
         let uv = self.wrap(uv);
         let (su, sv) = (
-            span_of(&self.u, self.p, self.nu, uv.x),
-            span_of(&self.v, self.q, self.nv, uv.y),
+            span_of(&self.u, p, self.nu, uv.x),
+            span_of(&self.v, q, self.nv, uv.y),
         );
         let (mut bu, mut bv) = ([[0.0; N]; 3], [[0.0; N]; 3]);
-        basis::<N>(&self.u, self.p, su, uv.x, want, &mut bu);
-        basis::<N>(&self.v, self.q, sv, uv.y, want, &mut bv);
+        basis::<N>(&self.u, p, su, uv.x, want, &mut bu);
+        basis::<N>(&self.v, q, sv, uv.y, want, &mut bv);
         // homogeneous value and derivatives, A with weight w: each sum over the net in the
         // same order, i then j
         let mut s = [[[0.0_f64; 4]; 3]; 3];
-        for i in 0..=self.p {
-            let row = (su - self.p + i) * self.nv;
-            for j in 0..=self.q {
-                let c = self.net[row + sv - self.q + j];
+        for i in 0..=p {
+            let row = (su - p + i) * self.nv;
+            for j in 0..=q {
+                let c = self.net[row + sv - q + j];
                 for (du, b) in bu.iter().enumerate().take(want + 1) {
                     for (dv, a) in bv.iter().enumerate().take(want + 1 - du) {
                         let k = b[i] * a[j];
