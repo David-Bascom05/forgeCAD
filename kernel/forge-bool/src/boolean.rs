@@ -178,6 +178,9 @@ pub enum BoolError {
     /// exactly (a ball resting on a face, rods tangent along a line, blocks meeting at an
     /// edge) and both sides of the touch are kept, so the result is not a manifold solid.
     ZeroThickness { at: Point3 },
+    /// The boolean ran past its work budget (`forge_geom::budget::OP` evaluations of NURBS
+    /// surfaces and mesh steps, counted the same on every machine): nothing is returned of it.
+    TooLong,
 }
 
 impl BoolError {
@@ -202,8 +205,26 @@ impl std::fmt::Display for BoolError {
                  thickness there; move one apart or overlap them",
                 at.x, at.y, at.z
             ),
+            BoolError::TooLong => write!(
+                f,
+                "the boolean would take too long: its NURBS surfaces ask more work than one operation \
+                 may spend; simplify the spline faces where the solids meet (or rebuild them as \
+                 planes, cylinders, cones), or raise forge_geom::budget::OP"
+            ),
         }
     }
+}
+
+/// `f` under the work budget of one operation (`forge_geom::budget::OP`, shared with an outer
+/// one): past it, `TooLong`, whatever `f` made of the rest.
+pub(crate) fn budgeted<T>(f: impl FnOnce() -> R<T>) -> R<T> {
+    let _b = forge_geom::budget::scoped(forge_geom::budget::OP);
+    let r = f();
+    // (on any of its threads: one that ran dry cut its part of the work short)
+    if forge_geom::budget::exhausted() {
+        return Err(BoolError::TooLong);
+    }
+    r
 }
 
 pub(crate) type R<T> = Result<T, BoolError>;
@@ -482,7 +503,11 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
 /// and only the faces it actually changes are rebuilt. Removed entities stay
 /// as tombstones until `Body::compact`. Names do not depend on `_feature`: what the boolean makes
 /// is named by what meets there, as the n-ary boolean names it.
-pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()> {
+pub fn boolean_into(target: &mut Body, b: &Body, op: Op, feature: u64) -> R<()> {
+    budgeted(|| boolean_into_unbudgeted(target, b, op, feature))
+}
+
+fn boolean_into_unbudgeted(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()> {
     #[cfg(debug_assertions)]
     crate::size::debug_check(&[target, b]);
     #[cfg(debug_assertions)]
@@ -609,6 +634,10 @@ fn survivors(a: &Body, b: &Body, op: Op, r: &Body) -> Option<String> {
 /// `boolean_into` with the tool as its entities (`forge_ops::extrude_unlinked`): the Body is
 /// built only if the general boolean has to run.
 pub fn boolean_unlinked(target: &mut Body, b: forge_topo::Unlinked, op: Op) -> R<()> {
+    budgeted(|| boolean_unlinked_unbudgeted(target, b, op))
+}
+
+fn boolean_unlinked_unbudgeted(target: &mut Body, b: forge_topo::Unlinked, op: Op) -> R<()> {
     #[cfg(debug_assertions)]
     crate::size::debug_check(&[target, &b.clone().into_body()]);
     #[cfg(debug_assertions)]

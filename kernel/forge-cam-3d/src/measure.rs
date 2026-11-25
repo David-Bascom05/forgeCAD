@@ -12,6 +12,7 @@
 
 use crate::drape::Pass;
 use crate::drop::DropCutter;
+use forge_math::ipow::Powi as _;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Stats {
@@ -74,7 +75,7 @@ pub fn cusp(dc: &dyn DropCutter, r: f64, passes: &[Pass], lo: [f64; 2], hi: [f64
         let mut m = 0;
         while m + 1 < p.len() {
             let (a, b) = (p[m], p[m + 1]);
-            let l = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2) + (b[2] - a[2]).powi(2)).sqrt();
+            let l = ((b[0] - a[0]).ipow(2) + (b[1] - a[1]).ipow(2) + (b[2] - a[2]).ipow(2)).sqrt();
             length += l;
             let n = ((l / (0.25 * g)).ceil() as usize).max(1);
             let mut i = 0;

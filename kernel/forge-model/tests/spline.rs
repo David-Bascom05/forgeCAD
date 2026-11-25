@@ -2,6 +2,7 @@
 
 use forge_geom::spline::PlaneSpline;
 use forge_geom::spline::Spline;
+use forge_math::ipow::Powi as _;
 use forge_math::{Frame, Point2, dmath};
 use forge_mesh::{Quality, tessellate};
 use forge_ops::{
@@ -370,7 +371,7 @@ fn a_loft_closes_on_a_point() {
         .iter()
         .map(|&(x, w)| {
             let s = 0.5 * l * (x + 1.0);
-            dmath::PI * radial(s).0.powi(2) * axial(s).1 * 0.5 * l * w
+            dmath::PI * radial(s).0.ipow(2) * axial(s).1 * 0.5 * l * w
         })
         .sum();
     assert!((v - want).abs() < 1e-7 * want, "{v} {want}");

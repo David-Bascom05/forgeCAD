@@ -300,7 +300,9 @@ impl IntCurve {
                 .collect::<Option<Vec<Point2>>>(),
             _ => None,
         };
-        let [ha, hb] = self.hints.get_or_init(|| [near(&self.a), near(&self.b)]);
+        let [ha, hb] = self
+            .hints
+            .get_or_init(|| crate::budget::uncounted(|| [near(&self.a), near(&self.b)]));
         let (i, j, f) = self.locate(t);
         let at = |h: &Option<Vec<Point2>>| h.as_ref().map(|h| h[i].lerp(h[j], f));
         [at(ha), at(hb)]
@@ -376,11 +378,13 @@ impl IntCurve {
     /// A point of the curve lies this near a chain sample: half the longest chord and the sag.
     pub fn reach(&self) -> f64 {
         *self.reach.get_or_init(|| {
-            let n = self.pts.len();
-            let longest = (0..self.segments())
-                .map(|i| self.pts[i].distance_sq(self.pts[(i + 1) % n]))
-                .fold(0.0, f64::max);
-            0.5 * longest.sqrt() + self.sag
+            crate::budget::uncounted(|| {
+                let n = self.pts.len();
+                let longest = (0..self.segments())
+                    .map(|i| self.pts[i].distance_sq(self.pts[(i + 1) % n]))
+                    .fold(0.0, f64::max);
+                0.5 * longest.sqrt() + self.sag
+            })
         })
     }
 

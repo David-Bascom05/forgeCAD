@@ -1592,26 +1592,28 @@ impl Procedural for Skinned {
     fn patches(&self) -> Option<&[Box3]> {
         // faces lie on the span itself, never on the carried-on part
         Some(self.patches.get_or_init(|| {
-            let (nu, nv) = GRID;
-            let cell = |x: Interval, k: usize, n: usize| {
-                let w = x.width() / n as f64;
-                Interval::new(
-                    x.lo + w * k as f64,
-                    if k + 1 == n {
-                        x.hi
-                    } else {
-                        x.lo + w * (k + 1) as f64
-                    },
-                )
-            };
-            let whole = Interval::new(0.0, 1.0);
-            (0..nu)
-                .flat_map(|i| (0..nv).map(move |j| (i, j)))
-                .map(|(i, j)| {
-                    self.data
-                        .bbox(Box2::new(cell(whole, i, nu), cell(self.span, j, nv)))
-                })
-                .collect()
+            crate::budget::uncounted(|| {
+                let (nu, nv) = GRID;
+                let cell = |x: Interval, k: usize, n: usize| {
+                    let w = x.width() / n as f64;
+                    Interval::new(
+                        x.lo + w * k as f64,
+                        if k + 1 == n {
+                            x.hi
+                        } else {
+                            x.lo + w * (k + 1) as f64
+                        },
+                    )
+                };
+                let whole = Interval::new(0.0, 1.0);
+                (0..nu)
+                    .flat_map(|i| (0..nv).map(move |j| (i, j)))
+                    .map(|(i, j)| {
+                        self.data
+                            .bbox(Box2::new(cell(whole, i, nu), cell(self.span, j, nv)))
+                    })
+                    .collect()
+            })
         }))
     }
 }

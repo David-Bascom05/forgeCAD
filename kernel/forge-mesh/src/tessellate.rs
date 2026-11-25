@@ -872,9 +872,11 @@ pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
     tessellate_with(body, q, false)
 }
 
-/// What drawing one body from a file may spend outside an import: eight files' reads' worth, as
-/// much as a top-level op (a boolean) is given.
-pub const MESH: u64 = 8 * forge_geom::budget::FILE;
+/// What drawing one body from a file may spend outside an import. A mesh's units (steps round a
+/// fan, a sixteenth of a spline evaluation) cost about a hundredth of a boolean's in time, so its
+/// own: the Haas corpus's dearest mesh that finishes (HFL-3015D-6 #266470 with a copy over it,
+/// hairline faces) spends 606M in about 3 s; this is seven times that, some 25 to 45 s.
+pub const MESH: u64 = 1 << 32;
 
 /// `tessellate`, but a body from a file (`Body::from_file`), whose edges may meet only within their
 /// tolerance and so cross where its faces are laid flat, has those faces drawn as they are: the mesh
@@ -887,10 +889,11 @@ pub fn tessellate_tolerant(body: &Body, q: &Quality) -> Result<TriMesh, TessErro
     if body.dead > 0 {
         return tessellate_tolerant(&body.compact(), q);
     }
-    // a file's body is drawn within a budget of its own, MESH, or the import's where one is live.
-    // A file's (FILE) refused 102 of the Haas machine models' solids that mesh in under a second
-    // or a few (HFL-1313-3 #69702: 150M evaluations, 0.7 s; research/kernel-stress).
-    let _b = (!forge_geom::budget::limited()).then(|| forge_geom::budget::scoped(MESH));
+    // a file's body is drawn within a mesh's budget, MESH (a top-level op's, as a boolean's): a
+    // file's (FILE) refused 102 of the Haas machine models' solids that mesh in under a second or a
+    // few (HFL-1313-3 #69702: 150M evaluations, 0.7 s; research/kernel-stress). Nested, so inside
+    // an import the import's own budget, which is less, is the one that holds.
+    let _b = forge_geom::budget::scoped(MESH);
     tessellate_with(body, q, true)
 }
 
@@ -2872,6 +2875,7 @@ fn strips(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use forge_math::ipow::Powi as _;
     use forge_math::rng::Rng;
     use forge_math::{Frame, Point3, Vec3};
     use forge_ops::{Profile, extrude};
@@ -3112,7 +3116,7 @@ mod tests {
                 let q = Quality { chord, max_angle };
                 let step = arc_step(r, &q);
                 // the sag of one step, computed stably
-                let sag = 2.0 * r * dmath::sin(0.25 * step).powi(2);
+                let sag = 2.0 * r * dmath::sin(0.25 * step).ipow(2);
                 assert!(sag <= chord * (1.0 + 1e-12), "{r} {chord}: {sag}");
                 assert!(step <= max_angle);
                 for fine in [false, true] {
@@ -3122,7 +3126,7 @@ mod tests {
                     });
                     let width = 1e-3f64.min(dmath::PI);
                     let n = edge_segments(&c, Interval::new(0.0, width), &q, fine);
-                    let sag = 2.0 * r * dmath::sin(0.25 * width / n as f64).powi(2);
+                    let sag = 2.0 * r * dmath::sin(0.25 * width / n as f64).ipow(2);
                     let allowed = if fine { 0.5 * chord } else { chord };
                     assert!(sag <= allowed * (1.0 + 1e-12), "{r} {chord} {fine}: {sag}");
                 }

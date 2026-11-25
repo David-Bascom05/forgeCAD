@@ -4,6 +4,7 @@
 //! read the part as it stands. Errors, warnings and fixes are typed data (`error`), and edits
 //! are typed operations on the source (`edit`).
 
+use forge_math::ipow::Powi as _;
 pub mod anchors;
 pub mod asm;
 pub mod bench;
@@ -361,7 +362,11 @@ fn fit_sizes(src: &str, opts: &Options, run: &mut Run, mut cache: Cache) -> Cach
                 param: key.clone(),
                 value: error::Literal { value: v, dim },
             };
-            let Ok(text) = edit::apply(src, &op) else {
+            let at = edit::At {
+                dir: opts.dir.clone(),
+                root: opts.root.clone(),
+            };
+            let Ok(text) = edit::apply_at(src, &op, &at) else {
                 return Some("the edit does not apply".into());
             };
             let (r, c) = run_once(&text, inner.clone(), cache_cell.take().unwrap_or_default());
@@ -424,7 +429,7 @@ fn fit_search(
     let mut bad = top;
     let mut good = None;
     for h in 1..=FIT_HALVINGS {
-        let v = top * 0.5f64.powi(h);
+        let v = top * 0.5f64.ipow(h);
         if probe(v) {
             good = Some(v);
             break;
@@ -451,8 +456,8 @@ fn fit_search(
         }
     }
     let down = |p: f64| (lo * p).floor() / p;
-    let figures = 10f64.powi(2 - lo.abs().log10().floor() as i32);
-    let decimals = 10f64.powi(if lo.abs() >= 1000.0 {
+    let figures = 10f64.ipow(2 - units::decimal_exponent(lo));
+    let decimals = 10f64.ipow(if lo.abs() >= 1000.0 {
         1
     } else if lo.abs() >= 1.0 {
         3

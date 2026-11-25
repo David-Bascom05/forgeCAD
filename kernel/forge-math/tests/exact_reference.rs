@@ -3,6 +3,7 @@
 //! conversions to f64 (bit for bit) and inline-or-limb representation, on random dyadics in both
 //! the inline and the limb regime. Guards the bit identity of decide-once's exact geometry.
 
+use forge_math::ipow::Powi as _;
 #[allow(dead_code, clippy::all)]
 mod reference {
     use core::cmp::Ordering;
@@ -486,7 +487,7 @@ fn pick(s: &mut u64) -> f64 {
     }
     let m = (rng(s) >> 11) as f64 / (1u64 << 53) as f64 * 2.0 - 1.0;
     let k = (rng(s) % 400) as i32 - 200;
-    m * 2f64.powi(k)
+    m * 2f64.ipow(k)
 }
 
 #[test]

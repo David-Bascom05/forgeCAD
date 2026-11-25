@@ -1,6 +1,7 @@
 //! Weldments: members along a layout's segments, their corners, trims, caps and plates, and the
 //! cut list, each checked against numbers worked out by hand and against the built bodies.
 
+use forge_math::ipow::Powi as _;
 mod common;
 
 use forge_lang::weld::{CutRow, cutlist};
@@ -205,7 +206,7 @@ sketch lay(on: xy) {
 bend = members(lay.p, section: \"CHS 48.3x3.2\")
 ";
     let m = common::holds_alike(src);
-    let a = PI * (24.15f64.powi(2) - 20.95f64.powi(2));
+    let a = PI * (24.15f64.ipow(2) - 20.95f64.ipow(2));
     near(m.volume, a * (300.0 + 150.0 * PI / 2.0 + 250.0), 1e-6, "Pappus");
     let rs = rows(src);
     let arc = row(&rs, "bend[1]");
@@ -286,7 +287,7 @@ cope = end_trim(leg[0], to: rail[0])
     assert_eq!(m.bodies, 2);
     let b = solids(src);
     let legv = forge_topo::mass::mass(&b[1]).unwrap().volume;
-    let a = PI * (24.15f64.powi(2) - 20.95f64.powi(2));
+    let a = PI * (24.15f64.ipow(2) - 20.95f64.ipow(2));
     assert!(legv < a * 400.0 && legv > a * (400.0 - 30.15), "coped: {legv}");
     let rs = rows(src);
     assert_eq!(row(&rs, "leg[0]").copes[0], ["rail[0]"]);

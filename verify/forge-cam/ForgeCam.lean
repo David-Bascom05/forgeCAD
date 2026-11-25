@@ -21,3 +21,4 @@ import ForgeCam.Halfspace
 import ForgeCam.Quad
 import ForgeCam.Rational
 import ForgeCam.AxisPlane
+import ForgeCam.IvalZero

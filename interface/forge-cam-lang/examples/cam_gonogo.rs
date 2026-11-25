@@ -10,6 +10,7 @@ use forge_cam_geom::check::{Face, Move, Verdict, apart, swept_box};
 use forge_cam_geom::offset::offset;
 use forge_cam_geom::region::{Loop, Region, Seg, p2};
 use forge_cam_geom::tool::{Cutter, Holder, assemble};
+use forge_math::ipow::Powi as _;
 
 fn circle(r: f64, ccw: bool) -> Loop {
     let a = p2(r, 0.0);
@@ -47,7 +48,7 @@ fn moves(segs: &[Seg], z: f64, k: usize, out: &mut Vec<Move>) {
                 }
             }
             Seg::Arc { a, b, c, ccw } => {
-                let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+                let r = ((a.x - c.x).ipow(2) + (a.y - c.y).ipow(2)).sqrt();
                 let ang = |p: forge_cam_geom::region::P2| forge_math::dmath::atan2(p.y - c.y, p.x - c.x);
                 let t0 = ang(a);
                 let mut t1 = ang(b);

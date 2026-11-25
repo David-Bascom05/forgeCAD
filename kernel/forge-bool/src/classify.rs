@@ -434,8 +434,35 @@ pub fn face_box(body: &Body, f: FaceId) -> Box3 {
 }
 
 /// Face `f`'s point-in-face index: built on first use, kept on the face.
+/// `f`, `uncounted` where it `may_spend` the work budget (else as it is: nothing to hold aside).
+#[inline]
+fn uncounted_if<T>(may_spend: bool, f: impl FnOnce() -> T) -> T {
+    if may_spend {
+        forge_geom::budget::uncounted(f)
+    } else {
+        f()
+    }
+}
+
+/// `f`, a cache's fill that spends nothing of the work budget (closed forms only: checked in debug
+/// builds), so it needs no `uncounted`.
+#[inline]
+fn plain<T>(f: impl FnOnce() -> T) -> T {
+    #[cfg(debug_assertions)]
+    let was = forge_geom::budget::spent();
+    let v = f();
+    #[cfg(debug_assertions)]
+    debug_assert_eq!(
+        forge_geom::budget::spent(),
+        was,
+        "a plain cache fill spent the budget"
+    );
+    v
+}
+
 fn info(body: &Body, f: FaceId) -> &FaceInfo {
     let face = body.face(f);
+    // (closed forms and edges' boxes, each its own fill: nothing spent here)
     let q = face.query.get_or_init(|| {
         let mut edges = Vec::new();
         // (the body's bound of its vertices' tolerances, at least this face's loops')
@@ -529,23 +556,26 @@ impl<'a> Index<'a> {
     }
 
     fn drawn(&self, f: FaceId) -> &Drawn {
+        // (the face's loops drawn: its edges evaluated, which a procedural one spends)
         self.info(f).drawn.get_or_init(|| {
-            let loops = face_uv_loops(self.body, f);
-            let (mut u, mut v) = (Interval::EMPTY, Interval::EMPTY);
-            for p in loops.iter().flat_map(|l| l.points.iter()) {
-                u.include(p.x);
-                v.include(p.y);
-            }
-            let centre = loops.first().map_or(Point2::ORIGIN, |l| {
-                let n = l.points.len().max(1) as f64;
-                let s = l.points.iter().fold((0.0, 0.0), |a, p| (a.0 + p.x, a.1 + p.y));
-                Point2::new(s.0 / n, s.1 / n)
-            });
-            Drawn {
-                loops,
-                centre,
-                window: Box2::new(u, v),
-            }
+            uncounted_if(self.body.face_may_spend(f), || {
+                let loops = face_uv_loops(self.body, f);
+                let (mut u, mut v) = (Interval::EMPTY, Interval::EMPTY);
+                for p in loops.iter().flat_map(|l| l.points.iter()) {
+                    u.include(p.x);
+                    v.include(p.y);
+                }
+                let centre = loops.first().map_or(Point2::ORIGIN, |l| {
+                    let n = l.points.len().max(1) as f64;
+                    let s = l.points.iter().fold((0.0, 0.0), |a, p| (a.0 + p.x, a.1 + p.y));
+                    Point2::new(s.0 / n, s.1 / n)
+                });
+                Drawn {
+                    loops,
+                    centre,
+                    window: Box2::new(u, v),
+                }
+            })
         })
     }
 
@@ -583,7 +613,7 @@ impl<'a> Index<'a> {
         let info = self.info(f);
         if let Some(w) = info
             .simple
-            .get_or_init(|| Simple::of(body, f))
+            .get_or_init(|| plain(|| Simple::of(body, f)))
             .and_then(|s| s.place(p))
         {
             return w;
@@ -737,7 +767,7 @@ impl<'a> Index<'a> {
         let info = self.info(f);
         if info
             .simple
-            .get_or_init(|| Simple::of(body, f))
+            .get_or_init(|| plain(|| Simple::of(body, f)))
             .and_then(|s| s.place(p))
             .is_none()
         {
@@ -1305,6 +1335,7 @@ pub(crate) fn ray_hits_box(o: Point3, d: Vec3, b: &Box3) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use forge_math::ipow::Powi as _;
     use forge_math::rng::Rng;
     use forge_math::{Frame, Vec2, dmath};
     use forge_ops::{Axis2, Profile, ProfileLoop, Segment, extrude, revolve};
@@ -1370,7 +1401,7 @@ mod tests {
         agree(
             &b,
             |p| {
-                let hole = 4.0 - ((p.x - 15.0).powi(2) + (p.y - 10.0).powi(2)).sqrt();
+                let hole = 4.0 - ((p.x - 15.0).ipow(2) + (p.y - 10.0).ipow(2)).sqrt();
                 margin(
                     (-p.x)
                         .max(p.x - 30.0)

@@ -185,6 +185,7 @@ pub fn kernel_on(a: Body, b: Body, op: Op) -> Outcome {
         Ok(Err(BoolError::ZeroThickness { .. })) => Outcome::ZeroThickness,
         Ok(Err(BoolError::Internal(l))) => Outcome::Internal(kind(format!("{l:?}"))),
         Ok(Err(BoolError::Unsupported(u))) => Outcome::Unsupported(kind(format!("{u:?}"))),
+        Ok(Err(BoolError::TooLong)) => Outcome::Unsupported("TooLong".into()),
         Ok(Ok(body)) => {
             if body.face_ids().next().is_none() {
                 return Outcome::Empty;

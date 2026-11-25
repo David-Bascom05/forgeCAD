@@ -196,59 +196,61 @@ impl ChordCurve {
     /// point an integrator walking u has to stop at.
     fn foot_joins(&self) -> &[f64] {
         self.joins.get_or_init(|| {
-            let mut out = Vec::new();
-            for s in [&self.ic.a, &self.ic.b] {
-                let Surface::Procedural(p) = s else { continue };
-                let Some(base) = p.under() else { continue };
-                let d = base.domain();
-                for (axis, range, period) in [(0, d.u, d.u.period), (1, d.v, d.v.period)] {
-                    if !(range.lo.is_finite() && range.hi.is_finite()) {
-                        continue;
-                    }
-                    let whole = Interval::new(range.lo, range.hi);
-                    let joins = if axis == 0 {
-                        base.u_kinks(whole)
-                    } else {
-                        base.v_kinks(whole)
-                    };
-                    if joins.is_empty() {
-                        continue;
-                    }
-                    let foot = |t: f64| {
-                        let q = base.project(self.ic.eval(t));
-                        if axis == 0 { q.x } else { q.y }
-                    };
-                    // the chain's points are on the curve near enough to say which steps cross, and
-                    // each foot starts from the last
-                    let at = |q: Point2| if axis == 0 { q.x } else { q.y };
-                    let n = self.ic.pts.len();
-                    let mut q0 = base.project(self.ic.pts[0]);
-                    for k in 0..self.ic.domain_hi() as usize {
-                        let q1 = base.project_near(self.ic.pts[(k + 1) % n], q0);
-                        let (f0, f1) = (at(q0), at(q1));
-                        // (not across a closed surface's seam)
-                        if period.is_none_or(|w| (f1 - f0).abs() < 0.5 * w) {
-                            let (lo, up) = (f0.min(f1), f0.max(f1));
-                            let first = joins.partition_point(|&j| j <= lo);
-                            for &j in joins[first..].iter().take_while(|&&j| j < up) {
-                                let (mut a, mut b) = (k as f64, (k + 1) as f64);
-                                for _ in 0..40 {
-                                    let m = 0.5 * (a + b);
-                                    if (foot(m) - j) * (f1 - f0) < 0.0 {
-                                        a = m;
-                                    } else {
-                                        b = m;
-                                    }
-                                }
-                                out.push(self.u_of(0.5 * (a + b)));
-                            }
+            crate::budget::uncounted(|| {
+                let mut out = Vec::new();
+                for s in [&self.ic.a, &self.ic.b] {
+                    let Surface::Procedural(p) = s else { continue };
+                    let Some(base) = p.under() else { continue };
+                    let d = base.domain();
+                    for (axis, range, period) in [(0, d.u, d.u.period), (1, d.v, d.v.period)] {
+                        if !(range.lo.is_finite() && range.hi.is_finite()) {
+                            continue;
                         }
-                        q0 = q1;
+                        let whole = Interval::new(range.lo, range.hi);
+                        let joins = if axis == 0 {
+                            base.u_kinks(whole)
+                        } else {
+                            base.v_kinks(whole)
+                        };
+                        if joins.is_empty() {
+                            continue;
+                        }
+                        let foot = |t: f64| {
+                            let q = base.project(self.ic.eval(t));
+                            if axis == 0 { q.x } else { q.y }
+                        };
+                        // the chain's points are on the curve near enough to say which steps cross, and
+                        // each foot starts from the last
+                        let at = |q: Point2| if axis == 0 { q.x } else { q.y };
+                        let n = self.ic.pts.len();
+                        let mut q0 = base.project(self.ic.pts[0]);
+                        for k in 0..self.ic.domain_hi() as usize {
+                            let q1 = base.project_near(self.ic.pts[(k + 1) % n], q0);
+                            let (f0, f1) = (at(q0), at(q1));
+                            // (not across a closed surface's seam)
+                            if period.is_none_or(|w| (f1 - f0).abs() < 0.5 * w) {
+                                let (lo, up) = (f0.min(f1), f0.max(f1));
+                                let first = joins.partition_point(|&j| j <= lo);
+                                for &j in joins[first..].iter().take_while(|&&j| j < up) {
+                                    let (mut a, mut b) = (k as f64, (k + 1) as f64);
+                                    for _ in 0..40 {
+                                        let m = 0.5 * (a + b);
+                                        if (foot(m) - j) * (f1 - f0) < 0.0 {
+                                            a = m;
+                                        } else {
+                                            b = m;
+                                        }
+                                    }
+                                    out.push(self.u_of(0.5 * (a + b)));
+                                }
+                            }
+                            q0 = q1;
+                        }
                     }
                 }
-            }
-            out.sort_by(f64::total_cmp);
-            out
+                out.sort_by(f64::total_cmp);
+                out
+            })
         })
     }
 

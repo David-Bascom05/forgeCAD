@@ -575,6 +575,20 @@ impl CurveGeom for Curve {
 }
 
 impl Curve {
+    /// Whether evaluating it may spend an op's work budget (`budget`): only a procedural curve
+    /// does (a file's spline, through forge-step, and what is made on one), or one where such a
+    /// surface meets another. A closed form never does, so a cache of it need not be `uncounted`.
+    pub fn may_spend(&self) -> bool {
+        match self {
+            Curve::Line(_)
+            | Curve::Circle(_)
+            | Curve::Ellipse(_)
+            | Curve::Parabola(_)
+            | Curve::Hyperbola(_) => false,
+            Curve::Intersection(c) => c.a.may_spend() || c.b.may_spend(),
+            Curve::Procedural(_) => true,
+        }
+    }
     /// Parameters strictly inside `range` where the parametrisation is only once
     /// differentiable: an intersection curve's chain points, or a procedural curve's own.
     pub fn kinks(&self, range: Interval) -> Vec<f64> {

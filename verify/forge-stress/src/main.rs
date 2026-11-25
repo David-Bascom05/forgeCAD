@@ -9,7 +9,7 @@
 //! An `Ok` whose body fails `check`, whose mesh is open, or whose volume disagrees with the
 //! oracle is `wrong`: the worst kind of answer, so it is told apart from a refusal.
 //!
-//! `forge-stress FILE.step [--timeout S] [--max-rss-mb M] [--max-solids N] [--skip k1,k2] [--only k1,k2]`
+//! `forge-stress FILE.step [--timeout S] [--max-rss-mb M] [--max-solids N] [--skip k1,k2] [--only k1,k2] [--nary]`
 //! Past `--max-rss-mb` (4000) resident, the op is written as `memory` and the run ends as for a hang.
 
 use forge_bool::{Op, boolean};
@@ -163,8 +163,23 @@ struct Meshed {
     volume: f64,
 }
 
+/// `--nary`: every boolean through `forge_bool::nary` on par's threads, as the app's builds run
+/// them (forge-model), its helpers sharing the op's budget; else `forge_bool::boolean`.
+static NARY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// What the last `mesh` spent of its budget (written on the solid's line as `mesh_evals`); the op
+/// runs on the watchdog's thread, so not a thread-local.
+static MESH_EVALS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 fn mesh(b: &Body) -> Result<Meshed, String> {
-    let m = tessellate_tolerant(b, &Quality::default()).map_err(|e| format!("{e:?}"))?;
+    // what the mesh spends of its budget, as for a boolean: an outer budget it cannot run out of
+    let outer = forge_geom::budget::scoped(u64::MAX >> 1);
+    let before = forge_geom::budget::left();
+    let r = tessellate_tolerant(b, &Quality::default());
+    let evals = before - forge_geom::budget::left();
+    drop(outer);
+    MESH_EVALS.store(evals, std::sync::atomic::Ordering::Relaxed);
+    let m = r.map_err(|e| format!("{e:?}"))?;
     Ok(Meshed {
         tris: m.triangles.len(),
         open: m.open_edges().len(),
@@ -293,23 +308,41 @@ impl Ops<'_> {
         // hang them as well as the boolean
         let (r, ms) = self.cx.run(&key, || {
             let t = Instant::now();
-            let r = boolean(a, b, how, 9000).map_err(|e| format!("{e:?}"));
+            // what the boolean spends of its work budget: an outer budget it shares, read after
+            // (the distribution of what succeeding ops spend sets OP near the real tail)
+            let outer = forge_geom::budget::scoped(u64::MAX >> 1);
+            let before = forge_geom::budget::left();
+            let r = if NARY.load(std::sync::atomic::Ordering::Relaxed) {
+                forge_bool::nary(&[a, b], &[how], forge_math::par::threads())
+            } else {
+                boolean(a, b, how, 9000)
+            }
+            .map_err(|e| format!("{e:?}"));
+            let spent = before - forge_geom::budget::left();
+            drop(outer);
             let bms = t.elapsed().as_secs_f64() * 1e3;
-            (bms, judge(r))
+            MESH_EVALS.store(0, std::sync::atomic::Ordering::Relaxed);
+            let j = judge(r);
+            (bms, spent, j)
         });
+        // what the answer's mesh spent (0 when there was no answer to mesh)
+        let mesh_evals = MESH_EVALS.load(std::sync::atomic::Ordering::Relaxed);
         match r {
             Res::Skipped => f64::NAN,
             Res::Panic(m) => {
                 self.line(op, ms, "panic", "", &m);
                 f64::NAN
             }
-            Res::Done((bms, (st, v, d))) => {
+            Res::Done((bms, spent, (st, v, d))) => {
                 // the boolean's own time; the check of its answer after it is in `all_ms`
                 self.line(
                     op,
                     bms,
                     &st,
-                    &format!(",\"vol\":{},\"all_ms\":{ms:.1}", num(v)),
+                    &format!(
+                        ",\"vol\":{},\"all_ms\":{ms:.1},\"evals\":{spent},\"mesh_evals\":{mesh_evals}",
+                        num(v)
+                    ),
                     &d,
                 );
                 if st == "empty" { 0.0 } else { v }
@@ -371,6 +404,10 @@ fn main() {
         times: Vec::new(),
     };
     let max_solids: usize = opt("--max-solids").and_then(|t| t.parse().ok()).unwrap_or(24);
+    NARY.store(
+        args.iter().any(|a| a == "--nary"),
+        std::sync::atomic::Ordering::Relaxed,
+    );
     std::panic::set_hook(Box::new(|i| {
         let loc = i
             .location()
@@ -577,7 +614,9 @@ fn main() {
             Res::Panic(m) => (f64::NAN, f64::NAN, format!("panic: {m}"), f64::NAN),
             Res::Skipped => (f64::NAN, f64::NAN, "skipped".into(), f64::NAN),
         };
+        MESH_EVALS.store(0, std::sync::atomic::Ordering::Relaxed);
         let (r, tms) = cx.run(&format!("s{i}:mesh"), || mesh(b));
+        let mesh_evals = MESH_EVALS.load(std::sync::atomic::Ordering::Relaxed);
         let (watertight, manifold, mvol, tris, mrr) = match r {
             Res::Done(Ok(m)) => (
                 m.open == 0 && m.tris >= 4 && m.volume > 0.0,
@@ -592,7 +631,7 @@ fn main() {
         };
         let bx = b.faces_box();
         emit(format!(
-            "{{\"ev\":\"solid\",\"s\":{i},\"ent\":{},\"name\":\"{}\",\"faces\":{nf},\"edges\":{ne},\"verts\":{nv},\"shells\":{},\"problems\":{},\"why\":\"{}\",\"vol\":{},\"area\":{},\"merr\":\"{}\",\"watertight\":{watertight},\"manifold\":{manifold},\"mesh_vol\":{},\"tris\":{tris},\"mesh_err\":\"{}\",\"unverified\":\"{}\",\"check_ms\":{cms:.1},\"mass_ms\":{mms:.1},\"mesh_ms\":{tms:.1},\"diag\":{}}}",
+            "{{\"ev\":\"solid\",\"s\":{i},\"ent\":{},\"name\":\"{}\",\"faces\":{nf},\"edges\":{ne},\"verts\":{nv},\"shells\":{},\"problems\":{},\"why\":\"{}\",\"vol\":{},\"area\":{},\"merr\":\"{}\",\"watertight\":{watertight},\"manifold\":{manifold},\"mesh_vol\":{},\"tris\":{tris},\"mesh_err\":\"{}\",\"unverified\":\"{}\",\"check_ms\":{cms:.1},\"mass_ms\":{mms:.1},\"mesh_ms\":{tms:.1},\"mesh_evals\":{},\"diag\":{}}}",
             s.entity,
             esc(&s.name),
             b.shells.len(),
@@ -604,6 +643,7 @@ fn main() {
             num(mvol),
             esc(&mrr),
             esc(b.unverified.as_deref().unwrap_or("")),
+            mesh_evals,
             num(bx.diagonal())
         ));
         if nprob == 0 && vol.is_finite() && vol > 0.0 && watertight {

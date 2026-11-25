@@ -4,6 +4,7 @@
 //! what you see is what a click finds. All in pixels; no GPU here.
 
 use crate::camera::{Camera, dot};
+use forge_math::ipow::Powi as _;
 
 /// The square the widget fills, before the window's scale.
 pub const WIDGET_PX: f32 = 160.0;
@@ -388,7 +389,7 @@ fn roll_at(place: &Place, clockwise: bool) -> (f32, f32) {
 }
 
 fn near(a: (f32, f32), b: (f32, f32), r: f32) -> bool {
-    (a.0 - b.0).powi(2) + (a.1 - b.1).powi(2) < r * r
+    (a.0 - b.0).ipow(2) + (a.1 - b.1).ipow(2) < r * r
 }
 
 /// What's under a pixel.

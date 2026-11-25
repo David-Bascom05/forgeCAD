@@ -30,6 +30,7 @@
 //! inputs so a comparison can be run over a range of them; the defaults are grbl's.
 use crate::def::{JointType, MachineDef};
 use crate::sim::{Path, SegKind, Timeline};
+use forge_math::ipow::Powi as _;
 
 /// The planner's inputs.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -162,7 +163,7 @@ pub fn plan(def: &MachineDef, tl: &Timeline, p: &LookAhead) -> (Vec<f64>, f64) {
         }
         let lens: Vec<f64> = pts
             .windows(2)
-            .map(|w| (0..n).map(|j| (w[1][j] - w[0][j]).powi(2)).sum::<f64>().sqrt())
+            .map(|w| (0..n).map(|j| (w[1][j] - w[0][j]).ipow(2)).sum::<f64>().sqrt())
             .collect();
         let total: f64 = lens.iter().sum();
         if total == 0.0 {
@@ -441,7 +442,7 @@ pub fn plan_scurve(def: &MachineDef, tl: &Timeline, p: &SCurve) -> (Vec<f64>, f6
                 let pts: Vec<Vec<f64>> = (0..=k).map(|i| sg.at(i as f64 / k as f64)).collect();
                 let l: f64 = pts
                     .windows(2)
-                    .map(|w| (0..n).map(|j| (w[1][j] - w[0][j]).powi(2)).sum::<f64>().sqrt())
+                    .map(|w| (0..n).map(|j| (w[1][j] - w[0][j]).ipow(2)).sum::<f64>().sqrt())
                     .sum();
                 let (Some(u0), Some(u1)) = (
                     unit((0..n).map(|j| pts[1][j] - pts[0][j]).collect()),

@@ -66,6 +66,8 @@ refusals for time, 2 EdgeOffFace wrong Oks; after: 0, 1 and 0.
 | memory: booleans with a moved copy past 4 GB, or killed by the kernel (rc 137) | forge-bool / forge-topo `check` | PARASOLID sees `check` alone past 8 GB in `subdivide_pieces` / `Nurbs::implicit`, unbounded by the evaluation budget |
 | refused "too long to measure" (124) | forge-mesh / speed | two causes: the CDT spends the whole budget recovering the boundary of a hairline face (a cylinder r 2.5 um, 437 mm long, HRT160-2 #13299: refused in 0.3 s); and real spline cost (desktop lathe #106846: healing 24 M of 33 M evaluations, mass the rest, 8 s) |
 | import: ball-end sphere patch, "no place on the rim for a second meridian" (9) | forge-step | the loop runs through the pole along two meridians; choosing meridians the rim meets makes a degenerate edge instead, so left as a refusal |
+| mass silently wrong (no error): a closed cubic x linear B-surface face with 4 loops integrates to area 6e-9 against a mesh's 2732, the body's volume -216 against 15956 (from PARASOLID, an Onshape x_t with no licence: not committed) | forge-topo `mass` | the worst kind: a wrong answer that says nothing |
+| a periodic procedural face's box is its whole domain (+-1e6 mm along a closed extrusion's v) | forge-topo `procedural_box` | from PARASOLID (fixture kernel/forge-step/tests/data/xt/onshape/extrude.x_t on parasolid/xt-reader): bound v by the edges where v is not periodic; loose boxes also cost culling |
 | import: entity missing or of another kind (Cobot) | none: a file defect | an EDGE_LOOP lists an EDGE_CURVE, an EDGE_CURVE's vertex is an ORIENTED_EDGE; refusing is right |
 
 ## Parasolid (.x_t)

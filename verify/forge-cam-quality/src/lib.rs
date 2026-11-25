@@ -16,6 +16,7 @@
 //! about a cell of the exact sweep. Spindle rotation is taken as M03 (clockwise from above), so
 //! material right of the direction of travel is climb. Everything here is deterministic.
 pub mod crazy;
+use forge_math::ipow::Powi as _;
 pub mod endstate;
 pub mod foreign;
 pub mod map;
@@ -313,7 +314,7 @@ pub struct JobQ {
 }
 
 fn dist(a: [f64; 3], b: [f64; 3]) -> f64 {
-    ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)).sqrt()
+    ((a[0] - b[0]).ipow(2) + (a[1] - b[1]).ipow(2) + (a[2] - b[2]).ipow(2)).sqrt()
 }
 
 /// A path move cut into straight pieces no longer than `l` (arcs by chords).
@@ -333,7 +334,7 @@ fn pieces(from: [f64; 3], m: &PMove, l: f64) -> Vec<[f64; 3]> {
                 .collect()
         }
         PMove::Arc { to, c, cw, .. } => {
-            let r = ((from[0] - c[0]).powi(2) + (from[1] - c[1]).powi(2)).sqrt();
+            let r = ((from[0] - c[0]).ipow(2) + (from[1] - c[1]).ipow(2)).sqrt();
             let a0 = forge_math::dmath::atan2(from[1] - c[1], from[0] - c[0]);
             let a1 = forge_math::dmath::atan2(to[1] - c[1], to[0] - c[0]);
             let tau = std::f64::consts::TAU;
@@ -802,7 +803,7 @@ pub fn measure_op_unless(
                 PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
                 PMove::Cycle { .. } | PMove::Probe { .. } => unreachable!(),
             };
-            let dxy = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
+            let dxy = ((to[0] - at[0]).ipow(2) + (to[1] - at[1]).ipow(2)).sqrt();
             let dz = to[2] - at[2];
             if dxy < 1e-9 && dz > 0.5 {
                 q.retracts += 1;
@@ -853,7 +854,7 @@ pub fn measure_op_unless(
             for b in pieces(at, mv, l) {
                 let len = dist(a, b);
                 let dt = if f > 0.0 { 60.0 * len / f } else { 0.0 };
-                let pxy = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+                let pxy = ((b[0] - a[0]).ipow(2) + (b[1] - a[1]).ipow(2)).sqrt();
                 mq.len_xy += pxy;
                 let eng = if q.side && pxy > 1e-9 {
                     let u = [(b[0] - a[0]) / pxy, (b[1] - a[1]) / pxy];
@@ -1161,7 +1162,7 @@ fn timeline(cam: &CamView, cfg: &Config, mlib: &forge_machine::library::Library,
                         let dz = (sg.q1.get(2).copied().unwrap_or(0.0)
                             - sg.q0.get(2).copied().unwrap_or(0.0))
                         .abs();
-                        let dxy = ((sg.q1[0] - sg.q0[0]).powi(2) + (sg.q1[1] - sg.q0[1]).powi(2)).sqrt();
+                        let dxy = ((sg.q1[0] - sg.q0[0]).ipow(2) + (sg.q1[1] - sg.q0[1]).ipow(2)).sqrt();
                         let cat = match sg.kind {
                             forge_machine::sim::SegKind::Rapid => "rapid",
                             forge_machine::sim::SegKind::Arc => "arc",

@@ -557,6 +557,7 @@ pub fn ending<T>(r: &Result<T, crate::BoolError>) -> &'static str {
     match r {
         Ok(_) => "Ok",
         Err(crate::BoolError::ZeroThickness { .. }) => "ZeroThickness",
+        Err(crate::BoolError::TooLong) => "TooLong",
         Err(crate::BoolError::Unsupported(u)) => match **u {
             Unhandled::NoClosedForm { .. } => "Unsupported NoClosedForm",
             Unhandled::OpenCurve { .. } => "Unsupported OpenCurve",

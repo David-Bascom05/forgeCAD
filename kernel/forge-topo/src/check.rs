@@ -107,6 +107,9 @@ pub enum Problem {
     StrayVertex {
         vertex: VertexId,
     },
+    /// The check ran past its work budget (`forge_geom::budget::OP` evaluations of NURBS
+    /// surfaces, the same on every machine) and was stopped: the body is not known valid.
+    TooLong,
 }
 
 impl Problem {
@@ -134,6 +137,7 @@ impl Problem {
             Problem::ShellFaces { .. } => "shell-faces",
             Problem::ShellDisconnected { .. } => "shell-disconnected",
             Problem::StrayVertex { .. } => "stray-vertex",
+            Problem::TooLong => "too-long",
         }
     }
 
@@ -170,6 +174,10 @@ impl Problem {
             }
             Problem::ShellDisconnected { .. } => "a skin of the body is in separate pieces".to_string(),
             Problem::StrayVertex { .. } => "a corner of the body is on no edge".to_string(),
+            Problem::TooLong => "the check would take too long: the body's NURBS surfaces ask more work \
+                                 than one check may spend (simplify its spline faces, or raise \
+                                 forge_geom::budget::OP)"
+                .to_string(),
         }
     }
 
@@ -195,7 +203,7 @@ impl Problem {
             | Problem::StrayVertex { vertex } => Some(v(vertex)),
             Problem::BackLink { .. } | Problem::ShellFaces { .. } | Problem::ShellDisconnected { .. } => None,
             Problem::DuplicateName { name } => Some(Entity::Named(name)),
-            Problem::Euler { .. } | Problem::ShellEuler { .. } => None,
+            Problem::Euler { .. } | Problem::ShellEuler { .. } | Problem::TooLong => None,
         }
     }
 }
@@ -452,6 +460,17 @@ fn quiet_loops(a: &Body, f: FaceId, b: &Body, o: FaceId) -> Option<(Vec<bool>, B
 }
 
 fn check_known(body: &Body, known: &Known) -> Vec<Problem> {
+    // under one operation's work budget, shared with an outer one: past it, the check is stopped and
+    // says so (a NURBS body's curve-surface search ran unbounded, past 8 GB, on HA2TS)
+    let _b = forge_geom::budget::scoped(forge_geom::budget::OP);
+    let out = check_known_unbudgeted(body, known);
+    if forge_geom::budget::over() {
+        return vec![Problem::TooLong];
+    }
+    out
+}
+
+fn check_known_unbudgeted(body: &Body, known: &Known) -> Vec<Problem> {
     let mut out = Vec::new();
     // every other test reads through these links: where they are wrong, they are all there is to say
     check_links(body, &mut out);
@@ -507,23 +526,34 @@ fn check_strays(body: &Body, out: &mut Vec<Problem>) {
 impl crate::topo::Sink for Vec<Problem> {
     #[inline]
     fn stray(&mut self, v: usize) {
-        self.push(Problem::StrayVertex { vertex: VertexId(v as u32) });
+        self.push(Problem::StrayVertex {
+            vertex: VertexId(v as u32),
+        });
     }
     #[inline]
     fn edge_uses(&mut self, e: usize, n: usize) {
-        self.push(Problem::EdgeUses { edge: EdgeId(e as u32), uses: n });
+        self.push(Problem::EdgeUses {
+            edge: EdgeId(e as u32),
+            uses: n,
+        });
     }
     #[inline]
     fn edge_same_way(&mut self, e: usize) {
-        self.push(Problem::EdgeUsesSameWay { edge: EdgeId(e as u32) });
+        self.push(Problem::EdgeUsesSameWay {
+            edge: EdgeId(e as u32),
+        });
     }
     #[inline]
     fn edge_degenerate(&mut self, e: usize) {
-        self.push(Problem::EdgeDegenerate { edge: EdgeId(e as u32) });
+        self.push(Problem::EdgeDegenerate {
+            edge: EdgeId(e as u32),
+        });
     }
     #[inline]
     fn face_no_loops(&mut self, f: usize) {
-        self.push(Problem::FaceNoLoops { face: FaceId(f as u32) });
+        self.push(Problem::FaceNoLoops {
+            face: FaceId(f as u32),
+        });
     }
     #[inline]
     fn loop_empty(&mut self, l: usize) {
@@ -531,15 +561,22 @@ impl crate::topo::Sink for Vec<Problem> {
     }
     #[inline]
     fn loop_broken(&mut self, l: usize, c: usize) {
-        self.push(Problem::LoopBroken { lp: LoopId(l as u32), after: CoedgeId(c as u32) });
+        self.push(Problem::LoopBroken {
+            lp: LoopId(l as u32),
+            after: CoedgeId(c as u32),
+        });
     }
     #[inline]
     fn shell_faces(&mut self, s: usize) {
-        self.push(Problem::ShellFaces { shell: ShellId(s as u32) });
+        self.push(Problem::ShellFaces {
+            shell: ShellId(s as u32),
+        });
     }
     #[inline]
     fn shell_disconnected(&mut self, s: usize) {
-        self.push(Problem::ShellDisconnected { shell: ShellId(s as u32) });
+        self.push(Problem::ShellDisconnected {
+            shell: ShellId(s as u32),
+        });
     }
     #[inline]
     fn back_link(&mut self, what: u8, id: usize) {
@@ -659,7 +696,10 @@ impl crate::topo_edges::EdgeTopo for View<'_> {
                 .period
                 .is_none_or(|p| (edge.range.width() - p).abs() > tol::ANGULAR * 10.0)
         } else {
-            edge.curve.eval(edge.range.lo).distance(edge.curve.eval(edge.range.hi)) <= tol::LINEAR
+            edge.curve
+                .eval(edge.range.lo)
+                .distance(edge.curve.eval(edge.range.hi))
+                <= tol::LINEAR
         }
     }
 }
@@ -675,7 +715,11 @@ pub struct ShellView<'a> {
 
 impl<'a> ShellView<'a> {
     pub fn of(body: &'a Body) -> ShellView<'a> {
-        ShellView { view: View::of(body), shells: &body.shells, face_shells: &body.faces }
+        ShellView {
+            view: View::of(body),
+            shells: &body.shells,
+            face_shells: &body.faces,
+        }
     }
 }
 
@@ -921,20 +965,32 @@ fn check_shell_euler(body: &Body, out: &mut Vec<Problem>) {
 impl crate::topo_euler::EulerSink for Vec<Problem> {
     #[inline]
     fn shell_euler(&mut self, s: usize, value: i64) {
-        self.push(Problem::ShellEuler { shell: crate::body::ShellId(s as u32), value });
+        self.push(Problem::ShellEuler {
+            shell: crate::body::ShellId(s as u32),
+            value,
+        });
     }
 }
 
 /// Round each vertex, coedge to coedge: from one leaving it, back along its loop to the one
 /// arriving, then across to that one's partner, which leaves it again. One cycle is one fan.
 fn check_fans(body: &Body, out: &mut Vec<Problem>) {
-    crate::topo_fans::fans(&FanView { view: View::of(body), body }, out);
+    crate::topo_fans::fans(
+        &FanView {
+            view: View::of(body),
+            body,
+        },
+        out,
+    );
 }
 
 impl crate::topo_fans::FanSink for Vec<Problem> {
     #[inline]
     fn vertex_fans(&mut self, v: usize, n: usize) {
-        self.push(Problem::VertexFans { vertex: VertexId(v as u32), fans: n });
+        self.push(Problem::VertexFans {
+            vertex: VertexId(v as u32),
+            fans: n,
+        });
     }
 }
 

@@ -1919,7 +1919,8 @@ impl HolePatch {
     }
 
     fn seeds(&self) -> &[(Point2, Point3)] {
-        self.seeds.get_or_init(|| self.seed())
+        self.seeds
+            .get_or_init(|| crate::budget::uncounted(|| self.seed()))
     }
 
     fn seed(&self) -> Vec<(Point2, Point3)> {

@@ -1,4 +1,5 @@
 //! The core against brute force: classes as connected components, chains as walks, owners.
+use forge_math::ipow::Powi as _;
 use forge_math::rng::Rng;
 use forge_sheet_core::{ChainError, chain, classes, owner};
 
@@ -321,7 +322,7 @@ fn exact_is_fix_sheets() {
         // random, then near-ties: points on and near circles and lines by construction
         let (px, py, cx, cy) = (100.0 * next(), 100.0 * next(), 100.0 * next(), 100.0 * next());
         let r = if k % 2 == 0 {
-            ((px - cx).powi(2) + (py - cy).powi(2)).sqrt()
+            ((px - cx).ipow(2) + (py - cy).ipow(2)).sqrt()
         } else {
             50.0 * next()
         };

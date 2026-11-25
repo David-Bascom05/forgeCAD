@@ -103,6 +103,13 @@ pub enum Surface {
 }
 
 impl Surface {
+    /// Whether evaluating it may spend an op's work budget (`budget`): only a procedural surface
+    /// does (a file's spline patch, through forge-step, and what is made on one). A closed form
+    /// never does, so a cache of it need not be `uncounted`.
+    pub fn may_spend(&self) -> bool {
+        matches!(self, Surface::Procedural(_))
+    }
+
     /// The point, du and dv of `deriv`, bit for bit, with the second derivatives perhaps left out
     /// (a procedural surface's `deriv1`).
     pub fn deriv1(&self, uv: Point2) -> SurfDeriv {

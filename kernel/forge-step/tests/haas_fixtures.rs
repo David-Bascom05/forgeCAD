@@ -183,6 +183,63 @@ fn a_tolerant_edges_gap_is_covered_everywhere() {
     assert!(n > 0, "the part has tolerant edges");
 }
 
+/// A boolean and a check run under one operation's work budget: past it they refuse, `TooLong`,
+/// and return nothing of the work (an outer budget nests them, so a tiny one shows it at once on
+/// UMC-400's NURBS faces, whose bore otherwise runs to the operation's whole budget).
+#[test]
+fn a_boolean_and_a_check_past_their_budget_refuse() {
+    use forge_bool::{BoolError, Op, boolean};
+    use forge_math::{Frame, Point2, UnitVec3, Vec3};
+    let b = one("umc400_bore_runaway_73faces.step");
+    let bx = b.faces_box();
+    let small = bx.x.width().min(bx.y.width()).min(bx.z.width());
+    let len = 3.0 * bx.diagonal();
+    let p = forge_ops::Profile {
+        plane: Frame::from_z(bx.center() - Vec3::from(UnitVec3::Z) * (0.5 * len), UnitVec3::Z),
+        loops: vec![forge_ops::Profile::circle(Point2::ORIGIN, 0.13 * small, 7001)],
+    };
+    let tool = forge_ops::extrude(&p, len, 7000).unwrap();
+    {
+        let _tiny = forge_geom::budget::scoped(1);
+        assert!(matches!(
+            boolean(&b, &tool, Op::Subtract, 9000),
+            Err(BoolError::TooLong)
+        ));
+    }
+    {
+        let _tiny = forge_geom::budget::scoped(1);
+        assert_eq!(check(&b), vec![forge_topo::Problem::TooLong]);
+    }
+    // with the budget a check has, it finishes as before
+    assert!(check(&b).is_empty());
+}
+
+/// UMC-400 #63060 (73 faces): a bore through it, which ran without end in the curve-surface search
+/// on its NURBS faces (K051/K052 of the corpus), now stops at its work budget and refuses. Under
+/// an outer budget of 2^22, which the boolean's own (`budget::OP`, 2^29: about 90 s at opt-level
+/// 3) is held within: the search stops at whatever it is given.
+#[test]
+#[cfg_attr(target_os = "wasi", ignore = "90 s natively")]
+fn a_bore_through_umc400s_part_finishes() {
+    let _within = forge_geom::budget::scoped(1 << 22);
+    use forge_bool::{BoolError, Op, boolean};
+    use forge_math::{Frame, Point2, UnitVec3, Vec3};
+    let b = one("umc400_bore_runaway_73faces.step");
+    let bx = b.faces_box();
+    let small = bx.x.width().min(bx.y.width()).min(bx.z.width());
+    let len = 3.0 * bx.diagonal();
+    let p = forge_ops::Profile {
+        plane: Frame::from_z(bx.center() - Vec3::from(UnitVec3::Z) * (0.5 * len), UnitVec3::Z),
+        loops: vec![forge_ops::Profile::circle(Point2::ORIGIN, 0.13 * small, 7001)],
+    };
+    let tool = forge_ops::extrude(&p, len, 7000).unwrap();
+    match boolean(&b, &tool, Op::Subtract, 9000) {
+        Err(BoolError::TooLong) => {}
+        Ok(r) => assert!(check(&r).is_empty()),
+        Err(e) => panic!("{e:?}"),
+    }
+}
+
 /// `b` moved by `d`, as forge-stress moves its copies (names salted, so the two share none).
 /// FALLBACK's, from fix/torus-tangent-branches' tests/haas_booleans.rs.
 fn moved(b: &Body, d: forge_math::Vec3) -> Body {

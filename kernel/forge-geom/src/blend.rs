@@ -1243,13 +1243,15 @@ impl Spring {
             return whole();
         }
         let pts = self.samples.get_or_init(|| {
-            let n = 24;
-            (0..=n)
-                .map(|i| {
-                    let t = d.lo + (d.hi - d.lo) * i as f64 / n as f64;
-                    (t, self.at(t))
-                })
-                .collect()
+            crate::budget::uncounted(|| {
+                let n = 24;
+                (0..=n)
+                    .map(|i| {
+                        let t = d.lo + (d.hi - d.lo) * i as f64 / n as f64;
+                        (t, self.at(t))
+                    })
+                    .collect()
+            })
         });
         let mut out: Vec<Interval> = Vec::new();
         for pair in pts.windows(2) {
@@ -1431,20 +1433,22 @@ impl ProceduralCurve for Spring {
         let (twin, c) = self
             .smooth
             .get_or_init(|| {
-                let Curve::Intersection(ic) = &self.spine else {
-                    return None;
-                };
-                let c = Arc::new(ChordCurve::new(ic.as_ref().clone())?);
-                let twin = Curve::Procedural(ProcCurve(Arc::new(Spring {
-                    spine: Curve::Procedural(ProcCurve(c.clone())),
-                    surface: self.surface.clone(),
-                    d: self.d,
-                    on: self.on.as_ref().map(|(s, v)| (s.smooth().clone(), *v)),
-                    smooth: OnceLock::new(),
-                    samples: OnceLock::new(),
-                    scan: Default::default(),
-                })));
-                Some((twin, c))
+                crate::budget::uncounted(|| {
+                    let Curve::Intersection(ic) = &self.spine else {
+                        return None;
+                    };
+                    let c = Arc::new(ChordCurve::new(ic.as_ref().clone())?);
+                    let twin = Curve::Procedural(ProcCurve(Arc::new(Spring {
+                        spine: Curve::Procedural(ProcCurve(c.clone())),
+                        surface: self.surface.clone(),
+                        d: self.d,
+                        on: self.on.as_ref().map(|(s, v)| (s.smooth().clone(), *v)),
+                        smooth: OnceLock::new(),
+                        samples: OnceLock::new(),
+                        scan: Default::default(),
+                    })));
+                    Some((twin, c))
+                })
             })
             .as_ref()?;
         Some((twin, Interval::new(c.u_of(range.lo), c.u_of(range.hi))))
@@ -2048,19 +2052,21 @@ impl Procedural for Pipe {
     fn smooth(&self) -> Option<&Surface> {
         self.smooth
             .get_or_init(|| {
-                let Curve::Intersection(ic) = &self.spine else {
-                    return None;
-                };
-                Some(Surface::Procedural(Proc(Arc::new(Pipe {
-                    spine: ChordCurve::new(ic.as_ref().clone())?.curve(),
-                    first: self.first.clone(),
-                    second: self.second.clone(),
-                    d_first: self.d_first,
-                    d_second: self.d_second,
-                    radius: self.radius,
-                    near: self.near,
-                    smooth: OnceLock::new(),
-                }))))
+                crate::budget::uncounted(|| {
+                    let Curve::Intersection(ic) = &self.spine else {
+                        return None;
+                    };
+                    Some(Surface::Procedural(Proc(Arc::new(Pipe {
+                        spine: ChordCurve::new(ic.as_ref().clone())?.curve(),
+                        first: self.first.clone(),
+                        second: self.second.clone(),
+                        d_first: self.d_first,
+                        d_second: self.d_second,
+                        radius: self.radius,
+                        near: self.near,
+                        smooth: OnceLock::new(),
+                    }))))
+                })
             })
             .as_ref()
     }
@@ -2585,15 +2591,17 @@ impl Procedural for ConicPipe {
     fn smooth(&self) -> Option<&Surface> {
         self.smooth
             .get_or_init(|| {
-                let Surface::Procedural(sp) = Procedural::smooth(&self.pipe)? else {
-                    return None;
-                };
-                let p = sp.as_any()?.downcast_ref::<Pipe>()?;
-                Some(Surface::Procedural(Proc(Arc::new(ConicPipe::over(
-                    p,
-                    self.w,
-                    self.theta_max,
-                )))))
+                crate::budget::uncounted(|| {
+                    let Surface::Procedural(sp) = Procedural::smooth(&self.pipe)? else {
+                        return None;
+                    };
+                    let p = sp.as_any()?.downcast_ref::<Pipe>()?;
+                    Some(Surface::Procedural(Proc(Arc::new(ConicPipe::over(
+                        p,
+                        self.w,
+                        self.theta_max,
+                    )))))
+                })
             })
             .as_ref()
     }

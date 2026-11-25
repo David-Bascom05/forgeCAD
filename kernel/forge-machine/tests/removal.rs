@@ -2,6 +2,7 @@ use forge_machine::gcode::Control;
 use forge_machine::library::builtin;
 use forge_machine::removal;
 use forge_machine::sim::{self, Cut, Setup, SimTool};
+use forge_math::ipow::Powi as _;
 
 fn vmc_setup(m: &forge_machine::MachineDef, r: f64, corner: f64) -> Setup<'_> {
     let mut s = Setup::new(m, Control::for_dialect(m, "fanuc", 1).unwrap()).unwrap();
@@ -49,7 +50,7 @@ fn a_ball_plunge_leaves_its_sphere() {
     for j in 0..r.map.ny {
         for i in 0..r.map.nx {
             let (x, y) = r.map.node(i, j);
-            let d = ((x - 25.0).powi(2) + (y - 15.0).powi(2)).sqrt();
+            let d = ((x - 25.0).ipow(2) + (y - 15.0).ipow(2)).sqrt();
             let want = if d <= 5.0 {
                 (4.0 + 5.0 - (25.0 - d * d).sqrt()).min(10.0)
             } else {
