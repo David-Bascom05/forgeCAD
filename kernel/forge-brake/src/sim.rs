@@ -488,6 +488,21 @@ pub struct StepCtx<'a> {
     /// The legs' straight runs (far, near) and the part's length along the bed, if already known
     /// for these bends done: they read no tool.
     pub legs: Option<(f64, f64, f64)>,
+    /// A hem's flattening stroke, in place of an air bend (`flattening`).
+    pub flatten: Option<Flat>,
+}
+
+/// A hem's flattening stroke: the part's base (zone j's wall a side) flat on a flat die, the leg
+/// closed from the pre-bend's turn to the hem's by a flat punch face coming down on the part's
+/// highest point.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Flat {
+    /// The pre-bend's turn, where the stroke starts.
+    pub from: f64,
+    /// The leg's reach from the zone's far tangent line (zone-end x').
+    pub reach: f64,
+    /// Where across the bed (zone x) the tools' centre line is: the hem's middle.
+    pub x_ref: f64,
 }
 
 /// A distance verdict's key: the piece (strip kind and id, the done bends on its path), the tool
@@ -705,6 +720,7 @@ impl<'a> StepCtx<'a> {
             contact_kept: None,
             memo: None,
             legs: None,
+            flatten: None,
         }
     }
 
@@ -724,6 +740,14 @@ impl<'a> StepCtx<'a> {
             Side::B => b.end_apply(phi, q),
             _ => q,
         };
+        if let Some(f) = &self.flatten {
+            // zone coordinates keep wall a flat at every turn: it lies on the die, its outside
+            // skin down (z flipped with sigma, and y with it, a turn, not a mirror)
+            let x = (p.x + (-f.x_ref)) * self.rot;
+            let y = (p.y + (-0.5 * b.len)) * (self.rot * b.sigma);
+            let z = p.z * b.sigma + self.flat_off() - self.ztip(phi);
+            return V3::new(x, y, z);
+        }
         let pm = b.fold(T::c(0.5 * b.ba), T::c(0.5 * b.len), T::c(b.w_inside(self.t)), phi);
         let h = phi * 0.5;
         let (s, c) = (h.sin(), h.cos());
@@ -745,6 +769,61 @@ impl<'a> StepCtx<'a> {
         self
     }
 
+    /// This step as a hem's flattening stroke from the pre-bend's turn `from` (at least a
+    /// quarter turn) to the hem's own: the base flat on the die, the leg closed by a flat face.
+    /// None when the leg has walls beyond it (not simulated).
+    pub fn flattening(mut self, from: f64) -> Option<Self> {
+        let b = self.bj;
+        if from < 0.5 * dmath::PI
+            || self
+                .pieces
+                .iter()
+                .any(|p| p.side == Side::B && !matches!(p.kind, Kind::Wall { w, .. } if w == b.b))
+        {
+            return None;
+        }
+        let reach = self
+            .pieces
+            .iter()
+            .find(|p| matches!(p.kind, Kind::Wall { w, .. } if w == b.b))?
+            .dom[0]
+            .hi;
+        self.theta = b.theta;
+        self.phimax = b.theta;
+        self.flatten = Some(Flat {
+            from,
+            reach,
+            x_ref: -0.5 * reach,
+        });
+        Some(self)
+    }
+
+    /// Where the stroke starts: 0 for an air bend, the pre-bend's turn for a flattening.
+    pub fn phi0(&self) -> f64 {
+        self.flatten.map_or(0.0, |f| f.from)
+    }
+
+    /// Flattening: the height of wall a's outside skin over its zone coordinates' z (sigma
+    /// applied), so that skin lies on the die top.
+    fn flat_off(&self) -> f64 {
+        if self.bj.sigma > 0.0 { self.t } else { 0.0 }
+    }
+
+    /// Flattening: the part's highest point at turn phi (a quarter turn or more), where the flat
+    /// face meets it. The leg is flat: its highest point is a corner at its far end, on one skin;
+    /// the fold's outside skin is highest at its apex (a quarter turn in). So the greatest of the
+    /// three is the part's top; a cell's interval of turns gets an enclosure of it.
+    fn flat_top<T: Sc>(&self, f: &Flat, phi: T) -> T {
+        let b = self.bj;
+        let (sg, off) = (b.sigma, self.flat_off());
+        let w_out = if sg > 0.0 { -self.t } else { 0.0 };
+        let z0 = T::c(0.0);
+        let apex = b.fold(phi.recip() * (b.ba * 0.5 * dmath::PI), z0, T::c(w_out), phi);
+        let e0 = b.end_apply(phi, V3::new(T::c(f.reach), z0, z0));
+        let e1 = b.end_apply(phi, V3::new(T::c(f.reach), z0, T::c(-self.t)));
+        (apex.z * sg).max(e0.z * sg).max(e1.z * sg) + off
+    }
+
     /// The shoulder's contact on the leg through the motion: its least and farthest place, where
     /// the least is, and whether both are certified. It reads the bend, the die and the overbend
     /// only (a search keeps it by bend and die: `contact_kept`).
@@ -758,6 +837,9 @@ impl<'a> StepCtx<'a> {
     /// The punch tip's height above the die top at turn φ.
     pub fn ztip<T: Sc>(&self, phi: T) -> T {
         let b = self.bj;
+        if let Some(f) = &self.flatten {
+            return self.flat_top(f, phi);
+        }
         let h = phi * 0.5;
         let k = self.rs + b.r - b.rn + self.t;
         let zo = (h.sin() * (-self.xs) + h.vers() * k + h.vsc() * (0.5 * b.ba)) * h.cos().recip();
@@ -780,9 +862,9 @@ impl<'a> StepCtx<'a> {
 
     fn image<T: Sc>(&self, pc: &Piece, q: [T; 4], phase: Phase, attach: Attach) -> V3<T> {
         let (phi, lift): (T, Option<T>) = match phase {
-            Phase::Static => (T::c(0.0), None),
+            Phase::Static => (T::c(self.phi0()), None),
             Phase::Bend => (q[3], None),
-            Phase::Approach => (T::c(0.0), Some(q[3])),
+            Phase::Approach => (T::c(self.phi0()), Some(q[3])),
             Phase::Return => (T::c(self.theta), Some(q[3])),
         };
         let r = self.rel(self.side_point(pc, q[0], q[1], q[2], phi), pc.side, phi);
@@ -813,6 +895,16 @@ impl<'a> StepCtx<'a> {
     fn on_working(&self, pc: &Piece, c: &Cell, kind: Work) -> bool {
         if kind == Work::None {
             return false;
+        }
+        if self.flatten.is_some() {
+            // the hem itself between the faces: the base on the die, the fold and the leg under
+            // the punch face (the stroke's own contact; its rules are the flattening's)
+            let b = self.bj;
+            return match pc.kind {
+                Kind::ZoneJ { .. } => true,
+                Kind::Wall { w, .. } => w == b.a || w == b.b,
+                _ => false,
+            };
         }
         if matches!(pc.kind, Kind::ZoneJ { .. }) {
             return true;
@@ -1067,8 +1159,8 @@ impl<'a> StepCtx<'a> {
     ) {
         let s = match phase {
             Phase::Static => Interval::point(0.0),
-            Phase::Approach => Interval::new(self.ztip(0.0), self.z_tdc.max(self.ztip(0.0))),
-            Phase::Bend => Interval::new(0.0, self.phimax),
+            Phase::Approach => Interval::new(self.ztip(self.phi0()), self.z_tdc.max(self.ztip(self.phi0()))),
+            Phase::Bend => Interval::new(self.phi0(), self.phimax),
             Phase::Return => Interval::new(self.ztip(self.theta), self.z_tdc.max(self.ztip(self.theta))),
         };
         let limit = self.tl.clearance;
@@ -1296,7 +1388,7 @@ impl<'a> StepCtx<'a> {
                 let h = match (phase, q) {
                     (Phase::Bend, Some(q)) => self.ztip(q[3]),
                     (Phase::Approach | Phase::Return, Some(q)) => q[3],
-                    _ => self.ztip(0.0),
+                    _ => self.ztip(self.phi0()),
                 };
                 [a[0], a[1], a[2] + h]
             }
@@ -1307,8 +1399,8 @@ impl<'a> StepCtx<'a> {
     fn phase_span(&self, phase: Phase) -> Interval {
         match phase {
             Phase::Static => Interval::point(0.0),
-            Phase::Approach => Interval::new(self.ztip(0.0), self.z_tdc.max(self.ztip(0.0))),
-            Phase::Bend => Interval::new(0.0, self.phimax),
+            Phase::Approach => Interval::new(self.ztip(self.phi0()), self.z_tdc.max(self.ztip(self.phi0()))),
+            Phase::Bend => Interval::new(self.phi0(), self.phimax),
             Phase::Return => Interval::new(self.ztip(self.theta), self.z_tdc.max(self.ztip(self.theta))),
         }
     }
@@ -1391,7 +1483,7 @@ impl<'a> StepCtx<'a> {
                         (Attach::Die, _) => Interval::point(0.0),
                         (Attach::Punch, Phase::Bend) => self.ztip(c.cell.p[3]),
                         (Attach::Punch, Phase::Approach | Phase::Return) => c.cell.p[3],
-                        (Attach::Punch, Phase::Static) => Interval::point(self.ztip(0.0)),
+                        (Attach::Punch, Phase::Static) => Interval::point(self.ztip(self.phi0())),
                     };
                     let z = e[2] + lift;
                     for (k, iv) in [e[0], e[1], z].into_iter().enumerate() {
@@ -1437,7 +1529,7 @@ impl<'a> StepCtx<'a> {
         // the least gap allowed (0: touching is the limit), less the touch tolerance
         let limit = self.tl.self_clearance - 1e-5;
         let res = 0.02;
-        let s = Interval::new(0.0, self.phimax);
+        let s = Interval::new(self.phi0(), self.phimax);
         let (a, b) = (self.bj.a, self.bj.b);
         let wall_of = |pc: &Piece| match pc.kind {
             Kind::Wall { w, .. } => Some(w),
@@ -1529,7 +1621,7 @@ impl<'a> StepCtx<'a> {
     pub fn self_contacts(&self) -> Vec<Contact> {
         let limit = self.tl.self_clearance - 1e-5;
         let res = 0.02;
-        let s = Interval::new(0.0, self.phimax);
+        let s = Interval::new(self.phi0(), self.phimax);
         let (a, b) = (self.bj.a, self.bj.b);
         let wall_of = |pc: &Piece| match pc.kind {
             Kind::Wall { w, .. } => Some(w),
@@ -2329,7 +2421,7 @@ impl StepCtx<'_> {
     /// The punch tip's height while the part is handled: top dead centre, never below the flat
     /// sheet (as the scene stands it).
     fn handle_top(&self) -> f64 {
-        self.z_tdc.max(self.ztip(0.0))
+        self.z_tdc.max(self.ztip(self.phi0()))
     }
 
     /// The step's bodies during handling, the ram at top dead centre: with `gauge`, its
@@ -2956,5 +3048,139 @@ mod contact_tests {
         assert!(checked > 0, "the sample found the collision");
         let deepest = cs.iter().filter_map(|c| c.depth).fold(f64::INFINITY, f64::min);
         assert!(deepest < tl.clearance);
+    }
+}
+
+#[cfg(test)]
+mod hem_tests {
+    use super::*;
+    use forge_math::Frame;
+    use forge_ops::{ProfileLoop, Segment};
+    use forge_sheet::{BendRule, FeatureId, Gauge, HemKind, HemSpec, Sheet};
+
+    /// A 120 x 60 plate, 1 mm, a hem of `kind` on its right edge, leg 10.
+    fn hemmed(kind: HemKind, up: bool) -> Sheet {
+        let pts = [(0.0, 0.0), (120.0, 0.0), (120.0, 60.0), (0.0, 60.0)];
+        let lp = ProfileLoop::new(
+            (0..4)
+                .map(|i| {
+                    let (a, b) = (pts[i], pts[(i + 1) % 4]);
+                    (
+                        Segment::Line {
+                            a: Point2::new(a.0, a.1),
+                            b: Point2::new(b.0, b.1),
+                        },
+                        i as u64,
+                    )
+                })
+                .collect(),
+        );
+        let (mut s, base) = Sheet::face(
+            FeatureId(1),
+            Gauge {
+                thickness: 1.0,
+                radius: 1.0,
+                rule: BendRule::K(0.4),
+            },
+            Frame::WORLD,
+            &[lp],
+        )
+        .unwrap();
+        s.hem(base, 1, HemSpec { kind, leg: 10.0, up }, None).unwrap();
+        s
+    }
+
+    fn su() -> Setup {
+        Setup {
+            punch: 0,
+            die: 0,
+            rotate: false,
+        }
+    }
+
+    /// Every sampled point of the part at turn phi, in the press frame.
+    fn points(ctx: &StepCtx, phi: f64) -> Vec<[f64; 3]> {
+        let mut out = Vec::new();
+        for pc in &ctx.pieces {
+            let [u, v, w] = pc.dom;
+            for i in 0..=8 {
+                for k in 0..=2 {
+                    for ww in [w.lo, w.hi] {
+                        let (uu, vv) = (
+                            (u.lo + u.width() * i as f64 / 8.0).clamp(u.lo + 1e-7, u.hi - 1e-7),
+                            (v.lo + v.width() * k as f64 / 2.0).clamp(v.lo + 1e-7, v.hi - 1e-7),
+                        );
+                        let inside = match &pc.kind {
+                            Kind::Wall { region, .. } => region.contains(Point2::new(uu, vv)),
+                            _ => true,
+                        };
+                        if !inside {
+                            continue;
+                        }
+                        let q = ctx.side_point(pc, uu, vv, ww, phi);
+                        let r = ctx.rel(q, pc.side, phi);
+                        out.push([r.x, r.y, r.z + ctx.ztip(phi)]);
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// Flattening an open hem from the 30 degree pre-bend: the base lies on the die (its lowest
+    /// point at 0) at every turn; the punch face is the part's highest point (no sampled point
+    /// above it, one at it); it comes down as the turn grows; at the hem's turn it stands at two
+    /// thicknesses and the gap; and a cell's interval of turns encloses the face's heights.
+    #[test]
+    fn flattening_lays_the_base_flat_and_the_face_on_the_top() {
+        let tl = crate::library::std_eu();
+        for up in [true, false] {
+            let gap = 1.0;
+            let m = Model::new(&hemmed(HemKind::Open { gap }, up)).unwrap();
+            let from = dmath::PI - 30f64.to_radians();
+            let ctx = StepCtx::new(&m, &tl, &[false], 0, su(), 0.0)
+                .flattening(from)
+                .expect("a leg with nothing beyond");
+            assert_eq!(ctx.phi0(), from);
+            assert_eq!(ctx.phimax, m.bends[0].theta);
+            let mut last = f64::INFINITY;
+            for i in 0..=20 {
+                let phi = from + (ctx.phimax - from) * i as f64 / 20.0;
+                let top = ctx.ztip(phi);
+                let ps = points(&ctx, phi);
+                let lo = ps.iter().map(|p| p[2]).fold(f64::INFINITY, f64::min);
+                let hi = ps.iter().map(|p| p[2]).fold(f64::NEG_INFINITY, f64::max);
+                assert!(lo.abs() < 1e-9, "up {up} phi {phi}: the base at {lo}");
+                assert!(
+                    hi <= top + 1e-9 && hi >= top - 0.05,
+                    "up {up} phi {phi}: top {top}, part {hi}"
+                );
+                assert!(top <= last + 1e-12, "up {up}: the face goes up at {phi}");
+                last = top;
+            }
+            let end = ctx.ztip(ctx.phimax);
+            assert!((end - (2.0 * m.t + gap)).abs() < 1e-9, "up {up}: closed at {end}");
+            for k in 0..10 {
+                let a = from + (ctx.phimax - from) * k as f64 / 10.0;
+                let b = from + (ctx.phimax - from) * (k + 1) as f64 / 10.0;
+                let e = ctx.ztip(Interval::new(a, b));
+                for i in 0..=10 {
+                    let z = ctx.ztip(a + (b - a) * i as f64 / 10.0);
+                    assert!(e.lo <= z && z <= e.hi, "{z} outside {e:?}");
+                }
+            }
+        }
+    }
+
+    /// The pre-bend must be past a quarter turn, and a leg with walls beyond it is not flattened.
+    #[test]
+    fn flattening_refuses_what_it_does_not_model() {
+        let tl = crate::library::std_eu();
+        let m = Model::new(&hemmed(HemKind::Open { gap: 1.0 }, true)).unwrap();
+        assert!(
+            StepCtx::new(&m, &tl, &[false], 0, su(), 0.0)
+                .flattening(1.0)
+                .is_none()
+        );
     }
 }

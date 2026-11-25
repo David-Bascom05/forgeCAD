@@ -38,18 +38,15 @@ fn hemmed(kind: HemKind, up: bool) -> Sheet {
     s
 }
 
+/// A hem joint is a bend of the model like any other: its full refold is the builder's part, to
+/// the bit, folded up and down.
 #[test]
-fn zz_probe_hem_refold() {
-    for (kind, up) in [
-        (HemKind::Open { gap: 1.0 }, true),
-        (HemKind::Open { gap: 1.0 }, false),
-        (HemKind::Teardrop { radius: 2.0, angle: dmath::PI * 1.2 }, true),
-    ] {
-        let s = hemmed(kind, up);
+fn a_hems_refold_is_the_builders_part() {
+    for up in [true, false] {
+        let s = hemmed(HemKind::Open { gap: 1.0 }, up);
         let m = Model::new(&s).unwrap();
         let built = forge_sheet::build_with(&s, Map::Folded).unwrap();
-        let b = &m.bends[0];
-        eprintln!("ZZ {kind:?} up {up}: theta {} sigma {} r {} ba {}", b.theta, b.sigma, b.r, b.ba);
+        assert!((m.bends[0].theta - dmath::PI).abs() < 1e-12);
         let phi: Vec<f64> = m.bends.iter().map(|b| b.theta).collect();
         let f = m.frames(&phi);
         for (wi, w) in m.walls.iter().enumerate() {
@@ -57,8 +54,11 @@ fn zz_probe_hem_refold() {
             for p in [(0.0, 0.0, 0.0), (5.0, 5.0, -1.0), (3.0, 40.0, 0.0)] {
                 let mine = f[wi].apply(forge_brake::geo::V3::new(p.0, p.1, p.2));
                 let theirs = place.frame.point_to_world(Point3::new(p.0, p.1, p.2));
-                let d = ((mine.x - theirs.x).powi(2) + (mine.y - theirs.y).powi(2) + (mine.z - theirs.z).powi(2)).sqrt();
-                eprintln!("ZZ   wall {wi} d {d:e}");
+                assert_eq!(
+                    [mine.x, mine.y, mine.z],
+                    [theirs.x, theirs.y, theirs.z],
+                    "up {up} wall {wi}"
+                );
             }
         }
     }

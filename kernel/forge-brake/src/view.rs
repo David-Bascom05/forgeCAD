@@ -40,7 +40,7 @@ pub fn frame(m: &Model, tl: &Tooling, done: &[bool], st: &Step, t: f64) -> Frame
     let ctx = StepCtx::new(m, tl, done, st.bend, st.setup, st.overbend);
     let t = t.clamp(0.0, 1.0);
     let (phase, phi, tip) = if t < 0.2 {
-        let h = ctx.z_tdc + (ctx.ztip(0.0) - ctx.z_tdc) * (t / 0.2);
+        let h = ctx.z_tdc + (ctx.ztip(ctx.phi0()) - ctx.z_tdc) * (t / 0.2);
         (Phase::Approach, 0.0, h)
     } else if t <= 0.8 {
         // up to the overbend and sprung back over the last tenth of the bend

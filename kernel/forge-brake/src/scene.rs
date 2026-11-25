@@ -812,10 +812,10 @@ impl<'a> Scene<'a> {
         // the punch's top: top dead centre, but never below the flat sheet it meets (tools taller
         // than the open height leave it there: the open height check fails, and the punch is drawn
         // standing on the sheet, not through it, as the checks' own approach and return do)
-        let top = ctx.z_tdc.max(ctx.ztip(0.0));
+        let top = ctx.z_tdc.max(ctx.ztip(ctx.phi0()));
         let (phi, tip) = match stage {
             Stage::Handle | Stage::Gauge => (0.0, top),
-            Stage::Approach => (0.0, lerp(top, ctx.ztip(0.0), f)),
+            Stage::Approach => (0.0, lerp(top, ctx.ztip(ctx.phi0()), f)),
             Stage::Bend => {
                 let phi = ctx.phimax * f;
                 (phi, ctx.ztip(phi))
@@ -1532,7 +1532,7 @@ impl<'a> Scene<'a> {
             mesh: bedm,
             strip: None,
         });
-        let ram_top_open = ctx.z_tdc.max(ctx.ztip(0.0)) + ph + beam_h;
+        let ram_top_open = ctx.z_tdc.max(ctx.ztip(ctx.phi0())) + ph + beam_h;
         if let Some(f) = pr.frame {
             let g = 0.5 * pr.housing_gap;
             let front = -pr.bed.front.max(pr.ram.front) - 150.0;

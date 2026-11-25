@@ -23,6 +23,8 @@ pub trait Sc:
     fn div_c(self, c: f64) -> Self;
     /// sin x / x (1 at 0).
     fn sinc(self) -> Self;
+    /// The greater (for an interval: the greater of every pair, enclosed).
+    fn max(self, o: Self) -> Self;
     /// (1 - cos x) / x (0 at 0), as x/2 sinc(x/2)^2 so it is exact near 0.
     fn vsc(self) -> Self {
         let h = self * 0.5;
@@ -60,6 +62,9 @@ impl Sc for f64 {
     }
     fn recip(self) -> f64 {
         1.0 / self
+    }
+    fn max(self, o: f64) -> f64 {
+        f64::max(self, o)
     }
     fn div_c(self, c: f64) -> f64 {
         self / c
@@ -99,6 +104,12 @@ impl Sc for Interval {
     }
     fn recip(self) -> Interval {
         Interval::point(1.0).div(&self)
+    }
+    fn max(self, o: Interval) -> Interval {
+        Interval {
+            lo: self.lo.max(o.lo),
+            hi: self.hi.max(o.hi),
+        }
     }
     fn div_c(self, c: f64) -> Interval {
         self.div(&Interval::point(c))

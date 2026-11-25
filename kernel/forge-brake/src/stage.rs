@@ -206,7 +206,7 @@ fn layout(m: &Model, tl: &Tooling, prog: &Program, tight: bool) -> Option<Layout
 /// The ram's travel through a step: approach to the sheet, the bend, the return.
 fn travel(m: &Model, tl: &Tooling, done: &[bool], st: &crate::sim::Step) -> Travel {
     let ctx = StepCtx::new(m, tl, done, st.bend, st.setup, st.overbend);
-    let pinch = ctx.ztip(0.0);
+    let pinch = ctx.ztip(ctx.phi0());
     let bottom = ctx.ztip(ctx.phimax);
     Travel {
         approach: (ctx.z_tdc - pinch).max(0.0),
