@@ -1,6 +1,7 @@
 //! The wall's colours on the screen, headless: the pixels by the MIN marker are the legend's MIN
 //! colour, on the modelled part and the simulated one, the marker in the same place both ways.
 
+use forge_math::ipow::Powi as _;
 use forge_render::gui::{Gui, Headless};
 use forge_render::shell::thermo::BANDS;
 use forge_render::shell::thermo_ui::Cmd;
@@ -77,7 +78,7 @@ fn the_min_markers_pixels_are_the_legends_min_colour() {
     // the model's thinnest point is the same sheet point either way, off it by t or by the wall:
     // the two within the sheet's thickness and a half of each other (t = 2)
     let d: f32 = (0..3)
-        .map(|k| (markers[0][k] - markers[1][k]).powi(2))
+        .map(|k| (markers[0][k] - markers[1][k]).ipow(2))
         .sum::<f32>()
         .sqrt();
     assert!(d < 3.0, "{d}");

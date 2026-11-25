@@ -7,6 +7,7 @@
 //! The words it uses about the program are the run's: a check's verdict and the program's
 //! certification come from the certified checker; the stock's colours are labelled a preview.
 
+use forge_math::ipow::Powi as _;
 use crate::camsim::draw::{StockColour, look};
 use crate::camsim::timeline::{Kind, clock};
 use crate::camsim::{Marker, Sim};
@@ -76,6 +77,15 @@ pub struct CamSimUi {
     /// The toolpath coloured by a measured value per move (the workspace's colour-by).
     pub values: Option<crate::camsim::draw::Values>,
     pub follow: bool,
+    /// The operator's view while the posted code plays on a machine: the camera's target held
+    /// fixed in the machine's base frame (so the table and the part move under a still head, as
+    /// they do in the shop), carried into the part's frame each frame; re-anchored where the
+    /// person pans. Off: the part stays still and the machine moves about it.
+    pub shop_eye: bool,
+    /// The finer stock about the tool (`Sim::detail_at`), in the material's colours.
+    pub detail: bool,
+    /// (the target in the machine's base frame, the target last set in the part's frame).
+    pub eye_anchor: Option<([f64; 3], [f32; 3])>,
     /// Cutting soft jaws: the part they will hold drawn faint where it will sit (off: it is not
     /// there while they are cut).
     pub jaw_part: bool,
@@ -143,6 +153,9 @@ impl CamSimUi {
             machine: true,
             values: None,
             follow: false,
+            shop_eye: true,
+            detail: true,
+            eye_anchor: None,
             jaw_part: false,
             label_always: false,
             path_width: 2.0,
@@ -320,7 +333,7 @@ impl CamSimUi {
                 .min_by(|a, b| {
                     let d = |t: f64| {
                         let q = self.sim.tl.pos(t).map_or([f64::INFINITY; 3], |x| x.0);
-                        (0..3).map(|k| (q[k] - at[k]).powi(2)).sum::<f64>()
+                        (0..3).map(|k| (q[k] - at[k]).ipow(2)).sum::<f64>()
                     };
                     d(*a).total_cmp(&d(*b))
                 })
@@ -1359,6 +1372,17 @@ fn program(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
 fn display(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
     heading(ui, t, "Playback");
     ui.checkbox(&mut st.follow, "Follow the tool");
+    if ui
+        .checkbox(&mut st.detail, "Fine detail at the tool")
+        .on_hover_text("The stock about the tool on a grid of about 0.03 mm, so a ball's cusps and the stepover show; the rest of the stock on the coarser grid. Display only.")
+        .changed()
+    {
+        st.drawn_key = None;
+    }
+    if st.sim.machine().is_some() {
+        ui.checkbox(&mut st.shop_eye, "Operator's view")
+            .on_hover_text("The camera stays put in the machine: the table and the part move under the head, as in the shop. Off: the part stays still and the machine moves about it.");
+    }
     if st.sim.setups.iter().any(|s| s.jaws_for.is_some()) {
         ui.checkbox(&mut st.jaw_part, "Finished part in jaws")
             .on_hover_text("Shows the part faint where it will sit, and seated once the jaws are cut");
@@ -1685,6 +1709,7 @@ pub fn checked_line(markers: &[Marker], leftover_done: bool) -> (String, bool) {
             "shank_collision",
             "fixture_collision",
             "holder_into_stock",
+            "holder_into_stock_grid",
             "machine_collision",
         ],
         "holder and fixture clear",
@@ -1692,6 +1717,7 @@ pub fn checked_line(markers: &[Marker], leftover_done: bool) -> (String, bool) {
     let (r, rn) = said(
         &[
             "rapid_into_stock",
+            "rapid_into_stock_grid",
             "rapid_into_part",
             "rapid_into_workholding",
             "rapid_clear",
@@ -1749,7 +1775,7 @@ pub fn note_words(raw: &str) -> String {
 }
 
 /// A check's rule as a group's title.
-fn rule_title(rule: &str) -> String {
+pub fn rule_title(rule: &str) -> String {
     match rule {
         "holder_collision" => "Holder hits".into(),
         "fixture_collision" => "Fixture hits".into(),
@@ -1762,6 +1788,9 @@ fn rule_title(rule: &str) -> String {
         "rapid_into_part" => "Rapids into the part".into(),
         "rapid_into_workholding" => "Rapids into the workholding".into(),
         "holder_into_stock" => "Holder into the stock".into(),
+        // the display grid's, not proven: said so in their heading
+        "rapid_into_stock_grid" => "Rapids into the stock (approximate)".into(),
+        "holder_into_stock_grid" => "Holder into the stock (approximate)".into(),
         "machine_collision" => "Machine collisions".into(),
         "refused" => "Refused ops".into(),
         "overtravel" => "Beyond the machine's travel".into(),

@@ -1,5 +1,6 @@
 mod agent_bridge;
 mod fg;
+mod model;
 mod serve;
 mod web;
 
@@ -52,6 +53,8 @@ fn usage() -> ExitCode {
          forgecad serve | mcp [--root DIR] [--writable]   (JSON-RPC / MCP on stdio, parts under DIR, default .; edits only if --writable)\n       \
          forgecad web DIR [--port P] [--bind ADDR] [--token T] [--app WEBDIR] [--read-only]   (the browser app on DIR's files)\n       \
          forgecad import FILE.FCStd [-o DIR] [--json]   (each body a part file DIR/<file>.<body>.fg)\n       \
+         forgecad import FILE.step|stp|igs|iges|brep|x_t|x_b [-o DIR] [--json]   (the model beside DIR/<file>.fg, which imports it)\n       \
+         forgecad convert FILE.step|stp|igs|iges|brep|x_t|x_b -o OUT.step [ap242] [--json]   (its solids as STEP)\n       \
          forgecad tool import FILE.json|FILE.tools [--project DIR | --user] [--json]   (a Fusion tool library into your own cam/ tools, cited to the file)\n       \
          forgecad machine SETUP.toml [--json]   (posted G-code on a machine: timeline, collisions, removal)\n       \
          forgecad machine list [--json] | new NAME (--from M | --template T) [--project] | check FILE|NAME [--json]   (your own machines)\n       \
@@ -285,6 +288,7 @@ fn main() -> ExitCode {
         }
         Some("web") => web::main(&args[2..]),
         Some("import") if args.len() >= 3 => import(&args[2..]),
+        Some("convert") if args.len() >= 3 => convert(&args[2..]),
         Some("machine") if args.len() >= 3 => machine(&args[2..]),
         Some("tool") if args.len() >= 4 && args[2] == "import" => tool_import(&args[3..]),
         Some("mesh") if args.len() >= 3 => mesh(&args[2..]),
@@ -620,6 +624,46 @@ fn machine(argv: &[String]) -> ExitCode {
     }
 }
 
+/// A model tool's reply: its JSON or its line; an error to stderr.
+fn said(r: Result<(forge_agent::json::Json, String), String>, json: bool) -> ExitCode {
+    match r {
+        Ok((j, line)) => {
+            println!("{}", if json { j.to_string() } else { line });
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            if json {
+                println!(
+                    "{}",
+                    forge_agent::json::Json::obj(vec![("ok", false.into()), ("error", e.as_str().into())])
+                );
+            } else {
+                eprintln!("{e}");
+            }
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// `convert FILE -o OUT.step [ap242]`: a model file's solids as STEP.
+fn convert(argv: &[String]) -> ExitCode {
+    let (mut out, mut json, mut ap242, mut file) = (None, false, false, None);
+    let mut it = argv.iter();
+    while let Some(w) = it.next() {
+        match w.as_str() {
+            "-o" => out = it.next().cloned(),
+            "--json" => json = true,
+            "ap242" => ap242 = true,
+            "ap214" => ap242 = false,
+            _ => file = Some(w.clone()),
+        }
+    }
+    let Some(file) = file else { return usage() };
+    let path = Path::new(&file);
+    let out = out.unwrap_or_else(|| format!("{}.step", path.with_extension("").display()));
+    said(model::convert(path, Path::new(&out), ap242), json)
+}
+
 /// Another system's file as part files, one a body: a line each says what became of it.
 fn import(argv: &[String]) -> ExitCode {
     let (mut dir, mut json, mut file) = (".".to_string(), false, None);
@@ -635,6 +679,9 @@ fn import(argv: &[String]) -> ExitCode {
     let path = std::path::Path::new(&file);
     if path.extension().is_some_and(|x| x.eq_ignore_ascii_case("urdf")) {
         return import_urdf(path, Path::new(&dir), json);
+    }
+    if model::is_model_name(path) {
+        return said(model::import(path, Path::new(&dir)), json);
     }
     let stem = path
         .file_name()

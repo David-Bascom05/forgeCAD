@@ -89,7 +89,7 @@ pub fn title(c: SheetCmd) -> (&'static str, &'static str) {
         SheetCmd::CornerSeam => ("Corner Seam", "seam"),
         SheetCmd::CornerRelief => ("Corner Relief", "corner"),
         SheetCmd::CornerRound => ("Corner Round", "round"),
-        SheetCmd::Punch => ("PunchTool", "punch"),
+        SheetCmd::Punch => ("Punch Tool", "punch"),
         SheetCmd::Hardware => ("Insert Hardware", "pem"),
         SheetCmd::Unfold => ("Unfold", "flat"),
         _ => ("Sheet Metal", "sheet"),

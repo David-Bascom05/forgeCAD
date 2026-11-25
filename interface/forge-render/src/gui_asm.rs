@@ -74,7 +74,7 @@ impl Gui {
                         self.shell.status =
                             format!("{n} edit{} to the assembly", if n == 1 { "" } else { "s" })
                     }
-                    Err(e) => self.shell.status = format!("{}: {}", e.kind(), e.text()),
+                    Err(e) => self.shell.status = e.text(),
                 }
             }
             FgAct::AsmPreview(ops) => {

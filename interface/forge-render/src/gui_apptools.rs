@@ -10,6 +10,7 @@ use crate::shell::thermo_ui::Analysis;
 use forge_agent::json::Json;
 use forge_lang::error::{Literal, ParamKey};
 use forge_math::Frame;
+use forge_math::ipow::Powi as _;
 use std::collections::{HashMap, HashSet};
 
 /// An assembly's transient pose: its params driven and its components dragged.
@@ -694,7 +695,7 @@ impl Gui {
         });
         let r = spheres
             .iter()
-            .map(|(p, r)| ((p[0] - c[0]).powi(2) + (p[1] - c[1]).powi(2) + (p[2] - c[2]).powi(2)).sqrt() + r)
+            .map(|(p, r)| ((p[0] - c[0]).ipow(2) + (p[1] - c[1]).ipow(2) + (p[2] - c[2]).ipow(2)).sqrt() + r)
             .fold(0.0f32, f32::max);
         v.nav.camera = crate::nav::region_view_as(v.nav.camera, [1, -1, 1], &v.nav.orient);
         v.nav.fit_sphere(c, r * 2.0);

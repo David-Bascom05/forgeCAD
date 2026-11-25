@@ -16,6 +16,7 @@ use crate::sketch::Sk;
 use crate::syntax::{Arg, Key, Span};
 use crate::values::{Dim, Ty};
 use forge_agent::json::Json;
+use forge_math::ipow::Powi as _;
 use forge_math::{Frame, Point2, Point3, UnitVec3, Vec3};
 use forge_model::weld::{Member, MemberPath, Trim, TrimTool, cut_id};
 use forge_model::{BodyFeature, Cutter, Feature, Keep, Pick};
@@ -1368,7 +1369,7 @@ fn turn360(t: f64) -> f64 {
 }
 
 fn round(x: f64, places: i32) -> Json {
-    let p = 10f64.powi(places);
+    let p = 10f64.ipow(places);
     ((x * p).round() / p).into()
 }
 

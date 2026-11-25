@@ -19,6 +19,7 @@ use forge_geom::screw::{Screw, Section};
 use forge_geom::spline::swept::plane_of;
 use forge_geom::spline::{Spine, Spline, Spun, Swept};
 use forge_geom::{Circle, Cone, Curve, CurveGeom, Cylinder, Line, Plane, Sphere, Surface, Torus};
+use forge_math::ipow::Powi as _;
 use forge_math::{Frame, Interval, Point3, UnitVec3, Vec2, Vec3, dmath, tol};
 use forge_topo::{Body, Name};
 use std::sync::Arc;
@@ -475,7 +476,7 @@ fn too_tight(c: &Spline, plane: &Frame, segs: &[Segment]) -> bool {
     (0..=n).any(|i| {
         let q = c.deriv(d.lo + d.width() * i as f64 / n as f64);
         let turn = q.d1.cross(q.d2);
-        let l3 = q.d1.length().powi(3);
+        let l3 = q.d1.length().ipow(3);
         match planar {
             Some(b) => {
                 let k = turn.dot(b.get()) / l3;

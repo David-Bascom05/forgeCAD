@@ -13,6 +13,7 @@ use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 use forge_lang::error::{Literal, Op, ParamKey, Scope};
 use forge_lang::syntax::Seg;
 use forge_lang::values::Dim;
+use forge_math::ipow::Powi as _;
 
 /// How long the arrow's drawn, in points.
 const ARROW_PT: f32 = 64.0;
@@ -102,9 +103,10 @@ pub fn along_axis(c: &Camera, size: (u32, u32), px: (f32, f32), at: [f64; 3], di
     Some((a * e - b) / denom)
 }
 
-/// Drags land on tidy values, as fine as a pixel can tell.
+/// Drags land on tidy values, as fine as a pixel can tell. The value is written into the part, so
+/// its step is the same on every platform: the decimal exponent, not libm's `log10`.
 pub fn tidy(v: f64, mm_per_px: f64) -> f64 {
-    let step = 10f64.powi(mm_per_px.max(1e-6).log10().ceil() as i32);
+    let step = 10f64.ipow(forge_lang::units::decimal_exponent_ceil(mm_per_px.max(1e-6)));
     (v / step).round() * step
 }
 
@@ -285,6 +287,12 @@ fn target_of(feat: &FeatRow, d: &DimRow, src: &str, issues: &[Issue], params: &[
 
 /// The selected feature's number on the part as built (`key`: the build), if its kind has one an
 /// arrow can stand for: on its own faces, as the anchors name them.
+/// A length in the field as a person reads it: the value and its unit, in the part's system
+/// (STANDARD §5: no bare numbers).
+pub fn words(v: f64, units: &str) -> String {
+    super::ux::show(v, super::ux::Qty::Length, super::ux::System::of_doc(units))
+}
+
 pub fn handle(
     feat: &FeatRow,
     src: &str,
@@ -332,6 +340,7 @@ impl Shell {
     /// it's written.
     pub(super) fn fg_dim_ui(&mut self, ctx: &egui::Context) {
         let t = self.theme;
+        let units = self.units;
         let Some((camera, size)) = self.camera else { return };
         let Some(mut e) = self.fg_dim.take() else { return };
         let ppp = ctx.pixels_per_point();
@@ -361,7 +370,7 @@ impl Shell {
             acts.push(FgAct::DimCancel);
             e.dragging = false;
             e.value = e.was;
-            e.text = super::fg::short(e.was);
+            e.text = words(e.was, units);
         }
         let mut hint = None;
         egui::Area::new(egui::Id::unique("fg-dim-arrow"))
@@ -412,7 +421,7 @@ impl Shell {
                         let want = tidy(e.start + (s - e.press) * e.per_mm, mm_per_px);
                         if want != e.value && want > 0.0 {
                             e.value = want;
-                            e.text = super::fg::short(want);
+                            e.text = words(want, units);
                             acts.push(FgAct::DimPreview(e.ops(want)));
                         }
                     }
@@ -454,7 +463,9 @@ impl Shell {
             .order(egui::Order::Foreground)
             .constrain(false)
             .show(ctx, |ui| {
-                let (row, _) = ui.allocate_exact_size(vec2(FIELD_W + 54.0, 26.0), Sense::hover());
+                // the room right of the field, and the error under it, end at the view's edge
+                let room = (view.right() - at.x - 4.0).max(FIELD_W);
+                let (row, _) = ui.allocate_exact_size(vec2((FIELD_W + 54.0).min(room), 26.0), Sense::hover());
                 let field = Rect::from_min_size(row.min, vec2(FIELD_W, 26.0));
                 ui.painter().rect_filled(field, 4.0, t.surface);
                 let id = egui::Id::unique("fg-dim-text");
@@ -486,14 +497,20 @@ impl Shell {
                         .on_hover_text(format!("driven by {}: edit those", by.join(", ")));
                 }
                 let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                if enter && e.text.trim() != super::fg::short(e.was) {
-                    match super::fg::parse_value(&e.text, Dim::Length) {
+                // a bare number in the part's unit; any length unit typed after it is read
+                if enter && e.text.trim() != words(e.was, units) {
+                    match super::fg::parse_in(&e.text, Dim::Length, units) {
                         Some(v) if v.dim == Dim::Length && v.value > 0.0 => {
                             e.error = None;
                             e.value = v.value;
                             acts.push(FgAct::DimCommit(e.ops(v.value)));
                         }
-                        _ => e.error = Some(format!("{:?} is not a length", e.text)),
+                        _ => {
+                            e.error = Some(format!(
+                                "{} is not a length: type a number, or one with its unit (12 mm, 0.5 in)",
+                                e.text.trim()
+                            ))
+                        }
                     }
                 }
                 // the word sits on its own chip: it may be over the part
@@ -509,8 +526,14 @@ impl Shell {
                     t.ink,
                 );
                 if let Some(why) = &e.error {
-                    let g = ui
-                        .fonts_mut(|f| f.layout(why.clone(), theme::sans(12.0), egui::Color32::WHITE, 280.0));
+                    let g = ui.fonts_mut(|f| {
+                        f.layout(
+                            why.clone(),
+                            theme::sans(12.0),
+                            egui::Color32::WHITE,
+                            280.0f32.min(room - 14.0),
+                        )
+                    });
                     let bx =
                         Rect::from_min_size(field.left_bottom() + vec2(0.0, 4.0), g.size() + vec2(14.0, 8.0));
                     ui.painter().rect_filled(bx, 4.0, t.error);
@@ -572,5 +595,22 @@ mod tests {
             let back = unoct((x * 32767.0).round() as i16, (y * 32767.0).round() as i16);
             assert!(dot3(back, n) > 0.9999, "{n:?} {back:?}");
         }
+    }
+}
+
+#[cfg(test)]
+mod words_tests {
+    use super::words;
+    use forge_lang::values::Dim;
+
+    #[test]
+    fn the_field_says_its_unit_and_reads_one_typed() {
+        assert_eq!(words(12.0, "mm"), "12 mm");
+        assert_eq!(words(12.7, "in"), "0.5 in");
+        assert_eq!(words(12.0, "in"), "0.472 in");
+        let typed = crate::shell::fg::parse_in("0.5 in", Dim::Length, "mm").unwrap();
+        assert!((typed.value - 12.7).abs() < 1e-9);
+        let shown = crate::shell::fg::parse_in(&words(12.0, "mm"), Dim::Length, "mm").unwrap();
+        assert!((shown.value - 12.0).abs() < 1e-9);
     }
 }

@@ -106,6 +106,46 @@ thread_local! {
     static FIRST_FRAME: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
     /// The page's own changes are not echoed back to it.
     static LOADING: RefCell<bool> = const { RefCell::new(false) };
+    /// The UI audit's (web/tests/ui_audit.cjs) extra state: off but when it asks.
+    static AUDIT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The UI audit's state in `app_state` from now on (`audit`: the ribbon's tools, the shell's
+/// placed names, egui's visible layers), or not.
+#[wasm_bindgen]
+pub fn app_audit(on: bool) {
+    AUDIT.with(|a| a.set(on));
+}
+
+/// What the UI audit reads of a frame: what there is to click and what is open.
+fn audit_json(g: &Gui) -> Json {
+    let rect = |r: egui::Rect| Json::Arr(vec![num(r.left() as f64), num(r.top() as f64), num(r.width() as f64), num(r.height() as f64)]);
+    let tools = g
+        .shell
+        .ribbon_live()
+        .into_iter()
+        .map(|(gr, name, live)| Json::Arr(vec![gr.into(), name.into(), live.into()]))
+        .collect();
+    let places = g
+        .shell
+        .places
+        .iter()
+        .map(|(k, r)| Json::Arr(vec![k.clone().into(), rect(*r)]))
+        .collect();
+    let layers = g.ctx.memory(|m| {
+        m.areas()
+            .visible_layer_ids()
+            .into_iter()
+            .filter_map(|l| m.area_rect(l.id).map(|r| Json::Arr(vec![format!("{:?}", l.order).into(), format!("{:x}", l.id.value()).into(), rect(r)])))
+            .collect()
+    });
+    let focus = g.ctx.memory(|m| m.focused()).is_some();
+    Json::obj(vec![
+        ("tools", Json::Arr(tools)),
+        ("places", Json::Arr(places)),
+        ("layers", Json::Arr(layers)),
+        ("focus", focus.into()),
+    ])
 }
 
 fn wake() {
@@ -912,7 +952,11 @@ fn state_json(g: &Gui, canvas: Json) -> String {
         }
         Json::obj(f)
     });
-    Json::obj(vec![
+    let mut audit = vec![];
+    if AUDIT.with(|a| a.get()) {
+        audit.push(("audit", audit_json(g)));
+    }
+    Json::obj(audit.into_iter().chain(vec![
         ("ready", true.into()),
         ("first_frame_ms", num(FIRST_FRAME.with(|f| f.get()))),
         // frames drawn so far: a test waits on this, not on pictures, for a change to be drawn
@@ -1042,7 +1086,7 @@ fn state_json(g: &Gui, canvas: Json) -> String {
                     .collect(),
             ),
         ),
-    ])
+    ]).collect())
     .to_string()
 }
 

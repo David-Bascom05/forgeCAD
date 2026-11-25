@@ -1,6 +1,7 @@
 //! The Render Studio's tracer on the GPU against its CPU mirror, and against a golden picture.
 //! A machine with no GPU (and no software Vulkan) has nothing to test here and says so.
 
+use forge_math::ipow::Powi as _;
 use forge_render::camera::Camera;
 use forge_render::render;
 use forge_render::studio::bsdf::{Bsdf, Lut};
@@ -208,7 +209,7 @@ fn the_denoiser_brings_a_few_samples_closer_to_many() {
             .zip(&truth)
             .enumerate()
             .filter(|(k, _)| k % 4 != 3)
-            .map(|(_, (x, y))| (*x as f64 - *y as f64).powi(2))
+            .map(|(_, (x, y))| (*x as f64 - *y as f64).ipow(2))
             .sum();
         (s / (a.len() as f64 * 0.75)).sqrt()
     };

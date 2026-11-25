@@ -8,6 +8,7 @@ use forge_agent::select::{self, Ent};
 use forge_geom::CurveGeom;
 use forge_lang::anchors::{Anchors, Asked};
 use forge_lang::build::Cache;
+use forge_math::ipow::Powi as _;
 use forge_topo::{Body, Name};
 use std::collections::{BTreeSet, HashMap};
 
@@ -105,7 +106,7 @@ impl State {
                 hi[k] = hi[k].max(x);
             }
         }
-        let d: f64 = (0..3).map(|k| (hi[k] - lo[k]).powi(2)).sum::<f64>().sqrt();
+        let d: f64 = (0..3).map(|k| (hi[k] - lo[k]).ipow(2)).sum::<f64>().sqrt();
         Ok(2.0 * d.max(1.0) + lo.iter().chain(&hi).map(|x| x.abs()).fold(0.0, f64::max))
     }
 

@@ -24,10 +24,12 @@
 //! and the stock, rapids against both. An op whose checks are not all `pass` is refused, with the
 //! check, where, and a fix. The reply is `forgecad.cam/1`.
 use forge_lang::syntax::{self, Arg, Expr, ExprKind, StmtKind};
+use forge_math::ipow::Powi as _;
 pub mod cycle;
 pub mod export;
 pub mod holes;
 pub mod life;
+pub mod machines;
 /// The memos (kernel/forge-memo), by the path they had here.
 pub use forge_memo as memo;
 pub mod probing;
@@ -1528,7 +1530,7 @@ fn feed_over(q: i64, k: u32, max_feed: f64) -> bool {
         return q > 0 && (q as u128) > (max_feed as u128) * 10u128.pow(k);
     }
     let fmax = forge_cam_geom::ival::Ival::pt(max_feed)
-        .mul(forge_cam_geom::ival::Ival::pt(10f64.powi(k as i32)))
+        .mul(forge_cam_geom::ival::Ival::pt(10f64.ipow(k as i32)))
         .lo;
     (q as f64) > fmax || fmax.is_nan()
 }
@@ -1547,7 +1549,7 @@ fn not_down(hn: &str, dir: [f64; 3]) -> String {
 }
 
 fn dist_pts(a: forge_cam_geom::region::P2, b: forge_cam_geom::region::P2) -> f64 {
-    ((a.x - b.x).powi(2) + (a.y - b.y).powi(2)).sqrt()
+    ((a.x - b.x).ipow(2) + (a.y - b.y).ipow(2)).sqrt()
 }
 
 fn num(v: &V) -> Option<f64> {
@@ -1658,7 +1660,7 @@ impl Cam {
                             for l in &sec.loops {
                                 for sg in &l.segs {
                                     let dist = |q: forge_cam_geom::region::P2| {
-                                        ((q.x - c.x).powi(2) + (q.y - c.y).powi(2)).sqrt()
+                                        ((q.x - c.x).ipow(2) + (q.y - c.y).ipow(2)).sqrt()
                                     };
                                     m = m.max(match *sg {
                                         Seg::Line { a, b } => dist(a).max(dist(b)),
@@ -2400,16 +2402,29 @@ fn get_str(m: &BTreeMap<String, V>, k: &str, default: Option<&str>) -> Result<St
 
 /// Runs a machining document (its file's directory finds the part) on the built-in library.
 pub fn run(src: &str, dir: &Path) -> Cam {
-    // the built-in library, shared: read once (Library::builtin_shared), and copied only if
-    // the document's project files add to it (run_with_library)
-    run_shared(src, dir, Library::builtin_shared())
+    // the built-in library with the one machine list folded in (machines::merge), shared: made
+    // once from Library::builtin_shared, and copied only if the document's project files add to
+    // it (run_with_library)
+    static BUILTIN: std::sync::OnceLock<std::sync::Arc<Library>> = std::sync::OnceLock::new();
+    run_shared(
+        src,
+        dir,
+        BUILTIN
+            .get_or_init(|| {
+                let mut lib = (*Library::builtin_shared()).clone();
+                machines::merge(&mut lib);
+                std::sync::Arc::new(lib)
+            })
+            .clone(),
+    )
 }
 
 /// Runs a machining document on a given tooling library: the one the user's levels make
 /// (forge-tooling-builder's `library(project, user_cam)`: the project's records over the user's
 /// over the built-in), so tools, holders and inserts made in the builder reach CAM. The
 /// document's `cam/*.toml` beside it are added on top, as with `run`.
-pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
+pub fn run_with_library(src: &str, dir: &Path, mut lib: Library) -> Cam {
+    machines::merge(&mut lib);
     run_shared(src, dir, std::sync::Arc::new(lib))
 }
 
@@ -2460,11 +2475,16 @@ fn run_shared(src: &str, dir: &Path, lib: std::sync::Arc<Library>) -> Cam {
                 .collect();
             files.sort();
             for f in files {
-                if let Ok(s) = forge_dirs::fs::read_to_string(&f)
-                    && let Err(e) = std::sync::Arc::make_mut(&mut cam.lib).add(&f.display().to_string(), &s)
-                {
-                    cam.errors.push(e.to_string());
-                    cam.ok = false;
+                if let Ok(s) = forge_dirs::fs::read_to_string(&f) {
+                    let lib = std::sync::Arc::make_mut(&mut cam.lib);
+                    match lib.add(&f.display().to_string(), &s) {
+                        // a machine it adds joins the one list
+                        Ok(_) => machines::merge(lib),
+                        Err(e) => {
+                            cam.errors.push(e.to_string());
+                            cam.ok = false;
+                        }
+                    }
                 }
             }
         }
@@ -2552,7 +2572,8 @@ impl Cam {
     /// (and nothing is posted) records each 3D op's generator call, then those run on the
     /// pool. Each is a function of its memo key alone, which no earlier op's result enters,
     /// so the run that follows takes every one from its memo: the same values, in the same
-    /// order, as making them there. Only with two or more such ops and more than one thread.
+    /// order, as making them there (rest's key holds the earlier ops' paths: it is made in the
+    /// run only). Only with two or more such ops and more than one thread.
     fn prefetch(&self, prog: &[forge_lang::syntax::Stmt], src: &str, dir: &Path) {
         let gen3d = prog
             .iter()
@@ -2865,7 +2886,7 @@ impl Cam {
                                             }
                                             // an arc may bulge past its ends: its circle's box bounds it
                                             if let Seg::Arc { a, c, .. } = *sg {
-                                                let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+                                                let r = ((a.x - c.x).ipow(2) + (a.y - c.y).ipow(2)).sqrt();
                                                 b = [
                                                     b[0].min(c.x - r),
                                                     b[1].min(c.y - r),
@@ -3048,6 +3069,14 @@ impl Cam {
             "machine" => {
                 let n = get_str(a, "#0", None)?;
                 self.lib.machine(&n).map_err(|e| e.to_string())?;
+                if let Some(why) = machines::conflict(&self.lib, &n) {
+                    return Err(why);
+                }
+                for w in machines::unchecked(&self.lib, &n) {
+                    if !self.warnings.contains(&w) {
+                        self.warnings.push(w);
+                    }
+                }
                 Ok(V::Machine(n))
             }
             "tool" => {
@@ -3700,7 +3729,7 @@ impl Cam {
                     let ccw = ccw != flip;
                     if off != 0.0 {
                         // left of a ccw arc is toward its centre
-                        let r0 = ((p0[0] - c[0]).powi(2) + (p0[1] - c[1]).powi(2)).sqrt();
+                        let r0 = ((p0[0] - c[0]).ipow(2) + (p0[1] - c[1]).ipow(2)).sqrt();
                         let r1 = r0 + if ccw { -off } else { off };
                         if r1 <= 0.0 {
                             return Err(format!(
@@ -3712,7 +3741,7 @@ impl Cam {
                         p1 = [c[0] + (p1[0] - c[0]) * k, c[1] + (p1[1] - c[1]) * k];
                     }
                     // in pieces of at most a quarter turn, as posted
-                    let r = ((p0[0] - c[0]).powi(2) + (p0[1] - c[1]).powi(2)).sqrt();
+                    let r = ((p0[0] - c[0]).ipow(2) + (p0[1] - c[1]).ipow(2)).sqrt();
                     let a0 = forge_math::dmath::atan2(p0[1] - c[1], p0[0] - c[0]);
                     let mut a1 = forge_math::dmath::atan2(p1[1] - c[1], p1[0] - c[0]);
                     let tau = std::f64::consts::TAU;
@@ -3809,7 +3838,13 @@ impl Cam {
                         });
                         let (sa, ca) = forge_math::dmath::sin_cos(deg.to_radians());
                         let run = (above - z) * ca / sa;
+                        // an even number of legs, so the ramp ends back at the curve's start at
+                        // the level and the curve's own pass cuts what the ramp's wedge left
+                        // (an odd count ended at the far end: back along the line and then the
+                        // curve's pass along it again, a third of the groove cut twice); the
+                        // angle only gets shallower
                         let n = ((run / len - 1e-9).ceil().max(1.0)) as usize;
+                        let n = n + n % 2;
                         for k in 1..=n {
                             let zk = if k == n {
                                 z
@@ -3820,13 +3855,6 @@ impl Cam {
                             mv.push(PMove::Line {
                                 to: [p[0], p[1], zk],
                                 f: feed.1,
-                                phase: Phase::Cut,
-                            });
-                        }
-                        if n % 2 == 1 {
-                            mv.push(PMove::Line {
-                                to: [p0[0], p0[1], z],
-                                f: feed.0,
                                 phase: Phase::Cut,
                             });
                         }
@@ -4446,7 +4474,7 @@ impl Cam {
                     Seg::Line { a: pa, b: pb } => {
                         let u2 = dir(sg, false);
                         let nn = [u2[1], -u2[0]];
-                        let len = ((pb.x - pa.x).powi(2) + (pb.y - pa.y).powi(2)).sqrt();
+                        let len = ((pb.x - pa.x).ipow(2) + (pb.y - pa.y).ipow(2)).sqrt();
                         // the slope's length from the top's edge to the chamfer's bottom
                         let qb = if beta == 45.0 {
                             s * std::f64::consts::SQRT_2
@@ -4491,7 +4519,7 @@ impl Cam {
                     } => {
                         junction(prev, sg, *sg)?;
                         junction(sg, next, *next)?;
-                        let r1 = ((pa.x - cc.x).powi(2) + (pa.y - cc.y).powi(2)).sqrt();
+                        let r1 = ((pa.x - cc.x).ipow(2) + (pa.y - cc.y).ipow(2)).sqrt();
                         let full = pa == pb;
                         // pieces of at most a quarter turn
                         let t0 = forge_math::dmath::atan2(pa.y - cc.y, pa.x - cc.x);
@@ -4802,7 +4830,7 @@ impl Cam {
                             let a = from[smp.mv];
                             (
                                 to[2] == a[2],
-                                ((to[0] - a[0]).powi(2) + (to[1] - a[1]).powi(2)).sqrt(),
+                                ((to[0] - a[0]).ipow(2) + (to[1] - a[1]).ipow(2)).sqrt(),
                             )
                         }
                         _ => (false, 0.0),
@@ -5842,8 +5870,11 @@ impl Cam {
                 }
                 let h = s.heights;
                 if let Some(jobs) = self.prefetch.as_mut() {
-                    // the prefetch pass: a 3D generator's call recorded; nothing generated
-                    if GEN3D.contains(&kind) {
+                    // the prefetch pass: a 3D generator's call recorded; nothing generated.
+                    // Not rest's: its key holds the setup's earlier ops' paths
+                    // (`earlier_cuts`), which this pass does not make, so it would be made for
+                    // a key the run never asks
+                    if GEN3D.contains(&kind) && kind != "rest" {
                         jobs.push(Prefetch {
                             su,
                             kind: kind.to_string(),
@@ -5934,6 +5965,19 @@ impl Cam {
                             }
                             o => return Err(format!("adaptive: region \"{o}\": \"outside\" or \"pockets\"")),
                         };
+                        // an advisory hint, never a refusal: on levels shallower than the tool's
+                        // diameter the full flute adaptive exists for does not come into play.
+                        // Measured (plan_scurve, hops on): at 0.67 D (the RPTU parts' 4 mm levels,
+                        // 6 mm tool) clear was 1.4-1.8 x faster (rptu3 67.1 s against 36.6 s, rptu4
+                        // 115.3 against 82.6); at 1.48 D (boss, 14.8 mm, 10 mm tool) they tied (162.3
+                        // against 161.9 s); from 2.5 D adaptive was 20-56 % faster round a boss or in
+                        // an open slot (docs/cam.md)
+                        let level = step.min(top - bottom);
+                        if level > 0.0 && level < d {
+                            self.warnings.push(format!(
+                                "{name}: hint: its levels are {level:.1} mm deep, under the tool's {d:.1} mm diameter; on levels this shallow `clear` was 1.4-1.8 x faster than `adaptive` where measured; fix: `clear(...)` with the same tool, from and to"
+                            ));
+                        }
                         let prm = forge_cam::adaptive::Adaptive {
                             phi_max: get_num(a, "engagement", Some(60.0))?,
                             step: get_num(a, "step_length", Some(0.0))?,
@@ -6158,6 +6202,7 @@ impl Cam {
                             // material where it was (when that section can be made)
                             let below = part.section(bottom + 1e-3, 1e-5).ok();
                             let mut shallow: Vec<[f64; 4]> = vec![];
+                            let mut cleared: Vec<[f64; 4]> = vec![];
                             for rg in pockets {
                                 // (where no section can be made there, a drill point crossing
                                 // that height say, the part's hole features decide)
@@ -6180,28 +6225,92 @@ impl Cam {
                                     skipped.push(region_box(&rg));
                                     continue;
                                 }
-                                let p = ops::pocket(
-                                    &rg,
-                                    ops::Cut {
-                                        tool: t,
-                                        tidx: ti,
-                                        h,
-                                        feed: (vf, vp),
-                                        ramp_feed: None,
-                                        lead_feed: None,
-                                    },
-                                    ops::Span { top, bottom, step },
-                                    stepover,
-                                    leave,
-                                    ramp,
-                                );
-                                match p {
-                                    Ok(p) => paths.push(p),
-                                    Err(ops::OpError::ToolTooBig { .. }) => {
-                                        skipped.push(region_box(&rg));
+                                // only where there is material left: the hole within 2(r + leave)
+                                // of the stock still there at the floor (what earlier ops left)
+                                let rest = rest_region(&rg, &s.ip, bottom, 0.5 * d + leave);
+                                // each piece of it on its own, through all its levels (depth
+                                // first: no hop between pieces at every level); a piece whose
+                                // material all lies within reach of its outermost pass (within
+                                // 2(r + leave) of its edge) gets that pass alone
+                                let pieces: Vec<(Region, f64, f64)> = match &rest {
+                                    Rest::Cleared => {
+                                        cleared.push(region_box(&rg));
                                         continue;
                                     }
-                                    Err(e) => return Err(e.refusal("")),
+                                    Rest::Near(w, inside) => components(w)
+                                        .into_iter()
+                                        .map(|c| {
+                                            let so = if reach_of_edge(&c, inside, 2.0 * (0.5 * d + leave)) {
+                                                1e6
+                                            } else {
+                                                stepover
+                                            };
+                                            (c, so, leave)
+                                        })
+                                        .collect(),
+                                    // centres: passes from the region's own edge (leave −r puts
+                                    // the first pass on it); one pass where all the material is
+                                    // within reach of it
+                                    Rest::Centres(c, edge_only) => components(c)
+                                        .into_iter()
+                                        .map(|c| (c, if *edge_only { 1e6 } else { stepover }, -0.5 * d))
+                                        .collect(),
+                                    Rest::All => vec![(rg.clone(), stepover, leave)],
+                                };
+                                for (work, so, lv) in pieces {
+                                    // a centres piece swept by one pass: its wall run alone
+                                    // (forge_cam::rest), the way back a link
+                                    let single = matches!(rest, Rest::Centres(_, true));
+                                    let rp = if single {
+                                        forge_cam::rest::rest_pass(
+                                            &work,
+                                            &rg,
+                                            0.5 * d + leave,
+                                            ops::Cut {
+                                                tool: t,
+                                                tidx: ti,
+                                                h,
+                                                feed: (vf, vp),
+                                                ramp_feed: None,
+                                                lead_feed: None,
+                                            },
+                                            ops::Span { top, bottom, step },
+                                        )
+                                    } else {
+                                        None
+                                    };
+                                    if let Some(rp) = rp {
+                                        paths.push(rp);
+                                        continue;
+                                    }
+                                    let p = ops::pocket(
+                                        &work,
+                                        ops::Cut {
+                                            tool: t,
+                                            tidx: ti,
+                                            h,
+                                            feed: (vf, vp),
+                                            ramp_feed: None,
+                                            lead_feed: None,
+                                        },
+                                        ops::Span { top, bottom, step },
+                                        so,
+                                        lv,
+                                        // a piece of the rest is entered through what earlier ops
+                                        // cleared: a helix down that column is air, so plunge
+                                        if matches!(rest, Rest::All) { ramp } else { None },
+                                    );
+                                    match p {
+                                        Ok(p) => paths.push(p),
+                                        // a piece of the rest the tool does not fit: its material is
+                                        // out of reach (G4 lists it)
+                                        Err(ops::OpError::ToolTooBig { .. })
+                                            if !matches!(rest, Rest::All) => {}
+                                        Err(ops::OpError::ToolTooBig { .. }) => {
+                                            skipped.push(region_box(&rg));
+                                        }
+                                        Err(e) => return Err(e.refusal("")),
+                                    }
                                 }
                                 let o = if stepover <= 0.5 * d {
                                     opening(&rg, 0.5 * d)
@@ -6223,6 +6332,18 @@ impl Cam {
                                     "{name}: {} of {total} holes in the section end above z {bottom} and are left to their own op (G4 lists them): {}",
                                     shallow.len(),
                                     boxes(&shallow)
+                                ));
+                            }
+                            if !cleared.is_empty() {
+                                self.warnings.push(format!(
+                                    "{name}: {} of {total} holes in the section have no material left between z {top} and {bottom} (earlier ops cleared them): {}",
+                                    cleared.len(),
+                                    boxes(&cleared)
+                                ));
+                            }
+                            if paths.is_empty() && cleared.len() == total {
+                                return Err(format!(
+                                    "pocket: nothing left to cut: earlier ops cleared all the section's {total} holes between z {top} and {bottom}"
                                 ));
                             }
                             if paths.is_empty() {
@@ -6524,6 +6645,22 @@ impl Cam {
     /// linked (stay down / lift / retract by a fixed rule), and certified afterwards by the
     /// column route like the surfacing ops. With `cusp:` the stepover and step-down are the
     /// largest the scallop module proves leave at most that cusp on a plane at the op's slopes.
+    /// The setup's built ops so far, each path with its tool's profile (a tool with none, a
+    /// drill's, is left out): what the stock holds after them, as `HeightMap::sweep_path` models it.
+    fn earlier_cuts(&self, su: usize) -> Vec<(forge_cam::engage::Profile, &OpPath)> {
+        self.ops
+            .iter()
+            .filter(|o| o.setup == su && o.status == "built")
+            .filter_map(|o| {
+                Some((
+                    forge_cam::engage::Profile::of(&self.tools[o.tool?].tool)?,
+                    &o.paths,
+                ))
+            })
+            .flat_map(|(p, ps)| ps.iter().map(move |q| (p, q)))
+            .collect()
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn finish3d(
         &self,
@@ -6563,6 +6700,16 @@ impl Cam {
                 (s.tol, ti, h, feed, arc_min_r(&s.machine, feed.0))
             )
         );
+        // rest reads the stock the setup's earlier ops left (`earlier_cuts`): their paths too
+        let key = if kind == "rest" {
+            // (of the stock, what its model reads: its bottom, top and voids)
+            format!(
+                "{key} {:?}",
+                ((s.ip.min[2], s.ip.max[2], &s.ip.voids), self.earlier_cuts(su))
+            )
+        } else {
+            key
+        };
         let (paths, plan, finish) = FINISHED.get_or(key, || {
             let (mut plan, mut finish) = (Vec::new(), None);
             let r = self.finish3d_made(su, kind, a, ti, h, feed, &mut plan, &mut finish);
@@ -6775,7 +6922,7 @@ impl Cam {
                     },
                     Some(_) => return Err("center: (x, y)".into()),
                 };
-                let reach = ((area[2] - area[0]).powi(2) + (area[3] - area[1]).powi(2)).sqrt();
+                let reach = ((area[2] - area[0]).ipow(2) + (area[3] - area[1]).ipow(2)).sqrt();
                 let r0 = get_num(a, "r0", Some(0.0))?;
                 let r1 = get_num(a, "r1", Some(reach))?;
                 let ps = if kind == "spiral" {
@@ -6911,13 +7058,31 @@ impl Cam {
                     None => get_num(a, "stepover", Some(0.1 * d))?,
                 };
                 fin.stepover = so;
-                let m = forge_cam_3d::rest::region(
+                // and only where the stock as the setup's earlier ops left it stands above what
+                // this tool leaves: their paths swept over the stock's top less its voids, on
+                // cells centred on the grid's nodes (a model for where to cut, not for safety;
+                // the region is within the part's footprint, so within the stock's box: its
+                // sides are not read)
+                let [lo, hi] = forge_cam_3d::drop::DropCutter::extent(&dc);
+                let hc = grid / (grid / 0.1).ceil();
+                let ip = &s.ip;
+                let mut sm = forge_cam::engage::HeightMap::new(
+                    [lo[0] - 0.5 * hc, lo[1] - 0.5 * hc, ip.min[2]],
+                    [hi[0] + 0.5 * hc, hi[1] + 0.5 * hc, ip.max[2]],
+                    hc,
+                );
+                sm.lower_voids(ip);
+                for (pr, p) in self.earlier_cuts(su) {
+                    sm.sweep_path(p.start, &p.moves, &pr);
+                }
+                let m = forge_cam_3d::rest::region_in(
                     &dc,
                     &sf.check,
                     &bdc,
                     &before.check,
                     grid,
                     get_num(a, "min", Some(0.05))?,
+                    Some(&|x, y| sm.top(x, y)),
                 );
                 if !m.on.iter().any(|x| *x) {
                     return Err(
@@ -6934,6 +7099,16 @@ impl Cam {
                     &within,
                 )
                 .map_err(|x| e(format!("{x:?}")))?;
+                // each pass from where it first meets the stock the model holds to where it last
+                // does (the model lowered as the passes cut it): no run at the cutting feed over
+                // what is already finished
+                let pr = forge_cam::engage::Profile::of(&t.tool).ok_or("rest: a tool with no profile")?;
+                let rp = forge_cam_3d::rest::trim(rp, &mut |p, q| sm.sweep(p, q, &pr) > 1e-4);
+                if rp.is_empty() {
+                    return Err(
+                        "rest: nothing left by the earlier ops that this tool reaches (above `min`)".into(),
+                    );
+                }
                 vec![rp]
             }
             _ => {
@@ -8714,6 +8889,240 @@ fn hole_ends_above(holes: &[holes::HoleInfo], rg: &Region, bottom: f64) -> bool 
     })
 }
 
+/// Where a pocket has material left to cut.
+enum Rest {
+    /// Earlier ops left none in the hole.
+    Cleared,
+    /// The part of the hole the tool needs to visit (a sub-region of it), and the material
+    /// left in the hole.
+    Near(Region, Region),
+    /// The tool centres that touch the material left (inside the hole shrunk by r), and
+    /// whether all that material lies within r of the allowed centres' edge (the hole's wall
+    /// offset), so that one pass round the centres' edge sweeps it: pocketed as centres (its
+    /// passes from its own edge in).
+    Centres(Region, bool),
+    /// The hole as it is (the stock's material could not be formed: the conservative answer).
+    All,
+}
+
+/// The part of a pocket's region `rg` that a tool of radius `r` (plus leave) needs to visit
+/// to cut the material earlier ops left at or above `floor`, M (the stock's material just above
+/// the floor: the most material at any of the op's levels, a void counting from its floor up).
+/// The tool centres that matter are C = (rg ⊖ r) ∩ (M ⊕ r): allowed (the disk inside rg) and
+/// touching M. Passes covering C (its edge, then offsets in by the stepover) put the tool on
+/// or within a stepover of every such centre, so they clear all the material pocketing rg
+/// would, and they stay next to that material (rest machining by morphology: plain offsetting).
+/// Where C cannot be formed, rg ∩ (M ⊕ 2r) pocketed as a hole (a
+/// superset, also correct); any other failure: the whole hole.
+fn rest_region(rg: &Region, ip: &forge_cam::stock::InProcess, floor: f64, r: f64) -> Rest {
+    use forge_cam_geom::boolean::{Op, boolean, region_of};
+    use forge_cam_geom::offset::offset;
+    let m = match ip.material(floor) {
+        Ok(Some(m)) => m,
+        Ok(None) => return Rest::Cleared,
+        Err(_) => return Rest::All,
+    };
+    let inside = match boolean(rg, &m, Op::Inter) {
+        Ok(l) if l.is_empty() => return Rest::Cleared,
+        Ok(l) => region_of(&l),
+        Err(_) => return Rest::All,
+    };
+    // all of the hole still there: pocketed as it is (entered by its ramp)
+    if matches!(boolean(rg, &m, Op::Diff), Ok(l) if l.is_empty()) {
+        return Rest::All;
+    }
+    // grown by d (negative offsets grow); material left as slivers (a corner a bigger tool
+    // left: two arcs meeting tangentially) has cusps the offset refuses as spikes: then each
+    // piece's bounding box is grown instead (a superset, so still every disk that meets it)
+    let grow = |g: &Region, d: f64| -> Option<Region> {
+        let once = |x: &Region| match offset(x, -d) {
+            Ok((l, _)) if !l.is_empty() => Some(region_of(&l)),
+            _ => None,
+        };
+        once(g).or_else(|| once(&boxes_of(g)?))
+    };
+    let near = || -> Rest {
+        match grow(&inside, 2.0 * r + 1e-3).and_then(|g| boolean(rg, &g, Op::Inter).ok()) {
+            Some(l) if !l.is_empty() => Rest::Near(region_of(&l), inside.clone()),
+            Some(_) => Rest::Cleared,
+            None => Rest::All,
+        }
+    };
+    let allowed = match offset(rg, r) {
+        Ok((l, _)) if !l.is_empty() => region_of(&l),
+        _ => return near(),
+    };
+    // M ⊕ r without growing M (whose slivers have cusps): M = S ∖ ∪ Vᵢ (the stock's box less the
+    // voids that count at this floor), and (S ∖ ∪ Vᵢ) ⊕ r ⊆ (S ⊕ r) ∖ ∪ (Vᵢ ⊖ r): a point at
+    // least r inside a void is at least r from all that is left (to 0.001, below). The voids are openings (smooth),
+    // so shrinking them is clean; where it is not, M's pieces grown as before
+    let near_material = || -> Option<Region> {
+        let g = r + 1e-3;
+        let (lo, hi) = (ip.min, ip.max);
+        let q = [
+            p2(lo[0] - g, lo[1] - g),
+            p2(hi[0] + g, lo[1] - g),
+            p2(hi[0] + g, hi[1] + g),
+            p2(lo[0] - g, hi[1] + g),
+        ];
+        let mut acc = Region {
+            loops: vec![Loop {
+                segs: (0..4)
+                    .map(|k| Seg::Line {
+                        a: q[k],
+                        b: q[(k + 1) % 4],
+                    })
+                    .collect(),
+            }],
+        };
+        let below = ip.under.iter().filter(|(_, c)| floor < *c);
+        for (v, _) in ip.voids.iter().filter(|(_, f)| *f <= floor).chain(below) {
+            // (r − 0.001: a void touching the walls leaves no 0.001 strip along them; a centre so
+            // dropped meets material by at most 0.001, under any tolerance)
+            let sh = match offset(v, r - 1e-3) {
+                Ok((l, _)) if l.is_empty() => continue,
+                Ok((l, _)) => region_of(&l),
+                Err(_) => return None,
+            };
+            let d = boolean(&acc, &sh, Op::Diff).ok()?;
+            if d.is_empty() {
+                return Some(Region { loops: vec![] });
+            }
+            acc = region_of(&d);
+        }
+        Some(acc)
+    };
+    let centres = match near_material()
+        .filter(|g| !g.loops.is_empty())
+        .or_else(|| grow(&inside, r + 1e-3))
+        .and_then(|g| boolean(&allowed, &g, Op::Inter).ok())
+    {
+        Some(l) if l.is_empty() => return Rest::Cleared,
+        Some(l) => region_of(&l),
+        None => return near(),
+    };
+    // all the material within r of the allowed centres' edge: none of it in (rg ⊖ r) ⊖ r. Then
+    // for a point x of it there is y on that edge with |x − y| ≤ r; y is an allowed centre
+    // touching the material, so in C and on C's edge (C ⊆ the allowed centres): one pass on C's
+    // edge sweeps x
+    // (the core lies in rg, so its meet with the stock's material is its meet with the material
+    // in rg; the stock's material has no cusp where a cleared arc meets rg's wall tangentially)
+    let edge_only = match offset(rg, 2.0 * r) {
+        Ok((l, _)) if l.is_empty() => true,
+        Ok((l, _)) => matches!(boolean(&region_of(&l), &m, Op::Inter), Ok(x) if x.is_empty()),
+        Err(_) => false,
+    };
+    Rest::Centres(centres, edge_only)
+}
+
+/// A region's connected pieces: each outer (counter-clockwise) loop with the holes directly
+/// inside it. On any failure, the region whole.
+fn components(rg: &Region) -> Vec<Region> {
+    use forge_cam_geom::region;
+    let mut cx = forge_cam_geom::real::Ctx::new();
+    let Ok(ex) = region::validate(&mut cx, rg) else {
+        return vec![rg.clone()];
+    };
+    let n = rg.loops.len();
+    if n == 1 {
+        return vec![rg.clone()];
+    }
+    let ccw: Vec<bool> = (0..n).map(|l| region::loop_ccw(&mut cx, &ex, l)).collect();
+    let rep: Vec<_> = ex
+        .loops
+        .iter()
+        .map(|&(first, _)| {
+            let e = ex.elems[first];
+            forge_cam_geom::arr::rep_point(&mut cx, &e.piece, e.piece.s, e.piece.e)
+        })
+        .collect();
+    let within: Vec<Vec<bool>> = rep
+        .iter()
+        .enumerate()
+        .map(|(k, q)| {
+            (0..n)
+                .map(|l| k != l && region::inside_loop(&mut cx, &ex, l, *q))
+                .collect()
+        })
+        .collect();
+    let mut out = vec![];
+    for h in (0..n).filter(|&h| ccw[h]) {
+        let mut loops = vec![rg.loops[h].clone()];
+        for k in (0..n).filter(|&k| !ccw[k]) {
+            if within[k][h] && !(0..n).any(|m| m != k && m != h && within[k][m] && within[m][h]) {
+                loops.push(rg.loops[k].clone());
+            }
+        }
+        out.push(Region { loops });
+    }
+    if out.is_empty() { vec![rg.clone()] } else { out }
+}
+
+/// Whether all of `material` inside `piece` lies within `reach` of the piece's edge: then the
+/// pocket's outermost pass (its centre `reach / 2` in) sweeps all of it. False when unsure.
+fn reach_of_edge(piece: &Region, material: &Region, reach: f64) -> bool {
+    use forge_cam_geom::boolean::{Op, boolean};
+    match forge_cam_geom::offset::offset(piece, reach) {
+        Ok((l, _)) if l.is_empty() => true,
+        Ok((l, _)) => matches!(
+            boolean(&forge_cam_geom::boolean::region_of(&l), material, Op::Inter),
+            Ok(x) if x.is_empty()
+        ),
+        Err(_) => false,
+    }
+}
+
+/// The union of a region's loops' bounding boxes (an arc's box taken as its whole circle's):
+/// a superset of the region with no cusps. None if the union cannot be formed.
+fn boxes_of(rg: &Region) -> Option<Region> {
+    use forge_cam_geom::boolean::{Op, boolean, region_of};
+    let mut u: Option<Region> = None;
+    for l in &rg.loops {
+        let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+        let mut take = |x: f64, y: f64| {
+            lo = [lo[0].min(x), lo[1].min(y)];
+            hi = [hi[0].max(x), hi[1].max(y)];
+        };
+        for sg in &l.segs {
+            match *sg {
+                Seg::Line { a, b } => {
+                    take(a.x, a.y);
+                    take(b.x, b.y);
+                }
+                Seg::Arc { a, c, .. } => {
+                    let r = ((a.x - c.x).ipow(2) + (a.y - c.y).ipow(2)).sqrt();
+                    take(c.x - r, c.y - r);
+                    take(c.x + r, c.y + r);
+                }
+            }
+        }
+        if !(lo[0] < hi[0] && lo[1] < hi[1]) {
+            continue;
+        }
+        let q = [
+            p2(lo[0], lo[1]),
+            p2(hi[0], lo[1]),
+            p2(hi[0], hi[1]),
+            p2(lo[0], hi[1]),
+        ];
+        let b = Region {
+            loops: vec![Loop {
+                segs: (0..4)
+                    .map(|k| Seg::Line {
+                        a: q[k],
+                        b: q[(k + 1) % 4],
+                    })
+                    .collect(),
+            }],
+        };
+        u = Some(match u {
+            None => b,
+            Some(r) => region_of(&boolean(&r, &b, Op::Union).ok()?),
+        });
+    }
+    u
+}
+
 fn pockets_of(sec: &Region) -> Result<Vec<Region>, String> {
     use forge_cam_geom::region;
     let mut cx = forge_cam_geom::real::Ctx::new();
@@ -9056,7 +9465,7 @@ impl Cam {
                     // the arc's own box: its ends, and each axis extreme its sweep passes
                     // (c ± r on that axis), widened past rounding; the full circle's box when
                     // the sweep's ends are not resolved
-                    let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt() * (1.0 + 1e-12);
+                    let r = ((at[0] - c[0]).ipow(2) + (at[1] - c[1]).ipow(2)).sqrt() * (1.0 + 1e-12);
                     let (zl, zh) = (to[2].min(at[2]), to[2].max(at[2]));
                     add([at[0], at[1], zl]);
                     add([to[0], to[1], zh]);
@@ -9186,7 +9595,7 @@ impl Cam {
         };
         // 10^k exactly (k ≤ 22, so the power is an exact f64), then the limit times it
         let k = feed_decimals.min(22) as i32;
-        let fs = 10f64.powi(k);
+        let fs = 10f64.ipow(k);
         let over = |q: i64| feed_over(q, k as u32, m.max_feed);
         for (i, mo) in ms.iter().enumerate() {
             match *mo {
@@ -9431,6 +9840,21 @@ impl Cam {
                         all.extend(cur_band.clone());
                         stages.push((i, faces_of(&stage_of(&all, deepest))));
                     }
+                }
+                // a plunge straight down to the next level after cutting one, with nothing later
+                // above it (a pocket that stays down level to level): that level is complete,
+                // as at the retract it replaced (below), so the op's own voids are staged to it
+                PMove::Line {
+                    phase: Phase::Plunge, ..
+                } if stock_needed
+                    && cut_z.is_some_and(|z| z < deepest && later_top[i] <= z)
+                    && !self.ops[oi].voids.is_empty() =>
+                {
+                    let z = cut_z.take().unwrap_or(deepest);
+                    deepest = z;
+                    let mut all = loop_bands.clone();
+                    all.extend(cur_band.clone());
+                    stages.push((i, faces_of(&stage_of(&all, z))));
                 }
                 // a level's depth: the lowest point it cut (the feed back up is not one)
                 PMove::Line {
@@ -9912,8 +10336,8 @@ impl Cam {
         }
         // certify what the text means: each op's records, quantised, as motion, back in the
         // part's frame
-        let scale = 10f64.powi(d.decimals as i32);
-        let fscale = 10f64.powi(d.feed_decimals as i32);
+        let scale = 10f64.ipow(d.decimals as i32);
+        let fscale = 10f64.ipow(d.feed_decimals as i32);
         // each path read back and certified on its own (a function of the program's records
         // and the op, reading `self` only), on up to the threads there are; taken into the ops
         // after, in the paths' order, as before (the memos' state carried to the threads)
@@ -9995,9 +10419,9 @@ impl Cam {
                                 && from == to
                             {
                                 *b = true;
-                                let l = ((to[0] - at[0]).powi(2)
-                                    + (to[1] - at[1]).powi(2)
-                                    + (to[2] - at[2]).powi(2))
+                                let l = ((to[0] - at[0]).ipow(2)
+                                    + (to[1] - at[1]).ipow(2)
+                                    + (to[2] - at[2]).ipow(2))
                                 .sqrt();
                                 let fa = *f as f64 / fscale;
                                 lc += l;
@@ -10018,7 +10442,7 @@ impl Cam {
                                 start = Some(t);
                             }
                             let cc = [c[0] as f64 / scale + o[0], c[1] as f64 / scale + o[1]];
-                            let r = ((at[0] - cc[0]).powi(2) + (at[1] - cc[1]).powi(2)).sqrt();
+                            let r = ((at[0] - cc[0]).ipow(2) + (at[1] - cc[1]).ipow(2)).sqrt();
                             // its length: the turn it sweeps (as the control reads it: a whole turn
                             // when `full`), with the height it climbs; its time at its feed
                             let tau = std::f64::consts::TAU;
@@ -10034,7 +10458,7 @@ impl Cam {
                             if *full {
                                 sweep = tau;
                             }
-                            let l = ((r * sweep).powi(2) + (t[2] - at[2]).powi(2)).sqrt();
+                            let l = ((r * sweep).ipow(2) + (t[2] - at[2]).ipow(2)).sqrt();
                             lc += l;
                             let fa = *f as f64 / fscale;
                             time += if fa > 0.0 { l / fa * 60.0 } else { 0.0 };
@@ -10115,7 +10539,7 @@ impl Cam {
                         continue;
                     }
                     let l =
-                        ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2) + (to[2] - at[2]).powi(2)).sqrt();
+                        ((to[0] - at[0]).ipow(2) + (to[1] - at[1]).ipow(2) + (to[2] - at[2]).ipow(2)).sqrt();
                     if ph == Phase::Rapid {
                         lr += l;
                         time += l / 10_000.0 * 60.0;
@@ -10767,7 +11191,7 @@ impl Cam {
             ));
         }
         // the cycle time as the app shows it: the lower bound and the estimate together
-        let ct = self.cycle_times(&forge_machine::library::Library::with_builtin(), None);
+        let ct = self.cycle_times(machines::library(), None);
         let time_of = |i: usize, feed: f64| match ct.ops.get(i) {
             Some(t) if t.t_min > 0.0 => cycle::cycle_words(t.t_min, t.t_scurve),
             _ => format!("{feed:.0} s feed time"),
@@ -11722,6 +12146,41 @@ mod prefetch_tests {
         let fresh = super::run(src, &dir);
         super::memo::bypass(false);
         assert_eq!(reply(&cam), reply(&fresh), "made ahead: not the fresh run");
+    }
+
+    /// rest is not made ahead: its key holds the setup's earlier ops' paths, which the
+    /// prefetch pass does not make, so made ahead it would be made twice (once for a key the
+    /// run never asks). With a zlevel, a parallel and a rest, the run makes the rest once and
+    /// the two surfacing ops once each, and is the fresh run. (Its steps are its own: no other
+    /// test's call, so no other test's memo entry.)
+    #[test]
+    fn rest_is_made_in_the_run_only() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+        let src = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 40, holder: \"bt40-er32\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01)\nrough = zlevel(op1, tool: t1, leave: 0.5, step: 2.5, stepover: 4, area: (-34, -28, -6, 0), grid: 1)\nfin = parallel(op1, tool: t2, stepover: 2.5, area: (-24, -18, -16, -10))\nleft = rest(op1, tool: t2, after: t1, stepover: 2.5, area: (-26, -20, -12, -6), grid: 1.25)\nprog = program(op1, post: \"fanuc\", number: 1003)\n";
+        let reply = |cam: &super::Cam| {
+            let mut t = cam.json().to_string();
+            for p in &cam.programs {
+                t.push_str(&format!("\n{:?}", p.text));
+            }
+            t
+        };
+        let (s0, f0) = (super::SURFACED.computed(), super::FINISHED.computed());
+        let cam = super::run(src, &dir);
+        assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+        assert_eq!(
+            super::SURFACED.computed() - s0,
+            2,
+            "a surfacing op made twice or not at all"
+        );
+        assert_eq!(
+            super::FINISHED.computed() - f0,
+            1,
+            "rest made ahead as well as in the run"
+        );
+        super::memo::bypass(true);
+        let fresh = super::run(src, &dir);
+        super::memo::bypass(false);
+        assert_eq!(reply(&cam), reply(&fresh), "not the fresh run");
     }
 }
 
