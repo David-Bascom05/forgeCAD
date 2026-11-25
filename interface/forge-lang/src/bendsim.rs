@@ -530,8 +530,12 @@ fn prepare(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Prep, Answer>
     if !ask.stations.is_empty() {
         let mut ps: Vec<String> = ask.stations.iter().map(|s| s.punch.clone()).collect();
         let mut ds: Vec<String> = ask.stations.iter().map(|s| s.die.clone()).collect();
-        ps.dedup();
-        ds.dedup();
+        // each tool once, in the order its first station names it (stations need not be
+        // neighbours to share a tool)
+        let mut seen = std::collections::HashSet::new();
+        ps.retain(|x| seen.insert(x.clone()));
+        let mut seen = std::collections::HashSet::new();
+        ds.retain(|x| seen.insert(x.clone()));
         ask.punches.get_or_insert(ps);
         ask.dies.get_or_insert(ds);
     }
