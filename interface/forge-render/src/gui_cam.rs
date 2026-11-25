@@ -61,6 +61,12 @@ impl Gui {
             // nothing else to say (a view loaded after the run cleared it): the run's state
             self.shell.status = crate::shell::cam::status_line(w);
         }
+        // a narrow window's turns: a sheet opened (an op's, a setup's) shows the column again
+        let sheet = w.op_dlg.is_some() || w.setup_dlg.is_some();
+        if sheet && !w.sheet_was {
+            self.shell.column_shown = true;
+        }
+        w.sheet_was = sheet;
         // an export the host has not answered in 10 s: said so, with Try again
         w.export_wait(crate::viewer::now_ms());
         if let Some(a) = w.export_asked.as_ref().filter(|a| !a.waiting) {

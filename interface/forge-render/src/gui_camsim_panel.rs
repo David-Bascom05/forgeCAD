@@ -438,7 +438,7 @@ impl Shell {
         // (outside `v`), from before the column has first drawn it
         let panel_w = if self.cam.is_some() { -8.0 } else { covered_w(st) };
         // a timeline folded away (a view too narrow for it) covers nothing
-        let timeline = if timeline_fits(v, covered_w(st)) { TIMELINE_H + 16.0 } else { 0.0 };
+        let timeline = if timeline_fits(v, covered_w(st)) && !self.view_hidden { TIMELINE_H + 16.0 } else { 0.0 };
         Rect::from_min_max(v.min, pos2(v.right() - panel_w - 8.0, v.bottom() - timeline))
     }
 
@@ -469,7 +469,8 @@ impl Shell {
         );
         // a view too narrow for the timeline's controls (a phone-wide window: the bar's width
         // went negative, and egui panicked): folded away, the panel's Program tab still plays
-        if timeline_fits(v, panel_w) {
+        // (and none while the view is behind the properties column: a narrow window's turns)
+        if timeline_fits(v, panel_w) && !self.view_hidden {
             let r = egui::Area::new(egui::Id::unique("camsim:timeline"))
                 .fixed_pos(bar.min)
                 .order(egui::Order::Middle)
@@ -487,7 +488,8 @@ impl Shell {
             self.view_blocks.push(r.response.rect);
         }
         // the panel: down the view's right, unless the environment docks it
-        if !st.docked {
+        // (a narrow window taking turns: the panel is the column's only, never over the view)
+        if !st.docked && !self.props_alternate {
             // the panel: down the view's right
             let pr = Rect::from_min_max(
                 pos2(v.right() - panel_w - 8.0, v.top() + 44.0),
@@ -563,6 +565,7 @@ impl Shell {
             // holder meets it), out to the side with more room; the records it was drawn from
             // (keys, sources, what is left out) are its hover
             if st.tool
+                && !self.view_hidden
                 && let Some((tool, p, _)) = st.tool_now()
                 && let Some(lk) = st.sim.looks.get(tool)
                 && let Some((at, note)) = lk.note.as_ref()

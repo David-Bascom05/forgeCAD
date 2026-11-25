@@ -825,7 +825,55 @@ fn manufacture_opens_in_a_phone_wide_window() {
     assert_eq!(h.gui.shell.cam.as_ref().unwrap().view_cover, 0.0, "no room kept for a timeline not drawn");
     // its way to play stays: the panel's Program tab
     assert!(h.gui.shell.camsim.is_some());
-    shot(&mut h, "cam-480");
+    // too narrow for both: the column and the view take turns in the view's place (UX-LEAD);
+    // the column shown first, the view's own tools hidden (they floated over the browser)
+    let sh = &h.gui.shell;
+    assert!(sh.props_alternate && sh.column_shown && sh.view_hidden);
+    assert!(sh.place("nav:fit").is_none(), "the view's tool strip hidden behind the column");
+    assert!(sh.place("view:column").is_none());
+    let col = sh.place("cam:dock:sim").expect("the column's tabs");
+    assert!(col.left() < sh.view_rect.center().x, "the column in the view's place: {col:?}");
+    shot(&mut h, "cam-480-column");
+    // View: the view in its place, the way back named as the column's tab
+    let playing = h.gui.shell.camsim.as_ref().map(|s| s.playing);
+    tap(&mut h, "cam:dock:view");
+    for _ in 0..20 {
+        if !h.gui.shell.view_hidden {
+            break;
+        }
+        h.step();
+    }
+    h.step();
+    let sh = &h.gui.shell;
+    assert!(!sh.column_shown && !sh.view_hidden);
+    assert!(sh.place("nav:fit").is_some(), "the view's tools back");
+    assert!(sh.place("cam:dock:sim").is_none(), "the column hidden");
+    assert!(sh.place("view:column").is_some());
+    assert_eq!(h.gui.shell.cam.as_ref().unwrap().col_label, "Simulation");
+    assert_eq!(h.gui.shell.camsim.as_ref().map(|s| s.playing), playing, "the simulation as it was");
+    shot(&mut h, "cam-480-view");
+    // back to the column by its name
+    tap(&mut h, "view:column");
+    for _ in 0..20 {
+        if h.gui.shell.view_hidden {
+            break;
+        }
+        h.step();
+    }
+    assert!(h.gui.shell.column_shown && h.gui.shell.view_hidden, "back to the column");
+    // the view shown, and an op's sheet opened: the column shows it
+    tap(&mut h, "cam:dock:view");
+    for _ in 0..20 {
+        if !h.gui.shell.view_hidden {
+            break;
+        }
+        h.step();
+    }
+    assert!(!h.gui.shell.column_shown);
+    h.gui.shell.cam.as_mut().unwrap().command(forge_render::shell::cam::Cmd::Edit("side".into()));
+    h.step();
+    h.step();
+    assert!(h.gui.shell.column_shown, "a new sheet shows the column");
 }
 
 /// The tool library is left as every window is: Esc (BUTTON-AUDITOR: it stayed open), and its

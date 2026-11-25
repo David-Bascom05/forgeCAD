@@ -306,6 +306,10 @@ pub struct CamWs {
     pub said: Option<String>,
     /// `said` as last put in the shell's status (it is put there once, when it changes).
     pub said_shown: Option<String>,
+    /// The properties column's tab now shown, in words (the view's way back to it names it).
+    pub col_label: String,
+    /// An op's or a setup's sheet was open last frame (a new one shows the column again).
+    pub sheet_was: bool,
     /// An export handed to the host: when, what, and the words said then; while those words
     /// stand 10 s on, the host has not answered (`nc::EXPORT_WAIT_MS`).
     pub export_asked: Option<nc::ExportAsked>,
@@ -399,6 +403,8 @@ impl CamWs {
             redo: vec![],
             parts: vec![],
             said_shown: None,
+            col_label: String::new(),
+            sheet_was: false,
             export_asked: None,
             said: None,
             want_write: vec![],
