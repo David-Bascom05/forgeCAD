@@ -26,8 +26,6 @@ pub struct StudioHost {
     env_key: Option<(usize, String)>,
     scene_key: Option<(u64, u64, u64)>,
     scene: Option<(Built, Vec<Bsdf>)>,
-    /// When the last frame's samples went in, ms.
-    last: f64,
     /// The render under way began (ms); the picture it last wrote, to show; its texture.
     render_started: Option<f64>,
     written: Option<((u32, u32), Vec<u8>)>,
@@ -120,9 +118,17 @@ pub(super) fn lit(
 }
 
 impl Gui {
-    /// The Studio's live view, while it's open (tests: its target, to stop it).
+    /// The Studio's live view, while it's open (tests: its pace, its target).
     pub fn studio_live(&mut self) -> Option<&mut Live> {
         self.studio.as_mut().map(|h| &mut h.live)
+    }
+
+    /// The Studio's live view as it goes: the samples in the picture shown, those traced, the
+    /// rows it traces a frame (the page's state for its tests).
+    pub fn studio_progress(&self) -> Option<(u32, u32, u32)> {
+        self.studio
+            .as_ref()
+            .map(|h| (h.live.samples(), h.live.traced(), h.live.pace.rows))
     }
 
     /// The GPU drawing the window (tests: a software rasteriser's frames are its own measure).
@@ -156,6 +162,8 @@ impl Gui {
             }
             return false;
         }
+        // where Render Image and Turntable write when no file is named
+        let (render_dir, render_name) = self.capture_place_for("render");
         let Some(v) = &mut self.view else {
             return false;
         };
@@ -178,7 +186,6 @@ impl Gui {
                 env_key: None,
                 scene_key: None,
                 scene: None,
-                last: now_ms(),
                 render_started: None,
                 written: None,
                 thumb: None,
@@ -436,17 +443,11 @@ impl Gui {
             backdrop: Backdrop::Environment,
             ..Settings::default()
         };
-        let now = now_ms();
-        host.live.pace.after(now - host.last);
-        host.last = now;
         // a final render asked or under way has the GPU: the live picture waits, as it is (on a
         // software GPU a live sample is seconds, and the click must answer at once)
         let rendering = host.queue.progress() != Progress::Idle
             || st.asks.iter().any(|a| matches!(a, Ask::Image | Ask::Turntable));
-        let more = !rendering && host.live.frame(view, settings, size);
-        if !st.denoise && more {
-            host.live.tracer.show(settings.exposure, false);
-        }
+        let more = !rendering && host.live.frame(view, settings, size, st.denoise);
         if host.live.tracer.size != host.tex_size {
             self.egui.update_egui_texture_from_wgpu_texture(
                 &self.device,
@@ -457,6 +458,8 @@ impl Gui {
             host.tex_size = host.live.tracer.size;
         }
         st.samples = host.live.samples();
+        st.traced = host.live.traced();
+        st.target = host.live.target;
         // the view cube over the picture, as the shaded view has it
         if host.cube_tex == egui::TextureId::default()
             || host.cube.texture.size().width != size.0
@@ -505,15 +508,17 @@ impl Gui {
                     if st.depth_of_field && !cam.parallel {
                         fview = fview.with_lens(view.focal_mm(), Some(st.f_number), cam.dist);
                     }
-                    // a file named alone goes beside the document, as photos do
+                    // where captures go (the Capture folder, else the document's): a fresh
+                    // `<document>-render-<time>.png` there, or the file named (a name alone there)
                     let out = {
                         let p = std::path::Path::new(st.out.trim());
-                        let doc = self.shell.fg.as_ref().map(|f| f.path.clone());
-                        match doc.as_deref().map(std::path::Path::new).and_then(|d| d.parent()) {
-                            Some(dir) if p.is_relative() && !dir.as_os_str().is_empty() => {
-                                dir.join(p).to_string_lossy().into_owned()
-                            }
-                            _ => st.out.trim().to_string(),
+                        if st.out.trim().is_empty() {
+                            let ext = if ask == Ask::Image { ".png" } else { "" };
+                            Self::fresh_name(&render_dir, &render_name, ext)
+                        } else if p.is_relative() && !render_dir.as_os_str().is_empty() {
+                            render_dir.join(p).to_string_lossy().into_owned()
+                        } else {
+                            st.out.trim().to_string()
                         }
                     };
                     let output = if ask == Ask::Image {
@@ -595,7 +600,7 @@ impl Gui {
                 (id, (w, h))
             });
             status = Some(match &last {
-                Ok(p) => format!("Render saved: {p}"),
+                Ok(p) => format!("Wrote {p}"),
                 Err(e) => format!("Render failed: {e}"),
             });
             st.result = Some(RenderResult {
@@ -628,7 +633,8 @@ impl Gui {
             host.queue.log.clear();
             host.queue.log.extend(keep);
         }
-        let s = host.live.samples();
+        // the picture shown (from READABLE samples), and the samples traced since, for the fade
+        let (s, traced) = (host.live.samples(), host.live.traced());
         self.studio = Some(host);
         self.shell.studio = std::mem::take(st);
         // until the trace is readable the raster view (the same looks, its own cube) stands in;
@@ -637,10 +643,10 @@ impl Gui {
             self.shell.view_tex = Some(raster_tex);
             self.shell.view_over_tex = None;
             self.shell.view_over_alpha = 1.0;
-        } else if s < 2 * READABLE {
+        } else if traced < 2 * READABLE {
             self.shell.view_tex = Some(raster_tex);
             self.shell.view_over_tex = Some(tex);
-            self.shell.view_over_alpha = (s - READABLE) as f32 / READABLE as f32;
+            self.shell.view_over_alpha = (traced - READABLE) as f32 / READABLE as f32;
         } else {
             self.shell.view_tex = Some(tex);
             self.shell.view_over_tex = Some(cube_tex);

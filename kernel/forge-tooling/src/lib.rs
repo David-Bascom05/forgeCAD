@@ -1011,25 +1011,36 @@ impl JawBlank {
 impl Library {
     /// Adds a file's records (later files may not redefine an id already present).
     pub fn add(&mut self, file: &str, src: &str) -> Result<(), LibError> {
-        let t = toml::parse(src).map_err(|e| LibError::Toml {
+        let t = Self::parse_file(file, src)?;
+        self.add_table(t)
+    }
+
+    /// A library file's text read (`add`'s first half: a function of the text alone).
+    fn parse_file(file: &str, src: &str) -> Result<Table, LibError> {
+        toml::parse(src).map_err(|e| LibError::Toml {
             file: file.to_string(),
             line: e.line,
             what: e.what,
-        })?;
-        for r in tables(&t, "tool") {
-            let x = Tool::from_table(r)?;
+        })
+    }
+
+    /// A read file's records added (`add`'s second half). The records kept as sources are the
+    /// file's own tables, moved, not copied.
+    fn add_table(&mut self, mut t: Table) -> Result<(), LibError> {
+        for r in toml::take_tables(&mut t, "tool") {
+            let x = Tool::from_table(&r)?;
             if self.tools.iter().any(|o| o.id == x.id) {
                 return Err(LibError::Duplicate {
                     kind: "tool",
                     name: x.id,
                 });
             }
-            self.sources.push(("tool".into(), x.id.clone(), r.clone()));
+            self.sources.push(("tool".into(), x.id.clone(), r));
             self.tools.push(x);
         }
-        for r in tables(&t, "holder") {
-            let x = Holder::from_table(r)?;
-            self.sources.push(("holder".into(), x.id.clone(), r.clone()));
+        for r in toml::take_tables(&mut t, "holder") {
+            let x = Holder::from_table(&r)?;
+            self.sources.push(("holder".into(), x.id.clone(), r));
             if self.holders.iter().any(|o| o.id == x.id) {
                 return Err(LibError::Duplicate {
                     kind: "holder",
@@ -1089,9 +1100,9 @@ impl Library {
         }
         macro_rules! unique {
             ($key:literal, $vec:ident, $ty:ty, $kind:literal) => {
-                for r in tables(&t, $key) {
-                    let x = <$ty>::from_table(r)?;
-                    self.sources.push(($key.into(), x.id.clone(), r.clone()));
+                for r in toml::take_tables(&mut t, $key) {
+                    let x = <$ty>::from_table(&r)?;
+                    self.sources.push(($key.into(), x.id.clone(), r));
                     if self.$vec.iter().any(|o| o.id == x.id) {
                         return Err(LibError::Duplicate {
                             kind: $kind,
@@ -1122,14 +1133,23 @@ impl Library {
     /// The built-in library: ours, generic. Read from its files once per process (they are
     /// compiled in, so every read gives the same library), then cloned.
     pub fn builtin() -> Library {
-        static BUILT: std::sync::OnceLock<Library> = std::sync::OnceLock::new();
+        (*Library::builtin_shared()).clone()
+    }
+
+    /// The built-in library, shared (`builtin` without the copy). Its files are read in
+    /// parallel (each file's text alone makes its table) and added in their order, so the
+    /// library is the one `add`ing them one by one makes.
+    pub fn builtin_shared() -> std::sync::Arc<Library> {
+        static BUILT: std::sync::OnceLock<std::sync::Arc<Library>> = std::sync::OnceLock::new();
         BUILT
             .get_or_init(|| {
+                let read = forge_math::par::map(BUILTIN.len(), |i| Self::parse_file(BUILTIN[i].0, BUILTIN[i].1));
                 let mut l = Library::default();
-                for (f, s) in BUILTIN {
-                    l.add(f, s).expect("the built-in library reads");
+                for t in read {
+                    l.add_table(t.expect("the built-in library reads"))
+                        .expect("the built-in library reads");
                 }
-                l
+                std::sync::Arc::new(l)
             })
             .clone()
     }
@@ -1385,6 +1405,8 @@ mod tests {
         for (f, s) in super::BUILTIN {
             fresh.add(f, s).unwrap();
         }
+        // read in parallel, added in order: the library one-by-one `add`s make
+        assert_eq!(*super::Library::builtin_shared(), fresh);
         let mut a = super::Library::builtin();
         assert_eq!(a, fresh);
         a.tools.clear();

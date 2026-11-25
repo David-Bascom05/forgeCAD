@@ -133,26 +133,28 @@ impl OpenAi {
 }
 
 impl Backend for OpenAi {
-    fn send(&mut self, prompt: String, picture: Option<Vec<u8>>) {
+    fn send(&mut self, prompt: String, pictures: Vec<super::Picture>) {
         if self.busy.swap(true, Ordering::SeqCst) {
             return;
         }
         self.stop.store(false, Ordering::SeqCst);
-        let content = match picture {
-            None => prompt.into(),
-            Some(png) => Json::Arr(vec![
-                Json::obj(vec![("type", "text".into()), ("text", prompt.into())]),
+        let content = if pictures.is_empty() {
+            prompt.into()
+        } else {
+            let mut parts = vec![Json::obj(vec![("type", "text".into()), ("text", prompt.into())])];
+            parts.extend(pictures.iter().map(|p| {
                 Json::obj(vec![
                     ("type", "image_url".into()),
                     (
                         "image_url",
                         Json::obj(vec![(
                             "url",
-                            format!("data:image/png;base64,{}", super::apptools::base64(&png)).into(),
+                            format!("data:{};base64,{}", p.media, super::apptools::base64(&p.bytes)).into(),
                         )]),
                     ),
-                ]),
-            ]),
+                ])
+            }));
+            Json::Arr(parts)
         };
         self.history
             .lock()

@@ -88,6 +88,22 @@ pub fn report_pick(ms: &[f64]) -> String {
     )
 }
 
+/// p50, p95, p99 and the frames over 16.7 ms of a set of times (the big-model bench's line).
+pub fn report_split(what: &str, ms: &[f64]) -> String {
+    let mut v = ms.to_vec();
+    v.sort_by(f64::total_cmp);
+    let at = |q: f64| v[((v.len() - 1) as f64 * q).ceil() as usize];
+    let over = v.iter().filter(|&&x| x > 1000.0 / 60.0).count();
+    format!(
+        "{what}: p50 {:.3} p95 {:.3} p99 {:.3} worst {:.3} ms, {over} of {} over 16.7 ms",
+        at(0.5),
+        at(0.95),
+        at(0.99),
+        v[v.len() - 1],
+        v.len()
+    )
+}
+
 /// A pixel wandering over the middle of the window, what `--hover` picks at each frame.
 pub fn hover_at(frame: usize, size: (u32, u32)) -> (f32, f32) {
     let t = frame as f32 * 0.037;

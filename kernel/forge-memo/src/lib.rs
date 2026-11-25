@@ -78,6 +78,8 @@ struct Entry<V> {
     key: String,
     value: V,
     used: u64,
+    /// The bytes it counts for: its key's, and what `get_or_weighed` said its value holds.
+    bytes: usize,
 }
 
 pub struct Memo<V> {
@@ -103,6 +105,12 @@ impl<V: Clone> Memo<V> {
 
     /// The value for `key`: the one made before for the same key, else `make()`, kept.
     pub fn get_or(&self, key: String, make: impl FnOnce() -> V) -> V {
+        self.get_or_weighed(key, |_| 0, make)
+    }
+
+    /// `get_or` for a value much larger than its key (a height map): kept counting `weigh` of
+    /// it as well as its key against the budget.
+    pub fn get_or_weighed(&self, key: String, weigh: impl FnOnce(&V) -> usize, make: impl FnOnce() -> V) -> V {
         if key.contains("NaN") || BYPASS.with(|b| b.get()) {
             self.count();
             return make();
@@ -129,7 +137,7 @@ impl<V: Clone> Memo<V> {
         // made outside the lock: other threads' lookups go on meanwhile
         let value = make();
         if let Ok(mut g) = self.inner.lock() {
-            let len = key.len();
+            let len = key.len() + weigh(&value);
             if len <= MAX_BYTES / 4 {
                 g.bytes += len;
                 let now = g.clock;
@@ -141,6 +149,7 @@ impl<V: Clone> Memo<V> {
                         key,
                         value: value.clone(),
                         used: now,
+                        bytes: len,
                     });
                 // past the budget: the least recently used go (in order of use, ties by key)
                 while g.bytes > MAX_BYTES {
@@ -158,7 +167,7 @@ impl<V: Clone> Memo<V> {
                     if b.is_empty() {
                         map.remove(&bh);
                     }
-                    g.bytes -= gone.key.len();
+                    g.bytes -= gone.bytes;
                 }
             }
         }
