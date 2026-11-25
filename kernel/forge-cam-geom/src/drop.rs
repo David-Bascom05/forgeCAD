@@ -2625,9 +2625,6 @@ mod tests {
     use crate::check::{Surf, TSeg, Trim};
     use crate::tool::{Cutter, Part};
 
-    /// A bull-nose column's section at a (`bull_section`) is below the true section
-    /// b(√(u² + a²)) everywhere across it, and at least as wide: sampled densely for several
-    /// bull-noses and offsets, including the ones where the flat ring has gone (a near R).
     /// A profile whose arc only seems to start on its ring (EXACT-CORE's case: z0 < 0, the
     /// centre's z a denormal, both plain subtractions passing) gets no section; an exact one
     /// with z0 < 0 still does.
@@ -2664,6 +2661,9 @@ mod tests {
         assert!(bull_section(&segs, 1.0).is_some());
     }
 
+    /// A bull-nose column's section at a (`bull_section`) is below the true section
+    /// b(√(u² + a²)) everywhere across it, and at least as wide: sampled densely for several
+    /// bull-noses and offsets, including the ones where the flat ring has gone (a near R).
     #[test]
     #[cfg(not(feature = "old-closed-form"))]
     fn a_bull_noses_section_is_below_and_as_wide_as_the_true_one() {
