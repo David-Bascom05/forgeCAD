@@ -28,7 +28,7 @@ pub use plan::{
     programs, simulate,
 };
 pub use sim::{
-    Check, Contact, ContactFace, PartRef, Phase, Rule, Setup, Severity, Step, Surface, contacts_of,
+    Check, Contact, ContactFace, PartRef, Phase, Rule, Setup, Severity, Step, Stroke, Surface, contacts_of,
 };
 pub use stage::{StageFail, Staged, StationUse, stage};
 pub use tooling::{

@@ -6,7 +6,7 @@
 //! (straight, gooseneck, acute, then by id) and the dies (V nearest the set's rule, then by id).
 //! The closed-form rules are tried before any distance is: a setup that fails one costs nothing.
 use crate::model::Model;
-use crate::sim::{Check, Rule, Setup, Severity, Step, StepCtx};
+use crate::sim::{Check, Rule, Setup, Severity, Step, StepCtx, Stroke};
 use crate::tooling::{PunchKind, Tooling};
 use forge_sheet::{JointId, Strip, WallId};
 use std::collections::{HashMap, HashSet};
@@ -622,6 +622,7 @@ impl<'a> Search<'a> {
         let (pl, dl) = ctx.tool_lengths();
         let mut step = Step {
             bend: j,
+            stroke: Stroke::Air,
             joint: self.m.bends[j].joint,
             angle: self.m.bends[j].theta,
             overbend: ob,

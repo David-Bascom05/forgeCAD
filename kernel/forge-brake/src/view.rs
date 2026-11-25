@@ -37,7 +37,7 @@ fn sample(s: &Seg, n: usize) -> Vec<Point2> {
 /// Step `st` (after the bends `done`) at `t` in [0, 1]: the first fifth the punch coming down,
 /// then the bend to its overbent turn, the last fifth the punch going back up.
 pub fn frame(m: &Model, tl: &Tooling, done: &[bool], st: &Step, t: f64) -> Frame {
-    let ctx = StepCtx::new(m, tl, done, st.bend, st.setup, st.overbend);
+    let ctx = StepCtx::of_stroke(m, tl, done, st);
     let t = t.clamp(0.0, 1.0);
     let (phase, phi, tip) = if t < 0.2 {
         let h = ctx.z_tdc + (ctx.ztip(ctx.phi0()) - ctx.z_tdc) * (t / 0.2);

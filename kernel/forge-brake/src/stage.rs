@@ -162,7 +162,7 @@ fn layout(m: &Model, tl: &Tooling, prog: &Program, tight: bool) -> Option<Layout
     let mut reach = vec![(f64::INFINITY, f64::NEG_INFINITY); ps.len()];
     for (i, st) in steps.iter().enumerate() {
         let k = of[i];
-        let ctx = StepCtx::new(m, &bare, &dones[i], st.bend, st.setup, st.overbend);
+        let ctx = StepCtx::of_stroke(m, &bare, &dones[i], st);
         let (lo, hi) = ctx.part_span_y();
         reach[k] = (reach[k].0.min(lo), reach[k].1.max(hi));
     }
@@ -205,7 +205,7 @@ fn layout(m: &Model, tl: &Tooling, prog: &Program, tight: bool) -> Option<Layout
 
 /// The ram's travel through a step: approach to the sheet, the bend, the return.
 fn travel(m: &Model, tl: &Tooling, done: &[bool], st: &crate::sim::Step) -> Travel {
-    let ctx = StepCtx::new(m, tl, done, st.bend, st.setup, st.overbend);
+    let ctx = StepCtx::of_stroke(m, tl, done, st);
     let pinch = ctx.ztip(ctx.phi0());
     let bottom = ctx.ztip(ctx.phimax);
     Travel {

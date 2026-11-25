@@ -327,6 +327,8 @@ pub struct Gauged {
 pub struct Step {
     /// Index into `Model::bends`.
     pub bend: usize,
+    /// What the stroke does to the bend: all of it in the air, or one of a hem's two strokes.
+    pub stroke: Stroke,
     pub joint: JointId,
     /// The turn and the overbend (radians).
     pub angle: f64,
@@ -349,6 +351,29 @@ pub struct Step {
     /// The setups tried before this one, in the planner's order, each with the first rule it
     /// failed (punch id, die id, rotated, rule): why these tools were chosen.
     pub rejected: Vec<(String, String, bool, Rule)>,
+}
+
+/// What a step's stroke does to its bend.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum Stroke {
+    /// An air bend through the whole turn (and its overbend).
+    #[default]
+    Air,
+    /// A hem's first stroke: an air bend to the pre-bend's turn `to`, short of the hem's.
+    PreBend { to: f64 },
+    /// A hem's second: flattened from the pre-bend's turn `from` to the hem's
+    /// (`StepCtx::flattening`).
+    Flatten { from: f64 },
+}
+
+impl Stroke {
+    pub fn word(self) -> &'static str {
+        match self {
+            Stroke::Air => "bend",
+            Stroke::PreBend { .. } => "pre-bend",
+            Stroke::Flatten { .. } => "flatten",
+        }
+    }
 }
 
 impl Step {
@@ -773,6 +798,11 @@ impl<'a> StepCtx<'a> {
     /// quarter turn) to the hem's own: the base flat on the die, the leg closed by a flat face.
     /// None when the leg has walls beyond it (not simulated).
     pub fn flattening(mut self, from: f64) -> Option<Self> {
+        self.set_flattening(from).then_some(self)
+    }
+
+    /// `flattening` in place: false (nothing changed) where it does not model the stroke.
+    pub fn set_flattening(&mut self, from: f64) -> bool {
         let b = self.bj;
         if from < 0.5 * dmath::PI
             || self
@@ -780,14 +810,16 @@ impl<'a> StepCtx<'a> {
                 .iter()
                 .any(|p| p.side == Side::B && !matches!(p.kind, Kind::Wall { w, .. } if w == b.b))
         {
-            return None;
+            return false;
         }
-        let reach = self
+        let Some(leg) = self
             .pieces
             .iter()
-            .find(|p| matches!(p.kind, Kind::Wall { w, .. } if w == b.b))?
-            .dom[0]
-            .hi;
+            .find(|p| matches!(p.kind, Kind::Wall { w, .. } if w == b.b))
+        else {
+            return false;
+        };
+        let reach = leg.dom[0].hi;
         self.theta = b.theta;
         self.phimax = b.theta;
         self.flatten = Some(Flat {
@@ -795,7 +827,37 @@ impl<'a> StepCtx<'a> {
             reach,
             x_ref: -0.5 * reach,
         });
-        Some(self)
+        true
+    }
+
+    /// A pre-bend: the air bend stops at turn `to` (and its overbend), short of the bend's own.
+    pub fn set_pre_bend(&mut self, to: f64, overbend: f64) {
+        self.theta = to;
+        self.phimax = (to + overbend).min(dmath::PI - 1e-6);
+    }
+
+    /// A planned step's bend after `done`, with its tools and its stroke, at the bed's centre
+    /// (`of_step` puts it at its station).
+    pub fn of_stroke(m: &'a Model, tl: &'a Tooling, done: &[bool], st: &Step) -> StepCtx<'a> {
+        let mut ctx = StepCtx::new(m, tl, done, st.bend, st.setup, st.overbend);
+        match st.stroke {
+            Stroke::Air => {}
+            Stroke::PreBend { to } => ctx.set_pre_bend(to, st.overbend),
+            Stroke::Flatten { from } => {
+                ctx.set_flattening(from);
+            }
+        }
+        ctx
+    }
+
+    /// The context a planned step was simulated in: its bend after `done`, its tools, its stroke,
+    /// and the station it was worked at.
+    pub fn of_step(m: &'a Model, tl: &'a Tooling, done: &[bool], st: &Step) -> StepCtx<'a> {
+        let ctx = StepCtx::of_stroke(m, tl, done, st);
+        match st.station {
+            Some(i) if ctx.station != Some(i) && i < tl.stations.len() => ctx.at_station(i),
+            _ => ctx,
+        }
     }
 
     /// Where the stroke starts: 0 for an air bend, the pre-bend's turn for a flattening.
@@ -2749,10 +2811,7 @@ pub fn contacts_of(m: &Model, tl: &Tooling, done: &[bool], step: &Step) -> Vec<C
     if phases.is_empty() && !selfs {
         return Vec::new();
     }
-    let mut ctx = StepCtx::new(m, tl, done, step.bend, step.setup, step.overbend);
-    if let Some(k) = step.station {
-        ctx = ctx.at_station(k);
-    }
+    let ctx = StepCtx::of_step(m, tl, done, step);
     let mut out = Vec::new();
     if selfs {
         out.extend(ctx.self_contacts());

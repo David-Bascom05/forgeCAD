@@ -772,20 +772,9 @@ impl<'a> Scene<'a> {
     }
 
     fn build_ctx(&self, k: usize) -> StepCtx<'a> {
-        let st = &self.plan.steps[k];
-        let ctx = StepCtx::new(
-            self.m,
-            self.tl,
-            &self.done_before(k),
-            st.bend,
-            st.setup,
-            st.overbend,
-        );
-        // the station the plan worked it at (a lock may set one its tools would not pick)
-        match st.station {
-            Some(i) if ctx.station != Some(i) && i < self.tl.stations.len() => ctx.at_station(i),
-            _ => ctx,
-        }
+        // its stroke, and the station the plan worked it at (a lock may set one its tools would
+        // not pick)
+        StepCtx::of_step(self.m, self.tl, &self.done_before(k), &self.plan.steps[k])
     }
 
     /// The instant at `t` in [0, 1] of step `k`.
