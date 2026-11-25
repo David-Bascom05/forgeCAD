@@ -6283,7 +6283,6 @@ impl Cam {
     /// linked (stay down / lift / retract by a fixed rule), and certified afterwards by the
     /// column route like the surfacing ops. With `cusp:` the stepover and step-down are the
     /// largest the scallop module proves leave at most that cusp on a plane at the op's slopes.
-    #[allow(clippy::too_many_arguments)]
     /// The setup's built ops so far, each path with its tool's profile (a tool with none, a
     /// drill's, is left out): what the stock holds after them, as `HeightMap::sweep_path` models it.
     fn earlier_cuts(&self, su: usize) -> Vec<(forge_cam::engage::Profile, &OpPath)> {
@@ -6300,6 +6299,7 @@ impl Cam {
             .collect()
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn finish3d(
         &self,
         su: usize,

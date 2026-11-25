@@ -394,7 +394,8 @@ impl HeightMap {
                 PMove::Arc { to, c, cw, .. } => {
                     let a0 = dmath::atan2(at[1] - c[1], at[0] - c[0]);
                     let sw = sweep(a0, dmath::atan2(to[1] - c[1], to[0] - c[0]), !cw);
-                    let rad = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
+                    let (rx, ry) = (at[0] - c[0], at[1] - c[1]);
+                    let rad = (rx * rx + ry * ry).sqrt();
                     let k = ((sw.abs() * rad / self.h).ceil() as usize).max(1);
                     let mut q0 = at;
                     for i in 1..=k {
