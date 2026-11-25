@@ -102,9 +102,10 @@ pub fn along_axis(c: &Camera, size: (u32, u32), px: (f32, f32), at: [f64; 3], di
     Some((a * e - b) / denom)
 }
 
-/// Drags land on tidy values, as fine as a pixel can tell.
+/// Drags land on tidy values, as fine as a pixel can tell. The value is written into the part, so
+/// its step is the same on every platform: the decimal exponent, not libm's `log10`.
 pub fn tidy(v: f64, mm_per_px: f64) -> f64 {
-    let step = 10f64.powi(mm_per_px.max(1e-6).log10().ceil() as i32);
+    let step = 10f64.powi(forge_lang::units::decimal_exponent_ceil(mm_per_px.max(1e-6)));
     (v / step).round() * step
 }
 

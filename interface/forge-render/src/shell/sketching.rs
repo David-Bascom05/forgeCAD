@@ -1955,6 +1955,8 @@ impl Shell {
                 .iter()
                 .fold((f64::MAX, f64::MIN), |a, c| (a.0.min(c.1), a.1.max(c.1)));
             let want = 18.0 * mm_per_pt;
+            // the drawn grid's spacing only (no snap reads it): never saved
+            #[allow(clippy::disallowed_methods)]
             let base = 10f64.powi(want.log10().floor() as i32);
             let step = [1.0, 2.0, 5.0, 10.0]
                 .into_iter()

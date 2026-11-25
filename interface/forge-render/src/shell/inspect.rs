@@ -1826,6 +1826,8 @@ fn fig(x: f64) -> String {
     if !(1e-4..1e12).contains(&a) {
         return format!("{x:.4e}");
     }
+    // on-screen figures only (a value's digits before the point): never saved
+    #[allow(clippy::disallowed_methods)]
     let int = if a < 1.0 { 1 } else { a.log10().floor() as i32 + 1 };
     let places = (5 - int).clamp(0, 4) as usize;
     let s = format!("{a:.places$}");

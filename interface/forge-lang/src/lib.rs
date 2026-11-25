@@ -361,7 +361,11 @@ fn fit_sizes(src: &str, opts: &Options, run: &mut Run, mut cache: Cache) -> Cach
                 param: key.clone(),
                 value: error::Literal { value: v, dim },
             };
-            let Ok(text) = edit::apply(src, &op) else {
+            let at = edit::At {
+                dir: opts.dir.clone(),
+                root: opts.root.clone(),
+            };
+            let Ok(text) = edit::apply_at(src, &op, &at) else {
                 return Some("the edit does not apply".into());
             };
             let (r, c) = run_once(&text, inner.clone(), cache_cell.take().unwrap_or_default());
@@ -451,7 +455,7 @@ fn fit_search(
         }
     }
     let down = |p: f64| (lo * p).floor() / p;
-    let figures = 10f64.powi(2 - lo.abs().log10().floor() as i32);
+    let figures = 10f64.powi(2 - units::decimal_exponent(lo));
     let decimals = 10f64.powi(if lo.abs() >= 1000.0 {
         1
     } else if lo.abs() >= 1.0 {

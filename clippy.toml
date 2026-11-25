@@ -13,5 +13,8 @@ disallowed-methods = [
   { path = "f64::hypot", reason = "platform libm" },
   { path = "f64::exp", reason = "platform libm" },
   { path = "f64::ln", reason = "platform libm" },
+  { path = "f64::log10", reason = "platform libm (an ulp off at a power of ten flips a floor): forge_lang::units::decimal_exponent, or forge_math::dmath::ln" },
+  { path = "f64::log2", reason = "platform libm: forge_math::dmath::ln" },
+  { path = "f64::log", reason = "platform libm: forge_math::dmath::ln" },
   { path = "f64::powf", reason = "platform libm" },
 ]

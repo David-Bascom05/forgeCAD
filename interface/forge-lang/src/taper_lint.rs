@@ -32,7 +32,7 @@ pub(crate) fn closes(
     // three figures, rounded towards 0 so the walls meet at the depth or past it (a lesser
     // depth, or a shallower taper): the fixed part has no lint
     let down = |x: f64| {
-        let p = 10f64.powi(2 - x.abs().log10().floor() as i32);
+        let p = 10f64.powi(2 - crate::units::decimal_exponent(x));
         (x.abs() * p).floor() / p * x.signum()
     };
     let depth_fix = driven("depth").map(|(key, v)| {
