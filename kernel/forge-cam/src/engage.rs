@@ -108,6 +108,33 @@ fn polygon(segs: &[Seg]) -> Vec<(f64, f64)> {
     pts
 }
 
+/// A closed loop as a polygon whose chords stray from its arcs by at most `sag` (and no fewer
+/// than `polygon`'s 32 a turn).
+fn polygon_fine(segs: &[Seg], sag: f64) -> Vec<(f64, f64)> {
+    let mut pts = Vec::new();
+    for sg in segs {
+        match *sg {
+            Seg::Line { a, .. } => pts.push((a.x, a.y)),
+            Seg::Arc { a, b, c, ccw } => {
+                let r = ((a.x - c.x) * (a.x - c.x) + (a.y - c.y) * (a.y - c.y)).sqrt();
+                let a0 = dmath::atan2(a.y - c.y, a.x - c.x);
+                let a1 = dmath::atan2(b.y - c.y, b.x - c.x);
+                let sw = sweep(a0, a1, ccw);
+                // a chord of length l strays l²/8r from its arc
+                let step = (8.0 * r * sag).sqrt();
+                let n = ((sw.abs() / std::f64::consts::TAU * 32.0).ceil() as usize)
+                    .max((sw.abs() * r / step).ceil() as usize)
+                    .max(1);
+                for k in 0..n {
+                    let (sn, cs) = dmath::sin_cos(a0 + sw * k as f64 / n as f64);
+                    pts.push((c.x + r * cs, c.y + r * sn));
+                }
+            }
+        }
+    }
+    pts
+}
+
 /// The signed sweep from angle a0 to a1, counter-clockwise if ccw, in (0, 2π] or [−2π, 0) (the
 /// same angle: a whole turn).
 fn sweep(a0: f64, a1: f64, ccw: bool) -> f64 {
@@ -197,6 +224,144 @@ impl HeightMap {
                 }
             }
         }
+    }
+
+    /// The in-process stock, never below it: `of_stock` with each void lowering only the cells
+    /// wholly inside its region (`lower_voids_under`).
+    pub fn of_stock_under(ip: &InProcess, h: f64) -> HeightMap {
+        let mut m = HeightMap::new(ip.min, ip.max, h);
+        m.lower_voids_under(ip);
+        m
+    }
+
+    /// `lower_voids`, but a cell is lowered only where the whole cell lies inside the void's
+    /// region (its centre inside and at least h/√2 from every edge, the edges' arcs taken as
+    /// chords within h/100 of them, which the margin covers): no cell is ever brought below
+    /// material it still holds, however thin. For tests of clearance (hops), not for engagement.
+    pub fn lower_voids_under(&mut self, ip: &InProcess) {
+        for (rg, floor) in &ip.voids {
+            self.lower_region_under(rg, *floor);
+        }
+    }
+
+    fn lower_region_under(&mut self, rg: &Region, floor: f64) {
+        let sag = 0.01 * self.h;
+        let polys: Vec<Vec<(f64, f64)>> = rg.loops.iter().map(|l| polygon_fine(&l.segs, sag)).collect();
+        let margin = self.h * std::f64::consts::FRAC_1_SQRT_2 + sag;
+        let mut inside = vec![false; self.nx * self.ny];
+        let mut xs: Vec<f64> = Vec::new();
+        for j in 0..self.ny {
+            let y = self.y0 + (j as f64 + 0.5) * self.h;
+            xs.clear();
+            for p in &polys {
+                let n = p.len();
+                for i in 0..n {
+                    let (x0, y0) = p[i];
+                    let (x1, y1) = p[(i + 1) % n];
+                    if (y0 > y) != (y1 > y) {
+                        xs.push(x0 + (y - y0) * (x1 - x0) / (y1 - y0));
+                    }
+                }
+            }
+            xs.sort_by(f64::total_cmp);
+            for pair in xs.as_chunks::<2>().0 {
+                let i0 = ((pair[0] - self.x0) / self.h - 0.5).ceil().max(0.0) as usize;
+                let i1 = ((pair[1] - self.x0) / self.h - 0.5).floor();
+                if i1 < 0.0 {
+                    continue;
+                }
+                let i1 = (i1 as usize).min(self.nx.saturating_sub(1));
+                for i in i0..=i1 {
+                    inside[j * self.nx + i] = true;
+                }
+            }
+        }
+        // the cells whose centre lies within the margin of an edge: not wholly inside
+        let cell = |v: f64, o: f64| ((v - o) / self.h - 0.5).floor();
+        for p in &polys {
+            let n = p.len();
+            for k in 0..n {
+                let (a, b) = (p[k], p[(k + 1) % n]);
+                let i0 = cell(a.0.min(b.0) - margin, self.x0).max(0.0) as usize;
+                let j0 = cell(a.1.min(b.1) - margin, self.y0).max(0.0) as usize;
+                let i1 = ((cell(a.0.max(b.0) + margin, self.x0) + 2.0).max(0.0) as usize).min(self.nx);
+                let j1 = ((cell(a.1.max(b.1) + margin, self.y0) + 2.0).max(0.0) as usize).min(self.ny);
+                let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+                let ll = dx * dx + dy * dy;
+                for j in j0..j1 {
+                    let y = self.y0 + (j as f64 + 0.5) * self.h;
+                    for i in i0..i1 {
+                        let x = self.x0 + (i as f64 + 0.5) * self.h;
+                        let t = if ll > 0.0 {
+                            (((x - a.0) * dx + (y - a.1) * dy) / ll).clamp(0.0, 1.0)
+                        } else {
+                            0.0
+                        };
+                        let (px, py) = (a.0 + t * dx, a.1 + t * dy);
+                        if (x - px) * (x - px) + (y - py) * (y - py) < margin * margin {
+                            inside[j * self.nx + i] = false;
+                        }
+                    }
+                }
+            }
+        }
+        for (k, &ins) in inside.iter().enumerate() {
+            if ins && self.z[k] > floor {
+                self.z[k] = floor.max(self.bottom);
+            }
+        }
+    }
+
+    /// `sweep`, never below the material: a cell is lowered only where one position of the tool
+    /// along a → b covers the whole cell (its centre within r − h/√2 of the tip's axis there),
+    /// and only to the body's highest point over the cell at that position. Thin material the
+    /// tool's edge left inside a cell keeps the cell up. For tests of clearance (hops).
+    pub fn sweep_under(&mut self, a: [f64; 3], b: [f64; 3], p: &Profile) -> f64 {
+        let r = p.r();
+        let hh = self.h * std::f64::consts::FRAC_1_SQRT_2;
+        let cell = |v: f64, o: f64| ((v - o) / self.h - 0.5).floor();
+        let i0 = cell(a[0].min(b[0]) - r, self.x0).max(0.0) as usize;
+        let j0 = cell(a[1].min(b[1]) - r, self.y0).max(0.0) as usize;
+        let i1 = ((cell(a[0].max(b[0]) + r, self.x0) + 2.0).max(0.0) as usize).min(self.nx);
+        let j1 = ((cell(a[1].max(b[1]) + r, self.y0) + 2.0).max(0.0) as usize).min(self.ny);
+        let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+        let ll = dx * dx + dy * dy;
+        let zmin = a[2].min(b[2]);
+        let mut removed = 0.0;
+        for j in j0..j1 {
+            let y = self.y0 + (j as f64 + 0.5) * self.h;
+            for i in i0..i1 {
+                let k = j * self.nx + i;
+                let old = self.z[k];
+                if old <= zmin || old <= self.bottom {
+                    continue;
+                }
+                let x = self.x0 + (i as f64 + 0.5) * self.h;
+                let t = if ll > 0.0 {
+                    (((x - a[0]) * dx + (y - a[1]) * dy) / ll).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+                let (px, py) = (a[0] + t * dx, a[1] + t * dy);
+                let d = ((x - px) * (x - px) + (y - py) * (y - py)).sqrt();
+                if d + hh > r {
+                    continue;
+                }
+                let mut zc = a[2] + t * (b[2] - a[2]) + p.at(d + hh);
+                for e in [a, b] {
+                    let de = ((x - e[0]) * (x - e[0]) + (y - e[1]) * (y - e[1])).sqrt();
+                    if de + hh <= r {
+                        zc = zc.min(e[2] + p.at(de + hh));
+                    }
+                }
+                let new = zc.max(self.bottom);
+                if new < old {
+                    removed += old - new;
+                    self.z[k] = new;
+                }
+            }
+        }
+        removed * self.h * self.h
     }
 
     /// The top at a point; outside the box, no material (−∞).
@@ -979,5 +1144,120 @@ mod tests {
                 (t.to_bits(), ws.to_bits(), wc.to_bits())
             );
         }
+    }
+
+    /// The body's true height at (x, y) after a → b (the tool's tip at fine positions along it),
+    /// or `old` where the tool never covers the point.
+    fn true_height(old: f64, a: [f64; 3], b: [f64; 3], p: &Profile, x: f64, y: f64) -> f64 {
+        let mut z = old;
+        for k in 0..=2000 {
+            let t = k as f64 / 2000.0;
+            let c = [
+                a[0] + t * (b[0] - a[0]),
+                a[1] + t * (b[1] - a[1]),
+                a[2] + t * (b[2] - a[2]),
+            ];
+            let d = ((x - c[0]).powi(2) + (y - c[1]).powi(2)).sqrt();
+            if d <= p.r() {
+                z = z.min(c[2] + p.at(d));
+            }
+        }
+        z
+    }
+
+    #[test]
+    fn sweep_under_never_brings_a_cell_below_what_it_still_holds() {
+        let profs = [
+            Profile::Bull { r: 3.0, re: 0.0 },
+            Profile::Bull { r: 3.0, re: 1.0 },
+            Profile::Ball { r: 3.0 },
+        ];
+        let moves = [
+            ([2.0, 5.13, 4.0], [17.7, 5.13, 4.0]),
+            ([3.1, 2.9, 6.0], [15.2, 11.4, 2.5]),
+            ([9.03, 7.71, 5.0], [9.03, 7.71, 5.0]),
+        ];
+        for p in &profs {
+            for &(a, b) in &moves {
+                let mut under = HeightMap::new([0.0, 0.0, 0.0], [20.0, 15.0, 10.0], 0.25);
+                let mut plain = under.clone();
+                under.sweep_under(a, b, p);
+                plain.sweep(a, b, p);
+                let mut lowered = 0;
+                for j in 0..under.ny {
+                    for i in 0..under.nx {
+                        let k = j * under.nx + i;
+                        assert!(under.z[k] >= plain.z[k] - 1e-12, "below sweep at {i} {j}");
+                        if under.z[k] >= 10.0 {
+                            continue;
+                        }
+                        lowered += 1;
+                        // every point of the cell: still at or below the cell's height
+                        for v in 0..=6 {
+                            for u in 0..=6 {
+                                let x = under.x0 + (i as f64 + u as f64 / 6.0) * under.h;
+                                let y = under.y0 + (j as f64 + v as f64 / 6.0) * under.h;
+                                let t = true_height(10.0, a, b, p, x, y);
+                                assert!(
+                                    t <= under.z[k] + 1e-9,
+                                    "{p:?} {a:?}->{b:?}: cell {i} {j} at {} holds {t}",
+                                    under.z[k]
+                                );
+                            }
+                        }
+                    }
+                }
+                assert!(lowered > 100, "{p:?} {a:?}->{b:?}: only {lowered} cells lowered");
+            }
+        }
+    }
+
+    #[test]
+    fn lower_voids_under_lowers_only_cells_wholly_inside() {
+        let c = forge_cam_geom::region::P2 { x: 8.37, y: 7.11 };
+        let a = forge_cam_geom::region::P2 { x: c.x + 5.3, y: c.y };
+        let circle = forge_cam_geom::region::Loop {
+            segs: vec![Seg::Arc {
+                a,
+                b: a,
+                c,
+                ccw: true,
+            }],
+        };
+        let ip = InProcess {
+            min: [0.0, 0.0, 0.0],
+            max: [20.0, 15.0, 10.0],
+            voids: vec![(Region { loops: vec![circle] }, 4.0)],
+            under: Vec::new(),
+        };
+        let m = HeightMap::of_stock_under(&ip, 0.25);
+        let plain = HeightMap::of_stock(&ip, 0.25);
+        let (mut n, mut n_plain) = (0, 0);
+        for j in 0..m.ny {
+            for i in 0..m.nx {
+                let k = j * m.nx + i;
+                n_plain += (plain.z[k] < 10.0) as usize;
+                if m.z[k] >= 10.0 {
+                    continue;
+                }
+                n += 1;
+                for v in 0..=4 {
+                    for u in 0..=4 {
+                        let x = m.x0 + (i as f64 + u as f64 / 4.0) * m.h;
+                        let y = m.y0 + (j as f64 + v as f64 / 4.0) * m.h;
+                        assert!(
+                            ((x - c.x).powi(2) + (y - c.y).powi(2)).sqrt() <= 5.3 + 1e-9,
+                            "cell {i} {j} pokes out"
+                        );
+                    }
+                }
+            }
+        }
+        // all but the rim: the disk of radius 5.3 − h/√2 − h holds every centre lowered by plain
+        // whose cell is wholly inside, near enough
+        assert!(
+            n > 0 && n < n_plain && (n as f64) > 0.85 * n_plain as f64,
+            "{n} of {n_plain}"
+        );
     }
 }

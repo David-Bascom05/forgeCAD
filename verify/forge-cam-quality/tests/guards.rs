@@ -1,4 +1,4 @@
-//! Two guards over every benchmark part, for every strategy:
+//! Guards over every benchmark part, for every strategy:
 //! - chip load: no cutting sample's chip (hex) is over its op's target by more than 10 %. A feed
 //!   error breaks tools and no geometric certifier sees it (a link at its link feed grazing stock
 //!   reached 12 x fz before this guard; a sample given the air feed while cutting, 3 x).
@@ -6,6 +6,10 @@
 //!   same volume within 0.5 %, so a time compared between them compares the same job (adaptive
 //!   once left 12 % of a level while its time was compared with clear's). Pairs that differ by
 //!   design are listed with the reason.
+//! - nothing fast meets material: no rapid piece and no feed piece at the link feed (f >=
+//!   FAST_FEED) meets material in the quality model, on any part. A hop's ramp once grazed a skin
+//!   finer than its map's cell at F9999 (hex 12 x fz); its map is conservative now, and this guard
+//!   keeps every map and link rule honest without slowing any descent.
 //! - no micro-moves: every adaptive op's mean move (all its moves, links and rapids too) is at
 //!   least the tool's radius and at least the mean move of clear on the same part (adaptive was
 //!   once posted as its 0.75 mm simulation steps: 5,348 blocks where clear has 1,171).
@@ -62,6 +66,7 @@ fn measure_all() -> Vec<JobQ> {
 fn chip_load_and_equal_work() {
     let jobs = measure_all();
     let mut over = Vec::new();
+    let mut fast = Vec::new();
     // (part, strategy) -> removed, for the parts named NAME_STRATEGY_cam
     let mut work: BTreeMap<String, Vec<(String, f64)>> = BTreeMap::new();
     // part -> (strategy, op, mean move, tool radius), the clearing ops
@@ -74,6 +79,12 @@ fn chip_load_and_equal_work() {
             .into_owned();
         assert!(j.errors.is_empty(), "{stem}: {:?}", j.errors);
         for q in &j.ops {
+            if q.rapid_cuts > 0 || q.fast_cuts > 0 {
+                fast.push(format!(
+                    "{stem}/{}: {} rapid and {} link-feed pieces meet material (first at {:?})",
+                    q.name, q.rapid_cuts, q.fast_cuts, q.fast_cut_at
+                ));
+            }
             if q.fz_target > 0.0 && q.hex_max > 1.10 * q.fz_target {
                 over.push(format!(
                     "{stem}/{}: hex_max {:.4} against fz {:.4}",
@@ -101,6 +112,7 @@ fn chip_load_and_equal_work() {
         }
     }
     assert!(over.is_empty(), "chip load over its target:\n{}", over.join("\n"));
+    assert!(fast.is_empty(), "fast moves meet material:\n{}", fast.join("\n"));
     let mut unequal = Vec::new();
     for (part, v) in &work {
         if v.len() < 2 || UNEQUAL.iter().any(|(p, _)| p == part) {
