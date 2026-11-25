@@ -10,6 +10,9 @@ use crate::shell::markup::{Mark, Sent, Thumb, Under, describe};
 use crate::viewer::now_ms;
 use egui::{Pos2, Rect, pos2, vec2};
 use std::collections::HashMap;
+
+/// What the message says of a picture of the view sent with no marks on it.
+pub const VIEW_SAID: &str = "(The picture is the app's view as I see it now.)";
 use std::sync::Arc;
 
 /// The thumbnail's largest side, in pixels.
@@ -323,6 +326,8 @@ pub(super) struct Waiting {
     /// The picture's top left in window points, and pixels per point.
     at: (Pos2, f32),
     png: Option<Vec<u8>>,
+    /// Pasted or dropped, sent after the view's.
+    pictures: Vec<crate::agent::Picture>,
     ids: Option<ViewIds>,
     since: f64,
 }
@@ -464,7 +469,7 @@ impl Gui {
     /// (an assembly's occurrences' own names are found off the frame's thread, once a text).
     pub(super) fn markup_send(
         &mut self,
-        (text, refs): (String, Vec<String>),
+        (text, refs, pictures): (String, Vec<String>, Vec<crate::agent::Picture>),
         prims: &[egui::ClippedPrimitive],
         sd: &egui_wgpu::ScreenDescriptor,
     ) {
@@ -518,6 +523,7 @@ impl Gui {
             sent,
             at,
             png,
+            pictures,
             ids,
             since: now_ms(),
         }));
@@ -554,12 +560,17 @@ impl Gui {
             w.sent.marks.iter().any(Mark::region),
             occ.as_deref(),
         );
-        let said = describe(&w.sent.marks, &names, &|p| {
-            (
-                ((p.x - min.x) * ppp).round() as i32,
-                ((p.y - min.y) * ppp).round() as i32,
-            )
-        });
+        // no marks: the view alone, attached
+        let said = if w.sent.marks.is_empty() {
+            VIEW_SAID.to_string()
+        } else {
+            describe(&w.sent.marks, &names, &|p| {
+                (
+                    ((p.x - min.x) * ppp).round() as i32,
+                    ((p.y - min.y) * ppp).round() as i32,
+                )
+            })
+        };
         eprintln!(
             "forge-app: markup named in {:.1} ms, {:.0} ms after it was taken",
             now_ms() - t0,
@@ -581,7 +592,13 @@ impl Gui {
         } else {
             format!("{}\n\n{said}", w.text)
         };
-        self.agent_send(&full, &w.refs, w.png);
+        let pictures = w
+            .png
+            .map(crate::agent::Picture::png)
+            .into_iter()
+            .chain(w.pictures)
+            .collect();
+        self.agent_send(&full, &w.refs, pictures);
     }
 
     /// An assembly's occurrences named as their own models name them, found on a thread for the

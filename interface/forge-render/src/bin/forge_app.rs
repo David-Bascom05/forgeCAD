@@ -52,6 +52,8 @@ enum Step {
     /// A key going down, or coming up, alone (a key held to talk).
     KeyDown(String),
     KeyUp(String),
+    /// A length param of the open document set, as its field does (by its name).
+    Set(String, f64),
 }
 
 struct Args {
@@ -86,6 +88,8 @@ struct Args {
     frames: bool,
     out_size: Option<(u32, u32)>,
     times: bool,
+    /// Each step's frames: p50, p95, p99 of the UI thread's frame (research/big-render).
+    frame_log: bool,
     present: Option<String>,
     run_for: Option<f64>,
     spin: bool,
@@ -119,6 +123,7 @@ fn args() -> Result<Args, String> {
         frames: false,
         out_size: None,
         times: false,
+        frame_log: false,
         present: None,
         run_for: None,
         spin: false,
@@ -227,7 +232,13 @@ fn args() -> Result<Args, String> {
             }
             "--marking" => a.marking = true,
             "--bench" => a.bench = true,
+            "--set" => {
+                let name = it.next().ok_or("--set PARAM VALUE")?;
+                let v = it.next().and_then(|v| v.parse().ok()).ok_or("--set PARAM VALUE")?;
+                a.steps.push(Step::Set(name, v));
+            }
             "--times" => a.times = true,
+            "--frame-log" => a.frame_log = true,
             "--present" => a.present = Some(v()?),
             "--run-for" => a.run_for = Some(v()?.parse().map_err(|_| USAGE)?),
             "--spin" => a.spin = true,
@@ -476,6 +487,14 @@ fn hover(h: &mut Headless, x: f32, y: f32) {
     }
 }
 
+/// A step's frames: the whole UI-thread frame, then its parts as the app times them.
+fn frame_report(step: &str, log: &[[f64; 5]]) {
+    for (k, what) in ["frame", "ui", "tess", "view", "draw"].iter().enumerate() {
+        let v: Vec<f64> = log.iter().map(|r| r[k]).collect();
+        println!("{}", forge_render::bench::report_split(&format!("{step} {what}"), &v));
+    }
+}
+
 fn wait(h: &mut Headless) {
     let t = std::time::Instant::now();
     while t.elapsed().as_secs() < 900 {
@@ -576,7 +595,15 @@ fn run() -> Result<(), String> {
             h.step();
         }
     }
-    for step in &a.steps {
+    for (k, step) in a.steps.iter().enumerate() {
+        if a.frame_log {
+            if let Some(log) = h.frame_log.take()
+                && !log.is_empty()
+            {
+                frame_report(&format!("step {k}"), &log);
+            }
+            h.frame_log = Some(Vec::new());
+        }
         let (right, c) = match step {
             Step::Click(c) | Step::DoubleClick(c) => (false, c),
             Step::RightClick(c) => (true, c),
@@ -641,6 +668,19 @@ fn run() -> Result<(), String> {
             }
             Step::Hover(x, y) => {
                 hover(&mut h, *x, *y);
+                continue;
+            }
+            Step::Set(name, v) => {
+                let key = h.gui.shell.fg.as_ref().and_then(|p| {
+                    p.params.iter().find(|r| r.key.name == *name).map(|r| r.key.clone())
+                });
+                let Some(key) = key else {
+                    return Err(format!("no param {name}"));
+                };
+                if !set_length(&mut h, &key, *v) {
+                    return Err(format!("{name} = {v} refused"));
+                }
+                h.step();
                 continue;
             }
             Step::Sleep(secs) => {
@@ -798,6 +838,11 @@ fn run() -> Result<(), String> {
         }
         h.step();
         h.step();
+    }
+    if let Some(log) = h.frame_log.take()
+        && !log.is_empty()
+    {
+        frame_report("last step", &log);
     }
     if let Some(s) = &a.select
         && !h.click(&format!("fg:row:{s}"))

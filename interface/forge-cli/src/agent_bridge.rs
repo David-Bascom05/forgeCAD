@@ -5,7 +5,9 @@
 //!   POST /api/agent/start   {"file"?: REL, "mode"?: M}   starts the session (or finds it running)
 //!   GET  /api/agent/events?from=N                        its stream-json lines from the Nth, as
 //!                                                       they come (a streamed response, a line each)
-//!   POST /api/agent/send    {"text", "picture"?: B64}    a message (a PNG picture, base64)
+//!   POST /api/agent/send    {"text", "pictures"?: [{"media", "data": B64}]}
+//!                                                       a message, and its pictures (PNG, JPEG,
+//!                                                       GIF or WebP, base64)
 //!   POST /api/agent/answer  {"id", "answer"}             a permission: allow | always | deny
 //!   POST /api/agent/mode    {"mode"}                     default | acceptEdits | plan
 //!   POST /api/agent/stop    {}                           interrupt the turn
@@ -48,9 +50,6 @@ pub struct Agent {
     pub program: String,
     /// This binary, for the session's MCP server (`forgecad mcp --root DIR --writable`).
     pub forgecad: PathBuf,
-    /// A page on another origin (case 2) may run a session in a bypass mode only with this.
-    pub allow_bypass: bool,
-    pub cross_origin: bool,
     s: Mutex<Session>,
     cv: Condvar,
 }
@@ -71,6 +70,8 @@ struct Session {
     last_read: Option<Instant>,
     mode: Option<String>,
     file: Option<String>,
+    /// When the process started (a session no page ever read is ended after `IDLE` too).
+    started: Option<Instant>,
     /// Bumped at each start: a reader of an ended session's stream stops.
     run: u64,
     stops: u64,
@@ -102,19 +103,74 @@ fn fields(body: &[u8], allowed: &[&str]) -> Result<Json, Answer> {
     Ok(j)
 }
 
+/// A message's pictures, checked: each a type the models read and base64 data, nothing else.
+/// The most pictures a message takes, and the most each may be (decoded), as the models take.
+const MAX_PICTURES: usize = 20;
+const MAX_PICTURE_BYTES: usize = 5 << 20;
+const MAX_MESSAGE_PICTURES: usize = 8 << 20;
+
+fn pictures(j: Option<&Json>) -> Result<Vec<(&'static str, String)>, String> {
+    const MEDIA: [&str; 4] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+    let Some(j) = j else { return Ok(vec![]) };
+    let Json::Arr(all) = j else {
+        return Err("pictures: a list".into());
+    };
+    if all.len() > MAX_PICTURES {
+        return Err(format!("pictures: at most {MAX_PICTURES} with a message"));
+    }
+    // all of them, decoded: what a message's body (MAX_AGENT_BODY, base64's third more) holds
+    let total: usize = all
+        .iter()
+        .filter_map(|p| s(p, "data"))
+        .map(|d| d.len() / 4 * 3)
+        .sum();
+    if total > MAX_MESSAGE_PICTURES {
+        return Err("pictures: 8 MB at most with a message, all told".into());
+    }
+    all.iter()
+        .map(|p| {
+            let Json::Obj(kv) = p else {
+                return Err("pictures: each {\"media\", \"data\"}".to_string());
+            };
+            if kv.iter().any(|(k, _)| k != "media" && k != "data") {
+                return Err("pictures: each {\"media\", \"data\"} only".into());
+            }
+            let media = s(p, "media").unwrap_or("");
+            let Some(media) = MEDIA.iter().find(|m| **m == media) else {
+                return Err(format!("pictures: {media:?} isn't PNG, JPEG, GIF or WebP"));
+            };
+            let data = s(p, "data").unwrap_or("");
+            // base64 whole: groups of 4, its alphabet, `=` only as the last one or two
+            let body = data.trim_end_matches('=');
+            let fine = !data.is_empty()
+                && data.len().is_multiple_of(4)
+                && data.len() - body.len() <= 2
+                && body
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/');
+            if !fine {
+                return Err("pictures: data must be base64".into());
+            }
+            // what it decodes to
+            if data.len() / 4 * 3 - (data.len() - body.len()) > MAX_PICTURE_BYTES {
+                return Err("pictures: each up to 5 MB".into());
+            }
+            Ok((*media, data.to_string()))
+        })
+        .collect()
+}
+
 fn s<'a>(j: &'a Json, k: &str) -> Option<&'a str> {
     j.get(k).and_then(Json::str)
 }
 
 impl Agent {
-    pub fn new(root: PathBuf, token: String, cross_origin: bool, allow_bypass: bool) -> Agent {
+    pub fn new(root: PathBuf, token: String) -> Agent {
         Agent {
             token,
             root,
             program: std::env::var("FORGECAD_CLAUDE").unwrap_or_else(|_| "claude".into()),
             forgecad: std::env::current_exe().unwrap_or_else(|_| PathBuf::from("forgecad")),
-            allow_bypass,
-            cross_origin,
             s: Mutex::new(Session::default()),
             cv: Condvar::new(),
         }
@@ -272,6 +328,7 @@ impl Agent {
         let errs = child.stderr.take().expect("piped");
         st.stdin = child.stdin.take();
         st.child = Some(child);
+        st.started = Some(Instant::now());
         st.run += 1;
         st.busy = false;
         st.asked.clear();
@@ -310,38 +367,18 @@ impl Agent {
             if st.run != run {
                 return;
             }
-            if let Some(j) = &j {
-                // a bypass on another origin's page, unless the bridge was started to allow it
-                let bypass = j.get("permissionMode").and_then(Json::str) == Some("bypassPermissions");
-                if bypass && self.cross_origin && !self.allow_bypass {
-                    self.push(&mut st, line.clone());
-                    self.push(
-                        &mut st,
-                        bridge_error(
-                            "Your Claude settings bypass permissions, and this page is on another origin: start forgecad web with --allow-bypass to allow that, or change your settings",
-                        ),
-                    );
-                    if let Some(c) = &mut st.child {
-                        let _ = c.kill();
-                    }
-                    st.child = None;
-                    st.stdin = None;
-                    st.busy = false;
-                    self.cv.notify_all();
-                    return;
-                }
-                if kind == "control_request"
-                    && let Some(r) = j.get("request")
-                    && s(r, "subtype") == Some("can_use_tool")
-                {
-                    let id = s(j, "request_id").unwrap_or("").to_string();
-                    let input = r.get("input").cloned().unwrap_or(Json::Obj(vec![]));
-                    let sugg = r
-                        .get("permission_suggestions")
-                        .cloned()
-                        .unwrap_or(Json::Arr(vec![]));
-                    st.asked.insert(id, (input, sugg));
-                }
+            if let Some(j) = &j
+                && kind == "control_request"
+                && let Some(r) = j.get("request")
+                && s(r, "subtype") == Some("can_use_tool")
+            {
+                let id = s(j, "request_id").unwrap_or("").to_string();
+                let input = r.get("input").cloned().unwrap_or(Json::Obj(vec![]));
+                let sugg = r
+                    .get("permission_suggestions")
+                    .cloned()
+                    .unwrap_or(Json::Arr(vec![]));
+                st.asked.insert(id, (input, sugg));
             }
             self.push(&mut st, line);
             // after a tool, and at a turn's end: what it changed in the project
@@ -413,33 +450,43 @@ impl Agent {
     }
 
     fn send(&self, body: &[u8], client: &str) -> Answer {
-        let j = match fields(body, &["text", "picture"]) {
+        let j = match fields(body, &["text", "pictures"]) {
             Ok(j) => j,
             Err(e) => return e,
         };
         let Some(text) = s(&j, "text") else {
             return err(400, "text: the message");
         };
+        let pictures = match pictures(j.get("pictures")) {
+            Ok(p) => p,
+            Err(e) => return err(400, &e),
+        };
         let mut st = self.lock();
         if !self.owns(&mut st, client) {
             return err(409, "another page has this agent");
         }
-        let content = match s(&j, "picture") {
-            None => text.into(),
-            Some(png) => Json::Arr(vec![
-                Json::obj(vec![
-                    ("type", "image".into()),
-                    (
-                        "source",
-                        Json::obj(vec![
-                            ("type", "base64".into()),
-                            ("media_type", "image/png".into()),
-                            ("data", png.into()),
-                        ]),
-                    ),
-                ]),
-                Json::obj(vec![("type", "text".into()), ("text", text.into())]),
-            ]),
+        // the pictures first, as image blocks the text reads after
+        let content = if pictures.is_empty() {
+            text.into()
+        } else {
+            let mut blocks: Vec<Json> = pictures
+                .into_iter()
+                .map(|(media, data)| {
+                    Json::obj(vec![
+                        ("type", "image".into()),
+                        (
+                            "source",
+                            Json::obj(vec![
+                                ("type", "base64".into()),
+                                ("media_type", media.into()),
+                                ("data", data.into()),
+                            ]),
+                        ),
+                    ])
+                })
+                .collect();
+            blocks.push(Json::obj(vec![("type", "text".into()), ("text", text.into())]));
+            Json::Arr(blocks)
         };
         let msg = Json::obj(vec![
             ("type", "user".into()),
@@ -599,7 +646,12 @@ impl Agent {
     /// Ends a session no page has read for `IDLE`. Called now and then.
     pub fn reap(&self) {
         let mut st = self.lock();
-        let idle = st.readers == 0 && st.last_read.is_some_and(|t| t.elapsed() > IDLE);
+        // no page reading it for a while, or none ever since it started
+        let idle = st.readers == 0
+            && match st.last_read {
+                Some(t) => t.elapsed() > IDLE,
+                None => st.started.is_some_and(|t| t.elapsed() > IDLE),
+            };
         if idle && let Some(mut c) = st.child.take() {
             let _ = c.kill();
             st.stdin = None;
@@ -614,10 +666,6 @@ impl Drop for Agent {
             let _ = c.kill();
         }
     }
-}
-
-fn bridge_error(e: &str) -> String {
-    Json::obj(vec![("type", "forge_bridge".into()), ("error", e.into())]).to_string()
 }
 
 /// The project's files (as the file API serves them: no dot files) changed since `seen`: each
@@ -699,4 +747,39 @@ fn system_prompt(root: &Path) -> String {
          short sentences unless asked for more: what you changed, and any new error or warning.",
         root.display()
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_messages_pictures_are_twenty_at_most_each_5_mb_and_base64_whole() {
+        let one = |data: &str| Json::obj(vec![("media", "image/png".into()), ("data", data.into())]);
+        let list = |v: Vec<Json>| pictures(Some(&Json::Arr(v)));
+        assert!(list(vec![one("iVBORw0K"); 20]).is_ok());
+        assert!(
+            list(vec![one("iVBORw0K"); 21])
+                .unwrap_err()
+                .contains("at most 20")
+        );
+        for bad in [
+            "iVBORw0",
+            "iVB=Rw0K",
+            "iVBORw==K",
+            "iVBORw0K=",
+            "iV=====",
+            "iVBO\nRw0K",
+            "====",
+        ] {
+            assert!(list(vec![one(bad)]).is_err(), "{bad}");
+        }
+        assert!(list(vec![one("iVBORw==")]).is_ok(), "padding at the end");
+        let five = "A".repeat((5 << 20) / 3 * 4);
+        assert!(list(vec![one(&five)]).is_ok());
+        let more = "A".repeat(((5 << 20) / 3 + 1) * 4);
+        assert!(list(vec![one(&more)]).unwrap_err().contains("5 MB"));
+        // all told, 8 MB: two of 5 MB don't go together
+        assert!(list(vec![one(&five), one(&five)]).unwrap_err().contains("8 MB"));
+    }
 }
