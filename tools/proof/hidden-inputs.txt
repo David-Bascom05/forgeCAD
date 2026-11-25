@@ -170,8 +170,8 @@ no-output (allocator bookkeeping: spin locks, page owners and heaps, never a val
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|atomic|owner: [AtomicU8; 1 << 16],
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|atomic|owner: [const { AtomicU8::new(0) }; 1 << 16],
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|atomic|use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
-no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|static|static ALLOC: Alloc = Alloc {
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|static|static ALLOC: Alloc = Alloc(UnsafeCell::new(Heap::new()));
+no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|static|static ALLOC: Alloc = Alloc::new(Mem {
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|static|static CACHE: core::cell::UnsafeCell<Cache> = const { core::cell::UnsafeCell::new(Cache::new()) };
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|thread_local|std::thread_local! {
 no-output (work index, counter or stop flag)  @ forge-asm/src/check.rs|atomic|let next = std::sync::atomic::AtomicUsize::new(0);
@@ -765,8 +765,8 @@ no-output (powi: small integer exponents, same bits native and wasm; ban-list it
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-tooling/src/feeds.rs|float|let i = |d: f64| std::f64::consts::PI * d.powi(4) / 64.0;
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-tooling/src/instances.rs|float|l.iter().map(|x| (x - m).powi(2)).sum::<f64>() / (l.len() - 1) as f64
 no-output (constant tables or print switches)  @ forge-tooling/src/lib.rs|env|include!(concat!(env!("OUT_DIR"), "/builtin.rs"));
-speed (lazy field or constant table)  @ forge-tooling/src/lib.rs|lazy|static BUILT: std::sync::OnceLock<Library> = std::sync::OnceLock::new();
-speed (lazy field or constant table)  @ forge-tooling/src/lib.rs|static|static BUILT: std::sync::OnceLock<Library> = std::sync::OnceLock::new();
+speed (lazy field or constant table)  @ forge-tooling/src/lib.rs|lazy|static BUILT: std::sync::OnceLock<std::sync::Arc<Library>> = std::sync::OnceLock::new();
+speed (lazy field or constant table)  @ forge-tooling/src/lib.rs|static|static BUILT: std::sync::OnceLock<std::sync::Arc<Library>> = std::sync::OnceLock::new();
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-tooling/src/resolve.rs|float|0.25 * PI * (d * d - (d - allow.v).max(0.0).powi(2))
 speed (lazy field or constant table)  @ forge-topo/src/body.rs|lazy|Cached(std::sync::OnceLock::new())
 speed (lazy field or constant table)  @ forge-topo/src/body.rs|lazy|pub struct Cached<T>(std::sync::OnceLock<T>);

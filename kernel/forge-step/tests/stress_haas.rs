@@ -334,11 +334,22 @@ fn a_surface_model_shell_that_closes_is_a_solid() {
     let want = forge_math::dmath::PI * 25.0 * 10.0;
     let v = forge_topo::mass::mass(b).unwrap().volume;
     assert!((v - want).abs() < 1e-6 * want, "{v} vs {want}");
-    // one face less: a sheet
+    // its flat end left out (a surface model missing a cap: 08-1717, 05-0807, Haas Tooling): the
+    // hole lies in a plane, and is filled; the same bar
     let sh = sm.find("OPEN_SHELL('',(").unwrap() + 15;
     let comma = sh + sm[sh..].find(',').unwrap();
-    let sheet = format!("{}{}", &sm[..sh], &sm[comma + 1..]);
-    let r = import(sheet.as_bytes(), &Limits::default());
+    let capless = format!("{}{}", &sm[..sh], &sm[comma + 1..]);
+    let imp = import(capless.as_bytes(), &Limits::default()).unwrap();
+    assert!(imp.refusals.is_empty(), "{:?}", imp.refusals);
+    let b = &imp.solids[0].body;
+    assert!(check(b).is_empty(), "{:?}", check(b));
+    let v = forge_topo::mass::mass(b).unwrap().volume;
+    assert!((v - want).abs() < 1e-6 * want, "{v} vs {want}");
+    // its round side left out: holes not flat, a sheet still
+    let close = sh + sm[sh..].find(')').unwrap();
+    let last = sh + sm[sh..close].rfind(',').unwrap();
+    let wall_less = format!("{}{}", &sm[..last], &sm[close..]);
+    let r = import(wall_less.as_bytes(), &Limits::default());
     assert!(r.map_or(true, |i| i.solids.is_empty()
         && i.refusals.iter().any(|x| x.kind == "OPEN_SHELL")));
 }
@@ -361,4 +372,94 @@ fn a_lost_reference_refuses_its_solid_not_the_file() {
         import(worse.as_bytes(), &Limits::default()),
         Err(forge_step::ImportError::Parse(_))
     ));
+}
+
+/// An O-ring as SolidWorks writes one: a solid of one torus face with no edges at all. It was
+/// refused, "a whole torus with no edges" (05-0335, Haas Tooling workholding). It is read as two
+/// half rings between meridians, each seamed as a band: 2 pi^2 R r^2.
+#[test]
+fn a_whole_torus_with_no_edges_is_an_o_ring() {
+    for (z, x) in [
+        ("0.,0.,1.", "1.,0.,0."),
+        ("0.,1.,0.", "0.,0.,1."),
+        ("0.6,0.,0.8", "0.8,0.,-0.6"),
+    ] {
+        let text = format!(
+            "ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('oring','',(''),(''),'','','');
+FILE_SCHEMA(('AUTOMOTIVE_DESIGN'));
+ENDSEC;
+DATA;
+#1=DIRECTION('',({z}));
+#2=DIRECTION('',({x}));
+#10=CARTESIAN_POINT('',(3.,-2.,1.));
+#20=AXIS2_PLACEMENT_3D('',#10,#1,#2);
+#30=TOROIDAL_SURFACE('',#20,53.25,1.);
+#100=ADVANCED_FACE('',(),#30,.T.);
+#110=CLOSED_SHELL('',(#100));
+#111=MANIFOLD_SOLID_BREP('oring',#110);
+#120=(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(.MILLI.,.METRE.));
+#121=(NAMED_UNIT(*)PLANE_ANGLE_UNIT()SI_UNIT($,.RADIAN.));
+#122=(NAMED_UNIT(*)SI_UNIT($,.STERADIAN.)SOLID_ANGLE_UNIT());
+#123=UNCERTAINTY_MEASURE_WITH_UNIT(LENGTH_MEASURE(1.E-06),#120,'','');
+#124=(GEOMETRIC_REPRESENTATION_CONTEXT(3)GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT((#123))GLOBAL_UNIT_ASSIGNED_CONTEXT((#120,#121,#122))REPRESENTATION_CONTEXT('',''));
+#125=ADVANCED_BREP_SHAPE_REPRESENTATION('',(#111),#124);
+ENDSEC;
+END-ISO-10303-21;
+"
+        );
+        let imp = import(text.as_bytes(), &Limits::default()).unwrap();
+        assert!(imp.refusals.is_empty(), "{z}: {:?}", imp.refusals);
+        let b = &imp.solids[0].body;
+        let p = check(b);
+        assert!(p.is_empty(), "{z}: {p:?}");
+        let pi = forge_math::dmath::PI;
+        let want = 2.0 * pi * pi * 53.25 * 1.0;
+        let m = forge_topo::mass::mass(b).unwrap();
+        assert!(
+            (m.volume - want).abs() < 1e-6 * want,
+            "{z}: {} vs {want}",
+            m.volume
+        );
+    }
+}
+
+/// A direction written with noise where 0 was meant: 05-0182 (Haas Tooling, a CarvLock vise) gives
+/// a plane's axes parts of 8e-65, 8e-97 and 7e-161, which laid its face out over a span of 1e-160
+/// in its parameters; two of its solids were refused ("a face laid out over a span of its
+/// parameters below 2^-433"). A part below 2^-100 of the largest is now 0.
+#[test]
+fn a_direction_with_noise_for_its_zeros_is_read() {
+    let clean = export(&bar(5.0, 10.0), &Options::default()).unwrap().text;
+    // every 0 in a direction made 7e-161, every other part left
+    let noise = "6.568047796523286E-161";
+    let noisy: String = clean
+        .lines()
+        .map(|line| {
+            if !line.contains("DIRECTION(") {
+                return format!("{line}\n");
+            }
+            let l = line
+                .replace("(0.,", &format!("({noise},"))
+                .replace(",0.,", &format!(",{noise},"))
+                .replace(",0.)", &format!(",{noise})"));
+            format!("{l}\n")
+        })
+        .collect();
+    assert_ne!(noisy, clean, "no direction had a 0 to make noise of");
+    let a = import(clean.as_bytes(), &Limits::default()).unwrap();
+    let b = import(noisy.as_bytes(), &Limits::default()).unwrap();
+    assert!(b.refusals.is_empty(), "{:?}", b.refusals);
+    let (ba, bb) = (&a.solids[0].body, &b.solids[0].body);
+    assert!(check(bb).is_empty(), "{:?}", check(bb));
+    // the same part as without the noise, to the bit
+    let bits = |x: &Body| {
+        x.vertices
+            .iter()
+            .flat_map(|v| [v.point.x, v.point.y, v.point.z].map(f64::to_bits))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(bits(bb), bits(ba));
 }

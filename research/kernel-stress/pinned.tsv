@@ -2,3 +2,4 @@ class	zip	file	ents	op	then	detail	owner	from
 section wrong: negative area	HRT160SP_10-2019.zip	HRT160SP_STEP_10-2019.STEP	71564	section	wrong	negative area (sec_x, sec_x_off)	KERNEL-STRESS (forge-agent section loops)	coordinator, FALLBACK's 4-file sweep
 section wrong: negative area	HRTA6_2019-08.zip	HRTA6_STEP_2019-08.STEP	87677	section	wrong	negative area (sec_z37)	KERNEL-STRESS (forge-agent section loops)	coordinator, FALLBACK's 4-file sweep
 boolean wrong: check: EdgeOffFace	trt210_4-2021.zip	TRT210_STEP_4-2021.STEP	204568	int_over	wrong	EdgeOffFace 0.00074 on main; also K029	FLAT-SITES	coordinator, FALLBACK's 4-file sweep
+boolean refused: InconsistentClassification	(example)	examples/demo/part_tools.fg	hole1.d=4.9999	build	refused	a bore a hair inside the M5 major diameter with a tapped M5 thread (CURVED-SITES); d swept 4.999-5.0001 by forge-lang tests/hair_gap.rs	FALLBACK	coordinator, CURVED-SITES
