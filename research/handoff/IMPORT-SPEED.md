@@ -101,11 +101,17 @@ more cores; on 4 cores the parallel work is already spread.
 
 ## Risks I would watch
 
-- **The per-face mesh budget's margin.** `FACE` = 2^27 (134 M) evaluations. Measured over 415,000
-  faces drawn across the corpus at the app's 16x budget, the heaviest face that actually draws
-  spends 75 M, so the headroom is about 1.8x. HRT160-2's #42930 spends 536 M and fails. If a file
-  ever has a legitimate face above 134 M it would newly be refused; the guard is the corpus
-  differential, which must be rerun if the mesher's or the NURBS evaluation's work per face changes.
+- **The per-face mesh budget's margin.** `FACE` = 2^28 (268 M) evaluations, which is also `MESH`,
+  so the cap binds only inside a budget bigger than a lone drawing's — the app's 16x read, the case
+  it is for. The heaviest face that is drawn anywhere is HFL-1313-3 #69702's #10 at 141 M (the
+  fixture of `forge-step/tests/mesh_budget.rs`); the heaviest in the Haas corpus's own files is
+  75 M of 415,000 faces measured at that 16x budget. So the headroom is about 1.9x.
+  HRT160-2's #42930 spends 536 M and fails. **A first cap of 2^27 looked safe on the corpus and was
+  not**: it would have refused HFL-1313-3's face, and only `mesh_budget.rs` caught it, because that
+  fixture was not in my digest corpus list. The lesson for whoever touches this: the corpus
+  differential is not enough on its own — build the file list from the repository as well
+  (`find . -iname '*.step' -o ...`), and rerun it if the mesher's or the NURBS evaluation's work per
+  face changes.
   A face that runs its own budget out ends the drawing and charges everything the drawing had left,
   so the solid is refused exactly as it is today when a face runs the budget out itself — that is
   what keeps the verdicts identical, and it is the part to re-check if anyone edits `face_within`.
