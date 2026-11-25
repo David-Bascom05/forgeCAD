@@ -303,7 +303,10 @@ fn one_file_one_room() {
             .text(),
         )
         .unwrap();
-        assert!(matches!(next(&mut r), Down::Error { .. }), "{doc}");
+        assert!(
+            matches!(next(&mut r), Down::Closing { retry: false, .. }),
+            "{doc}"
+        );
     }
     h.stop();
     let _ = std::fs::remove_dir_all(&root);
@@ -359,7 +362,7 @@ fn outside_changes_and_one_server_per_folder() {
     )
     .unwrap();
     match next(&mut r) {
-        Down::Error { text } => assert!(text.contains("changed on disk"), "{text}"),
+        Down::Closing { text, retry: false } => assert!(text.contains("changed on disk"), "{text}"),
         d => panic!("{d:?}"),
     }
     h.stop();
@@ -636,7 +639,7 @@ fn a_panic_quarantines_one_document() {
     )
     .unwrap();
     match next(&mut ra) {
-        Down::Error { text } => assert!(text.contains("quarantined"), "{text}"),
+        Down::Closing { text, retry: false } => assert!(text.contains("quarantined"), "{text}"),
         d => panic!("{d:?}"),
     }
     wb.send(
@@ -663,7 +666,7 @@ fn a_panic_quarantines_one_document() {
         kernel: forge_sync::KERNEL.into(),
     };
     w2.send(&hello.text()).unwrap();
-    assert!(matches!(next(&mut r2), Down::Error { .. }));
+    assert!(matches!(next(&mut r2), Down::Closing { retry: false, .. }));
     let st = h.stats.lock().unwrap().clone();
     assert_eq!(st.quarantined, 1);
     h.stop();

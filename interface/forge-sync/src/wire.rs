@@ -93,9 +93,16 @@ pub enum Down {
     Pong {
         t: f64,
     },
-    /// The server closes the connection after this (bad token, malformed message, ...).
+    /// Something the server says about the last message; the connection stays.
     Error {
         text: String,
+    },
+    /// The server closes the connection after this. `retry`: a passing state (busy, stopping,
+    /// too slow), reconnect; else it will not be served as it is (a bad token, another kernel or
+    /// protocol, a quarantined or unopenable document, a malformed message): do not reconnect.
+    Closing {
+        text: String,
+        retry: bool,
     },
 }
 
@@ -253,6 +260,11 @@ impl Down {
             ]),
             Down::Pong { t } => Json::obj(vec![("t", "pong".into()), ("at", Json::Num(*t))]),
             Down::Error { text } => Json::obj(vec![("t", "error".into()), ("text", text.as_str().into())]),
+            Down::Closing { text, retry } => Json::obj(vec![
+                ("t", "closing".into()),
+                ("text", text.as_str().into()),
+                ("retry", (*retry).into()),
+            ]),
         }
     }
     pub fn from_json(j: &Json) -> Option<Down> {
@@ -298,6 +310,10 @@ impl Down {
                 t: j.get("at")?.num()?,
             },
             "error" => Down::Error { text: s(j, "text")? },
+            "closing" => Down::Closing {
+                text: s(j, "text")?,
+                retry: matches!(j.get("retry"), Some(Json::Bool(true))),
+            },
             _ => return None,
         })
     }
@@ -543,6 +559,14 @@ mod tests {
             },
             Down::Pong { t: 1.0 },
             Down::Error { text: "no".into() },
+            Down::Closing {
+                text: "busy".into(),
+                retry: true,
+            },
+            Down::Closing {
+                text: "bad token".into(),
+                retry: false,
+            },
         ] {
             assert_eq!(Down::parse(&m.text()).unwrap(), m);
         }

@@ -372,7 +372,7 @@ pub fn validate(
 }
 
 /// The wire protocol's version: a client of another version is refused at Hello.
-pub const PROTOCOL: u32 = 1;
+pub const PROTOCOL: u32 = 2;
 
 /// This build's kernel: the pinned toolchain and the hash of the kernel's and the language's
 /// sources (build.rs). Geometry is bit-identical only between equal kernels, so a room holds one.

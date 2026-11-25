@@ -261,6 +261,28 @@ impl Session {
         Session::start_with(remote, doc, waker, PING)
     }
 
+    /// [`start`](Self::start), taking up a client the app saved ([`saved`](Self::saved)) when
+    /// it closed: its pending ops are sent again under the same ids (never applied twice). A
+    /// saved text that is not one starts a new client.
+    pub fn resume(
+        remote: &Remote,
+        doc: &str,
+        saved: Option<&str>,
+        waker: Option<Waker>,
+    ) -> Result<Session, String> {
+        let client = saved.and_then(|t| Client::restore(doc, &remote.token, t));
+        Session::start_client(remote, doc, client, waker, PING)
+    }
+
+    /// This client as the app keeps it across a close: its id, op ids and pending ops.
+    pub fn saved(&self) -> String {
+        self.shared
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .client
+            .saved()
+    }
+
     /// [`start`](Self::start), pinging every `ping` when quiet (tests).
     pub fn start_with(
         remote: &Remote,
@@ -268,9 +290,19 @@ impl Session {
         waker: Option<Waker>,
         ping: Duration,
     ) -> Result<Session, String> {
+        Session::start_client(remote, doc, None, waker, ping)
+    }
+
+    fn start_client(
+        remote: &Remote,
+        doc: &str,
+        client: Option<Client>,
+        waker: Option<Waker>,
+        ping: Duration,
+    ) -> Result<Session, String> {
         let (addr, path) = split_url(&remote.url)?;
         let shared = Arc::new(Mutex::new(Shared {
-            client: Client::new(doc, &client_id(), &remote.token),
+            client: client.unwrap_or_else(|| Client::new(doc, &client_id(), &remote.token)),
             events: vec![],
             writer: None,
             connected: false,
@@ -447,10 +479,18 @@ fn run(addr: &str, path: &str, shared: &Mutex<Shared>, stop: &AtomicBool, waker:
                     {
                         s.acks_ms.push(t0.elapsed().as_secs_f64() * 1e3);
                     }
-                    let closed = ev.iter().any(|e| matches!(e, Event::Closed(_)));
+                    let closed = ev
+                        .iter()
+                        .any(|e| matches!(e, Event::Closed(_) | Event::Stopped(_)));
+                    // refused for good (a bad token, another kernel, a quarantined document):
+                    // reconnecting would be refused the same way, for ever
+                    let stopped = ev.iter().any(|e| matches!(e, Event::Stopped(_)));
                     s.events.extend(ev);
                     s.flush();
                     drop(s);
+                    if stopped {
+                        stop.store(true, Ordering::SeqCst);
+                    }
                     wake();
                     if closed {
                         break;
