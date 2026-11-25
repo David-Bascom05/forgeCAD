@@ -9,9 +9,30 @@
 
 use forge_lang::{Options, run};
 
-const DIAMETERS: [f64; 12] = [
-    4.999, 4.9995, 4.9998, 4.9999, 4.99995, 4.99997, 4.99999, 5.0, 5.00001, 5.00002, 5.00005, 5.0001,
+/// The diameters about 5; 5 itself, the pinned document as it stands, is its own test (its
+/// refusal takes 4 s).
+const DIAMETERS: [f64; 11] = [
+    4.999, 4.9995, 4.9998, 4.9999, 4.99995, 4.99997, 4.99999, 5.00001, 5.00002, 5.00005, 5.0001,
 ];
+
+/// One build: "built" (and it checks clean) or "refused: why".
+fn verdict(d: f64) -> String {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/demo");
+    let opts = Options {
+        dir: Some(dir),
+        ..Options::default()
+    };
+    let (r, _) = run(&part(d), opts, Default::default());
+    match r.errors.iter().find(|e| e.kind() == "Build") {
+        Some(e) => format!("refused: {}", e.text().chars().take(100).collect::<String>()),
+        None => {
+            let b = r.body.as_ref().expect("a body");
+            let p = forge_topo::check(b);
+            assert!(p.is_empty(), "d {d}: an Ok that fails check: {p:?}");
+            "built".into()
+        }
+    }
+}
 
 fn part(d: f64) -> String {
     let base = include_str!("../../../examples/demo/part_tools.fg");
@@ -24,24 +45,19 @@ fn part(d: f64) -> String {
 
 #[test]
 fn a_bore_a_hair_inside_a_tapped_m5_builds_right_or_is_refused() {
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/demo");
-    let mut map = vec![];
-    for d in DIAMETERS {
-        let opts = Options {
-            dir: Some(dir.clone()),
-            ..Options::default()
-        };
-        let (r, _) = run(&part(d), opts, Default::default());
-        let said = match r.errors.iter().find(|e| e.kind() == "Build") {
-            Some(e) => format!("refused: {}", e.text().chars().take(100).collect::<String>()),
-            None => {
-                let b = r.body.as_ref().expect("a body");
-                let p = forge_topo::check(b);
-                assert!(p.is_empty(), "d {d}: an Ok that fails check: {p:?}");
-                "built".into()
-            }
-        };
-        map.push(format!("{d:<8} {said}"));
-    }
+    // each diameter on a thread of its own: twelve builds one after another were 6 s
+    let map: Vec<String> = std::thread::scope(|s| {
+        let all: Vec<_> = DIAMETERS
+            .into_iter()
+            .map(|d| s.spawn(move || format!("{d:<8} {}", verdict(d))))
+            .collect();
+        all.into_iter().map(|t| t.join().unwrap()).collect()
+    });
     eprintln!("{}", map.join("\n"));
+}
+
+/// The pinned document itself (the bore at the M5 major diameter, 5): built right or refused.
+#[test]
+fn corpus_guard_part_tools_tapped_m5() {
+    eprintln!("5        {}", verdict(5.0));
 }
