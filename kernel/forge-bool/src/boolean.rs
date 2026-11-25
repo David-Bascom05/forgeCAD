@@ -2298,6 +2298,47 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
     }
 }
 
+/// Whether two cuts of `curve` (a circle) past 0.3 mm apart are a shallow pass the midpoint would
+/// join: a circle within `t` of a line or circle it touches stays so for sqrt(8 R_rel t), R_rel =
+/// 1/|1/R - 1/R'| (a line 1/R' = 0; two circles touching inside, their centres |R - R'| apart),
+/// which can pass 0.3 mm; and the stretch's midpoint is on one cut's edge, while the curve is not
+/// that edge's own circle. Counted only (the decision log): research/decide-once/flat-g11.md, U.
+#[cfg(feature = "decisions")]
+#[allow(clippy::too_many_arguments)]
+fn long_pass(bodies: &[&Body], sides: &[Side], a: &Cut, b: &Cut, curve: &Curve, t0: f64, t1: f64) -> bool {
+    let Curve::Circle(c) = curve else { return false };
+    let reach = 1.2 * a.tol.max(b.tol);
+    let gap = a.point.distance(b.point);
+    let edge = |x: &Cut| match x.on {
+        CutOn::Edge(sd, e) => Some((bodies[(sides[0] != sd) as usize], e)),
+        CutOn::Free => None,
+    };
+    let long = |x: &Cut| {
+        let Some((body, e)) = edge(x) else { return false };
+        match &body.edge(e).curve {
+            Curve::Line(_) => 8.0 * reach * c.radius >= gap * gap,
+            Curve::Circle(k) => {
+                let dr = (c.radius - k.radius).abs();
+                let same = dr <= tol::LINEAR
+                    && c.frame.origin.distance(k.frame.origin) <= tol::LINEAR
+                    && c.frame.z().cross(k.frame.z()).length() <= tol::ANGULAR;
+                !same
+                    && dr > tol::LINEAR
+                    && 8.0 * reach * c.radius * k.radius >= gap * gap * dr
+                    && (c.frame.origin.distance(k.frame.origin) - dr).abs() <= reach
+            }
+            _ => false,
+        }
+    };
+    if !long(a) && !long(b) {
+        return false;
+    }
+    let mid = curve.eval(0.5 * (t0 + t1));
+    [a, b]
+        .iter()
+        .any(|x| edge(x).is_some_and(|(body, e)| on_edge(body, e, mid).is_some()))
+}
+
 /// The vertices `apply` adds to A, as it first needs each: B's, and the new ones.
 struct Made {
     // (declared in this order so they drop as main's locals did: new_vertex, then b_vertex)
@@ -3695,8 +3736,25 @@ fn trim_in(
             continue;
         }
         let gap = cuts[i].point.distance(cuts[j].point);
-        // (a curve radius R stays within t of a tangent for sqrt(8 R t): under a third of a mm unless
-        // R is over a metre)
+        // Two cuts past 0.3 mm apart are never one shallow pass: an assumption, not a theorem
+        // (research/decide-once/flat-g11.md, U). A curve of radius R stays within t of a tangent
+        // line for sqrt(8 R t), so for a circle against a line that holds for R under about 0.94 m,
+        // and for two circles touching inside unless 1/|1/R - 1/R'| is that large; a curve on an
+        // edge's own circle runs along it, its cuts the run's two ends, kept. A pass the bound
+        // skips but the midpoint would join is counted under `decisions` (`long_pass`), so the
+        // sweeps can show whether one is ever met.
+        decided!(if gap > 0.3
+            && long_pass(
+                &bodies,
+                &sides,
+                &cuts[i],
+                &cuts[j],
+                &curve,
+                ts[w].0,
+                ts[next].0 + if next == 0 { period } else { 0.0 }
+            ) {
+            crate::decisions::site("trim: a long shallow pass the 0.3 mm bound skips (G11 U)", 1);
+        });
         decided!(if gap <= 1.2 * cuts[i].tol.max(cuts[j].tol) {
             let of = |sd: Side| bodies[(sides[0] != sd) as usize];
             let (x, y) = (&cuts[i], &cuts[j]);
