@@ -9,6 +9,7 @@ Branch `ui/audit-b6`, stacked on `ui/audit-narrow`. It starts from a fresh full 
 | 3 | With no part open, Versions says so, and points to Project. "This part" and "Show saves" are off, with the reason on hover. | before-3-versions-no-part ("No saves yet.") | after-3-versions-no-part-hover |
 | 4 | Focus follows STANDARD §9 (see below). | | after-4-create-version-focus, after-4-iproperties-focus |
 | 5 | Words: the ribbon button and status line now say "Punch Tool", not "PunchTool". Create Harness labels its field "Slack (ratio)". The Feature Control Frame tolerance shows "mm". | | after-5-punch-tool |
+| 6 | Create Version and Release in a folder with no history no longer open a dialog whose save could only fail (with an error nobody saw). They open Versions, where "Turn on history" is, and the status line says why. With no part open, the panel's own Create Version and Release are off, with the reason on hover. Create's name hint is the next version's ("v3"), which is what an empty name becomes. | | after-6-create-version-no-history |
 
 ## Focus (STANDARD §9, ux/standard-focus)
 
