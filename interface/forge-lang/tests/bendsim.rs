@@ -721,66 +721,94 @@ fn an_unchanged_part_is_answered_from_the_kept_plan() {
         programs: Some(3),
         ..Ask::default()
     };
-    let t0 = std::time::Instant::now();
-    let a = ask_src(&src, None, None, &ask);
-    let first = t0.elapsed();
+    // a changed part (the lips 1 mm taller) is planned for itself: alongside, on its own thread
+    let changed = src.replace("shared lip = 12", "shared lip = 13");
+    let (a, first, c) = std::thread::scope(|sc| {
+        let c = sc.spawn(|| ask_src(&changed, None, None, &ask));
+        let t0 = std::time::Instant::now();
+        let a = ask_src(&src, None, None, &ask);
+        (a, t0.elapsed(), c.join().unwrap())
+    });
     let t1 = std::time::Instant::now();
     let b = ask_src(&src, None, None, &ask);
     let second = t1.elapsed();
     assert!(a.ok, "{}", a.text);
     assert_eq!(a.json, b.json);
     assert!(second * 5 < first, "kept plan: {second:?} vs {first:?}");
-    // a changed part (the lips 1 mm taller) is planned for itself
-    let c = ask_src(
-        &src.replace("shared lip = 12", "shared lip = 13"),
-        None,
-        None,
-        &ask,
-    );
     assert!(c.ok);
     assert_ne!(a.json, c.json);
 }
 
 /// `begin` / `step` / `finish` (what the app drives a slice at a time, or a worker drives) give
 /// the very reply `simulate` gives; the scene (model, tooling) is there before anything is
-/// planned; the simulation can be sent from a worker thread.
-#[test]
-fn a_simulation_planned_a_little_at_a_time_is_the_simulation() {
+/// planned; the simulation can be sent from a worker thread. Each part and question is a test of
+/// its own (within the test-time budget): load_tray, the channel, load_tray asking 2 programs.
+fn planned_a_little_at_a_time(part: &str, ask: &Ask, sliced: bool) {
     fn send<T: Send>() {}
     send::<forge_lang::bendsim::Sim>();
-    let src = std::fs::read_to_string(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../examples/sheetmetal/load_tray.fg"
-    ))
-    .unwrap();
-    for (part, ask) in [
-        (src.clone(), Ask::default()),
-        (channel(), Ask::default()),
-        (
-            src.clone(),
-            Ask {
-                programs: Some(2),
-                ..Ask::default()
-            },
-        ),
-    ] {
-        forge_lang::bendsim::forget_plans();
-        let whole = ask_src(&part, None, None, &ask);
-        forge_lang::bendsim::forget_plans();
-        let mut p = forge_lang::bendsim::begin(&part, None, None, &ask).expect("begun");
-        assert!(!p.model().bends.is_empty() && !p.tooling().punches.is_empty());
-        assert!(!p.progress().done);
+    // the slices, begun with no kept plan; the whole reply alongside on its own thread, which
+    // finds no kept plan either (it looks as it starts, long before the slices keep theirs). Were
+    // its reply ever the slices' kept plan (as fast as a lookup), it is made again, alone.
+    forge_lang::bendsim::forget_plans();
+    let mut p = forge_lang::bendsim::begin(part, None, None, ask).expect("begun");
+    assert!(!p.model().bends.is_empty() && !p.tooling().punches.is_empty());
+    assert!(!p.progress().done);
+    let (sim, ticks, sliced_for, whole, whole_for) = std::thread::scope(|sc| {
+        let w = sc.spawn(|| {
+            let t = std::time::Instant::now();
+            let a = ask_src(part, None, None, ask);
+            (a, t.elapsed())
+        });
+        let t = std::time::Instant::now();
         let mut ticks = 0;
         while !p.step(3).done {
             ticks += 1;
             assert!(ticks < 100_000);
         }
-        if ask.programs.is_none() && part == src {
-            assert!(ticks > 1, "planned in slices");
-        }
-        let sim = p.finish();
-        assert_eq!(sim.answer.json, whole.json);
+        let sliced_for = t.elapsed();
+        let (whole, whole_for) = w.join().unwrap();
+        (p.finish(), ticks, sliced_for, whole, whole_for)
+    });
+    let whole = if whole_for * 5 < sliced_for {
+        forge_lang::bendsim::forget_plans();
+        ask_src(part, None, None, ask)
+    } else {
+        whole
+    };
+    if sliced {
+        assert!(ticks > 1, "planned in slices");
     }
+    assert_eq!(sim.answer.json, whole.json);
+}
+
+fn load_tray() -> String {
+    std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/sheetmetal/load_tray.fg"
+    ))
+    .unwrap()
+}
+
+#[test]
+fn a_simulation_planned_a_little_at_a_time_is_the_simulation() {
+    planned_a_little_at_a_time(&load_tray(), &Ask::default(), true);
+}
+
+#[test]
+fn a_simulation_planned_a_little_at_a_time_is_the_simulation_on_a_channel() {
+    planned_a_little_at_a_time(&channel(), &Ask::default(), false);
+}
+
+#[test]
+fn a_simulation_planned_a_little_at_a_time_is_the_simulation_with_programs() {
+    planned_a_little_at_a_time(
+        &load_tray(),
+        &Ask {
+            programs: Some(2),
+            ..Ask::default()
+        },
+        false,
+    );
 }
 
 /// `contacts` and `bendsim collisions [step N]`: where the part and the tools collide, on both
