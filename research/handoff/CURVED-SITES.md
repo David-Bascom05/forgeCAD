@@ -8,8 +8,8 @@ refused, their Lean proofs and ledger rows, and the speed of curved intersection
 
 | Branch | State |
 |---|---|
-| `proof/curved-sites-screw-flip` | In train 8. Pre-verified with tool 13d78f06, UX OK'd. It holds the anti-parallel screw flip (`pair.rs`, ScrewFlip.lean, ledger C.flip), a thread's band on its own bore made Coincident (`coaxial.rs`, ledger C.band), HOSTED-DESIGN's repro tests (`asm_thread_repros.rs`), the fg_demo refused-preview fixture, and extent refusals in words (`error.rs` `extent_text`, UX-LEAD's clauses). |
-| `perf/ellipse-foot` | The ellipse closest-point rewrite (below). The second review found 2 blockers and 1 minor; all are fixed, and the re-review is SAFE. Pre-verified for train 9, pending a ruling on volute's codegen band. |
+| `proof/curved-sites-screw-flip` | Sent to TRAIN-CONDUCTOR at c1042ae57 (PRE-VERIFY GREEN, tool 13d78f06, accepted). UX OK'd. It holds the anti-parallel screw flip (`pair.rs`, ScrewFlip.lean, ledger C.flip), a thread's band on its own bore made Coincident (`coaxial.rs`, ledger C.band), HOSTED-DESIGN's repro tests (`asm_thread_repros.rs`), the fg_demo refused-preview fixture, and extent refusals in words (`error.rs` `extent_text`, UX-LEAD's clauses). |
+| `perf/ellipse-foot` | The ellipse closest-point rewrite (below). The second review found 2 blockers and 1 minor; all are fixed, and the re-review is SAFE. Pre-verified for train 9. Volute's codegen band is accepted, with a condition (below). |
 
 ## The ellipse closest point (`perf/ellipse-foot`)
 
@@ -36,6 +36,10 @@ solver and removing the feature both left volute unchanged to the instruction. B
 gate parts. In every one, `bits measures` and `benchparts measures` (84 lines: validity, meshed
 volume to 1e-6, area, face count) are identical to main's. So the moves are last-bit differences
 in the foot point's angle, where an exact solve replaced a bisection.
+
+**Ruling (coordinator, 2026-11-25): volute's overage is ACCEPTED as codegen noise.** **Condition:**
+after gate-memfns (CGU=1) lands, re-check volute on the new baseline, and look again if it is
+still over the band then. That re-check is open: whoever takes this file over owns it.
 
 A bug the tests caught: where U ≫ V, the bracket end p₀ = d·cu/(cu + cv) rounds onto the pole at
 e = 0, G is infinite there, and the solver read the wrong direction. Each bracket's direction now
