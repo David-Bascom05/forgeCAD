@@ -223,13 +223,15 @@ fn a_part_with_tori_with_copies_near_over_answers_right_or_refuses() {
     let b = one("tori_167faces.step");
     let w = b.faces_box().x.width();
     let v = mass::mass_rel(&b, 1e-6).unwrap().volume;
-    for k in [0.40, 0.405, 0.41, 0.412, 0.4137, 0.415, 0.417, 0.42, 0.43] {
+    // each offset on a thread of its own: eighteen refusals of about 0.45 s each, one after
+    // another, were 8 s
+    let check = |k: f64| {
         let copy = moved(&b, forge_math::Vec3::new(k * w, 0.0, 0.0));
         let (Ok(u), Ok(i)) = (
             boolean(&b, &copy, Op::Union, 9000),
             boolean(&b, &copy, Op::Intersect, 9000),
         ) else {
-            continue;
+            return;
         };
         let sum = mass::mass_rel(&u, 1e-6).unwrap().volume + mass::mass_rel(&i, 1e-6).unwrap().volume;
         let miss = sum - 2.0 * v;
@@ -237,5 +239,17 @@ fn a_part_with_tori_with_copies_near_over_answers_right_or_refuses() {
             miss.abs() < 1e-6 * v,
             "offset {k}: union + intersection - 2V = {miss}"
         );
+    };
+    let offsets = [0.40, 0.405, 0.41, 0.412, 0.4137, 0.415, 0.417, 0.42, 0.43];
+    // (wasm has no threads: one after another there)
+    if cfg!(target_family = "wasm") {
+        offsets.into_iter().for_each(check);
+        return;
     }
+    std::thread::scope(|s| {
+        let all: Vec<_> = offsets.into_iter().map(|k| s.spawn(move || check(k))).collect();
+        for t in all {
+            t.join().unwrap();
+        }
+    });
 }

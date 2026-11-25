@@ -122,6 +122,10 @@ def run(path, zipdir, only):
     try:
         byzip = defaultdict(list)
         for r in rows:
+            # a row not out of a zip (an example part, pinned) is replayed by its own test
+            if r["zip"].startswith("("):
+                results.append((r, ("elsewhere", r["detail"][-60:])))
+                continue
             byzip[r["zip"]].append(r)
         for zname, rs in byzip.items():
             zd = os.path.join(tmp, "z")
