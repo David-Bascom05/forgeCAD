@@ -1,0 +1,13 @@
+# haas-vf-2 enclosure outline (display only: drawn see-through, never collided)
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared x0 = -1191.53
+shared y0 = -726.44
+shared z0 = -888
+shared lx = 3145.06
+shared ly = 2248.44
+shared lz = 2342.42
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (lx, ly))
+}
+block = extrude(plan, lz)

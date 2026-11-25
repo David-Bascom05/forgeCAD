@@ -11,10 +11,13 @@ forge-dirs = { path = "../../kernel/forge-dirs" }
 forge-library = { path = "../forge-library" }
 forge-machine = { path = "../../kernel/forge-machine" }
 forge-math = { path = "../../kernel/forge-math" }
+forge-mesh = { path = "../../kernel/forge-mesh" }
+forge-step = { path = "../../kernel/forge-step" }
 forge-tooling = { path = "../../kernel/forge-tooling" }
 
 [lints]
 workspace = true
 
 [dev-dependencies]
+forge-lang = { path = "../forge-lang" }
 forge-machine-lang = { path = "../forge-machine-lang" }
