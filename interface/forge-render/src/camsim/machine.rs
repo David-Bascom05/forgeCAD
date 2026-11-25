@@ -585,33 +585,40 @@ pub struct BodySources {
     pub checked: Source,
 }
 
-/// Every body of `def`: its drawn source and its checked source.
-pub fn sources(def: &forge_machine::MachineDef) -> Vec<BodySources> {
-    let models = attached(&def.name);
-    let files: Vec<(Option<String>, String)> = models_dir(&def.name)
-        .and_then(|d| forge_machine_builder::models::load_in(&d).ok())
-        .unwrap_or_default()
-        .into_iter()
-        .map(|m| (m.body, m.file))
-        .collect();
+/// Every body of `def`: its drawn source and its checked source. The drawn side takes the
+/// models a machine is drawn with: the user's own and forgecad's shipped ones (`user`), or the
+/// shipped ones alone (the same on every computer: the test's count). The checked side is what
+/// `Cam::machine_run`'s check takes: a body's real part where forge_machine_lang::real_trees
+/// compiled it (collide::check_with), else its record's primitives, or nothing for a body the
+/// check leaves out (`check = false`).
+pub fn sources(def: &forge_machine::MachineDef, user: bool) -> Vec<BodySources> {
+    let dir = if user {
+        models_dir(&def.name)
+    } else {
+        forge_machine_builder::models::shipped_dir(&def.name)
+    };
+    // the models that read (an LFS pointer is no model), by body
+    let models: Vec<(String, String)> = dir
+        .as_ref()
+        .and_then(|d| Some((d, forge_machine_builder::models::load_in(d).ok()?)))
+        .map(|(d, ms)| {
+            ms.into_iter()
+                .filter(|m| crate::machine_model::file_tris(&d.join(&m.file)).is_ok())
+                .filter_map(|m| Some((m.body?, m.file)))
+                .collect()
+        })
+        .unwrap_or_default();
     let checked: Vec<String> = forge_machine::collide::machine_bodies(def)
         .into_iter()
         .map(|b| b.name)
         .collect();
+    let (trees, _) = forge_machine_lang::real_trees(def, None);
     def.bodies
         .iter()
         .map(|b| {
-            let drawn = if models
-                .iter()
-                .any(|(body, _)| body.as_deref() == Some(b.name.as_str()))
-            {
-                let f = files
-                    .iter()
-                    .find(|(body, _)| body.as_deref() == Some(b.name.as_str()))
-                    .map_or(String::new(), |x| x.1.clone());
-                Source::Model(f)
-            } else {
-                match &b.part {
+            let drawn = match models.iter().find(|(body, _)| body == &b.name) {
+                Some((_, f)) => Source::Model(f.clone()),
+                None => match &b.part {
                     Some(p)
                         if forge_machine_builder::make::builtin_part(p)
                             .is_some_and(|src| crate::machine_mesh::part_tris(src, None).is_ok()) =>
@@ -620,16 +627,21 @@ pub fn sources(def: &forge_machine::MachineDef) -> Vec<BodySources> {
                     }
                     _ if b.prims.is_empty() => Source::None,
                     _ => Source::Prims,
-                }
+                },
+            };
+            let checked = if !b.check {
+                Source::None
+            } else if trees.contains_key(&b.name) {
+                Source::Part(b.part.clone().unwrap_or_default())
+            } else if checked.contains(&b.name) {
+                Source::Prims
+            } else {
+                Source::None
             };
             BodySources {
                 body: b.name.clone(),
                 drawn,
-                checked: if checked.contains(&b.name) {
-                    Source::Prims
-                } else {
-                    Source::None
-                },
+                checked,
             }
         })
         .collect()

@@ -1144,6 +1144,7 @@ dependencies = [
  "forge-lang",
  "forge-library",
  "forge-machine",
+ "forge-machine-lang",
  "forge-material",
  "forge-math",
  "forge-memo",
@@ -1323,6 +1324,8 @@ dependencies = [
  "forge-machine-builder",
  "forge-math",
  "forge-mesh",
+ "forge-topo",
+ "forge-workholding-builder",
 ]
 
 [[package]]

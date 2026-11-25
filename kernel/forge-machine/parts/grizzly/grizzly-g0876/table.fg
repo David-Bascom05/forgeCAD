@@ -4,7 +4,7 @@
 # the table top plate; T-slots are inside the box
 shared b0x0 = -497.5
 shared b0y0 = -203
-shared b0z0 = -49.5
+shared b0z0 = -49
 shared b0sx = 685
 shared b0sy = 209
 shared b0h = 49

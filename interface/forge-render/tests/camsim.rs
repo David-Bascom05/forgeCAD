@@ -1068,12 +1068,14 @@ fn what_is_drawn_against_what_is_checked() {
     let mut gaps = vec![];
     let mut bodies = 0;
     for def in forge_machine::library::builtin() {
-        for b in sources(&def) {
+        for b in sources(&def, false) {
             bodies += 1;
-            let same = matches!(
-                (&b.drawn, &b.checked),
-                (Source::Prims, Source::Prims) | (Source::None, Source::None)
-            );
+            // one source: both the record's part, both its primitives, or neither
+            let same = match (&b.drawn, &b.checked) {
+                (Source::Part(a), Source::Part(c)) => a == c,
+                (Source::Prims, Source::Prims) | (Source::None, Source::None) => true,
+                _ => false,
+            };
             if !same {
                 gaps.push(format!(
                     "{} {}: drawn {:?}, checked {:?}",
@@ -1091,7 +1093,7 @@ fn what_is_drawn_against_what_is_checked() {
     }
     // every body the check takes is drawn (nothing checked unseen)
     for def in forge_machine::library::builtin() {
-        for b in sources(&def) {
+        for b in sources(&def, false) {
             assert!(
                 b.checked == Source::None || b.drawn != Source::None,
                 "{} {}: checked but not drawn",

@@ -32,14 +32,23 @@ fn assert_clear(s: &Setup, tl: &sim::Timeline, stock: Prim, fixture: Prim) {
         collide::part_body(s, "stock", &[stock], Role::Stock),
         collide::part_body(s, "fixture", &[fixture], Role::Fixture),
     ];
-    let r = collide::check(s, tl, &work);
-    let bad: Vec<_> = r
-        .contacts
-        .iter()
-        .filter(|c| !matches!(c.verdict, Verdict::Clear))
-        .filter(|c| !(c.a.ends_with("cutter") && c.b == "stock" || c.b.ends_with("cutter") && c.a == "stock"))
-        .collect();
-    assert!(bad.is_empty(), "{bad:?}");
+    // the envelopes, and (the differential) the machine's real geometry: no new contact either way
+    let (trees, left) = forge_machine_lang::real_trees(s.def, None);
+    assert!(left.is_empty(), "{}: {left:?}", s.def.name);
+    for r in [
+        collide::check(s, tl, &work),
+        collide::check_with(s, tl, &work, &trees),
+    ] {
+        let bad: Vec<_> = r
+            .contacts
+            .iter()
+            .filter(|c| !matches!(c.verdict, Verdict::Clear))
+            .filter(|c| {
+                !(c.a.ends_with("cutter") && c.b == "stock" || c.b.ends_with("cutter") && c.a == "stock")
+            })
+            .collect();
+        assert!(bad.is_empty(), "{}: {bad:?}", s.def.name);
+    }
 }
 
 /// A/C trunnion (A about X carries C): a 40 mm block on a 60 mm riser (so the 140 mm table stays
