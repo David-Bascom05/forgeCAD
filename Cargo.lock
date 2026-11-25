@@ -162,6 +162,7 @@ dependencies = [
  "forge-post",
  "forge-sketch",
  "forge-tooling",
+ "forge-turn-lang",
 ]
 
 [[package]]
