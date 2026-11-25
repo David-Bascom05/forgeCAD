@@ -1095,7 +1095,22 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
     // again (as do the coarsened edges of a face along an open mesh edge, or unsettled: neither is
     // a mesh within the chord), and the body is drawn again, once
     let mut keep = vec![false; body.edges.len()];
-    let (mesh, tangled, coarse, open) = tessellate_once(body, q, mend, &keep)?;
+    // each drawing under a budget of its own, and only the one kept charged: a body drawn twice
+    // spends no more for it (ST-28:28Y #436428 and VF-1 #478688 ran a read's budget out so)
+    let attempt = |keep: &[bool]| {
+        if !forge_geom::budget::limited() {
+            return (0, tessellate_once(body, q, mend, keep));
+        }
+        forge_geom::budget::isolated(forge_geom::budget::left(), || tessellate_once(body, q, mend, keep))
+    };
+    let (spent, first) = attempt(&keep);
+    let (mesh, tangled, coarse, open) = match first {
+        Ok(x) => x,
+        Err(e) => {
+            forge_geom::budget::spend_many(spent);
+            return Err(e);
+        }
+    };
     let mut again = false;
     let mut faces = tangled;
     faces.extend(open.into_iter().map(|f| f as u32));
@@ -1113,9 +1128,12 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
         }
     }
     if !again {
+        forge_geom::budget::spend_many(spent);
         return Ok(mesh);
     }
-    tessellate_once(body, q, mend, &keep).map(|(m, ..)| m)
+    let (spent, second) = attempt(&keep);
+    forge_geom::budget::spend_many(spent);
+    second.map(|(m, ..)| m)
 }
 
 /// `tessellate_with` once: the mesh, the faces drawn tangled or zipped, the edges sampled with
