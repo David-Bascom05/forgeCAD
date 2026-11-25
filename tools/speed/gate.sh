@@ -131,10 +131,16 @@ if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
   # Built from one fixed source path, whatever the checkout's: the binaries carry their sources'
   # paths (CARGO_MANIFEST_DIR in benchparts, and each path crate's metadata hash, which names its
   # symbols), so two checkouts at paths of different lengths build binaries whose counts differ.
-  # The checkout's files (tracked, and untracked ones not ignored: the work in progress) are copied
-  # there with their times, under a lock (gates may run at once: each builds in turn, then counts
-  # in parallel), and built into this checkout's own target directory, so neither side of a
-  # comparison reuses the other's build.
+  # The checkout's files (tracked, and untracked ones not ignored: the work in progress) are synced
+  # there under a lock (gates may run at once: each builds in turn, then counts in parallel), and
+  # built into this checkout's own target directory, so neither side of a comparison reuses the
+  # other's build. Synced (srcsync.py), not emptied and re-extracted: a file whose bytes match is
+  # left as it is, so a build reuses this checkout's crates that did not change (re-extracting gave
+  # every directory a new time, and forge-lang's build script, which watches a directory, rebuilt
+  # forge-lang and all after it, ~200 s, on every gate). That is safe for exact counts: the
+  # release build is reproducible (the same sources at this path give the same bytes), so an
+  # incremental build is the clean build's binary; checked, 99/99 counts and bits equal
+  # (FAST-VERIFY, 2026-11-24), and GATE_MEMO's key is the binaries' own hash in any case.
   src=/tmp/forge-gate-src
   checkout=$PWD
   exec 9>"$src.lock"
