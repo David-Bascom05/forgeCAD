@@ -313,6 +313,37 @@ struct SetupIn {
     fixture: Option<forge_cam::fixture::Fixture>,
     /// The setup this one continues, the part turned over.
     from: Option<usize>,
+    /// The fixture's memo key (`fixture_key`) and its faces, worked out once: every op of the
+    /// setup shares them.
+    fkey: std::sync::OnceLock<String>,
+    ffaces: std::sync::OnceLock<Vec<forge_cam_geom::check::Face>>,
+}
+
+/// The memo key of what holds a setup's stock. A fixture placed from the workholding library is
+/// keyed by its placement (each body's prims, keep-out and model reference: its faces are a pure
+/// function of those, a model's text being fixed for its name) and its clearance; any other by
+/// the sha256 of its faces' bits (what the checker reads of them). Formatting the faces instead
+/// cost more than checking them once a vise is its maker's model (thousands of faces).
+fn fixture_key(f: Option<&forge_cam::fixture::Fixture>, stock: &Stock) -> String {
+    let Some(f) = f else {
+        return format!("none {stock:?}");
+    };
+    if let Some(p) = &f.placed {
+        let bodies: Vec<_> = p
+            .bodies
+            .iter()
+            .map(|b| (&b.name, &b.prims, b.keepout, &b.exact))
+            .collect();
+        return format!("placed {bodies:?} {} {stock:?}", f.clearance);
+    }
+    let mut bytes = Vec::new();
+    for x in f.faces() {
+        forge_cam::fixture_model::face_bits(&x, &mut bytes);
+    }
+    let mut h = forge_git::hash::Sha256::new();
+    h.update(&bytes);
+    let d: String = h.finish().iter().map(|b| format!("{b:02x}")).collect();
+    format!("{d} {stock:?}")
 }
 
 /// One operation, as made and as checked.
@@ -3261,6 +3292,8 @@ impl Cam {
                     stock_kind,
                     fixture,
                     from,
+                    fkey: std::sync::OnceLock::new(),
+                    ffaces: std::sync::OnceLock::new(),
                 });
                 Ok(V::Setup(self.setups.len() - 1))
             }
@@ -9715,10 +9748,11 @@ impl Cam {
         }
         // with no workholding declared, whatever holds the stock is under it: the plane of the
         // stock's bottom is the support, and no body of the tool may reach it (G2)
-        let (ffaces, fclear) = match &s.fixture {
-            Some(f) => (f.faces(), f.clearance),
-            None => (vec![support_face(&s.stock)], 0.0),
-        };
+        let ffaces = s.ffaces.get_or_init(|| match &s.fixture {
+            Some(f) => f.faces(),
+            None => vec![support_face(&s.stock)],
+        });
+        let fclear = s.fixture.as_ref().map_or(0.0, |f| f.clearance);
         let target = self.ops[oi].target.as_ref().unwrap_or(&part.faces);
         let surfacing = matches!(
             self.ops[oi].kind,
@@ -9751,13 +9785,16 @@ impl Cam {
                 &*stage_ips.borrow()
             )
         );
-        let fixture_key = format!("{:?} {:?}", s.fixture, s.stock);
+        let fixture_key = s
+            .fkey
+            .get_or_init(|| fixture_key(s.fixture.as_ref(), &s.stock))
+            .clone();
         let mut sum = certify_memo(
             posted,
             &tool,
             (target, &target_key),
             (&stages, &stages_key),
-            (&ffaces, &fixture_key),
+            (ffaces.as_slice(), &fixture_key),
             fclear,
             s.tol,
             s.clearance,

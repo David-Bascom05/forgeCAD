@@ -119,6 +119,85 @@ pub fn face_line(f: &Face) -> String {
     s
 }
 
+/// A face's every number as its bits, with its kind and id: what the checker reads of it, so two
+/// faces with the same bytes are the same face to the checker (a memo's key, without formatting
+/// a float).
+pub fn face_bits(f: &Face, out: &mut Vec<u8>) {
+    let mut put = |xs: &[f64]| {
+        for x in xs {
+            out.extend_from_slice(&x.to_bits().to_le_bytes());
+        }
+    };
+    match f.surf {
+        Surf::Plane { o, u, v } => {
+            put(&[0.0]);
+            put(&o);
+            put(&u);
+            put(&v);
+        }
+        Surf::Cyl { o, x, y, ax, r } => {
+            put(&[1.0, r]);
+            put(&o);
+            put(&x);
+            put(&y);
+            put(&ax);
+        }
+        Surf::Cone { o, x, y, ax, r0, k } => {
+            put(&[2.0, r0, k]);
+            put(&o);
+            put(&x);
+            put(&y);
+            put(&ax);
+        }
+        Surf::Sphere { o, x, y, ax, r } => {
+            put(&[3.0, r]);
+            put(&o);
+            put(&x);
+            put(&y);
+            put(&ax);
+        }
+        Surf::Torus {
+            o,
+            x,
+            y,
+            ax,
+            big,
+            r,
+            cm,
+            sm,
+        } => {
+            put(&[4.0, big, r, cm, sm]);
+            put(&o);
+            put(&x);
+            put(&y);
+            put(&ax);
+        }
+    }
+    put(&[f.p.lo, f.p.hi, f.q.lo, f.q.hi, f.mu, f.id as f64]);
+    match &f.trim {
+        None => put(&[-1.0]),
+        Some(t) => {
+            put(&[t.segs.len() as f64]);
+            for g in &t.segs {
+                match *g {
+                    TSeg::Line { a, b } => put(&[0.0, a[0], a[1], b[0], b[1]]),
+                    TSeg::Arc { a, b, c, r, ccw } => put(&[
+                        1.0,
+                        a[0],
+                        a[1],
+                        b[0],
+                        b[1],
+                        c[0],
+                        c[1],
+                        r,
+                        if ccw { 1.0 } else { 0.0 },
+                    ]),
+                }
+            }
+        }
+    }
+}
+
 /// The compiled text of a model's groups, each with its solids' own box (`tight`).
 pub fn write(groups: &[(String, Vec<Face>, [V3; 2])]) -> String {
     let mut s = String::from(HEADER);

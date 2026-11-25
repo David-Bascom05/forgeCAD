@@ -537,10 +537,21 @@ impl Fixture {
         let jaw_top = if jaw_top.is_finite() {
             jaw_top
         } else {
-            p.bodies
+            let low = p
+                .bodies
                 .iter()
                 .map(|b| b.bounds().0[2])
-                .fold(f64::INFINITY, f64::min)
+                .fold(f64::INFINITY, f64::min);
+            // a device with no bodies at all: the table it stands on (written in the reply and
+            // the clamp report, so finite)
+            if low.is_finite() {
+                low
+            } else {
+                match p.mount {
+                    Mount::Table { z } => z,
+                    _ => 0.0,
+                }
+            }
         };
         Fixture {
             name: p.name.clone(),
@@ -580,7 +591,7 @@ pub fn body_source(b: &forge_workholding::Body) -> Option<BodySource> {
 fn model_faces(e: &forge_workholding::Exact, keepout: f64) -> Result<Vec<Face>, String> {
     let m = forge_workholding::model::get(&e.model).ok_or("no such model")?;
     let rot = rot_of(&e.pose.m).ok_or("the pose is not a turn by quarters")?;
-    let groups = crate::fixture_model::read(m.check).map_err(|_| "the compiled faces do not read")?;
+    let groups = parsed(m)?;
     let fs = groups
         .iter()
         .find(|g| g.0 == e.group)
@@ -597,6 +608,31 @@ fn model_faces(e: &forge_workholding::Exact, keepout: f64) -> Result<Vec<Face>, 
             g
         })
         .collect())
+}
+
+/// A model's compiled faces, read once a process: its text is fixed for its name (a built-in's
+/// is in the binary, a runtime one's name is its content's hash), so every setup and run after
+/// the first shares the faces read.
+type ModelFaces = std::sync::Arc<Vec<(String, Vec<Face>)>>;
+
+fn parsed(m: &forge_workholding::model::Model) -> Result<ModelFaces, String> {
+    type Read = ModelFaces;
+    static CACHE: std::sync::OnceLock<std::sync::Mutex<Vec<(String, Read)>>> = std::sync::OnceLock::new();
+    let c = CACHE.get_or_init(|| std::sync::Mutex::new(Vec::new()));
+    if let Some(r) = c
+        .lock()
+        .ok()
+        .and_then(|v| v.iter().find(|x| x.0 == m.name).map(|x| x.1.clone()))
+    {
+        return Ok(r);
+    }
+    let r: Read = std::sync::Arc::new(
+        crate::fixture_model::read(m.check).map_err(|_| "the compiled faces do not read".to_string())?,
+    );
+    if let Ok(mut v) = c.lock() {
+        v.push((m.name.clone(), r.clone()));
+    }
+    Ok(r)
 }
 
 /// A rotation matrix as a signed permutation, when it is one.
@@ -667,6 +703,21 @@ impl Fixture {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_device_with_no_bodies_has_a_finite_jaw_top() {
+        let p = forge_workholding::Placed {
+            name: "none".into(),
+            kind: forge_workholding::Kind::Custom,
+            bodies: vec![],
+            mount: forge_workholding::Mount::Table { z: -12.5 },
+            held: vec![],
+            notes: vec![],
+        };
+        let f = Fixture::from_workholding(&p, 0, 1.0);
+        assert_eq!(f.jaw_top, -12.5);
+        assert!(f.faces().is_empty() && f.enveloped.is_empty());
+    }
 
     #[test]
     fn a_library_vise_as_the_checkers_fixture() {
