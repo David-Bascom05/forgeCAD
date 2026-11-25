@@ -427,7 +427,7 @@ impl MachineView {
         let w = self.to_part(&q);
         let c = crate::viewcube::rgb(0xE8B13A);
         let mut put = |prims: &[forge_machine::def::Prim], link: Option<usize>| {
-            let l = link.map_or(Rigid::ID, |j| pose[j].clone());
+            let l = link.map_or(Rigid::ID, |j| pose[j]);
             let m = w.then(&l);
             let tr = crate::machine_mesh::prims_tris(prims);
             for tri in &tr.tri {
