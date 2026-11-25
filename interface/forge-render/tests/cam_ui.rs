@@ -752,6 +752,186 @@ fn export_nc_answers_its_click() {
     assert!(w.export.as_ref().is_some_and(|x| x.files.len() == 1), "handed to the host's Save As");
 }
 
+/// A host that does not answer an export (no dialog showing, or one the user has not seen): 10 s
+/// on, the line says it is still waiting, never that none opened (the app cannot know), with Try
+/// again; Try again asks again; the host's answer ends the wait.
+#[test]
+fn an_unanswered_export_says_it_is_waiting_and_asks_again() {
+    use forge_render::shell::cam::nc::{EXPORT_WAIT_MS, RETRY_TIP};
+    let Some((mut h, _)) = open("export-wait") else { return };
+    tap(&mut h, "tool:Export NC");
+    h.step();
+    // headless, nothing takes the export: as a host that never answers. 10 s on:
+    let w = h.gui.shell.cam.as_mut().unwrap();
+    w.export = None;
+    w.export_asked.as_mut().expect("asked").at_ms -= EXPORT_WAIT_MS + 1.0;
+    h.step();
+    h.step();
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert_eq!(forge_render::shell::cam::status_line(w), "Export NC: waiting for the save dialog");
+    assert_eq!(h.gui.shell.status, "Export NC: waiting for the save dialog", "the shell's status too");
+    assert_eq!(forge_render::shell::cam::status_fix_tip(w), Some(RETRY_TIP));
+    // Try again: asked again, the click's words again
+    tap(&mut h, "status:fix");
+    h.step();
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert!(w.export.is_some(), "asked of the host again");
+    assert_eq!(forge_render::shell::cam::status_line(w), "Export NC: choose where to save prog.nc\u{2026}");
+    assert!(w.export_asked.as_ref().is_some_and(|a| !a.waiting));
+    // the host answers: the wait ends, its words stand
+    h.gui.shell.cam.as_mut().unwrap().said = Some("Export cancelled".into());
+    h.step();
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert!(w.export_asked.is_none(), "no longer waiting");
+    assert_eq!(forge_render::shell::cam::status_line(w), "Export cancelled");
+}
+
+/// A phone-wide window (480 px: a view about 200 px wide beside the browser): Manufacture opens
+/// and draws with its simulation (BUTTON-AUDITOR, bracket_cam: the timeline's width went negative
+/// and egui panicked, in a debug build), the timeline folded away where its controls do not fit.
+#[test]
+fn manufacture_opens_in_a_phone_wide_window() {
+    let ex = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/machined"));
+    let dir = std::env::temp_dir().join(format!("fg-cam-ui-{}-narrow", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    for f in ["bracket.fg", "bracket_cam.fg"] {
+        std::fs::copy(ex.join(f), dir.join(f)).unwrap();
+    }
+    let mut h = match Headless::new((480.0, 860.0), 1.0) {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("skipped: {e}");
+            return;
+        }
+    };
+    h.step();
+    h.gui.open(dir.join("bracket_cam.fg").to_str().unwrap());
+    settle(&mut h);
+    // the simulation comes after the run: drawn a few frames with it
+    let t0 = std::time::Instant::now();
+    while h.gui.shell.camsim.is_none() {
+        assert!(t0.elapsed().as_secs() < 60, "no simulation");
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    for _ in 0..10 {
+        h.step();
+    }
+    assert!(h.gui.shell.view_rect.width() < 300.0, "a narrow view: {:?}", h.gui.shell.view_rect);
+    // folded, and the framing agrees: no timeline drawn, and nothing kept for it at the view's
+    // bottom (UX-LEAD: the fold and the free rect must not disagree)
+    let timeline = egui::LayerId::new(egui::Order::Middle, egui::Id::unique("camsim:timeline"));
+    assert!(!h.gui.ctx.memory(|m| m.areas().visible_last_frame(&timeline)), "the timeline folded");
+    assert_eq!(h.gui.shell.cam.as_ref().unwrap().view_cover, 0.0, "no room kept for a timeline not drawn");
+    // its way to play stays: the panel's Program tab
+    assert!(h.gui.shell.camsim.is_some());
+    // too narrow for both: the column and the view take turns in the view's place (UX-LEAD);
+    // the column shown first, the view's own tools hidden (they floated over the browser)
+    let sh = &h.gui.shell;
+    assert!(sh.props_alternate && sh.column_shown && sh.view_hidden);
+    assert!(sh.place("nav:fit").is_none(), "the view's tool strip hidden behind the column");
+    assert!(sh.place("view:column").is_none());
+    let col = sh.place("cam:dock:sim").expect("the column's tabs");
+    assert!(col.left() < sh.view_rect.center().x, "the column in the view's place: {col:?}");
+    shot(&mut h, "cam-480-column");
+    // View: the view in its place, the way back named as the column's tab
+    let playing = h.gui.shell.camsim.as_ref().map(|s| s.playing);
+    tap(&mut h, "cam:dock:view");
+    for _ in 0..20 {
+        if !h.gui.shell.view_hidden {
+            break;
+        }
+        h.step();
+    }
+    h.step();
+    let sh = &h.gui.shell;
+    assert!(!sh.column_shown && !sh.view_hidden);
+    assert!(sh.place("nav:fit").is_some(), "the view's tools back");
+    assert!(sh.place("cam:dock:sim").is_none(), "the column hidden");
+    assert!(sh.place("view:column").is_some());
+    assert_eq!(h.gui.shell.cam.as_ref().unwrap().col_label, "Simulation");
+    assert_eq!(h.gui.shell.camsim.as_ref().map(|s| s.playing), playing, "the simulation as it was");
+    shot(&mut h, "cam-480-view");
+    // back to the column by its name
+    tap(&mut h, "view:column");
+    for _ in 0..20 {
+        if h.gui.shell.view_hidden {
+            break;
+        }
+        h.step();
+    }
+    assert!(h.gui.shell.column_shown && h.gui.shell.view_hidden, "back to the column");
+    // the view shown, and an op's sheet opened: the column shows it
+    tap(&mut h, "cam:dock:view");
+    for _ in 0..20 {
+        if !h.gui.shell.view_hidden {
+            break;
+        }
+        h.step();
+    }
+    assert!(!h.gui.shell.column_shown);
+    h.gui.shell.cam.as_mut().unwrap().command(forge_render::shell::cam::Cmd::Edit("side".into()));
+    h.step();
+    h.step();
+    assert!(h.gui.shell.column_shown, "a new sheet shows the column");
+}
+
+/// The tool library is left as every window is: Esc (BUTTON-AUDITOR: it stayed open), and its
+/// Close, a click away whatever it shows.
+#[test]
+fn the_tool_library_closes_with_esc_and_its_close() {
+    let Some((mut h, _)) = open("tools-esc") else { return };
+    tap(&mut h, "tool:Tool Library");
+    h.step();
+    assert!(h.gui.shell.cam.as_ref().unwrap().tools_open);
+    h.key_with(egui::Key::Escape, egui::Modifiers::NONE);
+    h.step();
+    h.step();
+    assert!(!h.gui.shell.cam.as_ref().unwrap().tools_open, "Esc closes the library");
+}
+
+/// A new op's dialog (Thread Mill, from the ribbon) is cancelled by Esc as an op's is
+/// (BUTTON-AUDITOR's crawl: "Esc leaves it open").
+#[test]
+fn a_new_ops_dialog_is_cancelled_by_esc() {
+    let Some((mut h, _)) = open("newop-esc") else { return };
+    let before = text(&h);
+    tap(&mut h, "tool:Thread Mill");
+    h.step();
+    assert!(h.gui.shell.cam.as_ref().unwrap().op_dlg.is_some(), "the op dialog");
+    h.key_with(egui::Key::Escape, egui::Modifiers::NONE);
+    for _ in 0..8 {
+        h.step();
+    }
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert!(w.op_dlg.is_none(), "Esc cancels it");
+    assert_eq!(text(&h), before, "nothing written");
+}
+
+/// The tool library at a laptop's height: the tool's table runs under the footer, and the
+/// detail pane's scroll bar is drawn, so it is seen to scroll (UX-LEAD's shot).
+#[test]
+fn the_tool_library_scrolls_at_a_laptops_height() {
+    let Some((mut h, _)) = open_sized("tools-laptop", false, (1400.0, 860.0)) else { return };
+    tap(&mut h, "tool:Tool Library");
+    h.step();
+    assert!(h.gui.shell.cam.as_ref().unwrap().tools_open);
+    shot(&mut h, "cam-tools-1400x860");
+    let view = h.gui.shell.place("cam:tools:detail:view").expect("the detail pane");
+    let content = h.gui.shell.place("cam:tools:detail:content").unwrap();
+    let apply = h.gui.shell.place("cam:tools:apply").expect("the footer");
+    // the pane ends at the footer, its content runs past it, and its bar is drawn (the theme's
+    // solid handle was the page's own colour: there, and not seen)
+    assert!(view.bottom() <= apply.top(), "the pane {view:?} under the footer {apply:?}");
+    assert!(content.bottom() > view.bottom() + 1.0, "the table runs past the pane here: {content:?} in {view:?}");
+    let px = h.gui_pixels();
+    let bar = (view.top() as usize + 4..view.bottom() as usize - 4)
+        // (the bar is beside the viewport, outside its inner rect, at the pane's edge)
+        .filter(|&y| (view.right() as usize..(view.right() as usize + 14).min(1399)).any(|x| px.at(x, y).iter().all(|&c| c > 120)))
+        .count();
+    assert!(bar > 20, "the scroll bar drawn ({bar} rows)");
+}
+
 /// A cycle time is the lower bound and the estimate together (never the estimate alone), and the
 /// estimate counts the tool change the bound counts (the flange changes T1 for T12).
 #[test]
@@ -904,13 +1084,56 @@ fn document_text_is_a_bottom_panel() {
     shot(&mut h, "cam-text-panel");
     // typed: the whole text replaced
     let typed = text(&h).replace("stickout: 32", "stickout: 34");
-    assert!(h.click("cam:text:edit"));
+    // the field has the keyboard before anything is typed (a click taken late under load left
+    // the typing nowhere)
+    let field = egui::Id::unique("cam-text-edit");
+    for k in 0.. {
+        tap(&mut h, "cam:text:edit");
+        h.step();
+        if h.gui.ctx.memory(|m| m.has_focus(field)) {
+            break;
+        }
+        assert!(k < 4, "the text field never took the keyboard");
+    }
     h.key_with(egui::Key::A, egui::Modifiers::COMMAND);
     h.text(&typed);
+    let t0 = std::time::Instant::now();
+    while h.gui.shell.cam.as_ref().unwrap().text_edit != typed {
+        assert!(t0.elapsed().as_secs() < 30, "the typing never reached the field");
+        h.step();
+    }
+    // Apply takes the focus from the field: what was typed is what is applied
+    tap(&mut h, "cam:text:apply");
+    let t0 = std::time::Instant::now();
+    while !text(&h).contains("stickout: 34") {
+        assert!(t0.elapsed().as_secs() < 30, "never applied: {}", text(&h));
+        h.step();
+    }
+    assert_eq!(text(&h), typed, "exactly what was typed");
+}
+
+/// What is typed in Document Text and not yet applied stays while the field has no focus (a
+/// click on Apply takes the focus before Apply reads the field: the typing was put back first);
+/// the document's own change (an undo, an edit elsewhere) loads it again.
+#[test]
+fn document_text_keeps_what_was_typed_until_applied() {
+    let Some((mut h, _)) = open("text-keep") else { return };
+    tap(&mut h, "tool:Document Text");
     h.step();
-    assert!(h.click("cam:text:apply"));
-    h.step();
-    assert!(text(&h).contains("stickout: 34"), "{}", text(&h));
+    let typed = text(&h).replace("stickout: 32", "stickout: 34");
+    h.gui.shell.cam.as_mut().unwrap().text_edit = typed.clone();
+    for _ in 0..4 {
+        h.step();
+    }
+    assert_eq!(h.gui.shell.cam.as_ref().unwrap().text_edit, typed, "kept, not put back");
+    // the document changes (an edit from the op dialog's way): the field shows it
+    let w = h.gui.shell.cam.as_mut().unwrap();
+    let changed = w.text.replace("stickout: 32", "stickout: 30");
+    w.command(forge_render::shell::cam::Cmd::Text(changed.clone()));
+    for _ in 0..4 {
+        h.step();
+    }
+    assert_eq!(h.gui.shell.cam.as_ref().unwrap().text_edit, changed, "the document's new text shown");
 }
 
 /// An adaptive op selected: clear's time on the same setup, tool and heights is measured off the

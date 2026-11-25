@@ -164,7 +164,7 @@ mod page {
     }
 
     impl Backend for Bridge {
-        fn send(&mut self, prompt: String, picture: Option<Vec<u8>>) {
+        fn send(&mut self, prompt: String, pictures: Vec<crate::agent::Picture>) {
             let (out, parser, file, started, mode) = (
                 self.out.clone(),
                 self.parser.clone(),
@@ -204,8 +204,14 @@ mod page {
                     }
                 }
                 let mut body = vec![("text", prompt.into())];
-                if let Some(png) = picture {
-                    body.push(("picture", crate::agent::apptools::base64(&png).into()));
+                if !pictures.is_empty() {
+                    let all = pictures.iter().map(|p| {
+                        Json::obj(vec![
+                            ("media", p.media.into()),
+                            ("data", crate::agent::apptools::base64(&p.bytes).into()),
+                        ])
+                    });
+                    body.push(("pictures", Json::Arr(all.collect())));
                 }
                 let (status, j) = call("send", Json::obj(body)).await;
                 if status != 200 {
@@ -272,7 +278,7 @@ mod page {
     }
 
     impl Backend for Unbridged {
-        fn send(&mut self, _prompt: String, _picture: Option<Vec<u8>>) {
+        fn send(&mut self, _prompt: String, _pictures: Vec<crate::agent::Picture>) {
             self.out.send(Event::Problem {
                 text: NO_BRIDGE.into(),
                 fix: Some(NO_BRIDGE_FIX.into()),
