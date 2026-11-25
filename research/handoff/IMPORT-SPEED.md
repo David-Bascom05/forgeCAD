@@ -62,6 +62,18 @@ Each of these is bit-identical by construction, and was diffed over the whole co
 
 ## Open threads, in the order I would pick them up
 
+**(0) A face's mass pieces on all cores: reverted (b269a169), to be redone within the speed band.**
+34b2a9b7 split a face's integral over its loop pieces on all cores (HAB3232's four B-spline faces,
+12-22 s each, in parallel; digests identical). The speed gate counts on one core, where the split
+is pure overhead, and its `cli` lines (the cold build with the CLI's checks, which work out mass)
+rose 0.19-1.25% against a band of 0.03%. Gating the parallel path on `par::threads() > 1` and
+building its groups only then left valve +0.11% and bracket +0.43% (callgrind by function: heap
+churn from the `Share` vectors, `Share::add_to` not inlined, `InnerOf`'s deref in `Ctx::g`). The
+way back: leave `face_integrals`' one-by-one loop exactly as it was before 34b2a9b7 (integrate
+adding into the run's `Acc` directly, `Rc`, `Cell`) and put the parallel path in a separate
+function taken only above `PAR_PIECES` with more than one thread, its own `Near`/`Arc` way copies
+built there. The one-core build then runs the old instructions, and the gate cannot see it.
+
 **(a) One projection pass shared by the speck check and the edge tolerances.** CANCELLED by the
 coordinator in the wind-down; not started. Both phases project edge samples onto each face the edge
 bounds (speck: 8x `default_segments` per edge, chained round the loop; tolerances: 16 or 256 from
