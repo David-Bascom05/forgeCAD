@@ -9,7 +9,8 @@
 //!   forge-det [--root DIR] [--corpus] [--streams] [--shard K/N] [FILE.fg ..]
 //!   forge-det [--root DIR] --record      (re)write verify/forge-det/streams/*.ops
 //!
-//! Lines (stdout), all with paths relative to the root, '/'-separated:
+//! Lines (stdout), all with paths relative to the root, '/'-separated (a stream's lines name its
+//! document DOC+ops):
 //!   DOC OP BODY MESH ERRS          OP 0 = the document as written, k = after the k-th op of its
 //!                                  stream; BODY/MESH are 16 hex digits; ERRS the error kinds
 //!                                  joined by '+' ('-' for none)
@@ -65,7 +66,7 @@ fn main() {
     for (k, f) in files.iter().enumerate() {
         if k % shard.1 == shard.0 {
             n += 1;
-            replay(&root, f, &[]);
+            replay(&root, f, &[], f);
         }
     }
     if streams {
@@ -101,7 +102,7 @@ fn main() {
                 .map(|l| Json::parse(l).ok().and_then(|j| Op::from_json(&j)))
                 .collect();
             n += 1;
-            replay(&root, &doc, &ops);
+            replay(&root, &doc, &ops, &format!("{doc}+ops"));
         }
     }
     let secs = forge_math::clock::system_now()
@@ -144,26 +145,26 @@ fn opts(path: &Path) -> forge_lang::Options {
 
 /// The document `doc` (relative to `root`), then each op of `ops` applied in turn, hashed after
 /// each: cold, and warm from the previous run's Cache.
-fn replay(root: &Path, doc: &str, ops: &[Option<Op>]) {
+fn replay(root: &Path, doc: &str, ops: &[Option<Op>], label: &str) {
     let path = root.join(doc);
     let Ok(src) = std::fs::read_to_string(&path) else {
-        println!("{doc} 0 UNREADABLE");
+        println!("{label} 0 UNREADABLE");
         return;
     };
     let (run, mut cache) = forge_lang::run(&src, opts(&path), Default::default());
-    println!("{doc} 0 {}", hash_run(&run).line());
+    println!("{label} 0 {}", hash_run(&run).line());
     let dir = path.parent().map(Path::to_path_buf);
     let mut text = src;
     for (k, op) in ops.iter().enumerate() {
         let k = k + 1;
         let Some(op) = op else {
-            println!("{doc} {k} BAD_OP");
+            println!("{label} {k} BAD_OP");
             continue;
         };
         let next = match edit::apply_checked_in(&text, op, dir.clone()) {
             Ok((t, _)) => t,
             Err(e) => {
-                println!("{doc} {k} REFUSED {}", e.kind());
+                println!("{label} {k} REFUSED {}", e.kind());
                 continue;
             }
         };
@@ -171,9 +172,9 @@ fn replay(root: &Path, doc: &str, ops: &[Option<Op>]) {
         cache = c2;
         let (cold, _) = forge_lang::run(&next, opts(&path), Default::default());
         let (hw, hc) = (hash_run(&warm), hash_run(&cold));
-        println!("{doc} {k} {}", hc.line());
+        println!("{label} {k} {}", hc.line());
         if hw != hc {
-            println!("{doc} {k} WARM_DIFFERS {:016x} {:016x}", hw.body, hw.mesh);
+            println!("{label} {k} WARM_DIFFERS {:016x} {:016x}", hw.body, hw.mesh);
         }
         text = next;
     }
