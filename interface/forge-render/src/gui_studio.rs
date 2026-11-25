@@ -169,9 +169,6 @@ impl Gui {
         };
         let size = v.size;
         if self.studio.is_none() {
-            // entering: the subject framed for a picture (Fit All), not left as the modelling
-            // view had it
-            v.nav.fit_all(&v.scene);
             let live = Live::new(&self.device, &self.queue, size);
             let tex = self.egui.register_native_texture(
                 &self.device,

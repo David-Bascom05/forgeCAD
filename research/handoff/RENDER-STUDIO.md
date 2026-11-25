@@ -44,7 +44,14 @@ wind-down (2026-11-25).
    - P3: Output's Size/File and Lighting's File in the label column; File's hint shortened to
      "Capture folder" (the long one was cut off at that width: UX-LEAD may prefer the field on its
      own line instead).
-   - P3, §2: Fit All on entering the Studio (flange ~20% -> ~65% of the view's height).
+   - P3, §2 (NOT done, reverted): the flange fills ~20% of the view on entering the Studio. A
+     Fit All on entering made it ~65% but overrode the 3/4 entry framing
+     (`gui_env.rs::env_frame_view`, `frame::frame`, fill 0.7), failing
+     tests/environments.rs `each_document_keeps_the_environment_it_was_left_in`. The entry framing
+     itself asks for 0.7 of the view, so why the Studio shows ~20% is the open question: check the
+     subject box (`scene.shown_box()`) and the parallel camera's field after `cam.parallel = ..`
+     in `env_frame_view`, and whether the Studio's trace view (`studio::View` from the camera)
+     matches the raster's.
 2. From the Model tab's review (UX P2, earlier): outline marks for selections of up to 256
    entities over the trace (today the chosen parts are lit see-through through the ghost pass).
 3. A final render refining in the view (today a render runs in the background with its card and the

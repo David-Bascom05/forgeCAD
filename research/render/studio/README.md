@@ -33,7 +33,7 @@ alone (render.png) goes beside the document.
   The badge says it's still refining ("Tracing · N samples", the count traced, with a spinner;
   hover: "The live view refines until N samples; edits restart it. A render uses Output's
   samples.") and goes back to "N samples · denoised" when done; "Preparing" and "Starting again…"
-  have the spinner too. Entering the Studio frames the subject (Fit All).
+  have the spinner too.
 - 12: Output open, its labels in one column, the File field empty with its hint "Capture folder"
   (hover: a new file, `<document>-render-<time>.png`, there; a name alone goes there too): a render
   goes there as `<document>-render-<time>.png` (the document's folder if Capture has none), and the
