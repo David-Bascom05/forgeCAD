@@ -554,11 +554,34 @@ fn connection(s: TcpStream, c: &Config, lock: &Mutex<()>) -> std::io::Result<()>
                     .is_some_and(|v| v.eq_ignore_ascii_case("close"));
                 (answer(&q, c, lock), keep, q.method == "HEAD")
             }
-            Err(e) => (e, false, false),
+            Err(e) => {
+                // refused before its body was read: the refusal, then a lingering close (closed
+                // with the body unread, the kernel answers a reset, which can reach the client
+                // before the refusal does and lose it)
+                write_response(&mut out, &e, false, false, &csp)?;
+                linger(&out, &mut r);
+                return Ok(());
+            }
         };
         write_response(&mut out, &resp, keep, head, &csp)?;
         if !keep {
             return Ok(());
+        }
+    }
+}
+
+/// After a refusal sent with a request's body unread: no more to send, then what the client
+/// still sends is read and dropped, bounded (64 KiB, half a second), so the refusal is read
+/// before the connection goes.
+fn linger(out: &TcpStream, r: &mut BufReader<TcpStream>) {
+    let _ = out.shutdown(std::net::Shutdown::Write);
+    let _ = r.get_ref().set_read_timeout(Some(std::time::Duration::from_millis(500)));
+    let mut sink = [0u8; 4096];
+    let mut left = 64usize << 10;
+    while left > 0 {
+        match r.read(&mut sink) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => left = left.saturating_sub(n),
         }
     }
 }
@@ -1951,6 +1974,28 @@ mod tests {
         );
         assert_eq!(s, 403);
         assert!(!root.join("x.fg").exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A request refused before its body is read still gets its refusal: the connection closes
+    /// lingering (pre-verify saw a reset lose the 403 now and then).
+    #[test]
+    fn a_refusal_before_the_body_is_read_still_arrives() {
+        let token = "0123456789abcdef0123";
+        let (at, root) = started(Some(token), true);
+        let bearer = format!("Bearer {token}");
+        let body = vec![b'x'; 32 << 10];
+        for _ in 0..20 {
+            let (s, _, _) = call(
+                at,
+                "PUT",
+                "/api/files/y.fg",
+                &[("Origin", "http://evil.example"), ("Authorization", &bearer)],
+                &body,
+            );
+            assert_eq!(s, 403);
+        }
+        assert!(!root.join("y.fg").exists());
         let _ = std::fs::remove_dir_all(&root);
     }
 
