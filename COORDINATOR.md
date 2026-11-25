@@ -356,3 +356,5 @@ David: "start winding down and getting things merged". Per stream, finish the na
 - Anything done: stop.
 Everyone who stops with work unfinished writes research/handoff/<NAME>.md on their branch: what, state, shas, unmerged branches, next steps, thoughts.
 Merge infrastructure (TRAIN-CONDUCTOR, FAST-VERIFY, VERIFY-*) runs until everything is merged. UX-LEAD only gives OKs for merging branches.
+- (David, later) Workholding: no overfitting to one Haas vise. Any vise or fixture geometry, catalogue or custom-imported (STEP/IGES/XT/.fg), goes through the same exact-face path (WORKHOLDING, CAM-SIM, CAM-MACHINE).
+- (David, later) Failing imports and meshes: "recover these or fix whatever bug causes them to break". Root-cause fixes, not caps or refusals; refuse only a provably invalid file (IMPORT-SPEED: HRT160 and undrawn faces; KERNEL-STRESS: the 14 Haas Tooling files).
