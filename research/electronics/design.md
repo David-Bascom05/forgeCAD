@@ -17,6 +17,12 @@ Determine how ForgeCAD can infer **which components serve which pins or function
 - **Keep electrical and mechanical identity across edits.** Give parts, pads, pins and occurrences stable identities with explicit provenance. Separate intended nets, physical copper contact and signal paths. Map a board connector's logical pin to its land, installed mating frame and harness cavity. Source-linked simplified geometry can stand in for a detailed mechanical body while the connector interface remains available. [Backend architecture](backend.md)
 - **Extend the existing language proof and keep the production build dependency-free.** Establish graphical/text edit equivalence, stability of qualified references, sound invalidation and equality between incremental and fresh rule results. Keep external ECAD tools and reference solvers in verification. [Proof obligations](language-proof.md)
 
+## Starting from a pin
+
+Selecting a pin exposes what its library definition wants and gives. Both may apply to one pin. A regulator output gives power and can want a local output capacitor. A passive terminal acquires a job when it fulfills a particular want. **Add bypass capacitor** should create the occurrence, connect supply and return, and record which pin or pin group it serves in one undoable source edit. The designer can make the same connection freehand and inspect suggested associations.
+
+Show a rooted view from any selected pin. Keep electrical attachments undirected, distinguish ordered functional stages from parallel peers, and represent shared nodes or feedback edges by reference. Reversing a wire gesture preserves connectivity and functional intent. PCB placement reads the confirmed endpoints and their preferred metric, including after reannotation.
+
 ## First acceptance test
 
 Start from an empty sheet. With the graphical editor, draw two repeated MCU channels that share a power rail, a bypass capacitor in each channel, a bulk capacitor and a connector. Cover one pin name with a label. The editor should identify the visible clash, preserve the electrical connections when the label moves, and explain which capacitor-to-pin assignments it can infer. Confirm one pairing graphically.
