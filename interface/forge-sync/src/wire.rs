@@ -6,7 +6,7 @@
 //! must reach every client bit for bit).
 
 use crate::{Entry, Refusal};
-use forge_agent::json::Json;
+pub use forge_agent::json::Json;
 use forge_lang::error::Op;
 
 /// The largest message either side accepts, in bytes. An op is ~150–250 B; a Welcome carries a

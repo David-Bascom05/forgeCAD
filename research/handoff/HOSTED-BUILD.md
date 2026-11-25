@@ -1,7 +1,7 @@
 # HOSTED-BUILD handoff
 
 The state of the hosted build (research/hosted/DESIGN.md, on design/hosted), kept current by
-HOSTED-BUILD. Updated 2026-11-25.
+HOSTED-BUILD. Updated 2026-11-25 (evening).
 
 ## Branches
 
@@ -40,6 +40,20 @@ HOSTED-BUILD. Updated 2026-11-25.
 - Capacity (HOSTED-DESIGN's bench, 4 vCPU): about 3.2 MB per open document plus connection,
   about 300 documents per GB; about 1.1 ms of server CPU per committed op.
 
+## Load, soak, faults (hosted/server-hardening)
+
+- `tests/faults.rs`: the real binary under SIGKILL mid-op and restart, and sessions closed and
+  resumed from their saved client. A smoke run by default (~1.3 s); `--ignored` soak with
+  FORGE_SOAK_SECS. 60 s: 59,888 edits, 19 kills, 85 resumes; converged, nothing lost, nothing
+  committed twice.
+- `tests/load.rs` (`--ignored`, release): steady edits plus connection churn, with /proc memory
+  and CPU. 100 documents × 3 sessions, 120 s: 72,000 edits; RSS 35 MB joined, 110 MB at the end
+  (680 B per op: the in-memory op log); 0.57 ms server CPU per op; ack p50 3.6 ms, p99 23.5 ms.
+  `FORGE_LOAD_WRAP="valgrind --tool=massif ..."` profiles the server's heap.
+- Fixed from it: forge-lang's kept sketches (`forge_keep`) are released on every server thread
+  and on forge-remote's (`forge_sync::release_sketches`); they were 38 KB per op for good. The
+  per-connection outbox no longer pre-allocates 3 MB. Validation runs on one worker per document.
+
 ## App
 
 - LOCAL is unchanged: one `Option` test on the edit path. The gate binaries were
@@ -56,6 +70,6 @@ HOSTED-BUILD. Updated 2026-11-25.
 2. Clients review mediums: M3 (report hashes only for builds of exactly the seq's text), M4
    (hosted undo before an Ack), M5 (apply_all as one atomic group), M6 (done: a re-check right
    before the rename). Web lows (a stopped link stops; the token is scoped to its address).
-3. Load and soak tests at realistic scale, fault injection (kill, disconnect, restart
-   mid-op), and the cross-platform bit-identity CI.
+3. Load, soak and fault injection: done (above). Still to do: a multi-hour soak, a disk-full
+   fault, and the cross-platform bit-identity CI over hosted's own hashes.
 4. Not in scope: users, orgs and auth (HOSTED-DESIGN is writing that plan).

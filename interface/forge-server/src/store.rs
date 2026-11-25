@@ -240,7 +240,40 @@ impl FileLogStore {
     }
 }
 
+impl FileLogStore {
+    /// Every entry in `doc`'s log, in order, across its snapshots (the op history: who changed
+    /// what, when). None: no such document. Read only: a torn tail is not cut here.
+    pub fn history(&self, doc: &str) -> io::Result<Option<Vec<Entry>>> {
+        let p = self.path(doc);
+        let bytes = match std::fs::read(&p) {
+            Ok(b) => b,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(e),
+        };
+        let (mut at, mut out) = (0, vec![]);
+        while let Some(r) = record_at(&bytes, at) {
+            let text = std::str::from_utf8(&bytes[r.clone()])
+                .map_err(|_| corrupt(format!("{}: not UTF-8", p.display())))?;
+            let j = read(text).map_err(|e| corrupt(format!("{}: {e}", p.display())))?;
+            if j.get("first").is_none() {
+                out.push(
+                    entry_from(&j).ok_or_else(|| corrupt(format!("{}: a bad entry at {at}", p.display())))?,
+                );
+            }
+            at = r.end;
+        }
+        Ok(Some(out))
+    }
+}
+
 impl Store for FileLogStore {
+    fn read_range(&mut self, doc: &str, after: u64, upto: u64) -> io::Result<Option<Vec<Entry>>> {
+        Ok(self.history(doc)?.map(|es| {
+            es.into_iter()
+                .filter(|e| e.seq > after && e.seq <= upto)
+                .collect()
+        }))
+    }
     fn latest_snapshot(&mut self, doc: &str) -> io::Result<Option<Snapshot>> {
         let got = self.load(doc)?;
         // the entries kept for the read_since that follows (an open reads both)
@@ -416,6 +449,15 @@ mod tests {
             (n, at),
             (6, b.len()),
             "first text, 3 entries, the snapshot, 1 entry"
+        );
+        // and an op made before the snapshot reads them back to rebase through
+        assert_eq!(
+            s.read_range("p/a.fg", 0, 3).unwrap(),
+            Some(vec![e(1), e(2), e(3)])
+        );
+        assert_eq!(
+            s.read_range("p/a.fg", 1, 4).unwrap(),
+            Some(vec![e(2), e(3), e(4)])
         );
         // a second snapshot: an open starts from the latest
         let snap2 = Snapshot {
