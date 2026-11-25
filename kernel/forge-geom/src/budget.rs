@@ -20,6 +20,9 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 thread_local! {
     /// What is left of the slice in hand.
     static LEFT: Cell<u64> = const { Cell::new(u64::MAX) };
+    /// What this thread has drawn into its hand so far (wrapping): `spent` is this less `LEFT`, kept
+    /// by the cold paths only (a slice handed out, an overdraw), so `spend` stays as it was.
+    static DRAWN: Cell<u64> = const { Cell::new(u64::MAX) };
     /// What is left beyond it (while no bank is shared).
     static BANK: Cell<u64> = const { Cell::new(0) };
     /// The slice last handed out (what a watch is told was spent at the next).
@@ -151,6 +154,7 @@ fn bank_take(want: u64) -> u64 {
 fn set_total(n: u64) {
     let s = n.min(SLICE_NOW.get());
     SHARED.with(|x| *x.borrow_mut() = None);
+    DRAWN.set(spent().wrapping_add(s));
     LEFT.set(s);
     BANK.set(n - s);
     GIVEN.set(s);
@@ -159,6 +163,7 @@ fn set_total(n: u64) {
 /// No limit again.
 fn end() {
     SHARED.with(|x| *x.borrow_mut() = None);
+    DRAWN.set(spent().wrapping_add(u64::MAX));
     LEFT.set(u64::MAX);
     BANK.set(0);
     GIVEN.set(0);
@@ -248,7 +253,15 @@ pub fn spend_many(n: u64) {
 #[cold]
 #[inline(never)]
 fn overdraw(n: u64) {
+    DRAWN.set(DRAWN.get().wrapping_add(n));
     bank_take(n);
+}
+
+/// What this thread has spent, all told (wrapping; a difference of two readings is what was spent
+/// between them, on this thread): what a memo that answers a question again charges, the cost
+/// the first answer had, so an op spends the same whether its answers are fresh or remembered.
+pub fn spent() -> u64 {
+    DRAWN.get().wrapping_sub(LEFT.get())
 }
 
 /// Whether what `scoped` allowed is gone, or a watch stopped it: the caller stops and says so.
@@ -292,6 +305,7 @@ fn refill() -> bool {
         }
         return false;
     }
+    DRAWN.set(DRAWN.get().wrapping_add(s));
     LEFT.set(s);
     GIVEN.set(s);
     true
@@ -303,6 +317,66 @@ pub fn left() -> u64 {
     LEFT.get().saturating_add(bank())
 }
 
+/// `f`'s evaluations not counted: a lazy cache's filling (a spline's seed grid, a face's box), which
+/// whatever asks first would otherwise pay, so that what an op spends, and whether it runs past
+/// its budget, would hang on what ran before it and, on several threads, on which got there
+/// first. Uncounted, a cache costs every op the same: nothing. `f` runs as with no budget (no
+/// limit, no watch, no shared bank), and this thread's budget is as it was after.
+pub fn uncounted<T>(f: impl FnOnce() -> T) -> T {
+    if !LIMITED.get() {
+        return f();
+    }
+    let was = Taken {
+        left: LEFT.get(),
+        drawn: DRAWN.get(),
+        bank: BANK.get(),
+        given: GIVEN.get(),
+        limited: true,
+        watch: WATCH.with(|w| w.borrow_mut().take()),
+        shared: SHARED.with(|x| x.borrow_mut().take()),
+    };
+    DRAWN.set(spent().wrapping_add(u64::MAX));
+    LEFT.set(u64::MAX);
+    BANK.set(0);
+    GIVEN.set(0);
+    LIMITED.set(false);
+    // (put back on the way out, unwinding too)
+    let _back = Back(was);
+    f()
+}
+
+/// `f` on a counter of its own: at most `limit`, drawn from no bank but its own (not the op's, even
+/// on a thread sharing one), what it spends returned and charged nowhere else. For work whose
+/// spend must be its own whatever thread runs it (an item of a parallel step summed in item
+/// order: IMPORT-SPEED's `map_until`). A stop on this thread's watch reaches it as any budget.
+/// What `f` sees as over is `f`'s own budget, as for `scoped`.
+pub fn isolated<T>(limit: u64, f: impl FnOnce() -> T) -> (u64, T) {
+    hand_down();
+    let was = Taken {
+        left: LEFT.get(),
+        drawn: DRAWN.get(),
+        bank: BANK.get(),
+        given: GIVEN.get(),
+        limited: LIMITED.get(),
+        watch: WATCH.with(|w| w.borrow().clone()),
+        shared: SHARED.with(|x| x.borrow_mut().take()),
+    };
+    let _back = Back(was);
+    set_total(limit);
+    LIMITED.set(true);
+    let r = f();
+    (limit - left().min(limit), r)
+}
+
+/// A thread's budget put back as it was when this goes.
+struct Back(Taken);
+
+impl Drop for Back {
+    fn drop(&mut self) {
+        self.0.put_back();
+    }
+}
+
 /// What a thread an op starts takes from it: its bank (shared from now on) and its watch.
 struct Handed {
     shared: Option<Arc<Shared>>,
@@ -312,6 +386,7 @@ struct Handed {
 /// A started thread's state before it took the op's, put back when it is done.
 struct Taken {
     left: u64,
+    drawn: u64,
     bank: u64,
     given: u64,
     limited: bool,
@@ -319,9 +394,24 @@ struct Taken {
     shared: Option<Arc<Shared>>,
 }
 
-impl Drop for Taken {
+impl Taken {
+    /// The thread's state put back as it was taken.
+    fn put_back(&mut self) {
+        LEFT.set(self.left);
+        DRAWN.set(self.drawn);
+        BANK.set(self.bank);
+        GIVEN.set(self.given);
+        LIMITED.set(self.limited);
+        WATCH.with(|w| *w.borrow_mut() = self.watch.take());
+        SHARED.with(|x| *x.borrow_mut() = self.shared.take());
+    }
+}
+
+/// A started thread done: what it holds of its slice back to the op, its own state back.
+struct Started(Taken);
+
+impl Drop for Started {
     fn drop(&mut self) {
-        // what it holds of its slice, back to the op
         if let Some(s) = shared() {
             s.bank.fetch_add(LEFT.get(), Ordering::Relaxed);
         }
@@ -329,12 +419,7 @@ impl Drop for Taken {
             w.spent
                 .fetch_add(GIVEN.get() - LEFT.get().min(GIVEN.get()), Ordering::Relaxed);
         }
-        LEFT.set(self.left);
-        BANK.set(self.bank);
-        GIVEN.set(self.given);
-        LIMITED.set(self.limited);
-        WATCH.with(|w| *w.borrow_mut() = self.watch.take());
-        SHARED.with(|x| *x.borrow_mut() = self.shared.take());
+        self.0.put_back();
     }
 }
 
@@ -365,6 +450,7 @@ fn enter(h: Box<dyn std::any::Any + Send>) -> Box<dyn std::any::Any> {
     let Handed { shared, watch } = *h;
     let taken = Taken {
         left: LEFT.get(),
+        drawn: DRAWN.get(),
         bank: BANK.get(),
         given: GIVEN.get(),
         limited: LIMITED.get(),
@@ -372,13 +458,15 @@ fn enter(h: Box<dyn std::any::Any + Send>) -> Box<dyn std::any::Any> {
         shared: SHARED.with(|x| x.borrow_mut().take()),
     };
     let limited = shared.is_some();
-    LEFT.set(if limited { 0 } else { u64::MAX });
+    let l = if limited { 0 } else { u64::MAX };
+    DRAWN.set(spent().wrapping_add(l));
+    LEFT.set(l);
     BANK.set(0);
     GIVEN.set(0);
     LIMITED.set(limited);
     WATCH.with(|w| *w.borrow_mut() = watch);
     SHARED.with(|x| *x.borrow_mut() = shared);
-    Box::new(taken)
+    Box::new(Started(taken))
 }
 
 /// Threads the kernel starts take the budget and watch of the thread that starts them
@@ -449,7 +537,8 @@ mod tests {
         let seen = w.clone();
         let h = std::thread::spawn(move || {
             let _w = super::watched(w);
-            let _b = super::scoped(super::OP);
+            // (a budget it cannot run out of before the stop comes)
+            let _b = super::scoped(u64::MAX >> 4);
             let mut n = 0u64;
             while !super::over() {
                 super::spend_many(64);
@@ -463,7 +552,7 @@ mod tests {
         seen.stop();
         let n = h.join().unwrap();
         // it stopped well short of its budget, within a slice of the stop
-        assert!(n < super::OP / 2, "{n}");
+        assert!(n < u64::MAX >> 5, "{n}");
         assert!(seen.spent() >= 4 * super::SLICE);
         // and the thread that ran it has no limit left behind
     }
@@ -528,7 +617,7 @@ mod tests {
         let seen = w.clone();
         let h = std::thread::spawn(move || {
             let _w = super::watched(w);
-            let _op = super::scoped(super::OP);
+            let _op = super::scoped(u64::MAX >> 4);
             let n = std::sync::atomic::AtomicU64::new(0);
             let work = || {
                 while !super::over() {
@@ -548,8 +637,44 @@ mod tests {
         }
         seen.stop();
         let (n, told) = h.join().unwrap();
-        assert!(n < super::OP / 2, "{n}");
+        assert!(n < u64::MAX >> 5, "{n}");
         assert!(told);
+    }
+
+    #[test]
+    fn isolated_work_is_counted_on_its_own_even_on_a_shared_bank() {
+        let _op = super::scoped(1000);
+        super::spend_many(100);
+        forge_math::par::scope(|s| {
+            s.spawn(|| {
+                // a helper, sharing the op's bank: isolated, its spend is its own
+                let (n, ()) = super::isolated(50, || super::spend_many(30));
+                assert_eq!(n, 30);
+                let (n, over) = super::isolated(50, || {
+                    super::spend_many(60);
+                    super::over()
+                });
+                assert_eq!(n, 50);
+                assert!(over);
+            })
+            .join()
+            .unwrap();
+        });
+        // and nothing of it is the op's
+        assert_eq!(super::left(), 900);
+    }
+
+    #[test]
+    fn uncounted_work_leaves_the_budget_as_it_was() {
+        let _op = super::scoped(1000);
+        super::spend_many(100);
+        let over = super::uncounted(|| {
+            super::spend_many(5000);
+            super::over()
+        });
+        assert!(!over);
+        assert_eq!(super::left(), 900);
+        assert!(super::limited());
     }
 
     #[test]

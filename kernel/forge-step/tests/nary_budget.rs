@@ -83,3 +83,47 @@ fn an_nary_booleans_helpers_spend_its_budget() {
     }
     forge_math::par::force_helpers(false);
 }
+
+/// What an op spends does not hang on what ran before it: a lazy cache (a spline's seeds, a
+/// face's box and query) is filled uncounted, so an op that finds it filled spends what one that
+/// fills it does. (Before, the first to ask paid: the same bores on a part already meshed and
+/// weighed, or bored once before, spent a thirtieth, and a solid near its budget was refused or
+/// not by the order of its steps: ds-40y #249171, IMPORT-SPEED.)
+#[test]
+fn an_ops_spend_and_verdict_do_not_hang_on_what_ran_before() {
+    let (b, bores) = part_and_bores();
+    let (fresh, r) = spent(|| bored(&b, &bores, 1));
+    r.unwrap();
+    // the same op again, on the same part: its caches filled by the first
+    let (again, _) = spent(|| bored(&b, &bores, 1));
+    assert_eq!(again, fresh);
+    // a part meshed and weighed first
+    let (b2, bores2) = part_and_bores();
+    let (mass_first, _) = spent(|| forge_topo::mass::mass_rel(&b2, 1e-6));
+    let _ = forge_mesh::tessellate_tolerant(&b2, &forge_mesh::Quality::default());
+    let (warmed, _) = spent(|| bored(&b2, &bores2, 1));
+    assert_eq!(warmed, fresh);
+    // and weighing after the mesh spends what weighing before it did
+    let (b3, _) = part_and_bores();
+    let _ = forge_mesh::tessellate_tolerant(&b3, &forge_mesh::Quality::default());
+    let (mass_after, _) = spent(|| forge_topo::mass::mass_rel(&b3, 1e-6));
+    assert_eq!(mass_after, mass_first);
+    // on four threads, helpers forced on: the same
+    forge_math::par::force_helpers(true);
+    let (b4, bores4) = part_and_bores();
+    let _ = forge_mesh::tessellate_tolerant(&b4, &forge_mesh::Quality::default());
+    let (threaded, _) = spent(|| bored(&b4, &bores4, 4));
+    forge_math::par::force_helpers(false);
+    assert_eq!(threaded, fresh);
+    // and so the verdict at the budget's edge, whatever ran before: a budget it spends to the last
+    // evaluation refuses (it is used up), one evaluation more answers
+    for (b, bores) in [part_and_bores(), (b2, bores2)] {
+        {
+            let _used_up = forge_geom::budget::scoped(fresh);
+            assert!(matches!(bored(&b, &bores, 1), Err(BoolError::TooLong)));
+        }
+        let _enough = forge_geom::budget::scoped(fresh + 1);
+        assert!(bored(&b, &bores, 1).is_ok());
+    }
+}
+

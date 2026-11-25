@@ -200,25 +200,27 @@ impl Nurbs {
     /// is noise. Edges a little off the axis would otherwise take any angle from there.
     fn on_pole(&self, p: Point3) -> bool {
         let (poles, r) = self.poles.get_or_init(|| {
-            let at = |i: usize, j: usize| {
-                let c = self.net[i * self.nv + j];
-                Point3::new(c[0] / c[3], c[1] / c[3], c[2] / c[3])
-            };
-            let tol = forge_math::tol::LINEAR;
-            let one = |pts: Vec<Point3>| pts.iter().all(|q| q.distance(pts[0]) <= tol).then(|| pts[0]);
-            let sides = [
-                one((0..self.nu).map(|i| at(i, 0)).collect()),
-                one((0..self.nu).map(|i| at(i, self.nv - 1)).collect()),
-                one((0..self.nv).map(|j| at(0, j)).collect()),
-                one((0..self.nv).map(|j| at(self.nu - 1, j)).collect()),
-            ];
-            let size = Box3::from_points(
-                (0..self.nu)
-                    .flat_map(|i| (0..self.nv).map(move |j| (i, j)))
-                    .map(|(i, j)| at(i, j)),
-            )
-            .diagonal();
-            (sides.into_iter().flatten().collect(), (1e-5 * size).max(tol))
+            forge_geom::budget::uncounted(|| {
+                let at = |i: usize, j: usize| {
+                    let c = self.net[i * self.nv + j];
+                    Point3::new(c[0] / c[3], c[1] / c[3], c[2] / c[3])
+                };
+                let tol = forge_math::tol::LINEAR;
+                let one = |pts: Vec<Point3>| pts.iter().all(|q| q.distance(pts[0]) <= tol).then(|| pts[0]);
+                let sides = [
+                    one((0..self.nu).map(|i| at(i, 0)).collect()),
+                    one((0..self.nu).map(|i| at(i, self.nv - 1)).collect()),
+                    one((0..self.nv).map(|j| at(0, j)).collect()),
+                    one((0..self.nv).map(|j| at(self.nu - 1, j)).collect()),
+                ];
+                let size = Box3::from_points(
+                    (0..self.nu)
+                        .flat_map(|i| (0..self.nv).map(move |j| (i, j)))
+                        .map(|(i, j)| at(i, j)),
+                )
+                .diagonal();
+                (sides.into_iter().flatten().collect(), (1e-5 * size).max(tol))
+            })
         });
         poles.iter().any(|q| q.distance(p) <= *r)
     }
@@ -315,38 +317,41 @@ impl Nurbs {
 
     fn seeds(&self) -> &Seeds {
         self.seeds.get_or_init(|| {
-            let (du, dv) = self.dom();
-            // about two points a control point's span, within reason
-            let grid = |n: usize, p: usize| (2 * (n - p) + 1).clamp(9, 65);
-            let (a, b) = (grid(self.nu, self.p), grid(self.nv, self.q));
-            let (mut radius, mut lu, mut lv) = (f64::INFINITY, 0.0_f64, 0.0_f64);
-            for i in 0..a {
-                let u = du.lo + du.width() * i as f64 / (a - 1) as f64;
-                for j in 0..b {
-                    let v = dv.lo + dv.width() * j as f64 / (b - 1) as f64;
-                    let uv = Point2::new(u, v);
-                    let d = self.eval_all(uv);
-                    let (n, area) = {
-                        let c = d.du.cross(d.dv);
-                        let l = c.length();
-                        (if l > 0.0 { c / l } else { Vec3::ZERO }, l)
-                    };
-                    lu = lu.max(d.du.length());
-                    lv = lv.max(d.dv.length());
-                    if area > 0.0 {
-                        // normal curvature along each parameter line
-                        let (e, g) = (d.du.dot(d.du), d.dv.dot(d.dv));
-                        let k = (n.dot(d.duu).abs() / e.max(1e-300)).max(n.dot(d.dvv).abs() / g.max(1e-300));
-                        if k > 0.0 {
-                            radius = radius.min(1.0 / k);
+            forge_geom::budget::uncounted(|| {
+                let (du, dv) = self.dom();
+                // about two points a control point's span, within reason
+                let grid = |n: usize, p: usize| (2 * (n - p) + 1).clamp(9, 65);
+                let (a, b) = (grid(self.nu, self.p), grid(self.nv, self.q));
+                let (mut radius, mut lu, mut lv) = (f64::INFINITY, 0.0_f64, 0.0_f64);
+                for i in 0..a {
+                    let u = du.lo + du.width() * i as f64 / (a - 1) as f64;
+                    for j in 0..b {
+                        let v = dv.lo + dv.width() * j as f64 / (b - 1) as f64;
+                        let uv = Point2::new(u, v);
+                        let d = self.eval_all(uv);
+                        let (n, area) = {
+                            let c = d.du.cross(d.dv);
+                            let l = c.length();
+                            (if l > 0.0 { c / l } else { Vec3::ZERO }, l)
+                        };
+                        lu = lu.max(d.du.length());
+                        lv = lv.max(d.dv.length());
+                        if area > 0.0 {
+                            // normal curvature along each parameter line
+                            let (e, g) = (d.du.dot(d.du), d.dv.dot(d.dv));
+                            let k =
+                                (n.dot(d.duu).abs() / e.max(1e-300)).max(n.dot(d.dvv).abs() / g.max(1e-300));
+                            if k > 0.0 {
+                                radius = radius.min(1.0 / k);
+                            }
                         }
                     }
                 }
-            }
-            Seeds {
-                radius: radius.max(forge_math::tol::LINEAR),
-                scale: (lu.max(forge_math::tol::LINEAR), lv.max(forge_math::tol::LINEAR)),
-            }
+                Seeds {
+                    radius: radius.max(forge_math::tol::LINEAR),
+                    scale: (lu.max(forge_math::tol::LINEAR), lv.max(forge_math::tol::LINEAR)),
+                }
+            })
         })
     }
 
@@ -392,17 +397,19 @@ impl Nurbs {
 
     fn tree(&self) -> &Tree {
         self.tree.get_or_init(|| {
-            // the non-empty knot spans of a direction: (lo, hi, span index)
-            let spans = |k: &[f64], d: usize, n: usize| -> Vec<(f64, f64, usize)> {
-                (d..n)
-                    .filter(|&i| k[i + 1] > k[i])
-                    .map(|i| (k[i], k[i + 1], i))
-                    .collect()
-            };
-            let (us, vs) = (spans(&self.u, self.p, self.nu), spans(&self.v, self.q, self.nv));
-            let mut nodes = Vec::with_capacity(2 * us.len() * vs.len());
-            self.build(&us, &vs, (0, us.len()), (0, vs.len()), &mut nodes);
-            Tree { nodes, us, vs }
+            forge_geom::budget::uncounted(|| {
+                // the non-empty knot spans of a direction: (lo, hi, span index)
+                let spans = |k: &[f64], d: usize, n: usize| -> Vec<(f64, f64, usize)> {
+                    (d..n)
+                        .filter(|&i| k[i + 1] > k[i])
+                        .map(|i| (k[i], k[i + 1], i))
+                        .collect()
+                };
+                let (us, vs) = (spans(&self.u, self.p, self.nu), spans(&self.v, self.q, self.nv));
+                let mut nodes = Vec::with_capacity(2 * us.len() * vs.len());
+                self.build(&us, &vs, (0, us.len()), (0, vs.len()), &mut nodes);
+                Tree { nodes, us, vs }
+            })
         })
     }
 

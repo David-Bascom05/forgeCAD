@@ -166,8 +166,11 @@ impl<T> Default for Cached<T> {
 }
 
 impl<T> Cached<T> {
+    /// Its value, `f`'s the first time: a fill not counted in the work budget
+    /// (`forge_geom::budget::uncounted`), so what an op spends is the same whichever asked first,
+    /// and a fill is never cut short (a value kept half made).
     pub fn get_or_init(&self, f: impl FnOnce() -> T) -> &T {
-        self.0.get_or_init(f)
+        self.0.get_or_init(|| forge_geom::budget::uncounted(f))
     }
     pub fn get(&self) -> Option<&T> {
         self.0.get()

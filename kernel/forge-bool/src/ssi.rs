@@ -295,7 +295,7 @@ impl std::hash::Hasher for Mix {
 type Mets = (
     std::collections::HashMap<
         Met,
-        (Option<Proc>, Option<Proc>, SurfaceSurface),
+        (Option<Proc>, Option<Proc>, SurfaceSurface, u64),
         std::hash::BuildHasherDefault<Mix>,
     >,
     usize,
@@ -351,10 +351,19 @@ pub fn searched(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
         return SurfaceSurface::Empty;
     }
     let key = met(a, b, &region);
-    if let Some(r) = MET.with(|m| m.borrow().0.get(&key).map(|e| e.2.clone())) {
+    // a remembered answer charges what it cost when it was found, so that an op spends the same
+    // whether its answers are fresh or remembered, and whichever thread remembered them
+    if let Some((r, cost)) = MET.with(|m| m.borrow().0.get(&key).map(|e| (e.2.clone(), e.3))) {
+        forge_geom::budget::spend_many(cost);
         return r;
     }
+    let before = forge_geom::budget::spent();
     let r = search(a, b, region);
+    let cost = forge_geom::budget::spent().wrapping_sub(before);
+    // (one cut short by the budget or a stop is not remembered: a later op would take it whole)
+    if forge_geom::budget::exhausted() {
+        return r;
+    }
     let most = MET_MOST.with(|m| m.get());
     MET.with(|m| {
         let mut m = m.borrow_mut();
@@ -371,7 +380,7 @@ pub fn searched(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
                 Surface::Procedural(p) => Some(p.clone()),
                 _ => None,
             };
-            m.0.insert(key, (held(a), held(b), r.clone()));
+            m.0.insert(key, (held(a), held(b), r.clone(), cost));
         }
     });
     r

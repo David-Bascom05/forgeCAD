@@ -530,22 +530,24 @@ impl<'a> Index<'a> {
 
     fn drawn(&self, f: FaceId) -> &Drawn {
         self.info(f).drawn.get_or_init(|| {
-            let loops = face_uv_loops(self.body, f);
-            let (mut u, mut v) = (Interval::EMPTY, Interval::EMPTY);
-            for p in loops.iter().flat_map(|l| l.points.iter()) {
-                u.include(p.x);
-                v.include(p.y);
-            }
-            let centre = loops.first().map_or(Point2::ORIGIN, |l| {
-                let n = l.points.len().max(1) as f64;
-                let s = l.points.iter().fold((0.0, 0.0), |a, p| (a.0 + p.x, a.1 + p.y));
-                Point2::new(s.0 / n, s.1 / n)
-            });
-            Drawn {
-                loops,
-                centre,
-                window: Box2::new(u, v),
-            }
+            forge_geom::budget::uncounted(|| {
+                let loops = face_uv_loops(self.body, f);
+                let (mut u, mut v) = (Interval::EMPTY, Interval::EMPTY);
+                for p in loops.iter().flat_map(|l| l.points.iter()) {
+                    u.include(p.x);
+                    v.include(p.y);
+                }
+                let centre = loops.first().map_or(Point2::ORIGIN, |l| {
+                    let n = l.points.len().max(1) as f64;
+                    let s = l.points.iter().fold((0.0, 0.0), |a, p| (a.0 + p.x, a.1 + p.y));
+                    Point2::new(s.0 / n, s.1 / n)
+                });
+                Drawn {
+                    loops,
+                    centre,
+                    window: Box2::new(u, v),
+                }
+            })
         })
     }
 
@@ -583,7 +585,7 @@ impl<'a> Index<'a> {
         let info = self.info(f);
         if let Some(w) = info
             .simple
-            .get_or_init(|| Simple::of(body, f))
+            .get_or_init(|| forge_geom::budget::uncounted(|| Simple::of(body, f)))
             .and_then(|s| s.place(p))
         {
             return w;
@@ -737,7 +739,7 @@ impl<'a> Index<'a> {
         let info = self.info(f);
         if info
             .simple
-            .get_or_init(|| Simple::of(body, f))
+            .get_or_init(|| forge_geom::budget::uncounted(|| Simple::of(body, f)))
             .and_then(|s| s.place(p))
             .is_none()
         {
