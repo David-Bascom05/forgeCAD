@@ -191,25 +191,49 @@ fn main() {
             let mut worst_area: f64 = 0.0;
             let mut worst_vol: f64 = 0.0;
             let mut worst_box: f64 = 0.0;
-            for a in &xsum {
-                let score = |b: &Sum| {
-                    let d: f64 = (0..6).map(|k| (a.bx[k] - b.bx[k]).abs()).sum();
-                    let dv = forge_math::dmath::cbrt((a.volume - b.volume).abs());
-                    d + if dv.is_finite() { dv } else { 0.0 }
-                };
-                let best = ssum
-                    .iter()
-                    .enumerate()
-                    .filter(|(k, _)| !used[*k])
-                    .min_by(|p, q| score(p.1).total_cmp(&score(q.1)));
-                let Some((k, b)) = best else { continue };
-                let size = (0..3)
-                    .map(|j| b.bx[2 * j + 1] - b.bx[2 * j])
-                    .fold(0.0, f64::max)
-                    .max(1e-9);
-                let dbox = (0..6).map(|j| (a.bx[j] - b.bx[j]).abs()).fold(0.0, f64::max) / size;
-                if dbox > 0.05 {
+            // every XT and STEP solid scored, then paired best first: a solid early in the XT
+            // cannot take the STEP solid a later one matches better
+            let score = |a: &Sum, b: &Sum| {
+                let d: f64 = (0..6).map(|k| (a.bx[k] - b.bx[k]).abs()).sum();
+                let dv = forge_math::dmath::cbrt((a.volume - b.volume).abs());
+                d + if dv.is_finite() { dv } else { 0.0 }
+            };
+            let mut cands: Vec<(f64, usize, usize)> = Vec::new();
+            for (i, a) in xsum.iter().enumerate() {
+                for (k, b) in ssum.iter().enumerate() {
+                    let size = (0..3)
+                        .map(|j| b.bx[2 * j + 1] - b.bx[2 * j])
+                        .fold(0.0, f64::max)
+                        .max(1e-9);
+                    let dbox = (0..6).map(|j| (a.bx[j] - b.bx[j]).abs()).fold(0.0, f64::max) / size;
+                    if dbox <= 0.05 {
+                        cands.push((score(a, b), i, k));
+                    }
+                }
+            }
+            cands.sort_by(|p, q| p.0.total_cmp(&q.0).then(p.1.cmp(&q.1)).then(p.2.cmp(&q.2)));
+            let mut xused = vec![false; xsum.len()];
+            for (_, i, k) in cands {
+                if xused[i] || used[k] {
                     continue;
+                }
+                xused[i] = true;
+                let (a, b) = (&xsum[i], &ssum[k]);
+                let dbox = {
+                    let size = (0..3)
+                        .map(|j| b.bx[2 * j + 1] - b.bx[2 * j])
+                        .fold(0.0, f64::max)
+                        .max(1e-9);
+                    (0..6).map(|j| (a.bx[j] - b.bx[j]).abs()).fold(0.0, f64::max) / size
+                };
+                if std::env::var_os("XT_BAD").is_some() {
+                    let dv = (a.volume - b.volume).abs() / b.volume.abs().max(1e-12);
+                    if dv > 1e-4 && dv.is_finite() {
+                        eprintln!(
+                            "bad xt {i} vol {:.6} faces {} verified {} | step {k} vol {:.6} faces {} | rel {dv:.2e} dbox {dbox:.2e}",
+                            a.volume, a.faces, a.valid, b.volume, b.faces
+                        );
+                    }
                 }
                 used[k] = true;
                 paired += 1;
