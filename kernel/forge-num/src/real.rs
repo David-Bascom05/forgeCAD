@@ -1941,6 +1941,103 @@ mod tests {
         );
     }
 
+    /// The tower route over five roots of full-mantissa radicands (as coordinates have), against
+    /// refinement alone: random shallow expressions and zeros built from them, each sign the
+    /// same; where the tower answers it agrees, and where it gives up (past its budget) `sign`
+    /// still agrees.
+    #[test]
+    fn the_tower_route_agrees_over_five_full_mantissa_roots() {
+        let mut g = Rng(29);
+        let (mut zeros, mut nonzeros, mut routed, mut gave_up) = (0, 0, 0, 0);
+        for case in 0..40 {
+            let mut c = Ctx::new();
+            // radicands with full 53-bit mantissas
+            let rad = |c: &mut Ctx, g: &mut Rng| {
+                let v = 1.0 + (g.u(1 << 30) as f64) / (1u64 << 30) as f64 * 9.0 + 1e-9 * g.u(997) as f64;
+                c.lit(v)
+            };
+            let cs: Vec<R> = (0..5).map(|_| rad(&mut c, &mut g)).collect();
+            let rs: Vec<R> = cs.iter().map(|&x| c.sqrt(x)).collect();
+            let small = |c: &mut Ctx, g: &mut Rng| {
+                let v = (g.u(41) as f64 - 20.0) / 8.0 + 0.125;
+                c.lit(v)
+            };
+            let mut pool: Vec<R> = rs.clone();
+            pool.push(small(&mut c, &mut g));
+            pool.push(small(&mut c, &mut g));
+            for _ in 0..5 {
+                let (x, y) = (
+                    pool[g.u(pool.len() as u64) as usize],
+                    pool[g.u(pool.len() as u64) as usize],
+                );
+                let v = match g.u(4) {
+                    0 => c.add(x, y),
+                    1 => c.sub(x, y),
+                    2 => c.mul(x, y),
+                    _ => {
+                        if c.sign_by_refinement(y) == Ordering::Equal {
+                            continue;
+                        }
+                        c.div(x, y)
+                    }
+                };
+                pool.push(v);
+            }
+            let (x, y) = (pool[pool.len() - 1], pool[pool.len() - 2]);
+            // a sum over all five roots, and zeros built from it
+            let mut sum = rs[0];
+            for &r in &rs[1..] {
+                sum = c.add(sum, r);
+            }
+            let mut tests = vec![x, y, c.sub(x, y), sum];
+            // x (Σ√cᵢ) − Σ x√cᵢ = 0
+            let xs = c.mul(x, sum);
+            let mut parts = c.mul(x, rs[0]);
+            for &r in &rs[1..] {
+                let xr = c.mul(x, r);
+                parts = c.add(parts, xr);
+            }
+            tests.push(c.sub(xs, parts));
+            // (√c₀ + √c₁)² − (c₀ + c₁ + 2√c₀√c₁) = 0
+            let s01 = c.add(rs[0], rs[1]);
+            let sq = c.sqr(s01);
+            let c01 = c.add(cs[0], cs[1]);
+            let r01 = c.mul(rs[0], rs[1]);
+            let two = c.lit(2.0);
+            let tr = c.mul(two, r01);
+            let rhs = c.add(c01, tr);
+            tests.push(c.sub(sq, rhs));
+            // √c₂ √c₃ √c₄ (√c₂)⁻¹ − √c₃ √c₄ = 0
+            let r34 = c.mul(rs[3], rs[4]);
+            let r234 = c.mul(rs[2], r34);
+            let q = c.div(r234, rs[2]);
+            tests.push(c.sub(q, r34));
+            for t in tests {
+                let want = c.sign_by_refinement(t);
+                let order = c.closure(t);
+                if c.radicals(&order) >= 2 {
+                    match c.tower_sign(&order) {
+                        Some(got) => {
+                            routed += 1;
+                            assert_eq!(got, want, "case {case}");
+                        }
+                        None => gave_up += 1,
+                    }
+                }
+                assert_eq!(c.sign(t), want, "case {case}");
+                if want == Ordering::Equal {
+                    zeros += 1;
+                } else {
+                    nonzeros += 1;
+                }
+            }
+        }
+        assert!(
+            zeros >= 100 && nonzeros >= 100 && routed >= 100,
+            "{zeros} {nonzeros} {routed} {gave_up}"
+        );
+    }
+
     /// Quotients nested over five and six roots square their coefficients at every level of the
     /// tower (never reduced): unbounded, one such sign took minutes (a CAM pocket's offset, before
     /// the tower's work was bounded). The tower gives up within its budget and the sign is still
