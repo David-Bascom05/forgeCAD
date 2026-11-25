@@ -192,7 +192,12 @@ impl MachineView {
             last = sp.t1;
         }
         let total = run.tl.t_stop.max(segs.last().map_or(0.0, |g| g.t1()));
-        let tl = Timeline { segs, ops, total };
+        let tl = Timeline {
+            segs,
+            ops,
+            total,
+            changes: vec![],
+        };
         let mut mv = MachineView {
             run,
             setup,
