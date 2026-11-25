@@ -229,7 +229,9 @@ fn refine_on_edge(body: &Body, e: forge_topo::EdgeId, plane: &Frame, p: Point3) 
         let (a, b) = (c.eval(edge.range.lo), c.eval(edge.range.hi));
         let (da, db) = ((a - o).dot(n), (b - o).dot(n));
         if (da - db).abs() > 1e-15 {
-            return a + (b - a) * (da / (da - db));
+            let q = a + (b - a) * (da / (da - db));
+            // as for a curve: a crossing far from the mesh's is another edge's
+            return if q.distance(p) < 0.1 { q } else { p };
         }
         return p;
     }
@@ -264,10 +266,19 @@ fn nearest_edge(body: &Body, f: FaceId, p: Point3) -> Option<forge_topo::EdgeId>
         .map(|x| x.1)
 }
 
-fn common_edge(body: &Body, a: FaceId, b: FaceId) -> Option<forge_topo::EdgeId> {
+/// The edge between faces `a` and `b` nearest `p`. Two faces may share more than one: a
+/// cylinder's two halves meet at both seams (HRT160SP #71564, where the first found was the far
+/// seam and the section's arc swept a whole turn wrong).
+fn common_edge(body: &Body, a: FaceId, b: FaceId, p: Point3) -> Option<forge_topo::EdgeId> {
     edges_of_face(body, a)
         .into_iter()
-        .find(|e| crate::select::faces_of_edge(body, *e).contains(&b))
+        .filter(|e| crate::select::faces_of_edge(body, *e).contains(&b))
+        .map(|e| {
+            let edge = body.edge(e);
+            (edge.curve.eval(edge.curve.closest(p, edge.range)).distance(p), e)
+        })
+        .min_by(|x, y| x.0.total_cmp(&y.0))
+        .map(|x| x.1)
 }
 
 /// A crossing: the mesh edge it is on, by its two vertices.
@@ -339,7 +350,7 @@ pub fn section(body: &Body, plane: &Frame) -> Result<Vec<Loop>, String> {
     let mut exact: HashMap<(u32, u32), Point3> = HashMap::new();
     for (k, (p, faces, uses)) in &cross {
         let q = match faces[..] {
-            [a, b, ..] if a != b => match common_edge(body, a, b) {
+            [a, b, ..] if a != b => match common_edge(body, a, b, *p) {
                 Some(e) => refine_on_edge(body, e, plane, *p),
                 None => refine_on_face(body, a, plane, *p),
             },
@@ -736,6 +747,46 @@ mod tests {
         assert!(h[0].thru);
         assert!((h[0].axis - Vec3::Z).length() < 1e-12);
         assert!((h[1].radius - 4.0).abs() < 1e-12);
+    }
+
+    /// A rod of two half-cylinder faces, which meet at two seams, cut across: a circle's area.
+    /// A crossing on a seam was put on the first seam the two faces share, the far one for half
+    /// of them (HRT160SP #71564, HRTA6 #87677): the arc then swept a whole turn wrong and the
+    /// section's area came out negative.
+    #[test]
+    fn a_rod_of_two_halves_cut_across_is_a_circle() {
+        use forge_ops::Segment;
+        let r = 10.0;
+        let half = |start: f64, id: u64| {
+            (
+                Segment::Arc {
+                    center: Point2::ORIGIN,
+                    radius: r,
+                    start,
+                    sweep: dmath::PI,
+                },
+                id,
+            )
+        };
+        let p = Profile {
+            plane: Frame::WORLD,
+            loops: vec![forge_ops::ProfileLoop::new(vec![
+                half(0.0, 10),
+                half(dmath::PI, 20),
+            ])],
+        };
+        let b = extrude(&p, 20.0, 1).expect("rod");
+        for z in [3.0, 7.0, 13.0] {
+            let l = section(&b, &Frame::from_z(Point3::new(0.0, 0.0, z), UnitVec3::Z)).unwrap();
+            assert_eq!(l.len(), 1, "z {z}: {l:?}");
+            assert!(l[0].closed);
+            let want = dmath::PI * r * r;
+            assert!(
+                (l[0].area - want).abs() < 1e-9 * want,
+                "z {z}: {} vs {want}",
+                l[0].area
+            );
+        }
     }
 
     #[test]
