@@ -9,10 +9,10 @@ its builder (`interface/forge-workholding-builder`), and how CAM holds a part.
 | branch | sha | state |
 |---|---|---|
 | `cam/workholding` | 9edad4f6 | merged in train 7 (the library, kinds, lathe, generators, vendor data) |
-| `cam/workholding-vise` | d9040ec4 | PRE-VERIFY GREEN-EXCEPT-RENDER, sent to TRAIN-CONDUCTOR (render: VERIFY-RENDER) |
-| `cam/workholding-haas` | 783e2d57 | contains `-vise`; real Haas models (05-0404, 05-0405) in the certified path |
-| `cam/workholding-any2` | 11c7a3b2 | contains `-haas`; any geometry, user imports, the speed fix |
-| `cam/workholding-default2` | (this) | contains `-any2`; `generic-vise-150`/`-100` mean the real Haas vises |
+| `cam/workholding-vise` | 28d0255d | contained in `-any2` |
+| `cam/workholding-haas` | 88923990 | contains `-vise`; real Haas models (05-0404, 05-0405) in the certified path; contained in `-any2` |
+| `cam/workholding-any2` | 3c4dfe0d | contains `-haas`; any geometry, user imports, the speed fix; its pre-verify line covers all three |
+| `cam/workholding-default2` | (this) | contains `-any2`; `generic-vise-150`/`-100` mean the real Haas vises. **HELD**: see "default2 is held" below |
 
 They land in that order; each line goes to TRAIN-CONDUCTOR as its pre-verify comes in.
 `cam/workholding-any` and `cam/workholding-default` are superseded (by `-any2` and `-default2`):
@@ -79,6 +79,39 @@ sha256 the record cites, so a model swapped under a citation is caught either wa
   sha256, cached in `cam/workholding/.compiled/SHA.txt` beside the document.
 - Soft jaws on a model vise: the vise under them is still its sizes' boxes; each is named in
   `Fixture.enveloped` and the document warned.
+
+## default2 is held: a cut at exactly the clearance from a real jaw cannot be decided
+
+CAM-CORE's two-setup flange (`flange_cam.fg` with an op2 turned over, `facing(op2, to: 0)`)
+runs in 1.8 s against `standin-vise-150` and does not finish in 180 s against
+`haas-vise-05-0404`. With the stand-in it is refused too (`ok false`), so the document has a
+finding of its own either way; the time is ours.
+
+What the time is (release `cam_time`, each `certify_bb` call over 5 ms logged): every slow pair is
+one of the Haas jaws' inner faces (the planes at x = ±43, z up to 3.999 in the checker's frame)
+against op1's passes at x = ±49 (the passes' U-turn arcs, r 3.308, and their plunges). The checker
+bounds their distance at 0.99999048 with the limit 1 (the fixture clearance): inside the band
+(limit − μ, limit + μ) with μ = 1e-5, the STEP's own tolerance carried by every face the model
+lowers exactly. Nothing can decide a distance inside that band, so the branch and bound subdivides
+the whole line of near-contact until its budget runs out: 200 000 cells, about 5 s, per move.
+In 90 s, 60 such pairs ended `Undecided` and 32 of them spent the full budget. The stand-in's
+jaws are the same planes with μ = 0, so the same passes are at exactly the limit and clear at
+once.
+
+Why the passes are there: the passes run past the stock's edge by the setup's clearance
+(`clear_gap: s.clearance`), and with the vise closed on the stock the jaw's inner face is the
+stock's edge, so a pass ends at exactly the fixture clearance from the jaw. Two possible fixes
+(neither done):
+- the planner keeps the fixture's clearance plus its faces' largest μ (and a little room) from
+  the fixture, so it never plans a pass inside the band (CAM-CORE's: the overrun); or
+- `certify_bb` returns `Undecided` as soon as it pops a cell that lies wholly inside the band
+  and is below the resolution, instead of spending the rest of its budget. A Hit elsewhere on
+  the face would be lost as a witness (both are refusals), and the kernel's proofs would need to
+  cover it, so this is the larger change.
+
+Until one of them lands, `-default2` must not be merged: any document whose passes end at the
+jaws would spend minutes per setup against the real vise. `-any2` (opt-in by name) is
+unaffected unless a document names a Haas vise.
 
 ## Unfinished, in the order I would do it
 
