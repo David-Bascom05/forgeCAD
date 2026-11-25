@@ -1586,6 +1586,8 @@ pub(crate) fn regen_text(e: &forge_model::RegenError) -> String {
             error: forge_model::BodyError::Unsupported(what),
             ..
         } => format!("{what} is not supported"),
+        // which end could not be found: "extent: no next face", not the bare "extent"
+        G::Extent { error, .. } => format!("extent: {}", words(error)),
         _ => words(e),
     }
 }

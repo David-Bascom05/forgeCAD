@@ -271,7 +271,8 @@ fn the_demo_part_is_built_with_the_ribbons_tools() {
     );
 }
 
-/// A tapped hole where hole1 already is: the preview's refusal is said in words and OK is held.
+/// A tapped hole to the next face where hole1 already is: hole1's bore leaves no face ahead, so the
+/// preview is refused (a refusal by design, not a gap in the kernel), said in words, and OK is held.
 #[test]
 fn a_refused_preview_holds_ok_and_says_why_in_words() {
     let dir = std::env::temp_dir().join(format!("fg-demo-refused-{}", std::process::id()));
@@ -294,6 +295,7 @@ fn a_refused_preview_holds_ok_and_says_why_in_words() {
     let before = h.gui.fg.as_ref().unwrap().src.clone();
     button(&mut h, "Hole");
     click(&mut h, "fg:tool:choice:Type:Tapped");
+    click(&mut h, "fg:tool:choice:Termination:To Next");
     click(&mut h, "fg:choice:Points:sk2.p1");
     assert!(
         h.until(|g| g
@@ -318,7 +320,7 @@ fn a_refused_preview_holds_ok_and_says_why_in_words() {
         .clone()
         .unwrap();
     assert!(
-        note.contains("not supported yet") && !note.contains('{'),
+        note.contains("no next face") && !note.contains('{'),
         "{note}"
     );
     click(&mut h, "fg:tool:ok");
