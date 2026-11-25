@@ -299,12 +299,17 @@ impl Shell {
             if b.clicked() {
                 self.versions.release = Some((String::new(), String::new(), false));
             }
+            let none = self.no_document();
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let mut on = self.versions.show_saves;
                 // (UX-LEAD: what it shows, said; a bare "Saves" read as a setting)
                 let b = ui
-                    .checkbox(&mut on, egui::RichText::new("Show saves").font(sans(12.0)))
-                    .on_hover_text("List the saves between versions too");
+                    .add_enabled(
+                        !none,
+                        egui::Checkbox::new(&mut on, egui::RichText::new("Show saves").font(sans(12.0))),
+                    )
+                    .on_hover_text("List the saves between versions too")
+                    .on_disabled_hover_text("Off: no part open, so no saves to list");
                 self.places.push(("versions:show-saves".into(), b.rect));
                 self.versions.show_saves = on;
             });
@@ -317,7 +322,14 @@ impl Shell {
                 (Filter::Releases, "Releases"),
             ] {
                 let on = self.versions.filter == f;
-                let b = ui.selectable_label(on, egui::RichText::new(word).font(sans(12.0)));
+                // "This part" with no part open has nothing to be about
+                let off = f == Filter::Part && self.no_document();
+                let b = ui
+                    .add_enabled(
+                        !off,
+                        egui::Button::selectable(on, egui::RichText::new(word).font(sans(12.0))),
+                    )
+                    .on_disabled_hover_text("Off: no part open; Project lists the folder's versions");
                 self.places.push((format!("versions:filter:{word}"), b.rect));
                 if b.clicked() && !on {
                     self.versions.filter = f;
