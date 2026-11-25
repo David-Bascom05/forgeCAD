@@ -9,6 +9,7 @@ use egui::{Align2, Color32, Rect, Sense, Stroke, Ui, pos2, vec2};
 use forge_lang::error::{Literal, Op, ParamKey, Scope, parse_path, path_text};
 use forge_lang::syntax::Seg;
 use forge_lang::values::Dim;
+use forge_math::ipow::Powi as _;
 use std::collections::HashSet;
 
 pub(super) const WARN: Color32 = Color32::from_rgb(0xE0, 0xA0, 0x30);
@@ -91,7 +92,7 @@ impl Undrawn {
             return None;
         }
         let c = [0, 1, 2].map(|k| (lo[k] + hi[k]) / 2.0);
-        let r = (0..3).map(|k| ((hi[k] - lo[k]) / 2.0).powi(2)).sum::<f64>().sqrt();
+        let r = (0..3).map(|k| ((hi[k] - lo[k]) / 2.0).ipow(2)).sum::<f64>().sqrt();
         Some((c, r.max(1.0)))
     }
 }

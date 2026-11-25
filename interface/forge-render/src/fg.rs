@@ -16,6 +16,7 @@ use forge_lang::error::{Error, Op, Warning};
 use forge_lang::eval::Value;
 use forge_lang::values::{Dim, Src};
 use forge_lang::{Measure, Options, Run, Timings};
+use forge_math::ipow::Powi as _;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -790,7 +791,7 @@ pub fn undrawn_of(body: &forge_topo::Body, left: &[tess::LeftOut]) -> crate::she
             let b = body.face_box(f);
             let (x, y, z) = (b.x, b.y, b.z);
             let center = [x.mid(), y.mid(), z.mid()];
-            let radius = ((x.hi - x.lo).powi(2) + (y.hi - y.lo).powi(2) + (z.hi - z.lo).powi(2)).sqrt() / 2.0;
+            let radius = ((x.hi - x.lo).ipow(2) + (y.hi - y.lo).ipow(2) + (z.hi - z.lo).ipow(2)).sqrt() / 2.0;
             crate::shell::fg::UndrawnFace {
                 face: l.face,
                 why: l.why.clone(),
