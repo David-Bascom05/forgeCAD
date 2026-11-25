@@ -1,0 +1,9 @@
+{
+  "rss_idle_kb": 4308,
+  "rss_docs_kb": [(0, 4308), (60, 202468), (240, 792732)],
+  "rss_per_doc_and_conn_kb": 3279.2,
+  "rss_per_extra_conn_kb": 3113.1,
+  "load_1_per_s": {"docs": 240, "sent": 4800, "wall_s": 20.0, "ops_per_s": 240, "server_cpu_s": 6.53, "cpu_ms_per_op": 1.360, "ack_p50_ms": 61.69, "ack_p99_ms": 458.22, "still_pending": 0},
+  "load_4_per_s": {"docs": 240, "sent": 19200, "wall_s": 20.0, "ops_per_s": 960, "server_cpu_s": 26.57, "cpu_ms_per_op": 1.384, "ack_p50_ms": 62.71, "ack_p99_ms": 409.48, "still_pending": 0},
+  "rss_end_kb": 3184504
+}
