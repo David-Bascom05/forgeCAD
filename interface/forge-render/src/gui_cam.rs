@@ -42,22 +42,34 @@ impl Gui {
         let done = w.job.lock().unwrap_or_else(|e| e.into_inner()).take();
         let mut changed = false;
         // a run's quality, measured after it was taken in
-        let measured = w.quality_job.lock().unwrap_or_else(|e| e.into_inner()).take();
+        let measured = std::mem::take(&mut *w.quality_job.lock().unwrap_or_else(|e| e.into_inner()));
         let took = done.is_some();
         if let Some(r) = done {
             w.ran(r);
             changed = true;
             self.shell.status = crate::shell::cam::status_line(w);
         }
-        if let Some((text, q)) = measured
-            && let Some(r) = w.run.as_mut().filter(|r| r.text == text && r.quality.is_none())
-        {
-            r.quality = Some(q);
-            changed = true;
+        // the one for the run shown, whichever order they ended in (the others are for texts
+        // since changed)
+        for (text, q) in measured {
+            if let Some(r) = w.run.as_mut().filter(|r| r.text == text && r.quality.is_none()) {
+                r.quality = Some(q);
+                changed = true;
+            }
         }
         if !took && self.shell.status.is_empty() && w.run.is_some() && w.running.is_none() {
             // nothing else to say (a view loaded after the run cleared it): the run's state
             self.shell.status = crate::shell::cam::status_line(w);
+        }
+        // what the workspace just said (an export asked, a refusal) is the shell's status too, as
+        // drawn: the status bar draws the workspace's line, and what reads the shell's status
+        // (the page's state, the UI audit) sees the same words
+        // (once, when it is said: what comes after, "Generating", is not undone)
+        if w.said != w.said_shown {
+            if let Some(s) = &w.said {
+                self.shell.status = s.clone();
+            }
+            w.said_shown = w.said.clone();
         }
         // a run asked for, none going
         if w.want_run && w.running.is_none() {
@@ -78,7 +90,7 @@ impl Gui {
                 waker();
                 if let Some(cam) = cam {
                     let q = run::measure_cam(&cam);
-                    *qslot.lock().unwrap_or_else(|e| e.into_inner()) = Some((text, q));
+                    qslot.lock().unwrap_or_else(|e| e.into_inner()).push((text, q));
                     waker();
                 }
             });

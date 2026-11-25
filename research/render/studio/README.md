@@ -18,3 +18,10 @@ Every picture is denoised (the studio's own variance-guided a-trous filter) unle
 | 07-render-studio-environment-1024x700.png | the same at 1024x700 | the same |
 
 08-web-render-studio.png: the Render Studio environment in the browser (WebGPU, SwiftShader), the flange at 135 samples, denoised.
+
+09-render-progress.png, 10-render-result.png: Render Image answers at once (David: "no visible
+feedback"): from the next frame a card over the view with the progress (percent, samples, elapsed,
+an estimate of what's left) and Cancel, the button saying "Rendering…"; at the end the picture with
+its file (Open folder, Copy path, Close) and "Render saved: PATH" in the status bar; a failure says
+why (tests/studio_model.rs render_image_shows_its_progress_at_once_then_its_result). A file named
+alone (render.png) goes beside the document.

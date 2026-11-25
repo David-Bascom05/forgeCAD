@@ -1,11 +1,11 @@
-# haas-umc-750 trunnion support l (unpublished, conservative)
+# haas-umc-750 trunnion support l (measured on Haas's model)
 # frame: the machine's base frame at the home pose (forgecad Haas approximation).
 shared x0 = -159
-shared y0 = -409
-shared z0 = -549
+shared y0 = -559
+shared z0 = -359
 shared lx = 318
-shared ly = 138
-shared lz = 588
+shared ly = 88
+shared lz = 478
 
 sketch plan(on: offset(xy, z0)) {
   outline = rect(corner: (x0, y0), size: (lx, ly))
