@@ -1588,11 +1588,18 @@ impl Shell {
             );
             let g = ui.fonts_mut(|f| f.layout_no_wrap(text.clone(), sans(12.0), Color32::WHITE));
             let right = Self::units_chip(&units, ui, &p, st) - theme::S2;
+            // an assembly's last checks still shown while the new ones run: a spinner before the
+            // count, so it does not read as settled
+            let checking = fg.issues.iter().any(|i| i.stale);
+            let spin = if checking { 18.0 } else { 0.0 };
             let r = Rect::from_min_max(
-                pos2(right - g.size().x - 22.0, st.top() + 2.0),
+                pos2(right - g.size().x - 22.0 - spin, st.top() + 2.0),
                 pos2(right, st.bottom() - 2.0),
             );
-            let resp = ui.interact(r, ui.scope_id().with("status-issues"), Sense::click());
+            let mut resp = ui.interact(r, ui.scope_id().with("status-issues"), Sense::click());
+            if checking {
+                resp = resp.on_hover_text("Checking the assembly's overlaps since your last edit");
+            }
             // a chip at rest too, so it reads as the button it is
             let lit = resp.hovered() || fg.issues_list;
             p.rect_filled(r, theme::R1, Color32::from_white_alpha(if lit { 32 } else { 14 }));
@@ -1611,8 +1618,12 @@ impl Shell {
                 1.5,
                 ink,
             );
+            if checking {
+                let at = Rect::from_center_size(pos2(r.left() + 20.0 + 6.0, r.center().y), vec2(12.0, 12.0));
+                egui::Spinner::new().size(12.0).color(Color32::WHITE).paint_at(ui, at);
+            }
             p.galley(
-                pos2(r.left() + 20.0, r.center().y - g.size().y * 0.5),
+                pos2(r.left() + 20.0 + spin, r.center().y - g.size().y * 0.5),
                 g,
                 Color32::WHITE,
             );
