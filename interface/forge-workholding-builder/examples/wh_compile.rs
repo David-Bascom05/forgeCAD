@@ -46,7 +46,7 @@ fn main() {
             c.text.len(),
             t0.elapsed().as_secs_f64()
         );
-        for (g, lo, hi) in &c.boxes {
+        for (g, lo, hi) in &c.tight {
             println!("  {g:12} {lo:?} {hi:?}");
         }
     }

@@ -494,7 +494,8 @@ impl Fixture {
     /// The fixture a workholding library placement is (research/cam/workholding.md §5): its
     /// bodies' axis-aligned blocks (keep-outs applied) as named pieces, every other primitive
     /// (a cylinder, a block at an angle) as a shaped piece of its exact faces; the jaws' top is
-    /// the top of what the device holds (the stock below it is held); the table plane is the
+    /// the top of what the device holds (the stock below it is held; a device that holds nothing,
+    /// its lowest point, so nothing is); the table plane is the
     /// device's mount. The checker sees exactly the library's bodies.
     pub fn from_workholding(p: &forge_workholding::Placed, axis: usize, clearance: f64) -> Fixture {
         use forge_workholding::{Mount, Prim, geom::IDENT};
@@ -531,13 +532,15 @@ impl Fixture {
             }
         }
         let jaw_top = p.held.iter().map(|h| h.1[2]).fold(f64::NEG_INFINITY, f64::max);
+        // a device that grips nothing (a plate, the user's own fixture) holds no stock: its jaw
+        // top is its lowest point, so no band of leftover is excused as held by it
         let jaw_top = if jaw_top.is_finite() {
             jaw_top
         } else {
             p.bodies
                 .iter()
-                .map(|b| b.bounds().1[2])
-                .fold(f64::NEG_INFINITY, f64::max)
+                .map(|b| b.bounds().0[2])
+                .fold(f64::INFINITY, f64::min)
         };
         Fixture {
             name: p.name.clone(),
@@ -554,6 +557,21 @@ impl Fixture {
             enveloped,
         }
     }
+}
+
+/// A placed body's drawn mesh (where it has one) and its checked faces (`body_source`).
+pub type BodySource = (Option<std::path::PathBuf>, Result<Vec<Face>, String>);
+
+/// A placed body's two views of one compile, for a drawing that must be what is checked: its
+/// drawn mesh (an STL, `forge_workholding::model::mesh_path`) and the faces the checker keeps the
+/// tool from, posed into the part frame. None for a body with no model (its prims are what it
+/// is, drawn and checked alike).
+pub fn body_source(b: &forge_workholding::Body) -> Option<BodySource> {
+    let e = b.exact.as_ref()?;
+    let mesh = forge_workholding::model::get(&e.model)
+        .and_then(|m| m.groups.iter().find(|g| g.name == e.group))
+        .and_then(forge_workholding::model::mesh_path);
+    Some((mesh, model_faces(e, b.keepout)))
 }
 
 /// A model group's compiled faces (forge_workholding::model), posed into the part frame and

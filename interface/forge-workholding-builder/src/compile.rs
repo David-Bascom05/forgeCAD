@@ -13,6 +13,10 @@
 use forge_cam::fixture_model::{self, Rot};
 use forge_cam_geom::check::Face;
 
+/// The compiler's version: a cache of compiled faces is named by it with its input's content,
+/// so raise it whenever the same input would compile to other faces.
+pub const VERSION: u32 = 1;
+
 /// Which of the file's solids (in the order the reader gives them) make each of the device's
 /// bodies.
 #[derive(Clone, Debug)]
@@ -46,7 +50,7 @@ pub struct Compiled {
     pub text: String,
     /// Each group's faces' box in the device's frame: (name, min, max).
     pub boxes: Vec<(String, [f64; 3], [f64; 3])>,
-    /// Each group's solids' own box in the device's frame (the body itself).
+    /// Each group's own box in the device's frame (its mesh grown by the chord: the body).
     pub tight: Vec<(String, [f64; 3], [f64; 3])>,
     /// Each group's triangles for drawing (the device's frame), as a binary STL.
     pub stl: Vec<(String, Vec<u8>)>,
@@ -87,12 +91,6 @@ fn stl(tris: &[[[f64; 3]; 3]], header: &str) -> Vec<u8> {
 
 /// Compiles the STEP text by `spec`.
 pub fn compile(step: &[u8], spec: &Spec) -> Result<Compiled, String> {
-    if !fixture_model::is_rot(&spec.rot) {
-        return Err("rot: a proper rotation permuting the axes".into());
-    }
-    if spec.chord <= 0.0 || spec.chord.is_nan() {
-        return Err("chord > 0".into());
-    }
     let im = forge_step::import(step, &forge_step::Limits::default()).map_err(|e| format!("{e:?}"))?;
     if !im.refusals.is_empty() {
         return Err(format!(
@@ -101,6 +99,29 @@ pub fn compile(step: &[u8], spec: &Spec) -> Result<Compiled, String> {
             im.refusals
         ));
     }
+    let bodies: Vec<&forge_topo::Body> = im.solids.iter().map(|s| &s.body).collect();
+    compile_bodies(&bodies, spec)
+}
+
+/// `compile` on solids already made (a `.fg` part built, or a file read): the same faces.
+/// A spec with no groups makes one rigid body, `fixture`, of every solid.
+pub fn compile_bodies(solids: &[&forge_topo::Body], spec: &Spec) -> Result<Compiled, String> {
+    if !fixture_model::is_rot(&spec.rot) {
+        return Err("rot: a proper rotation permuting the axes".into());
+    }
+    if spec.chord <= 0.0 || spec.chord.is_nan() {
+        return Err("chord > 0".into());
+    }
+    if solids.is_empty() {
+        return Err("no solid to hold with".into());
+    }
+    let all;
+    let wanted: &[(String, Vec<usize>)] = if spec.groups.is_empty() {
+        all = vec![("fixture".to_string(), (0..solids.len()).collect())];
+        &all
+    } else {
+        &spec.groups
+    };
     let rot = spec.rot;
     let r = |v: [f64; 3]| {
         [
@@ -112,35 +133,21 @@ pub fn compile(step: &[u8], spec: &Spec) -> Result<Compiled, String> {
     let ro = r(spec.origin);
     let shift = [-ro[0], -ro[1], -ro[2]];
     let mut c = Compiled {
-        solids: im.solids.len(),
+        solids: solids.len(),
         ..Default::default()
     };
-    let mut used = vec![false; im.solids.len()];
+    let mut used = vec![false; solids.len()];
     let mut groups: Vec<(String, Vec<Face>, [[f64; 3]; 2])> = Vec::new();
-    for (name, sol) in &spec.groups {
+    for (name, sol) in wanted {
         let mut faces = Vec::new();
         let mut draw = Vec::new();
         let (mut tlo, mut thi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
         for &si in sol {
-            let s = im
-                .solids
+            let body: &forge_topo::Body = solids
                 .get(si)
-                .ok_or_else(|| format!("{name}: no solid {si} (the file has {})", im.solids.len()))?;
+                .ok_or_else(|| format!("{name}: no solid {si} (the file has {})", solids.len()))?;
             if std::mem::replace(&mut used[si], true) {
                 return Err(format!("solid {si} is in two groups"));
-            }
-            let body = &s.body;
-            // the solids' own box, in the device's frame (a signed permutation maps a box
-            // to a box, so its two opposite corners give it)
-            for f in body.face_ids() {
-                let b = body.face_box(f);
-                for c in [[b.x.lo, b.y.lo, b.z.lo], [b.x.hi, b.y.hi, b.z.hi]] {
-                    let w = r(c);
-                    for k in 0..3 {
-                        tlo[k] = tlo[k].min(w[k] + shift[k]);
-                        thi[k] = thi[k].max(w[k] + shift[k]);
-                    }
-                }
             }
             let mut left = std::collections::BTreeSet::new();
             let mut fs = Vec::new();
@@ -170,10 +177,19 @@ pub fn compile(step: &[u8], spec: &Spec) -> Result<Compiled, String> {
                     let p = m.positions[i as usize];
                     [p.x, p.y, p.z]
                 });
-                draw.push([a, b, cc].map(|p| {
+                let t = [a, b, cc].map(|p| {
                     let w = r(p);
                     [w[0] + shift[0], w[1] + shift[1], w[2] + shift[2]]
-                }));
+                });
+                // the body's own box: its mesh's corners, every one on the body within the
+                // chord, grown by the chord so the box holds the body itself
+                for v in t {
+                    for k in 0..3 {
+                        tlo[k] = tlo[k].min(v[k] - spec.chord);
+                        thi[k] = thi[k].max(v[k] + spec.chord);
+                    }
+                }
+                draw.push(t);
                 if left.contains(f) {
                     fs.push(fixture_model::triangle(a, b, cc, mu, 0));
                     c.triangles += 1;

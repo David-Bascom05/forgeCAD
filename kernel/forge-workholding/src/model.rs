@@ -45,11 +45,13 @@ pub struct Group {
     /// it can reach past the body itself).
     pub min: V3,
     pub max: V3,
-    /// Its solids' own box in the device's frame (the body itself: its envelope for drawing and
-    /// for the device's height and mount).
+    /// Its own box in the device's frame (its mesh grown by the chord, so the body is inside
+    /// it): its envelope for drawing, and the device's height and where it sits on the table.
     pub tight_min: V3,
     pub tight_max: V3,
-    /// Its drawn mesh (an STL in the device's frame), relative to data/models/ (Git LFS).
+    /// Its drawn mesh (an STL in the device's frame): relative to data/models/ (Git LFS) for a
+    /// built-in model, an absolute path for one compiled while running (`mesh_path` resolves
+    /// either). Empty when there is none.
     pub mesh: String,
     /// The STEP's solids it is made of (in the reader's order).
     pub solids: Vec<usize>,
@@ -106,12 +108,12 @@ fn group_box(text: &str, group: &str, key: &str) -> Option<(V3, V3)> {
     (b.len() == 6).then(|| ([b[0], b[1], b[2]], [b[3], b[4], b[5]]))
 }
 
+// every compiled model, by name (build.rs: one per data/check/*.txt, none named in code)
+include!(concat!(env!("OUT_DIR"), "/checks.rs"));
+
 /// The compiled faces of each built-in model, by name.
 fn check_text(name: &str) -> Option<&'static str> {
-    match name {
-        "haas-05-0404" => Some(include_str!("../data/check/haas-05-0404.txt")),
-        _ => None,
-    }
+    CHECKS.iter().find(|c| c.0 == name).map(|c| c.1)
 }
 
 fn parse(src: &str, compiled: bool) -> Result<Vec<Model>, WhError> {
@@ -234,7 +236,67 @@ pub fn specs(src: &str) -> Result<Vec<Model>, WhError> {
     parse(src, false)
 }
 
-/// A built-in model by name.
+/// Where a group's drawn mesh is, if it has one.
+pub fn mesh_path(g: &Group) -> Option<std::path::PathBuf> {
+    if g.mesh.is_empty() {
+        return None;
+    }
+    let p = std::path::Path::new(&g.mesh);
+    Some(if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("data/models")
+            .join(p)
+    })
+}
+
+/// Models compiled while running (a user's own imported fixture), each kept once, by name.
+fn runtime() -> &'static std::sync::Mutex<Vec<&'static Model>> {
+    static R: OnceLock<std::sync::Mutex<Vec<&'static Model>>> = OnceLock::new();
+    R.get_or_init(|| std::sync::Mutex::new(Vec::new()))
+}
+
+/// A model by name: built in, or compiled while running.
 pub fn get(name: &str) -> Option<&'static Model> {
-    builtin().iter().find(|m| m.name == name)
+    builtin()
+        .iter()
+        .find(|m| m.name == name)
+        .or_else(|| runtime().lock().ok()?.iter().copied().find(|m| m.name == name))
+}
+
+/// Keeps a model compiled while running: its spec (as `specs` reads one, its groups' boxes
+/// read from the compiled text) with its compiled faces. A model of that name already kept is
+/// given back (a name is its content's hash, so the same file is compiled once a run). Each is
+/// kept for the life of the process: they are few, one per distinct file a job names.
+pub fn register(mut m: Model, check: String) -> Result<&'static Model, WhError> {
+    if let Some(k) = get(&m.name) {
+        return Ok(k);
+    }
+    let who = m.name.clone();
+    let bad = |why: String| WhError::Bad {
+        record: who.clone(),
+        field: "model".into(),
+        why,
+    };
+    if check.lines().next() != Some("forge-workholding check 1") {
+        return Err(bad("not a compiled workholding model".into()));
+    }
+    for g in &mut m.groups {
+        let (a, b) =
+            group_box(&check, &g.name, "box ").ok_or_else(|| bad(format!("{}: not compiled", g.name)))?;
+        let (c, d) =
+            group_box(&check, &g.name, "tight ").ok_or_else(|| bad(format!("{}: not compiled", g.name)))?;
+        (g.min, g.max, g.tight_min, g.tight_max) = (a, b, c, d);
+    }
+    m.check = Box::leak(check.into_boxed_str());
+    let k: &'static Model = Box::leak(Box::new(m));
+    let mut r = runtime()
+        .lock()
+        .map_err(|_| bad("the model list is poisoned".into()))?;
+    if let Some(prev) = r.iter().copied().find(|x| x.name == k.name) {
+        return Ok(prev);
+    }
+    r.push(k);
+    Ok(k)
 }

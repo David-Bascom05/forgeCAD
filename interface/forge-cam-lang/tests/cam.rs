@@ -2231,10 +2231,11 @@ fn a_vise_with_a_makers_model_is_checked_against_its_real_bodies() {
     // the model's own faces, far more than a box's six
     assert!(f.faces().len() > 2000, "{}", f.faces().len());
     assert!(f.faces().iter().all(|x| f.piece_of(x.id).is_some()));
-    // the vise stands on the table: its own underside, the record's published height
-    // (117.20284, rounded) below the jaw top, which grips the stock's top 15 mm
+    // the vise stands on the table: its own underside, its published height (117.1, which is
+    // the page's BH + JH) below the jaw top, which grips the stock's top 15 mm. The model's own
+    // box is its mesh grown by the chord (0.02), so it agrees to within that
     assert!(
-        (f.table_z.unwrap() - (f.jaw_top - 117.20284)).abs() < 1e-3,
+        (f.table_z.unwrap() - (f.jaw_top - 117.1)).abs() < 0.05,
         "{:?}",
         f.table_z
     );

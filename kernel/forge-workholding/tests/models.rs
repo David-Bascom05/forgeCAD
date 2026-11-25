@@ -64,10 +64,11 @@ fn every_model_reads_and_its_groups_match_its_compiled_faces() {
                 m.name,
                 g.name
             );
-            // the checker's enclosure holds the body itself
+            // the checker's enclosure holds the body itself, which the group's own box holds
+            // to within the chord it was grown by
             for k in 0..3 {
                 assert!(
-                    g.min[k] <= g.tight_min[k] + 1e-9 && g.max[k] >= g.tight_max[k] - 1e-9,
+                    g.min[k] <= g.tight_min[k] + m.chord && g.max[k] >= g.tight_max[k] - m.chord,
                     "{}/{}: its faces do not enclose the body on axis {k}",
                     m.name,
                     g.name
@@ -84,13 +85,13 @@ fn every_model_reads_and_its_groups_match_its_compiled_faces() {
                 .find(|g| g.role == forge_workholding::Role::MovingJaw),
         ) {
             assert!(
-                f.tight_max[0].abs() <= 1e-4,
+                f.tight_max[0].abs() <= m.chord + 1e-9,
                 "{}: the fixed jaw's face at x = 0 ({})",
                 m.name,
                 f.tight_max[0]
             );
             assert!(
-                (v.tight_min[0] - m.opening).abs() <= 1e-4,
+                (v.tight_min[0] - m.opening).abs() <= m.chord + 1e-9,
                 "{}: the moving jaw's face at the opening ({} vs {})",
                 m.name,
                 v.tight_min[0],
@@ -124,7 +125,9 @@ fn a_record_that_names_a_model_agrees_with_it() {
             .iter()
             .find(|g| g.role == forge_workholding::Role::FixedJaw)
             .unwrap_or_else(|| panic!("{}: the model has no fixed jaw", m.name));
-        let close = |a: f64, b: f64| (a - b).abs() <= 0.01;
+        // the record's published sizes against the model's own box, which is its mesh grown by
+        // the chord: the chord each way, and the published value's own rounding
+        let close = |a: f64, b: f64| (a - b).abs() <= 2.0 * m.chord + 0.01;
         assert!(
             close(r.get("jaw_height").unwrap(), fixed.tight_max[2]),
             "{}: jaw_height {} vs the model's {}",
@@ -136,7 +139,7 @@ fn a_record_that_names_a_model_agrees_with_it() {
         // record's plate thickness is at most the group's own depth
         let t = r.get("jaw_thickness").unwrap();
         assert!(
-            t > 0.0 && t <= fixed.tight_max[0] - fixed.tight_min[0] + 0.01,
+            t > 0.0 && t <= fixed.tight_max[0] - fixed.tight_min[0] + 2.0 * m.chord,
             "{}: jaw_thickness {t} is not within the model's fixed jaw ({})",
             r.name,
             fixed.tight_max[0] - fixed.tight_min[0]
