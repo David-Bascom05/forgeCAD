@@ -1260,9 +1260,12 @@ impl Actor {
                     .name("forge-server hash build".into())
                     .spawn(move || {
                         let hash = catch_unwind(AssertUnwindSafe(|| {
+                            // as the app builds it (render: an assembly's placed parts, which
+                            // its hash is of)
                             let o = forge_lang::Options {
                                 dir,
                                 root: Some(root),
+                                render: true,
                                 ..forge_lang::Options::default()
                             };
                             let (run, _) = forge_lang::run(&text, o, Default::default());

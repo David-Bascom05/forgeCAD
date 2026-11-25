@@ -145,7 +145,7 @@ impl Room {
                 Err(refusal) => (vec![(conn, Down::Refused { id, refusal })], vec![]),
             },
             Up::BuildHash { seq, hash } => {
-                if seq == 0 || seq > self.seq.seq() {
+                if seq > self.seq.seq() {
                     return (vec![], vec![]);
                 }
                 (
