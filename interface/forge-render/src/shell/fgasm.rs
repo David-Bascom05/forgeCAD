@@ -3614,6 +3614,7 @@ mod tests {
             fixes: vec![],
             feature: None,
             asm: Some(i),
+            detail: None,
         };
         let f = issue_flags(&[
             issue(

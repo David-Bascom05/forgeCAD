@@ -124,6 +124,7 @@ fn a_part_note_says_how_it_builds() {
             fixes: vec![],
             feature: None,
             asm: None,
+            detail: None,
         })
         .collect();
     let note = forge_render::gui::gui_agent::build_note(&fg).unwrap();

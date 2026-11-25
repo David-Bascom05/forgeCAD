@@ -1153,6 +1153,18 @@ impl Error {
         }
     }
 
+    /// What a person may want under the text, on hover or in a detail: a failed expect's line as
+    /// written (`expect interferences = 0`), its text being in words.
+    pub fn detail(&self) -> Option<String> {
+        match self {
+            Error::ExpectFailed {
+                metric, cmp, limit, tol, ..
+            } => Some(format!("expect {}", crate::expect_words::raw(metric.name(), *cmp, *limit, *tol))),
+            Error::Asm(n) => n.issue.detail(),
+            _ => None,
+        }
+    }
+
     /// A one-line rendering of the data, for people and agents reading text.
     pub fn text(&self) -> String {
         use Error::*;
@@ -1299,13 +1311,7 @@ impl Error {
                 limit,
                 tol,
                 ..
-            } => format!(
-                "expect {} {cmp:?} {} +- {}: measured {}",
-                metric.name(),
-                crate::values::fmt(*limit),
-                crate::values::fmt(*tol),
-                crate::values::fmt(*measured)
-            ),
+            } => crate::expect_words::words(metric.name(), *cmp, *limit, *tol, *measured),
             UnknownMetric { metric, .. } => format!("unknown metric {metric}"),
             ExpectCopied { metric, value, .. } => format!(
                 "expect {} is the measured {} exactly: state the intended value and a tolerance",
@@ -1444,6 +1450,7 @@ impl Error {
             ExpectFailed {
                 metric,
                 measured,
+                cmp,
                 limit,
                 tol,
                 ..
@@ -1452,6 +1459,7 @@ impl Error {
                 ("measured", (*measured).into()),
                 ("limit", (*limit).into()),
                 ("tol", (*tol).into()),
+                ("expect", s(&crate::expect_words::raw(metric.name(), *cmp, *limit, *tol))),
             ],
             Regions { sketch, count, .. } => vec![("sketch", s(sketch)), ("count", (*count as f64).into())],
             SketchConflict { sketch, rows, .. } => vec![

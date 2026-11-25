@@ -219,6 +219,9 @@ pub struct Issue {
     /// An assembly's result as forge-lang types it: what to highlight (a conflict's set, the
     /// two parts that interfere).
     pub asm: Option<forge_lang::asm::Issue>,
+    /// What a person may want under the text, shown on hover: a failed expect's line as written
+    /// (`expect interferences = 0`), its text being in words.
+    pub detail: Option<String>,
 }
 
 /// What the browser and the dialogs ask of the host.
@@ -1561,7 +1564,12 @@ impl Shell {
                 .response;
             places.push((format!("fg:issue:{i}"), r.rect));
             ui.add_space(2.0);
-            ui.label(egui::RichText::new(&is.text).font(sans(12.0)).color(t.ink));
+            let said = ui.label(egui::RichText::new(&is.text).font(sans(12.0)).color(t.ink));
+            places.push((format!("fg:issue-text:{i}"), said.rect));
+            // the line as written, under the words (a failed expect's `expect interferences = 0`)
+            if let Some(d) = &is.detail {
+                said.on_hover_text(egui::RichText::new(d).font(mono(12.0)));
+            }
             if !is.fixes.is_empty() || is.asm.is_some() {
                 ui.add_space(2.0);
                 ui.horizontal_wrapped(|ui| {
