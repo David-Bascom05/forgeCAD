@@ -51,6 +51,8 @@ impl Gui {
                 ui.tool = old.tool;
                 ui.fixture = old.fixture;
                 ui.follow = old.follow;
+                ui.shop_eye = old.shop_eye;
+                ui.detail = old.detail;
                 ui.jaw_part = old.jaw_part;
                 ui.path_width = old.path_width;
                 ui.tab = old.tab;
@@ -263,6 +265,29 @@ impl Gui {
                 && let Some((_, p, _)) = st.tool_now()
             {
                 v.nav.camera.target = [p[0] as f32, p[1] as f32, p[2] as f32];
+            } else if st.shop_eye
+                && let Some(mv) = st.sim.machine()
+            {
+                // the operator's view: the target fixed in the machine's base frame
+                let to_part = mv.to_part(&mv.q_at(st.t));
+                let cur = v.nav.camera.target;
+                let base = match st.eye_anchor {
+                    // still where it was last put: the same place in the machine
+                    Some((b, last)) if last == cur => b,
+                    // panned (or first): anchored where it is now
+                    _ => to_part
+                        .inverse()
+                        .apply([cur[0] as f64, cur[1] as f64, cur[2] as f64]),
+                };
+                let p = to_part.apply(base);
+                let p = [p[0] as f32, p[1] as f32, p[2] as f32];
+                if p != cur {
+                    v.nav.camera.target = p;
+                    v.dirty = true;
+                }
+                st.eye_anchor = Some((base, p));
+            } else {
+                st.eye_anchor = None;
             }
             // the picture follows the time shown
             let key = (
@@ -314,16 +339,27 @@ pub fn geometry(
             let t = st.t;
             let mut mesh = std::mem::take(&mut st.stock_mesh);
             mesh.clear();
-            if st.sim.stock_at(t).is_some()
-                && let Some((z, s)) = st.sim.stock_shown()
-            {
-                draw::stock(
-                    z,
-                    st.sim.part_maps.get(s).and_then(|m| m.as_ref()),
-                    colour,
-                    tol,
-                    &mut mesh,
-                );
+            if st.sim.stock_at(t).is_some() {
+                // the detail window about the tool (the material's own look: its cusps and
+                // stepover), drawn in place of the whole grid's columns under it
+                let hole = if st.detail && colour == StockColour::Material {
+                    st.sim.detail_near(t, !st.playing).map(|(z, cols)| {
+                        draw::stock(z, None, colour, tol, &mut mesh);
+                        cols
+                    })
+                } else {
+                    None
+                };
+                if let Some((z, s)) = st.sim.stock_shown() {
+                    draw::stock_but(
+                        z,
+                        st.sim.part_maps.get(s).and_then(|m| m.as_ref()),
+                        colour,
+                        tol,
+                        hole,
+                        &mut mesh,
+                    );
+                }
             }
             st.stock_mesh = mesh;
             st.drawn_key = Some(key);
@@ -407,7 +443,7 @@ pub fn geometry(
             })
             .flat_map(|c| [c.a.clone(), c.b.clone()])
             .collect();
-        mv.draw(st.t, &hit, &mut solid);
+        mv.draw_with(st.t, &hit, &mut solid, world);
     }
     // the toolpath
     let show = PathShow {
@@ -495,6 +531,17 @@ impl Gui {
                     }
                 }
                 "follow" => st.follow = on()?,
+                // the finer grid about the tool
+                "detail" => {
+                    st.detail = on()?;
+                    st.drawn_key = None;
+                }
+                // the operator's view on a machine (`eye=shop`), or the part held still
+                "eye" => match v {
+                    "shop" => st.shop_eye = true,
+                    "part" => st.shop_eye = false,
+                    _ => return Err(format!("`{cmd}`: shop or part")),
+                },
                 // the part where it will sit in soft jaws, faint, while they are cut
                 "jawpart" => st.jaw_part = on()?,
                 // the tool's label while paused, pointer or not (for review shots)

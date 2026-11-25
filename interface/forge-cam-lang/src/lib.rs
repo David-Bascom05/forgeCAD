@@ -29,6 +29,7 @@ pub mod cycle;
 pub mod export;
 pub mod holes;
 pub mod life;
+pub mod machines;
 /// The memos (kernel/forge-memo), by the path they had here.
 pub use forge_memo as memo;
 pub mod probing;
@@ -2401,16 +2402,29 @@ fn get_str(m: &BTreeMap<String, V>, k: &str, default: Option<&str>) -> Result<St
 
 /// Runs a machining document (its file's directory finds the part) on the built-in library.
 pub fn run(src: &str, dir: &Path) -> Cam {
-    // the built-in library, shared: read once (Library::builtin_shared), and copied only if
-    // the document's project files add to it (run_with_library)
-    run_shared(src, dir, Library::builtin_shared())
+    // the built-in library with the one machine list folded in (machines::merge), shared: made
+    // once from Library::builtin_shared, and copied only if the document's project files add to
+    // it (run_with_library)
+    static BUILTIN: std::sync::OnceLock<std::sync::Arc<Library>> = std::sync::OnceLock::new();
+    run_shared(
+        src,
+        dir,
+        BUILTIN
+            .get_or_init(|| {
+                let mut lib = (*Library::builtin_shared()).clone();
+                machines::merge(&mut lib);
+                std::sync::Arc::new(lib)
+            })
+            .clone(),
+    )
 }
 
 /// Runs a machining document on a given tooling library: the one the user's levels make
 /// (forge-tooling-builder's `library(project, user_cam)`: the project's records over the user's
 /// over the built-in), so tools, holders and inserts made in the builder reach CAM. The
 /// document's `cam/*.toml` beside it are added on top, as with `run`.
-pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
+pub fn run_with_library(src: &str, dir: &Path, mut lib: Library) -> Cam {
+    machines::merge(&mut lib);
     run_shared(src, dir, std::sync::Arc::new(lib))
 }
 
@@ -2461,11 +2475,16 @@ fn run_shared(src: &str, dir: &Path, lib: std::sync::Arc<Library>) -> Cam {
                 .collect();
             files.sort();
             for f in files {
-                if let Ok(s) = forge_dirs::fs::read_to_string(&f)
-                    && let Err(e) = std::sync::Arc::make_mut(&mut cam.lib).add(&f.display().to_string(), &s)
-                {
-                    cam.errors.push(e.to_string());
-                    cam.ok = false;
+                if let Ok(s) = forge_dirs::fs::read_to_string(&f) {
+                    let lib = std::sync::Arc::make_mut(&mut cam.lib);
+                    match lib.add(&f.display().to_string(), &s) {
+                        // a machine it adds joins the one list
+                        Ok(_) => machines::merge(lib),
+                        Err(e) => {
+                            cam.errors.push(e.to_string());
+                            cam.ok = false;
+                        }
+                    }
                 }
             }
         }
@@ -3050,6 +3069,14 @@ impl Cam {
             "machine" => {
                 let n = get_str(a, "#0", None)?;
                 self.lib.machine(&n).map_err(|e| e.to_string())?;
+                if let Some(why) = machines::conflict(&self.lib, &n) {
+                    return Err(why);
+                }
+                for w in machines::unchecked(&self.lib, &n) {
+                    if !self.warnings.contains(&w) {
+                        self.warnings.push(w);
+                    }
+                }
                 Ok(V::Machine(n))
             }
             "tool" => {
@@ -5938,6 +5965,19 @@ impl Cam {
                             }
                             o => return Err(format!("adaptive: region \"{o}\": \"outside\" or \"pockets\"")),
                         };
+                        // an advisory hint, never a refusal: on levels shallower than the tool's
+                        // diameter the full flute adaptive exists for does not come into play.
+                        // Measured (plan_scurve, hops on): at 0.67 D (the RPTU parts' 4 mm levels,
+                        // 6 mm tool) clear was 1.4-1.8 x faster (rptu3 67.1 s against 36.6 s, rptu4
+                        // 115.3 against 82.6); at 1.48 D (boss, 14.8 mm, 10 mm tool) they tied (162.3
+                        // against 161.9 s); from 2.5 D adaptive was 20-56 % faster round a boss or in
+                        // an open slot (docs/cam.md)
+                        let level = step.min(top - bottom);
+                        if level > 0.0 && level < d {
+                            self.warnings.push(format!(
+                                "{name}: hint: its levels are {level:.1} mm deep, under the tool's {d:.1} mm diameter; on levels this shallow `clear` was 1.4-1.8 x faster than `adaptive` where measured; fix: `clear(...)` with the same tool, from and to"
+                            ));
+                        }
                         let prm = forge_cam::adaptive::Adaptive {
                             phi_max: get_num(a, "engagement", Some(60.0))?,
                             step: get_num(a, "step_length", Some(0.0))?,
@@ -11151,7 +11191,7 @@ impl Cam {
             ));
         }
         // the cycle time as the app shows it: the lower bound and the estimate together
-        let ct = self.cycle_times(&forge_machine::library::Library::with_builtin(), None);
+        let ct = self.cycle_times(machines::library(), None);
         let time_of = |i: usize, feed: f64| match ct.ops.get(i) {
             Some(t) if t.t_min > 0.0 => cycle::cycle_words(t.t_min, t.t_scurve),
             _ => format!("{feed:.0} s feed time"),

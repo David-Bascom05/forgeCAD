@@ -73,7 +73,9 @@ impl Cutter {
                                 a1 -= tau;
                             }
                         }
-                        let n = 24;
+                        // fine enough that a ball's facets do not show in the light on a
+                        // 0.03 mm grid (0.7° each over a quarter circle)
+                        let n = 128;
                         let mut prev = a;
                         for k in 1..=n {
                             let t = a0 + (a1 - a0) * k as f64 / n as f64;
@@ -93,7 +95,10 @@ impl Cutter {
         if pts.is_empty() || r <= 0.0 {
             return None;
         }
-        let n = 128;
+        // the envelope sampled finely enough near a ball's rim (where its height changes fastest:
+        // a near-vertical wall's contact) that its chords are not seen on the detail window's
+        // grid: r/1024, 0.003 mm on a Ø6 ball
+        let n = 1024;
         let dr = r / n as f64;
         let mut h = vec![f32::INFINITY; n + 1];
         for (k, hk) in h.iter_mut().enumerate() {
@@ -149,6 +154,10 @@ pub struct ZMap {
     pub hi: Vec<f32>,
     /// No column's top is above this (cutting only lowers them).
     pub top: f32,
+    /// The most a moving piece whose height changes is stepped by between stamps, mm (None:
+    /// half a cell). The detail window's grid steps by the chord a ball leaves no ridge of over
+    /// its cell's twentieth, far fewer stamps than half its fine cell.
+    pub step: Option<f64>,
 }
 
 impl ZMap {
@@ -174,6 +183,36 @@ impl ZMap {
             lo: vec![min[2] as f32; nx * ny],
             hi: vec![max[2] as f32; nx * ny],
             top: max[2] as f32,
+            step: None,
+        }
+    }
+
+    /// Its columns from a coarser grid's, interpolated (bilinear between the coarse columns'
+    /// centres where the four about a point all hold material, else the nearest): a finer grid
+    /// over part of a coarser one starts as smooth as the coarse stock, not in its steps.
+    pub fn resample(&mut self, from: &ZMap) {
+        let (c, nx, ny) = (from.cell, from.nx as isize, from.ny as isize);
+        let at = |i: isize, j: isize| (i.clamp(0, nx - 1) + j.clamp(0, ny - 1) * nx) as usize;
+        for j in 0..self.ny {
+            for i in 0..self.nx {
+                let p = self.centre(i, j);
+                let (fx, fy) = ((p[0] - from.x0) / c - 0.5, (p[1] - from.y0) / c - 0.5);
+                let (i0, j0) = (fx.floor() as isize, fy.floor() as isize);
+                let (u, v) = ((fx - i0 as f64) as f32, (fy - j0 as f64) as f32);
+                let ks = [at(i0, j0), at(i0 + 1, j0), at(i0, j0 + 1), at(i0 + 1, j0 + 1)];
+                let k = j * self.nx + i;
+                let full = ks.iter().all(|&q| from.hi[q] > from.lo[q]);
+                if full {
+                    let w = [(1.0 - u) * (1.0 - v), u * (1.0 - v), (1.0 - u) * v, u * v];
+                    let lerp = |a: &[f32]| ks.iter().zip(w).map(|(&q, w)| a[q] * w).sum::<f32>();
+                    self.hi[k] = lerp(&from.hi);
+                    self.lo[k] = lerp(&from.lo);
+                } else {
+                    let q = at(fx.round() as isize, fy.round() as isize);
+                    self.hi[k] = from.hi[q];
+                    self.lo[k] = from.lo[q];
+                }
+            }
         }
     }
 
@@ -290,7 +329,7 @@ impl ZMap {
                 return self.stamp_with(if a[2] < b[2] { a } else { b }, tool, act);
             }
             let len = seg.len * (u1 - u0);
-            let n = ((len / (0.5 * self.cell)).ceil() as usize).clamp(1, 100_000);
+            let n = ((len / self.step.unwrap_or(0.5 * self.cell)).ceil() as usize).clamp(1, 100_000);
             let mut any = false;
             for k in 0..=n {
                 any |= self.stamp_with(seg.at(u0 + (u1 - u0) * k as f64 / n as f64), tool, act);

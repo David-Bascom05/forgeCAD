@@ -8,11 +8,11 @@
 
 use super::Marker;
 use super::timeline::{ArcOf, Kind, OpSpan, Seg, Timeline};
+use crate::machine_mesh::Tris;
 use crate::origin::WorldVert;
 use forge_cam_lang::Cam;
 use forge_cam_lang::sim::MachineRun;
 use forge_machine::collide::Verdict;
-use forge_machine::def::Prim;
 use forge_machine::kin::{self, Rigid};
 use forge_machine::sim::{Happening, Path, SegKind, Violation};
 use forge_math::dmath;
@@ -375,192 +375,129 @@ impl MachineView {
         out
     }
 
-    /// The machine's bodies at time t, in the part's frame (shaded); `hit` names drawn red.
+    /// The machine's bodies at time t, in the part's frame (shaded); `hit` names drawn red. A
+    /// body the user attached a model to (forge_machine_builder::models: a maker's model, read
+    /// from their own library, never shipped) is drawn as that model, moving with its link; a
+    /// whole-machine model on the base. An enclosure is drawn see-through into `glass`, so it never
+    /// hides the cut. The checks keep the record's envelopes either way.
     pub fn draw(&self, t: f64, hit: &[String], out: &mut Vec<WorldVert>) {
+        self.draw_with(t, hit, out, &mut Vec::new());
+    }
+
+    /// `draw`, the see-through bodies (an enclosure) into `glass`.
+    pub fn draw_with(&self, t: f64, hit: &[String], out: &mut Vec<WorldVert>, glass: &mut Vec<WorldVert>) {
         let def = &self.run.def;
         let q = self.q_at(t);
         let pose = kin::pose(def, &q);
         let w = self.to_part(&q);
+        let models = attached(&def.name);
+        let colour = |name: &str| match name {
+            n if n.contains("table") || n.contains("bed") || n.contains("base") => {
+                crate::viewcube::rgb(0x4A5260)
+            }
+            n if n.contains("spindle") || n.contains("head") => crate::viewcube::rgb(0x8C939E),
+            _ => crate::viewcube::rgb(0x6A7380),
+        };
+        let put = |tr: &Tris,
+                   m: &Rigid,
+                   base: [f32; 3],
+                   see: bool,
+                   out: &mut Vec<WorldVert>,
+                   glass: &mut Vec<WorldVert>| {
+            let dst = if see { glass } else { out };
+            dst.reserve(tr.tri.len() * 3);
+            for tri in &tr.tri {
+                for &k in tri {
+                    let (q, n) = (tr.pos[k as usize], tr.nrm[k as usize]);
+                    let mut c = super::draw::shade_pub(base, f3(m.dir(n)));
+                    if see {
+                        c[3] = 0.12;
+                    }
+                    dst.push(WorldVert {
+                        at: f3(m.apply(q)),
+                        colour: c,
+                    });
+                }
+            }
+        };
         for b in &def.bodies {
             let l = kin::link(def, &pose, &b.link);
             let m = w.then(l);
             let base = if hit.iter().any(|h| h == &b.name) {
                 super::draw::look::FAIL
             } else {
-                match b.name.as_str() {
-                    n if n.contains("table") || n.contains("bed") || n.contains("base") => {
-                        crate::viewcube::rgb(0x4A5260)
-                    }
-                    n if n.contains("spindle") || n.contains("head") => crate::viewcube::rgb(0x8C939E),
-                    _ => crate::viewcube::rgb(0x6A7380),
-                }
+                colour(&b.name)
             };
-            for p in &b.prims {
-                prim(&m, p, base, out);
+            let see = b.name.contains("enclosure");
+            match models
+                .iter()
+                .find(|(body, _)| body.as_deref() == Some(b.name.as_str()))
+            {
+                // the user's model of it, placed in the base frame at home: moved by its link
+                Some((_, tr)) => put(tr, &m, base, see, out, glass),
+                // its real part where the record gives one that builds (the Machine Builder's
+                // own meshing: a built-in machine's embedded part), else its primitives
+                None => put(
+                    &crate::machine_mesh::body_tris(def, b, None),
+                    &m,
+                    base,
+                    see,
+                    out,
+                    glass,
+                ),
             }
         }
+        // a whole-machine model: on the base, still
+        for (_, tr) in models.iter().filter(|(body, _)| body.is_none()) {
+            put(tr, &w, colour("base"), false, out, glass);
+        }
     }
+}
+
+/// The models the user attached to a machine (their own library: `forgecad machine model
+/// attach` / `split`), each placed in the base frame at home, with the body it is drawn as (None:
+/// the whole machine). Read once per change of the machine's models.toml; none where it has none
+/// or a file does not read (the record's bodies are drawn then).
+fn attached(machine: &str) -> std::sync::Arc<Vec<(Option<String>, std::sync::Arc<Tris>)>> {
+    use std::sync::{Arc, Mutex, OnceLock};
+    type Kept = Mutex<
+        std::collections::HashMap<
+            String,
+            (
+                Option<std::time::SystemTime>,
+                Arc<Vec<(Option<String>, Arc<Tris>)>>,
+            ),
+        >,
+    >;
+    static KEPT: OnceLock<Kept> = OnceLock::new();
+    let Some(dir) = forge_machine_builder::models::dir(machine) else {
+        return Arc::new(vec![]);
+    };
+    let index = dir.join(forge_machine_builder::models::INDEX);
+    let stamp = forge_dirs::fs::metadata(&index)
+        .ok()
+        .and_then(|m| m.modified().ok());
+    let kept = KEPT.get_or_init(|| Mutex::new(std::collections::HashMap::new()));
+    if let Some((s, v)) = kept.lock().expect("no panics while held").get(machine)
+        && *s == stamp
+    {
+        return v.clone();
+    }
+    let v: Vec<(Option<String>, Arc<Tris>)> = forge_machine_builder::models::load_in(&dir)
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|md| {
+            let t = crate::machine_model::file_tris(&dir.join(&md.file)).ok()?;
+            Some((md.body.clone(), Arc::new(crate::machine_model::placed(&t, md))))
+        })
+        .collect();
+    let v = Arc::new(v);
+    kept.lock()
+        .expect("no panics while held")
+        .insert(machine.to_string(), (stamp, v.clone()));
+    v
 }
 
 fn f3(p: [f64; 3]) -> [f32; 3] {
     [p[0] as f32, p[1] as f32, p[2] as f32]
-}
-
-/// One primitive placed by m, shaded.
-fn prim(m: &Rigid, p: &Prim, c: [f32; 3], out: &mut Vec<WorldVert>) {
-    let quad = |q: [[f64; 3]; 4], n: [f64; 3], out: &mut Vec<WorldVert>| {
-        let col = super::draw::shade_pub(c, f3(m.dir(n)));
-        let v = q.map(|x| f3(m.apply(x)));
-        for k in [0, 1, 2, 0, 2, 3] {
-            out.push(WorldVert {
-                at: v[k],
-                colour: col,
-            });
-        }
-    };
-    match *p {
-        Prim::Box { min: a, max: b } => {
-            let v = |x: bool, y: bool, z: bool| {
-                [
-                    if x { b[0] } else { a[0] },
-                    if y { b[1] } else { a[1] },
-                    if z { b[2] } else { a[2] },
-                ]
-            };
-            quad(
-                [
-                    v(false, false, true),
-                    v(true, false, true),
-                    v(true, true, true),
-                    v(false, true, true),
-                ],
-                [0.0, 0.0, 1.0],
-                out,
-            );
-            quad(
-                [
-                    v(false, false, false),
-                    v(false, true, false),
-                    v(true, true, false),
-                    v(true, false, false),
-                ],
-                [0.0, 0.0, -1.0],
-                out,
-            );
-            quad(
-                [
-                    v(true, false, false),
-                    v(true, true, false),
-                    v(true, true, true),
-                    v(true, false, true),
-                ],
-                [1.0, 0.0, 0.0],
-                out,
-            );
-            quad(
-                [
-                    v(false, false, false),
-                    v(false, false, true),
-                    v(false, true, true),
-                    v(false, true, false),
-                ],
-                [-1.0, 0.0, 0.0],
-                out,
-            );
-            quad(
-                [
-                    v(false, true, false),
-                    v(false, true, true),
-                    v(true, true, true),
-                    v(true, true, false),
-                ],
-                [0.0, 1.0, 0.0],
-                out,
-            );
-            quad(
-                [
-                    v(false, false, false),
-                    v(true, false, false),
-                    v(true, false, true),
-                    v(false, false, true),
-                ],
-                [0.0, -1.0, 0.0],
-                out,
-            );
-        }
-        Prim::OBox { o, axes, size } => {
-            // corners o + Σ f_k size_k axes_k (f_k 0 or 1); each face's normal ± its axis,
-            // its corners counter-clockwise seen from outside (as the Box faces above)
-            let v = |f: [u8; 3]| Prim::obox_at(&o, &axes, &size, f.map(f64::from));
-            let neg = |a: [f64; 3]| a.map(|x| -x);
-            for (k, i, j) in [(0, 1, 2), (1, 2, 0), (2, 0, 1)] {
-                let at = |side: u8, a: u8, b: u8| {
-                    let mut f = [0u8; 3];
-                    f[k] = side;
-                    f[i] = a;
-                    f[j] = b;
-                    v(f)
-                };
-                quad([at(1, 0, 0), at(1, 1, 0), at(1, 1, 1), at(1, 0, 1)], axes[k], out);
-                quad(
-                    [at(0, 0, 0), at(0, 0, 1), at(0, 1, 1), at(0, 1, 0)],
-                    neg(axes[k]),
-                    out,
-                );
-            }
-        }
-        Prim::Cyl { base, axis, r, h } => {
-            // a frame about the axis
-            let u = if axis[2].abs() < 0.9 {
-                [0.0, 0.0, 1.0]
-            } else {
-                [1.0, 0.0, 0.0]
-            };
-            let cr = |a: [f64; 3], b: [f64; 3]| {
-                [
-                    a[1] * b[2] - a[2] * b[1],
-                    a[2] * b[0] - a[0] * b[2],
-                    a[0] * b[1] - a[1] * b[0],
-                ]
-            };
-            let e1 = cr(axis, u);
-            let l = (e1[0] * e1[0] + e1[1] * e1[1] + e1[2] * e1[2]).sqrt();
-            let e1 = [e1[0] / l, e1[1] / l, e1[2] / l];
-            let e2 = cr(axis, e1);
-            let top = [
-                base[0] + axis[0] * h,
-                base[1] + axis[1] * h,
-                base[2] + axis[2] * h,
-            ];
-            let n = 32;
-            let at = |o: [f64; 3], k: usize| {
-                let (s, c) = dmath::sin_cos(std::f64::consts::TAU * k as f64 / n as f64);
-                [
-                    o[0] + r * (c * e1[0] + s * e2[0]),
-                    o[1] + r * (c * e1[1] + s * e2[1]),
-                    o[2] + r * (c * e1[2] + s * e2[2]),
-                ]
-            };
-            for k in 0..n {
-                let (s, c) = dmath::sin_cos(std::f64::consts::TAU * (k as f64 + 0.5) / n as f64);
-                let nn = [
-                    c * e1[0] + s * e2[0],
-                    c * e1[1] + s * e2[1],
-                    c * e1[2] + s * e2[2],
-                ];
-                quad(
-                    [at(base, k), at(base, k + 1), at(top, k + 1), at(top, k)],
-                    nn,
-                    out,
-                );
-                // the caps as thin fans (two triangles per step, the second degenerate)
-                quad([top, top, at(top, k), at(top, k + 1)], axis, out);
-                quad(
-                    [base, base, at(base, k + 1), at(base, k)],
-                    [-axis[0], -axis[1], -axis[2]],
-                    out,
-                );
-            }
-        }
-    }
 }
