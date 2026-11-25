@@ -43,13 +43,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # the reference: .cargo/config.toml's x86-64-v3
-          - { name: linux-x86-64-v3, os: ubuntu-latest, rustflags: "", runs: 3 }
+          # the reference: .cargo/config.toml's x86-64-v3; 3 separate processes per thread
+          # setting (~10 min a run on a 4-core runner, so the settings are separate jobs)
+          - { name: linux-x86-64-v3, key: t1, os: ubuntu-latest, rustflags: "", threads: "1", runs: 3 }
+          - { name: linux-x86-64-v3, key: tN, os: ubuntu-latest, rustflags: "", threads: "N", runs: 3 }
           # no AVX/FMA unit: the same arithmetic must come out of the older instruction set
-          - { name: linux-x86-64-v2, os: ubuntu-latest, rustflags: "-C target-cpu=x86-64-v2", runs: 3 }
-          - { name: linux-arm64, os: ubuntu-24.04-arm, rustflags: "", runs: 1 }
-          - { name: macos-arm64, os: macos-14, rustflags: "", runs: 1 }
-          - { name: windows-x86-64, os: windows-latest, rustflags: "", runs: 1 }
+          - { name: linux-x86-64-v2, key: t1, os: ubuntu-latest, rustflags: "-C target-cpu=x86-64-v2", threads: "1", runs: 3 }
+          - { name: linux-x86-64-v2, key: tN, os: ubuntu-latest, rustflags: "-C target-cpu=x86-64-v2", threads: "N", runs: 3 }
+          - { name: linux-arm64, key: all, os: ubuntu-24.04-arm, rustflags: "", threads: "1 N", runs: 1 }
+          - { name: macos-arm64, key: all, os: macos-14, rustflags: "", threads: "1 N", runs: 1 }
+          - { name: windows-x86-64, key: all, os: windows-latest, rustflags: "", threads: "1 N", runs: 1 }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
     env:
@@ -68,14 +71,16 @@ jobs:
         run: |
           mkdir -p det
           bin=target/release/forge-det
-          for r in $(seq 1 ${{ matrix.runs }}); do
-            FORGECAD_THREADS=1 "$bin" --corpus --streams > "det/${{ matrix.name }}-t1-r$r.txt"
-            "$bin" --corpus --streams > "det/${{ matrix.name }}-tN-r$r.txt"
+          for t in ${{ matrix.threads }}; do
+            for r in $(seq 1 ${{ matrix.runs }}); do
+              if [ "$t" = 1 ]; then export FORGECAD_THREADS=1; else unset FORGECAD_THREADS; fi
+              "$bin" --corpus --streams > "det/${{ matrix.name }}-t$t-r$r.txt"
+            done
           done
           wc -l det/*
       - uses: actions/upload-artifact@v4
         with:
-          name: det-${{ matrix.name }}
+          name: det-${{ matrix.name }}-${{ matrix.key }}
           path: det/
           retention-days: 7
 
@@ -182,6 +187,11 @@ jobs:
             if ls det/wasm-$e-s*.txt >/dev/null 2>&1; then cat det/wasm-$e-s*.txt > det/wasm-$e.txt; rm det/wasm-$e-s*.txt; fi
           done
           ref=det/linux-x86-64-v3-t1-r1.txt
-          test -s "$ref"
+          # every platform must be there: a missing one is a gate not run, not a pass
+          for f in linux-x86-64-v3-t1-r1 linux-x86-64-v3-tN-r1 linux-x86-64-v2-t1-r1 linux-x86-64-v2-tN-r1 \
+                   linux-arm64-t1-r1 linux-arm64-tN-r1 macos-arm64-t1-r1 macos-arm64-tN-r1 \
+                   windows-x86-64-t1-r1 windows-x86-64-tN-r1 wasm-node wasm-node-shim wasm-chromium wasm-firefox wasm-webkit; do
+            test -s "det/$f.txt" || { echo "MISSING det/$f.txt"; exit 1; }
+          done
           others=$(ls det/*.txt | grep -v -x "$ref")
           python3 verify/forge-det/compare.py "$ref" $others
