@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """One stage of a train's verification on an exact commit: what a verifier session runs.
 
-    tools/preverify/stage.py STAGE SHA [--repo DIR]
+    tools/preverify/stage.py STAGE SHA [--repo DIR] [--publish]
 
 STAGE: native | render | wasm | clippy | guards | gate | all-local. The commit is checked out
 detached in DIR (default ~/verify), a worktree kept between trains: its target directories stay
@@ -73,7 +73,8 @@ tc = " / ".join(subprocess.run(c, cwd=repo, capture_output=True, text=True).stdo
                 for c in (["rustc", "-V"], ["cargo", "clippy", "-V"]))
 # this stage's items for this commit, published (branch preverify/maps), so a branch's pre-verify
 # on this commit as its main compares against them instead of running main again
-if stage in ("native", "render", "wasm"):
+# (only with --publish: a push to preverify/maps, which a verifier does only when allowed to)
+if stage in ("native", "render", "wasm") and "--publish" in sys.argv:
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import json
     from pvitems import ALONE, items, publish
