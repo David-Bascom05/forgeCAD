@@ -63,6 +63,14 @@ HOSTED-BUILD. Updated 2026-11-25 (evening).
   over. A hand edit pauses, and the editor then shows the kept file. Save updates the mark.
   "Syncing paused" is a banner over the view for as long as it holds.
 
+## UX
+
+UX-LEAD OK'd hosted/client-native 1bc1e103 and hosted/client-web deafa8fb (the sync notes'
+words, the Syncing paused banner, the shots in research/hosted/shots/). Open, P3: the native
+pause reason should read "bracket.fg changed on disk since it last synced, so your edits stay
+here and aren't shared. <the action>", with the path on hover (sync_link.rs SyncFile::open and
+tick).
+
 ## Next
 
 1. HOSTED-DESIGN re-review of server-hardening. Pre-verify (pv ≥ 13d78f06) for each branch,
