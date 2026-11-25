@@ -83,6 +83,25 @@ impl Ival {
     /// NaN, so no fix is needed (`tests::add_and_mul_are_the_reference_bit_for_bit`).
     #[inline]
     pub fn add(self, o: Ival) -> Ival {
+        // x + 0 = x exactly: an exact zero adds nothing, so the other operand is the sum (an
+        // ordered interval: NaN or inverted ends take the general rule). Sound, and tighter than
+        // rounding outward; it keeps a derivative that is exactly zero exactly zero
+        // (verify/forge-cam ForgeCam/IvalZero.lean `add_zero_encl`). Feature `ival-strict`: the
+        // rule as it was, for a train's comparison.
+        #[cfg(not(feature = "ival-strict"))]
+        {
+            if o.lo == 0.0 && o.hi == 0.0 && self.lo <= self.hi {
+                return self;
+            }
+            if self.lo == 0.0 && self.hi == 0.0 && o.lo <= o.hi {
+                return o;
+            }
+        }
+        self.add_strict(o)
+    }
+    /// The sum, outward, with no exact-zero rule.
+    #[inline]
+    pub fn add_strict(self, o: Ival) -> Ival {
         Ival {
             lo: down(self.lo + o.lo),
             hi: up(self.hi + o.hi),
@@ -105,6 +124,24 @@ impl Ival {
     /// result is the general rule's, bit for bit (`tests::add_and_mul_are_the_reference_bit_for_bit`).
     #[inline]
     pub fn mul(self, o: Ival) -> Ival {
+        // x · 0 = 0 exactly for every real x: an exact zero times a finite, ordered interval is
+        // exactly [0, 0] (an unbounded or undefined operand takes the general rule, so WHOLE is
+        // never hidden). Sound, and tighter than rounding outward
+        // (verify/forge-cam ForgeCam/IvalZero.lean `mul_zero_encl`). Feature `ival-strict`: the
+        // rule as it was, for a train's comparison.
+        #[cfg(not(feature = "ival-strict"))]
+        {
+            let finite = |x: Ival| x.lo.is_finite() && x.hi.is_finite() && x.lo <= x.hi;
+            if (self.lo == 0.0 && self.hi == 0.0 && finite(o)) || (o.lo == 0.0 && o.hi == 0.0 && finite(self))
+            {
+                return Ival { lo: 0.0, hi: 0.0 };
+            }
+        }
+        self.mul_strict(o)
+    }
+    /// The product, outward, with no exact-zero rule.
+    #[inline]
+    pub fn mul_strict(self, o: Ival) -> Ival {
         let (a0, a1, b0, b1) = (self.lo, self.hi, o.lo, o.hi);
         if a0.is_finite() && a1.is_finite() && b0.is_finite() && b1.is_finite() && a0 <= a1 && b0 <= b1 {
             if a0 == a1 && b0 == b1 {
@@ -300,11 +337,29 @@ mod tests {
         (x.lo.to_bits(), x.hi.to_bits())
     }
     fn same(op: &str, x: Ival, y: Ival) {
+        // the strict rules are the references bit for bit
         let (got, want) = match op {
-            "add" => (x.add(y), add_ref(x, y)),
-            _ => (x.mul(y), mul_ref(x, y)),
+            "add" => (x.add_strict(y), add_ref(x, y)),
+            _ => (x.mul_strict(y), mul_ref(x, y)),
         };
         assert_eq!(bits(got), bits(want), "{op} {x:?} {y:?}: {got:?} vs {want:?}");
+        // the rules in use: the strict ones, or (an exact zero) a result inside them and exact
+        let used = match op {
+            "add" => x.add(y),
+            _ => x.mul(y),
+        };
+        if bits(used) != bits(got) {
+            let zero = |v: Ival| v.lo == 0.0 && v.hi == 0.0;
+            assert!(zero(x) || zero(y), "{op} {x:?} {y:?}: {used:?} vs {got:?}");
+            assert!(
+                got.lo <= used.lo && used.hi <= got.hi,
+                "{op} {x:?} {y:?}: {used:?} not in {got:?}"
+            );
+            match op {
+                "add" => assert!(used == if zero(y) { x } else { y }),
+                _ => assert!(zero(used)),
+            }
+        }
     }
 
     /// Every pair of intervals over the special values (both zeros, the denormal limits, ±1,
