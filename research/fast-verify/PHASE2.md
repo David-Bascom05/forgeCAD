@@ -66,3 +66,17 @@ These are near-cold numbers, since each verifier had built main once first. Warm
 - Slow tests: main has 76 tests over the 2 s budget on a 4-core VM. contour fuzz_random_profiles (178–322 s) is one
   of its 250 cases, a folded-clash search refining an at-the-limit stretch to 2^-48 (24M+ intervals). The diagnosis went to forge-sheet's
   owner. reparse runs the same edits (18519 patched, 50467 refused) in 7.5 s instead of 16.2 s.
+
+## Slow tests rewritten (branch tests/faster-slow), with David's rigor rule
+
+Every rewrite runs the same cases with the same assertions, and old and new catch the same mutations.
+
+| test | change | same cases | mutations (old / new) | time |
+|---|---|---|---|---|
+| forge-lang reparse a_number_edited_patches_to_the_parse_of_the_edit | files checked in parallel; each file parsed once, its tree cloned per edit | 18519 patched + 50467 refused, both versions | M1 wrong value: FAIL/FAIL; M2 wrong span end: FAIL/FAIL; M3 comment check dropped: pass/pass (another test covers it, both versions alike) | 16.2 s → 7.5 s |
+| forge-machine removal_tip (both) | each comparison's tips and its 3 maps in parallel | the same programs, machines, forms and assertions; identical printed gaps | M4 affine tip +1e-6: FAIL/FAIL; M5 closed height +1e-4: FAIL/FAIL | see mill_with |
+| forge-machine removal::mill_with (library; the app's CAM sim too) | each move's rows of cells in parallel, applied in order | 12 maps (2 machines × 2 programs × 3 forms) bit-identical: every height, volume, cut, hit, trigger and probe hit | n/a (bit-identical) | 36.2 s → 21.4 s for the 12 maps, loaded VM |
+| forge-lang tests' bench font (common::font_dir) | written once per process and renamed into place | n/a | fixes the "block.ttf WrongKind" flake | |
+
+Diagnosed and sent to its owner, not changed here: forge-sheet contour fuzz_random_profiles. One case of 250 takes 322 s,
+the folded-clash search refining an at-the-limit stretch to 2^-48.
