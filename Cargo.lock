@@ -153,6 +153,7 @@ dependencies = [
  "forge-cam-3d",
  "forge-cam-geom",
  "forge-dirs",
+ "forge-git",
  "forge-lang",
  "forge-library",
  "forge-machine",
@@ -163,8 +164,10 @@ dependencies = [
  "forge-model",
  "forge-post",
  "forge-sketch",
+ "forge-step",
  "forge-tooling",
  "forge-workholding",
+ "forge-workholding-builder",
 ]
 
 [[package]]

@@ -2028,6 +2028,9 @@ pub struct Grid {
     ny: usize,
     cells: Vec<Vec<u32>>,
     n: usize,
+    /// Each face's z range (its box's), and each cell's (its faces' hull), for `near_z`.
+    zs: Vec<(f64, f64)>,
+    czs: Vec<(f64, f64)>,
 }
 
 /// A caller's scratch for `Grid::near` (one per thread): which faces a query has listed.
@@ -2057,6 +2060,14 @@ impl Grid {
                 ny: 1,
                 cells: vec![(0..faces.len() as u32).collect()],
                 n: faces.len(),
+                zs: faces.iter().map(|f| (f.bbox[2].lo, f.bbox[2].hi)).collect(),
+                czs: vec![
+                    faces
+                        .iter()
+                        .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), f| {
+                            (a.min(f.bbox[2].lo), b.max(f.bbox[2].hi))
+                        }),
+                ],
             };
         }
         let n = ((faces.len() as f64).sqrt() * 2.0).clamp(1.0, 64.0) as usize;
@@ -2078,8 +2089,18 @@ impl Grid {
             ch,
             nx: n,
             ny: n,
+            czs: cells
+                .iter()
+                .map(|c| {
+                    c.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), &i| {
+                        let f = &faces[i as usize];
+                        (a.min(f.bbox[2].lo), b.max(f.bbox[2].hi))
+                    })
+                })
+                .collect(),
             cells,
             n: faces.len(),
+            zs: faces.iter().map(|f| (f.bbox[2].lo, f.bbox[2].hi)).collect(),
         }
     }
 
@@ -2090,6 +2111,47 @@ impl Grid {
     }
 
     /// The faces whose (grown) boxes may meet the xy of `b`.
+    /// `near`, less the faces whose z range is more than `gap` from the box's: what `apart`
+    /// with a gap of at most `gap` would drop anyway (the rest in the same order as `near` lists
+    /// them), without pushing each to be tested. For a fixture whose faces are mostly below the
+    /// moves (a vise's body under the stock), most of a cell's list.
+    pub fn near_z(&self, b: &[Ival; 3], gap: f64, out: &mut Vec<u32>, seen: &mut Seen) {
+        out.clear();
+        if seen.mark.len() < self.n {
+            seen.mark.resize(self.n, 0);
+        }
+        seen.tag = seen.tag.wrapping_add(1);
+        if seen.tag == 0 {
+            seen.mark.iter_mut().for_each(|m| *m = 0);
+            seen.tag = 1;
+        }
+        let tag = seen.tag;
+        let (a, bb) = Self::span(self.x0, self.cw, self.nx, b[0].lo, b[0].hi);
+        let (c, d) = Self::span(self.y0, self.ch, self.ny, b[1].lo, b[1].hi);
+        // a margin over `apart`'s outward-rounded test: a face dropped here is one `apart`
+        // drops too
+        let g = gap + 1e-6 * (1.0 + b[2].lo.abs().max(b[2].hi.abs()));
+        for gy in c..=d {
+            for gx in a..=bb {
+                // a cell all of whose faces are that far below or above: none of them
+                let (clo, chi) = self.czs[gy * self.nx + gx];
+                if b[2].lo - chi > g || clo - b[2].hi > g {
+                    continue;
+                }
+                for &i in &self.cells[gy * self.nx + gx] {
+                    if seen.mark[i as usize] != tag {
+                        seen.mark[i as usize] = tag;
+                        let (lo, hi) = self.zs[i as usize];
+                        if b[2].lo - hi > g || lo - b[2].hi > g {
+                            continue;
+                        }
+                        out.push(i);
+                    }
+                }
+            }
+        }
+    }
+
     pub fn near(&self, b: &[Ival; 3], out: &mut Vec<u32>, seen: &mut Seen) {
         out.clear();
         if seen.mark.len() < self.n {

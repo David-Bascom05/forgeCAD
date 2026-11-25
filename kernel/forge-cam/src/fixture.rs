@@ -494,7 +494,8 @@ impl Fixture {
     /// The fixture a workholding library placement is (research/cam/workholding.md §5): its
     /// bodies' axis-aligned blocks (keep-outs applied) as named pieces, every other primitive
     /// (a cylinder, a block at an angle) as a shaped piece of its exact faces; the jaws' top is
-    /// the top of what the device holds (the stock below it is held); the table plane is the
+    /// the top of what the device holds (the stock below it is held; a device that holds nothing,
+    /// its lowest point, so nothing is); the table plane is the
     /// device's mount. The checker sees exactly the library's bodies.
     pub fn from_workholding(p: &forge_workholding::Placed, axis: usize, clearance: f64) -> Fixture {
         use forge_workholding::{Mount, Prim, geom::IDENT};
@@ -531,13 +532,15 @@ impl Fixture {
             }
         }
         let jaw_top = p.held.iter().map(|h| h.1[2]).fold(f64::NEG_INFINITY, f64::max);
+        // a device that grips nothing (a plate, the user's own fixture) holds no stock: its jaw
+        // top is its lowest point, so no band of leftover is excused as held by it
         let jaw_top = if jaw_top.is_finite() {
             jaw_top
         } else {
             p.bodies
                 .iter()
-                .map(|b| b.bounds().1[2])
-                .fold(f64::NEG_INFINITY, f64::max)
+                .map(|b| b.bounds().0[2])
+                .fold(f64::INFINITY, f64::min)
         };
         Fixture {
             name: p.name.clone(),
@@ -556,13 +559,28 @@ impl Fixture {
     }
 }
 
+/// A placed body's drawn mesh (where it has one) and its checked faces (`body_source`).
+pub type BodySource = (Option<std::path::PathBuf>, Result<Vec<Face>, String>);
+
+/// A placed body's two views of one compile, for a drawing that must be what is checked: its
+/// drawn mesh (an STL, `forge_workholding::model::mesh_path`) and the faces the checker keeps the
+/// tool from, posed into the part frame. None for a body with no model (its prims are what it
+/// is, drawn and checked alike).
+pub fn body_source(b: &forge_workholding::Body) -> Option<BodySource> {
+    let e = b.exact.as_ref()?;
+    let mesh = forge_workholding::model::get(&e.model)
+        .and_then(|m| m.groups.iter().find(|g| g.name == e.group))
+        .and_then(forge_workholding::model::mesh_path);
+    Some((mesh, model_faces(e, b.keepout)))
+}
+
 /// A model group's compiled faces (forge_workholding::model), posed into the part frame and
 /// grown by `keepout`: the pose must be a turn by quarters and a shift (exact in f64), as
 /// `model_bodies` makes, so the faces keep their kind.
 fn model_faces(e: &forge_workholding::Exact, keepout: f64) -> Result<Vec<Face>, String> {
     let m = forge_workholding::model::get(&e.model).ok_or("no such model")?;
     let rot = rot_of(&e.pose.m).ok_or("the pose is not a turn by quarters")?;
-    let groups = crate::fixture_model::read(m.check).map_err(|_| "the compiled faces do not read")?;
+    let groups = parsed(m)?;
     let fs = groups
         .iter()
         .find(|g| g.0 == e.group)
@@ -579,6 +597,31 @@ fn model_faces(e: &forge_workholding::Exact, keepout: f64) -> Result<Vec<Face>, 
             g
         })
         .collect())
+}
+
+/// A model's compiled faces, read once a process: its text is fixed for its name (a built-in's
+/// is in the binary, a runtime one's name is its content's hash), so every setup and run after
+/// the first shares the faces read.
+type ModelFaces = std::sync::Arc<Vec<(String, Vec<Face>)>>;
+
+fn parsed(m: &forge_workholding::model::Model) -> Result<ModelFaces, String> {
+    type Read = ModelFaces;
+    static CACHE: std::sync::OnceLock<std::sync::Mutex<Vec<(String, Read)>>> = std::sync::OnceLock::new();
+    let c = CACHE.get_or_init(|| std::sync::Mutex::new(Vec::new()));
+    if let Some(r) = c
+        .lock()
+        .ok()
+        .and_then(|v| v.iter().find(|x| x.0 == m.name).map(|x| x.1.clone()))
+    {
+        return Ok(r);
+    }
+    let r: Read = std::sync::Arc::new(
+        crate::fixture_model::read(m.check).map_err(|_| "the compiled faces do not read".to_string())?,
+    );
+    if let Ok(mut v) = c.lock() {
+        v.push((m.name.clone(), r.clone()));
+    }
+    Ok(r)
 }
 
 /// A rotation matrix as a signed permutation, when it is one.

@@ -496,7 +496,12 @@ pub fn certify_with(
     };
     let pad = clearance.max(0.0) + 1e-6;
     let pgrid = check::Grid::new(part, pad);
-    let fgrid = check::Grid::new(fixture, fclear.max(0.0) + 1e-6);
+    // the fixture's faces carry their own mu (a maker's model meshed within a chord carries
+    // that chord): the grid's pad and the z test take the largest, so a face `apart` would keep
+    // (within limit + its mu) is never left out of a cell or skipped
+    let fmu = fixture.iter().map(|f| f.mu).fold(0.0f64, f64::max);
+    let fgap = fclear.max(0.0) + fmu;
+    let fgrid = check::Grid::new(fixture, fgap + 1e-6);
     let sgrids: Vec<check::Grid> = stages.iter().map(|s| check::Grid::new(&s.1, pad)).collect();
     // the one point outside: the tool's top (an axis point of a body) is above every face it is
     // checked against, at every instant (G1-G3 need one point of the moved tool outside the set,
@@ -630,7 +635,11 @@ pub fn certify_with(
                     } else {
                         clearance
                     };
-                    grid.near(&sb, &mut cand, &mut seen);
+                    if what == "fixture" {
+                        grid.near_z(&sb, fgap, &mut cand, &mut seen);
+                    } else {
+                        grid.near(&sb, &mut cand, &mut seen);
+                    }
                     let near: Vec<u32> = cand
                         .iter()
                         .copied()

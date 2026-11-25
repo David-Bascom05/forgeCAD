@@ -13,6 +13,10 @@
 use forge_cam::fixture_model::{self, Rot};
 use forge_cam_geom::check::Face;
 
+/// The compiler's version: a cache of compiled faces is named by it with its input's content,
+/// so raise it whenever the same input would compile to other faces.
+pub const VERSION: u32 = 1;
+
 /// Which of the file's solids (in the order the reader gives them) make each of the device's
 /// bodies.
 #[derive(Clone, Debug)]
@@ -86,6 +90,19 @@ fn stl(tris: &[[[f64; 3]; 3]], header: &str) -> Vec<u8> {
 }
 
 /// Compiles the STEP text by `spec`.
+pub fn compile(step: &[u8], spec: &Spec) -> Result<Compiled, String> {
+    let im = forge_step::import(step, &forge_step::Limits::default()).map_err(|e| format!("{e:?}"))?;
+    if !im.refusals.is_empty() {
+        return Err(format!(
+            "the reader refused {} entities: {:?}",
+            im.refusals.len(),
+            im.refusals
+        ));
+    }
+    let bodies: Vec<&forge_topo::Body> = im.solids.iter().map(|s| &s.body).collect();
+    compile_bodies(&bodies, spec)
+}
+
 /// One solid compiled for the checker, in its own coordinates: each face exact
 /// (forge_cam::lower), else under a proven enclosure (forge_cam::enclose), else forge-mesh's
 /// triangles certified within `chord` (planar faces carrying mu = the chord plus the body's
@@ -130,9 +147,7 @@ pub fn compile_solid(body: &forge_topo::Body, chord: f64) -> Result<Solid, Strin
     };
     let m = forge_mesh::tessellate_tolerant(body, &q).map_err(|e| format!("{e:?}"))?;
     if let Some(u) = m.unsettled.iter().find(|f| left.contains(f)) {
-        return Err(format!(
-            "face {u} is not settled by the mesh (no certified triangles)"
-        ));
+        return Err(format!("face {u} is not settled by the mesh (no certified triangles)"));
     }
     let mu = forge_cam::lower::mu(body_scale(body)) + chord;
     for (t, f) in m.triangles.iter().zip(&m.face_of) {
@@ -149,21 +164,25 @@ pub fn compile_solid(body: &forge_topo::Body, chord: f64) -> Result<Solid, Strin
     Ok(out)
 }
 
-pub fn compile(step: &[u8], spec: &Spec) -> Result<Compiled, String> {
+/// `compile` on solids already made (a `.fg` part built, or a file read): the same faces.
+/// A spec with no groups makes one rigid body, `fixture`, of every solid.
+pub fn compile_bodies(solids: &[&forge_topo::Body], spec: &Spec) -> Result<Compiled, String> {
     if !fixture_model::is_rot(&spec.rot) {
         return Err("rot: a proper rotation permuting the axes".into());
     }
     if spec.chord <= 0.0 || spec.chord.is_nan() {
         return Err("chord > 0".into());
     }
-    let im = forge_step::import(step, &forge_step::Limits::default()).map_err(|e| format!("{e:?}"))?;
-    if !im.refusals.is_empty() {
-        return Err(format!(
-            "the reader refused {} entities: {:?}",
-            im.refusals.len(),
-            im.refusals
-        ));
+    if solids.is_empty() {
+        return Err("no solid to hold with".into());
     }
+    let all;
+    let wanted: &[(String, Vec<usize>)] = if spec.groups.is_empty() {
+        all = vec![("fixture".to_string(), (0..solids.len()).collect())];
+        &all
+    } else {
+        &spec.groups
+    };
     let rot = spec.rot;
     let r = |v: [f64; 3]| {
         [
@@ -175,24 +194,23 @@ pub fn compile(step: &[u8], spec: &Spec) -> Result<Compiled, String> {
     let ro = r(spec.origin);
     let shift = [-ro[0], -ro[1], -ro[2]];
     let mut c = Compiled {
-        solids: im.solids.len(),
+        solids: solids.len(),
         ..Default::default()
     };
-    let mut used = vec![false; im.solids.len()];
+    let mut used = vec![false; solids.len()];
     let mut groups: Vec<(String, Vec<Face>, [[f64; 3]; 2])> = Vec::new();
-    for (name, sol) in &spec.groups {
+    for (name, sol) in wanted {
         let mut faces = Vec::new();
         let mut draw = Vec::new();
         let (mut tlo, mut thi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
         for &si in sol {
-            let s = im
-                .solids
+            let body: &forge_topo::Body = solids
                 .get(si)
-                .ok_or_else(|| format!("{name}: no solid {si} (the file has {})", im.solids.len()))?;
+                .ok_or_else(|| format!("{name}: no solid {si} (the file has {})", solids.len()))?;
             if std::mem::replace(&mut used[si], true) {
                 return Err(format!("solid {si} is in two groups"));
             }
-            let one = compile_solid(&s.body, spec.chord).map_err(|e| format!("solid {si}: {e}"))?;
+            let one = compile_solid(body, spec.chord).map_err(|e| format!("solid {si}: {e}"))?;
             c.exact += one.exact;
             c.enclosed += one.enclosed;
             c.meshed += one.meshed;

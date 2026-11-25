@@ -1140,6 +1140,7 @@ dependencies = [
  "forge-cam-3d",
  "forge-cam-geom",
  "forge-dirs",
+ "forge-git",
  "forge-lang",
  "forge-library",
  "forge-machine",
@@ -1152,6 +1153,7 @@ dependencies = [
  "forge-sketch",
  "forge-tooling",
  "forge-workholding",
+ "forge-workholding-builder",
 ]
 
 [[package]]

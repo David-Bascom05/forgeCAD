@@ -20,6 +20,8 @@ forge-cam-3d = { path = "../../kernel/forge-cam-3d" }
 forge-memo = { path = "../../kernel/forge-memo" }
 forge-tooling = { path = "../../kernel/forge-tooling" }
 forge-workholding = { path = "../../kernel/forge-workholding" }
+forge-workholding-builder = { path = "../forge-workholding-builder" }
+forge-git = { path = "../../kernel/forge-git" }
 forge-material = { path = "../../kernel/forge-material" }
 # tool instances as a library kind (cam/tool-instances/ at the project and user levels)
 forge-library = { path = "../forge-library" }
@@ -30,3 +32,6 @@ forge-sketch = { path = "../../kernel/forge-sketch" }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+forge-step = { path = "../../kernel/forge-step" }

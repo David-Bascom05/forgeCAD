@@ -10,10 +10,11 @@ its builder (`interface/forge-workholding-builder`), and how CAM holds a part.
 |---|---|---|
 | `cam/workholding` | 9edad4f6 | merged in train 7 (the library, kinds, lathe, generators, vendor data) |
 | `cam/workholding-vise` | d9040ec4 | pre-verified, UX-LEAD OK, with TRAIN-CONDUCTOR for train 8 |
-| `cam/workholding-haas` | c4672cb0 | contains `cam/workholding-vise`; real Haas models in the certified path |
+| `cam/workholding-haas` | 41d3276e | contains `-vise`; real Haas models (05-0404, 05-0405) in the certified path |
+| `cam/workholding-default` | 6950ec87+ | contains `-haas`; `generic-vise-150`/`-100` mean the real Haas vises |
+| `cam/workholding-any` | d23db4bd | contains `-default`; any geometry: no model named in code, `workholding(..)`, user imports |
 
-`cam/workholding-haas` must land after (or with) `cam/workholding-vise`: it contains that branch's
-commits, because `Fixture::from_workholding` is where a model's faces reach the checker.
+Each contains the one before (vise → haas → default → any), so they land in that order or together.
 
 ## What `cam/workholding-vise` does
 
@@ -62,9 +63,32 @@ device. `kernel/forge-workholding/tests/models.rs` re-derives the text from the 
 byte when the objects are there, and otherwise checks the LFS pointer's own oid against the
 sha256 the record cites, so a model swapped under a citation is caught either way.
 
+## What `cam/workholding-any` does (David: "do not over fit to one Haas vise")
+
+- No code names a model: forge-workholding's build.rs embeds every `data/check/*.txt` by file
+  name, and a generic name's successor is the record's `replaces` word. A test
+  (forge-cam-lang tests/workholding_any.rs `no_code_path_names_a_particular_model`) fails if
+  the sources that place, compile or check workholding name one.
+- `mill::model_bodies(model, pose, travel)` places any model; `mill::model_fixture` places a rigid
+  device by its model.
+- `fixture: workholding("NAME", at: (X, Y, Z), turn: DEG, clearance: MM)`: a record whose bodies are
+  a maker's model (`model`), the user's own file (`model_file`: STEP, IGES, .brep or .fg beside the
+  document), or a custom record's boxes. A user's file is compiled while running, once per
+  sha256, cached in `cam/workholding/.compiled/SHA.txt` beside the document.
+- Soft jaws on a model vise: the vise under them is still its sizes' boxes; each is named in
+  `Fixture.enveloped` and the document warned.
+
 ## Unfinished, in the order I would do it
 
-1. **Make a real vise the default.** The coordinator approved repointing `generic-vise-150` to
+0. **Soft jaws on a model vise's own bodies.** `forge_cam::fixture::soft_jaws` builds the vise
+   under the jaws from `ViseSize` boxes; with a model it should place `mill::model_bodies` there
+   instead (the hard jaws' faces against the soft jaws' backs). Until then each box is reported.
+   Also: a non-Haas maker's model (none openly fetchable without sign-up was found), Parasolid
+   (forge-step does not read it), and writing an STL beside a runtime import's compiled faces
+   if CAM-SIM wants one to draw.
+
+1. **Make a real vise the default.** (Done on `cam/workholding-default`, kept here for what it
+   measured.) The coordinator approved repointing `generic-vise-150` to
    `haas-vise-05-0404`, with the full before/after (NC, verdicts, cam_time, band) and every
    verdict change explained — a new contact against the real vise is a real finding, not a
    regression. I did not get to it. It is a one-line change in `VISE_SUCCESSOR`
