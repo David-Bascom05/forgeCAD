@@ -872,6 +872,10 @@ pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
     tessellate_with(body, q, false)
 }
 
+/// What drawing one body from a file may spend outside an import: a top-level op's budget, as a
+/// boolean's (eight files' reads' worth).
+pub const MESH: u64 = forge_geom::budget::OP;
+
 /// `tessellate`, but a body from a file (`Body::from_file`), whose edges may meet only within their
 /// tolerance and so cross where its faces are laid flat, has those faces drawn as they are: the mesh
 /// parts from the next face by that little there instead of failing. On a body made here a crossing
@@ -883,10 +887,11 @@ pub fn tessellate_tolerant(body: &Body, q: &Quality) -> Result<TriMesh, TessErro
     if body.dead > 0 {
         return tessellate_tolerant(&body.compact(), q);
     }
-    // a file's body is drawn within an op's budget, a top-level op as a boolean is: a file's alone
-    // (FILE) refused 102 of the Haas corpus's solids that mesh in seconds (research/kernel-stress).
-    // Inside an import the import's own budget, which is less, is the one that holds.
-    let _b = forge_geom::budget::scoped(forge_geom::budget::OP);
+    // a file's body is drawn within a mesh's budget, MESH (a top-level op's, as a boolean's): a
+    // file's (FILE) refused 102 of the Haas machine models' solids that mesh in under a second or a
+    // few (HFL-1313-3 #69702: 150M evaluations, 0.7 s; research/kernel-stress). Nested, so inside
+    // an import the import's own budget, which is less, is the one that holds.
+    let _b = forge_geom::budget::scoped(MESH);
     tessellate_with(body, q, true)
 }
 
