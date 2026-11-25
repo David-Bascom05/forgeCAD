@@ -156,6 +156,7 @@ fn arc(line: &mut Vec<(f32, f32)>, a: (f32, f32), r: (f32, f32), large: bool, sw
 #[cfg(test)]
 mod tests {
     use super::*;
+    use forge_math::ipow::Powi as _;
 
     #[test]
     fn every_icon_parses_and_stays_near_its_grid() {
@@ -174,7 +175,7 @@ mod tests {
     #[test]
     fn a_circle_is_a_circle() {
         for p in flatten("M4 12A8 8 0 1 0 20 12A8 8 0 1 0 4 12").iter().flatten() {
-            assert!((((p.0 - 12.0).powi(2) + (p.1 - 12.0).powi(2)).sqrt() - 8.0).abs() < 1e-3);
+            assert!((((p.0 - 12.0).ipow(2) + (p.1 - 12.0).ipow(2)).sqrt() - 8.0).abs() < 1e-3);
         }
     }
 }

@@ -36,6 +36,7 @@
 //! within a unit of its start's (the simulation follows that as a spiral).
 use crate::gcode::{Block, Centre, CompModel, Ev, FeedMode, Q};
 use forge_math::dmath;
+use forge_math::ipow::Powi as _;
 
 type P = [f64; 2];
 
@@ -202,7 +203,7 @@ pub fn apply(
     if !blocks.iter().any(|b| matches!(b.ev, Ev::Comp { .. })) {
         return Ok(blocks.to_vec());
     }
-    let scale = 10f64.powi(k as i32);
+    let scale = 10f64.ipow(k as i32);
     let qf = |q: Q| q as f64 / scale;
     let fq = |v: f64| (v * scale).round() as Q;
     let mut out = Vec::with_capacity(blocks.len());

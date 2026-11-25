@@ -3,6 +3,7 @@
 use forge_brake::model::Model;
 use forge_brake::sim::{Check, Phase, Rule, Setup, StepCtx};
 use forge_brake::{Options, PunchKind, Suggestion, library, plan};
+use forge_math::ipow::Powi as _;
 use forge_math::{Frame, Point2, Point3, dmath};
 use forge_ops::{ProfileLoop, Segment};
 use forge_sheet::{BendRule, FeatureId, Gauge, Map, Sheet, Strip, WallId};
@@ -64,7 +65,7 @@ fn full_refold_is_the_builders_part() {
         for p in [(0.0, 0.0, 0.0), (10.0, 5.0, -2.0), (3.0, 40.0, 0.0)] {
             let mine = f[wi].apply(forge_brake::geo::V3::new(p.0, p.1, p.2));
             let theirs = place.frame.point_to_world(Point3::new(p.0, p.1, p.2));
-            let d = ((mine.x - theirs.x).powi(2) + (mine.y - theirs.y).powi(2) + (mine.z - theirs.z).powi(2))
+            let d = ((mine.x - theirs.x).ipow(2) + (mine.y - theirs.y).ipow(2) + (mine.z - theirs.z).ipow(2))
                 .sqrt();
             assert!(d < 1e-9, "wall {wi}: {d}");
         }

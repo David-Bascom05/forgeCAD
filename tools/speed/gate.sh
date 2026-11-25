@@ -3,6 +3,12 @@
 # path against a baseline (REGRESSED: more than 0.5% over it), and the hash of every regen's exact
 # result against tools/speed/bits.txt (CHANGED: expected only when geometry changes on purpose).
 # usage: tools/speed/gate.sh [baseline]    exit 1 regressed, 2 bits changed, 3 both
+#
+# The committed baseline-valgrind.txt is a REFERENCE (main's counts on one machine), not the
+# pass/fail comparison: another container's glibc or CPU can move whole-process lines by tens to
+# hundreds of Ir. A branch is judged by measuring main and the branch on the same machine
+# (`gate.sh --save` on each into a scratch copy) and comparing them with tools/speed/band.py, whose
+# band is the trains' rule. bits.txt, by contrast, must match exactly everywhere.
 #        tools/speed/gate.sh --save        rewrite the counter's baseline and bits.txt
 #
 # Two counters, each with its own baseline (their counts are not comparable with each other):
@@ -77,8 +83,14 @@ case $counter in
         # binary's size) and after it is never counted. The process runs on one CPU (taskset), so
         # its work is on main's thread, under main.
         only=${vgonly:-"--toggle-collect=$(basename "$1")::main"}
+        # (TMPDIR the gate directory's own: benchparts writes its font to a fixed name in the temp
+        # folder on every run, and two gates counting at once read each other's half-written
+        # font, gearbox edit off by 364; a path of one length, as FORGE_BENCH_PARTS. And no
+        # result cache (FORGECAD_CACHE=off): forge-lang keeps assemblies' results under
+        # $HOME/.cache, which every gate and run shares; no bench part is an assembly today, so it
+        # is never read, but a count must not depend on what an earlier run left there)
         (cd / && env -i PATH=/usr/bin:/bin HOME=/tmp LD_PRELOAD="$bin/fixedrandom.so" \
-          FORGE_BENCH_PARTS="$bin/parts" taskset -c "${GATE_CPU:-0}" setarch -R \
+          FORGE_BENCH_PARTS="$bin/parts" TMPDIR="$bin/tmp" FORGECAD_CACHE=off taskset -c "${GATE_CPU:-0}" setarch -R \
           valgrind --fair-sched=yes --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null $only "$@")
       else
         valgrind --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null $vgonly "$@"
@@ -133,9 +145,11 @@ if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
   # directory, 9,436,604 from 14, 9,437,129 from 41), its letters do not. Always this one form)
   fill() {
     cp "$bin/regen1" "$bin/bits" "$bin/benchparts" "$1/"
-    mkdir "$1/parts"
+    # (benchparts' font folder made here: a counted run that had to create it paid 564 fewer
+    # instructions than one finding it there, so the first part counted differed from the rest)
+    mkdir -p "$1/parts" "$1/tmp/forge-benchparts"
     cp interface/forge-lang/parts/bench/*.fg "$1/parts/"
-    cc -O2 -shared -fPIC -o "$1/fixedrandom.so" "$dir/fixedrandom.c"
+    cc -O2 -fno-builtin -ffreestanding -shared -fPIC -o "$1/fixedrandom.so" "$dir/fixedrandom.c"
   }
   gatedir=$(mktemp -d /tmp/forge-gate.XXXXXX)
   trap 'rm -rf "$gatedir"' EXIT
@@ -223,7 +237,9 @@ for p in gearbox volute crank valve heatsink quadarm conrod jack frame manifold 
     echo "$p $m ${n:-FAIL}" >> "$now"
   done
 done
-bits() { "$bin/bits"; "$bin/benchparts" bits; }
+# (the parts from this checkout: the binaries' own source path is the shared build folder, which a
+# gate starting while this one counts empties and refills; its bits then failed, or were cut short)
+bits() { "$bin/bits"; FORGE_BENCH_PARTS="$PWD/interface/forge-lang/parts/bench" "$bin/benchparts" bits; }
 if [ "$1" = --save ]; then
   mv "$now" "$baseline"
   bits > "$dir/bits.txt"

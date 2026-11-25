@@ -25,6 +25,7 @@ use forge_geom::ruled::{Rail, Ruled};
 use forge_geom::spline::{Extruded, PlaneSpline, Spline, SplineCurve};
 use forge_geom::wrap::{Flat, Wrap};
 use forge_geom::{Circle, Curve, CurveGeom, Cylinder, Line, Plane, Surface, SurfaceGeom};
+use forge_math::ipow::Powi as _;
 use forge_math::{Frame, Interval, Point2, Point3, Vec2, Vec3, dmath, tol};
 use forge_ops::{ProfileLoop, Segment};
 use forge_sheet_core::place;
@@ -2284,6 +2285,25 @@ impl<'a> Strips<'a> {
                                         limit,
                                         with,
                                         &|u| piece_box(geo, &bd.piece, w, u),
+                                        &|u| {
+                                            // on a plane wall a line's inset is a segment, an
+                                            // arc's an arc of under a turn: its points over the
+                                            // stretch are nearest its middle's at its ends
+                                            sag(u)?;
+                                            let m = geo.point(inset(u.mid()), w);
+                                            let flat = match bd.piece {
+                                                Piece::Arc { c, r, .. } => c.x.abs() + c.y.abs() + r + TOL,
+                                                _ => [inset(u.lo), inset(u.hi)]
+                                                    .iter()
+                                                    .map(|q| q.x.abs() + q.y.abs())
+                                                    .fold(0.0, f64::max),
+                                            };
+                                            Some(stretch(
+                                                m,
+                                                [geo.point(inset(u.lo), w), geo.point(inset(u.hi), w)],
+                                                geo.magnitude(flat, w),
+                                            ))
+                                        },
                                         &|u| Some(geo.point(inset(u), w)),
                                         &reach,
                                         &may,
@@ -2305,6 +2325,16 @@ impl<'a> Strips<'a> {
                                             geo.point(q, t * u.hi),
                                         ])
                                         .grow(TOL)
+                                    },
+                                    // a rail is a segment (straight through the thickness, on a
+                                    // plane or across a bend's radius)
+                                    &|u| {
+                                        let m = geo.point(q, t * u.mid());
+                                        Some(stretch(
+                                            m,
+                                            [geo.point(q, t * u.lo), geo.point(q, t * u.hi)],
+                                            geo.magnitude(q.x.abs() + q.y.abs(), t),
+                                        ))
                                     },
                                     &|u| Some(geo.point(q, t * u)),
                                     &reach,
@@ -2402,7 +2432,7 @@ impl<'a> Strips<'a> {
                     // middle within TOL is a touch; the box is dropped when the middle is farther
                     // than its size can close, the developed map stretching by `stretch`
                     let raw = box_of(u);
-                    let size = (raw.x.width().powi(2) + raw.y.width().powi(2) + raw.z.width().powi(2)).sqrt();
+                    let size = (raw.x.width().ipow(2) + raw.y.width().ipow(2) + raw.z.width().ipow(2)).sqrt();
                     let p = point(u.mid());
                     let (d, r) = self.developed_distance(b, p);
                     if d <= TOL {
@@ -2437,7 +2467,7 @@ impl<'a> Strips<'a> {
                 if d <= TOL {
                     return Ok(Some(p));
                 }
-                let size = (bx.x.width().powi(2) + bx.y.width().powi(2) + bx.z.width().powi(2)).sqrt();
+                let size = (bx.x.width().ipow(2) + bx.y.width().ipow(2) + bx.z.width().ipow(2)).sqrt();
                 if d > TOL + size {
                     continue;
                 }
@@ -2751,7 +2781,7 @@ impl<'a> Strips<'a> {
                 {
                     *best = (p, d);
                 }
-                let size = (bx.x.width().powi(2) + bx.y.width().powi(2) + bx.z.width().powi(2)).sqrt();
+                let size = (bx.x.width().ipow(2) + bx.y.width().ipow(2) + bx.z.width().ipow(2)).sqrt();
                 if size <= eps || level >= 60 {
                     continue;
                 }
@@ -2794,6 +2824,7 @@ impl<'a> Strips<'a> {
         limit: f64,
         with: Option<usize>,
         box_of: &dyn Fn(Interval) -> forge_math::Box3,
+        extent: &dyn Fn(Interval) -> Option<f64>,
         point: &dyn Fn(f64) -> Option<Point3>,
         reach: &dyn Fn(&forge_math::Box3) -> bool,
         may: &dyn Fn(Interval) -> bool,
@@ -2801,6 +2832,7 @@ impl<'a> Strips<'a> {
         hunt_by(
             limit,
             box_of,
+            extent,
             point,
             reach,
             may,
@@ -2853,6 +2885,7 @@ impl<'a> Strips<'a> {
                             if let Some(x) = hunt_by(
                                 limit,
                                 &|u| piece_box(geo, &bd.piece, w, u),
+                                &|_| None,
                                 &|u| Some(geo.point(bd.piece.at(u), w)),
                                 &reach,
                                 &|_| true,
@@ -2873,6 +2906,7 @@ impl<'a> Strips<'a> {
                         if let Some(x) = hunt_by(
                             limit,
                             &|u| rail.bbox(u),
+                            &|_| None,
                             &|u| Some(rail.at(u)),
                             &reach,
                             &|_| true,
@@ -2898,6 +2932,7 @@ impl<'a> Strips<'a> {
                     if let Some(x) = hunt_by(
                         limit,
                         &|u| c.bbox(u),
+                        &|_| None,
                         &|u| Some(c.at(u)),
                         &|bx| self.may_reach(b, bx, flat[b], limit),
                         &|_| true,
@@ -2922,6 +2957,7 @@ impl<'a> Strips<'a> {
                     if let Some(x) = hunt_by(
                         limit,
                         &|u| c.bbox(u),
+                        &|_| None,
                         &|u| Some(c.at(u)),
                         &reach,
                         &|_| true,
@@ -2968,11 +3004,41 @@ impl<'a> Strips<'a> {
     }
 }
 
+/// How far a segment's or an arc's points lie from its middle `m`, given its ends: the farther
+/// end (a segment by convexity; an arc parametrised by angle, each half turning at most a half
+/// turn (the whole stretch at most a full turn, since |t1 - t0| <= 2 pi and its width <= 1), by
+/// 2R sin(phi / 2) rising in phi), widened past the rounding of the computed points.
+/// That rounding scales with the inputs' magnitude `mag` (the frame's origin, the arc's centre
+/// and radius, the bend's radius), not the points' (which cancellation can make small): 1e-12
+/// of it is past a few dozen ulps of any of them.
+fn stretch(m: Point3, ends: [Point3; 2], mag: f64) -> f64 {
+    let far = ends.iter().map(|e| e.distance(m)).fold(0.0, f64::max);
+    let mag = [m.x, m.y, m.z, mag].iter().fold(1.0f64, |a, c| a.max(c.abs()));
+    far + 1e-12 * mag
+}
+
+impl Geo {
+    /// The magnitude of a folded point's inputs at a flat point of size `p` and depth `w`.
+    fn magnitude(&self, p: f64, w: f64) -> f64 {
+        let o = |f: &Frame| f.origin.x.abs() + f.origin.y.abs() + f.origin.z.abs();
+        match self {
+            Geo::Plane(f) => o(f) + p + w.abs(),
+            Geo::Round { axis, rho0, .. } => o(axis) + rho0.abs() + p + w.abs(),
+        }
+    }
+}
+
 /// The deepest point found along a curve over fractions 0..1 by `depth`, by halving while
 /// `reach` says a half's box may get deeper than `limit`: a point and its depth, if one is.
+/// `extent`, where it can say, bounds how far the curve's points over a stretch lie from its
+/// middle's: the leaves are decided by it (depth is 1-Lipschitz), not by the box, whose size
+/// keeps its padding however short the stretch (a depth within the padding of the limit was
+/// otherwise halved to 2^-48 of the curve: millions of leaves).
+#[allow(clippy::too_many_arguments)]
 fn hunt_by(
     limit: f64,
     box_of: &dyn Fn(Interval) -> forge_math::Box3,
+    extent: &dyn Fn(Interval) -> Option<f64>,
     point: &dyn Fn(f64) -> Option<Point3>,
     reach: &dyn Fn(&forge_math::Box3) -> bool,
     may: &dyn Fn(Interval) -> bool,
@@ -2986,7 +3052,7 @@ fn hunt_by(
             if !reach(&bx) || !may(u) {
                 continue;
             }
-            let size = (bx.x.width().powi(2) + bx.y.width().powi(2) + bx.z.width().powi(2)).sqrt();
+            let size = (bx.x.width().ipow(2) + bx.y.width().ipow(2) + bx.z.width().ipow(2)).sqrt();
             // every point of the box within `size` of its middle: none in the material when the
             // middle is further from it than that
             if let Some(p) = point(u.mid())
@@ -3007,8 +3073,10 @@ fn hunt_by(
                 {
                     return Ok(Some((p, d)));
                 }
-                // clear where no point of the box can pass the limit (1-Lipschitz); else halved
-                if d.is_none_or(|d| d + size <= limit) {
+                // clear where no point of the stretch can pass the limit (1-Lipschitz: its
+                // points within `reach` of the middle); else halved
+                let reach = extent(u).unwrap_or(size);
+                if d.is_none_or(|d| d + reach <= limit) {
                     continue;
                 }
                 if level >= 48 {

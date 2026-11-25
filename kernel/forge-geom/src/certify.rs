@@ -16,6 +16,7 @@
 
 use crate::intcurve::IntCurve;
 use crate::surface::Surface;
+use forge_math::ipow::Powi as _;
 use forge_math::{Box3, Interval as I, Point3, Vec3, tol};
 
 /// Why the certificate refused.
@@ -3841,10 +3842,10 @@ mod tests {
                         let mut got = 0.0;
                         for i in 0..=ch.f.dt {
                             for j in 0..=ch.f.dv {
-                                got += ch.f.at(i, j).mid() * t.powi(i as i32) * v.powi(j as i32);
+                                got += ch.f.at(i, j).mid() * t.ipow(i as i32) * v.ipow(j as i32);
                             }
                         }
-                        let want = want.mid() * w.powi(deg);
+                        let want = want.mid() * w.ipow(deg);
                         assert!(
                             (got - want).abs() <= 1e-7 * (1.0 + want.abs()),
                             "{host:?} / {other:?}: {got} {want}"

@@ -651,6 +651,7 @@ pub fn line_moments(p: Point2, q: Point2) -> (f64, f64, f64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use forge_math::ipow::Powi as _;
 
     fn near(a: f64, b: f64, tol: f64) {
         assert!((a - b).abs() <= tol, "{a} vs {b}");
@@ -791,7 +792,7 @@ mod tests {
         let chs = Section::chs("O".into(), 48.3, 3.2).unwrap();
         near(
             chs.area(),
-            dmath::PI * (24.15f64.powi(2) - 20.95f64.powi(2)),
+            dmath::PI * (24.15f64.ipow(2) - 20.95f64.ipow(2)),
             1e-9,
         );
         near(chs.support(Vec2::new(0.6, 0.8)), 24.15, 1e-12);

@@ -1,5 +1,6 @@
 //! Thread milling (Fusion parity): radial passes, spring passes, hand, starts and a tangent arc
 //! lead, each certified against P ∖ Δ like the single pass.
+use forge_math::ipow::Powi as _;
 mod common;
 use common::dir;
 use forge_cam::ops::PMove;
@@ -32,7 +33,7 @@ fn helix(cam: &forge_cam_lang::Cam) -> Vec<(f64, bool)> {
             PMove::Arc { to, c, .. } => {
                 if to[2] != z && !z.is_nan() {
                     out.push((
-                        ((to[0] - c[0]).powi(2) + (to[1] - c[1]).powi(2)).sqrt(),
+                        ((to[0] - c[0]).ipow(2) + (to[1] - c[1]).ipow(2)).sqrt(),
                         to[2] > z,
                     ));
                 }

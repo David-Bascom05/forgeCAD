@@ -1,6 +1,7 @@
 //! The trigon (W) insert and left-hand bars: a WNMG in a PWLNR holder roughs the shaft and
 //! certifies; its core closes (six equal sides); a left-hand bar decodes as its right-hand twin
 //! mirrored and is refused where the op feeds toward the chuck.
+use forge_math::ipow::Powi as _;
 mod common;
 use forge_turn::insert::{boring_tool, decode_insert, turning_tool};
 use forge_turn::ops;
@@ -18,7 +19,7 @@ fn a_trigon_decodes_and_roughs() {
     let core = &t.bodies[0].core;
     assert_eq!(core.len(), 6);
     // the last side closes on the nose: every side the same length
-    let side = |a: [f64; 2], b: [f64; 2]| ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2)).sqrt();
+    let side = |a: [f64; 2], b: [f64; 2]| ((a[0] - b[0]).ipow(2) + (a[1] - b[1]).ipow(2)).sqrt();
     let e = side(core[0], core[1]);
     for i in 0..6 {
         assert!((side(core[i], core[(i + 1) % 6]) - e).abs() < 1e-9);

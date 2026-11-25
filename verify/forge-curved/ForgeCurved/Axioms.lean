@@ -182,3 +182,6 @@ import ForgeCurved
 #print axioms ForgeCurved.BlendNode.branch_increasing
 #print axioms ForgeCurved.BlendNode.branch_meets_springs_only_at_node
 #print axioms ForgeCurved.BlendNode.tubes_one_branch
+#print axioms ForgeCurved.ScrewFlip.flip_point
+#print axioms ForgeCurved.ScrewFlip.flip_range
+#print axioms ForgeCurved.ScrewFlip.flip_face

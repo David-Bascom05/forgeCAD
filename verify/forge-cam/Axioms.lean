@@ -152,3 +152,8 @@ import ForgeCam
 #print axioms ForgeCam.AxisPlane.lin_ge_min
 #print axioms ForgeCam.AxisPlane.axisplane_clear
 #print axioms ForgeCam.AxisPlane.axisplane_clear_below
+#print axioms ForgeCam.IvalZero.add_zero_encl
+#print axioms ForgeCam.IvalZero.zero_add_encl
+#print axioms ForgeCam.IvalZero.mul_zero_encl
+#print axioms ForgeCam.IvalZero.zero_mul_encl
+#print axioms ForgeCam.IvalZero.exact_inside

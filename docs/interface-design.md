@@ -117,7 +117,9 @@ slint 1.18                225           +231 s        its own language, an async
 The added crates are over forge-render's 95. Click to GPU done is 0.7 ms at the median, 2.6 ms p95; an
 orbit frame with chrome and viewport 0.7 ms, 2.5 ms p95; idle asks for no frame at all. egui shapes
 with harfrust, so kerning is real. System clipboard through smithay-clipboard (3 crates); file dialogs
-through rfd's portal (2 crates, no async runtime). AccessKit stays an optional feature: egui's widgets
+through rfd's portal (2 crates, no async runtime). A picture pasted into the Agent tab (Ctrl/Cmd+V) is read through
+arboard =3.7.0, desktop only, default features off (image-data, wayland-data-control); it was in the
+lock already as egui-winit's clipboard, so it adds no crate. AccessKit stays an optional feature: egui's widgets
 and ours report their role and label from the start.
 
 Why not a webview over wgpu: WebKitGTK has no WebGPU, a frame shipped into a page takes 30 ms, and web

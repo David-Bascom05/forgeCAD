@@ -1,6 +1,7 @@
 //! Folded and flat solids against closed forms: flat length, bend allowance, the volume identity
 //! V_fold - V_flat = theta W t^2 (1/2 - K), the fold map's round trip; and check, closed meshes,
 //! names under edits, typed refusals, and a fuzz on random parts.
+use forge_math::ipow::Powi as _;
 mod common;
 use common::cases::blob;
 use common::reference;
@@ -699,7 +700,7 @@ fn segment_gap(p: (f64, f64), q: (f64, f64), r: (f64, f64), s: (f64, f64)) -> f6
     let point_seg = |x: (f64, f64), a: (f64, f64), b: (f64, f64)| {
         let (dx, dy) = (b.0 - a.0, b.1 - a.1);
         let f = (((x.0 - a.0) * dx + (x.1 - a.1) * dy) / (dx * dx + dy * dy)).clamp(0.0, 1.0);
-        ((x.0 - a.0 - f * dx).powi(2) + (x.1 - a.1 - f * dy).powi(2)).sqrt()
+        ((x.0 - a.0 - f * dx).ipow(2) + (x.1 - a.1 - f * dy).ipow(2)).sqrt()
     };
     point_seg(p, r, s)
         .min(point_seg(q, r, s))

@@ -15,6 +15,7 @@ use crate::graph::{JointKind, Sheet};
 use crate::region::{Piece, Region, holds, pieces, subtract};
 use crate::shop::Scaled;
 use forge_geom::{Cone, Cylinder, Surface, Torus};
+use forge_math::ipow::Powi as _;
 use forge_math::{Box3, Frame, Interval, Point2, Point3, Vec2, Vec3, dmath, tol};
 use forge_ops::{ProfileLoop, Segment};
 
@@ -572,7 +573,7 @@ fn moment_volume(p: &Profile, t: f64) -> f64 {
                 let sweep = (a1 - a0).abs();
                 let (s0, s1) = if a1 > a0 { (a0, a1) } else { (a1, a0) };
                 c.x * 0.5 * (hi * hi - lo * lo) * sweep
-                    + (hi.powi(3) - lo.powi(3)) / 3.0 * (dmath::sin(s1) - dmath::sin(s0))
+                    + (hi.ipow(3) - lo.ipow(3)) / 3.0 * (dmath::sin(s1) - dmath::sin(s0))
             }
             (Prof::Line { a, b: e }, Prof::Line { a: fa, b: fb }) => {
                 // a rectangle t across: its area times its centroid's r
@@ -906,7 +907,7 @@ impl FormGeo {
                 0.0
             }
         };
-        let r = (near(l.x, self.c.x).powi(2) + near(l.y, self.c.y).powi(2)).sqrt();
+        let r = (near(l.x, self.c.x).ipow(2) + near(l.y, self.c.y).ipow(2)).sqrt();
         let (d0, d1) = if self.up {
             (l.z.lo + t, l.z.hi + t)
         } else {

@@ -234,6 +234,53 @@ wrong, what the fix costs, and the guard that keeps it fixed.
   - engage.rs's property tests: a lowered cell holds nothing above it, for flat, bull and ball
     tools, on lines and ramps; void cells lie wholly inside.
 
+### Feeds from engagement: the edge read conservatively, wherever the grid falls (CAM-CORE)
+
+A correctness change that costs speed; recorded here because it moves outputs and CAM time.
+
+- **What.** `kernel/forge-cam/src/engage.rs` `HeightMap::engage_in`. Each front-edge point is
+  read at the tool's radius r, and counts as meeting stock when any cell within `reach` of it
+  stands above the tip. `reach` is the cell's half-diagonal, and at least half the 1° between
+  edge points. Before, each point read one cell at r + h/2. That erred low where the edge
+  leaves stock: up to 7.5 % over the chip at a stock's far edge, 1.1 % beside an earlier
+  slot. It was hidden on the examples only by a 1e-14 inflation of the stock box, which gave
+  the model a phantom column of material.
+  - An air point's block is passed over when its tiles are all at or below the tip (output
+    identical).
+  - Consecutive points reading the same block reuse its answer (output identical).
+- **Moves.**
+  - Feeds only, never paths: on flange and plate_break every changed F word is lower (316 and
+    99 lines slower, none faster).
+  - forge-cam-quality pins: well_island and deep_slot's hex_max drop (facing 0.0949 -> 0.0933
+    and 0.0458 -> 0.0446; slot 0.0585 -> 0.0578), and t_min rises 0.1 s.
+  - CAM CPU over the 10 examples and 18 quality parts: +2.5 % in total (82.7 -> 84.7 s,
+    dominated by the moulds). The 2.5D documents rise by 24-33 % (+0.05-0.1 s each).
+    `engage_in` on boss_cam is 386M -> 972M Ir: an air point next to material reads up to
+    9 cells instead of 1.
+  - Half a cell's reach was tried, with 2x2 blocks; it is not conservative (0.32 % over the
+    chip on a 17° slanted slot).
+  - Tried to win the cost back (output identical): the own cell first, the last block reused,
+    an air point's block passed over on low tiles. Together about 5 %. Not tried, and why:
+    - a dilated-max map kept by sweep_in: each piece lowers a crescent of about 45 cells, and
+      refreshing their neighbourhoods costs about as much as the reads it saves (about 900 vs
+      1450 per piece); a 3x3 max is also wider than `reach`, so outputs would move again;
+    - coarser angular sampling: fewer, wider reads, but it changes how the engaged angle and
+      cos θ are taken (a new semantics, not a speed-up of this one).
+    TOOLPATH-QUALITY offered the dilated map as a later follow-up, built lazily outside
+    HeightMap's hot fields.
+- **Sound.** Nothing certified changes: feeds are no part of G1-G4, and every posted feed is
+  checked by G5 as before. The model holds material only to within a cell. Its box covers the
+  stock, and a cell is lowered whole when its centre is cut. So true material at an edge point,
+  if it is at least a cell wide, lies within a cell's half-diagonal of a cell the model still
+  holds high, and the read errs only toward more engagement and a lower feed. A sliver narrower
+  than a cell between two cuts can hold no cell centre and is not in the model at all. Its
+  engagement is under a cell's width; the sweep lowering a cell only when its whole box is cut
+  would close that too (TOOLPATH-QUALITY's review).
+- **Pinned by.** `kernel/forge-cam/tests/engage_conservative.rs`: the model's feed never above
+  the exact engagement's, over sub-cell stock extents, a first pass leaving the stock, a second
+  beside a slot, and slots slanted at 17°, 30°, 45° and 62°. It fails on the old read (7.47 %).
+  Also forge-cam-quality's chip-load guard.
+
 ## Temporary safety exceptions
 
 Speed given up on purpose, for safety, until a named condition is met. Each row says what was

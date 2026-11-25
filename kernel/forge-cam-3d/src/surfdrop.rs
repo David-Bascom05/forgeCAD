@@ -13,6 +13,7 @@ use forge_cam::surf::{Surfacer, XyGrid};
 use forge_cam_geom::check::Move;
 use forge_cam_geom::drop::{Column, gap_clear};
 use forge_cam_geom::ival::Ival;
+use forge_math::ipow::Powi as _;
 
 /// Cells for one face's gap check in a generator's segment test. Undecided within it is "not
 /// proven", and the drape splits the chord (short pieces resolve by the closed forms), so the
@@ -114,7 +115,7 @@ impl DropCutter for SurfDrop<'_, '_> {
     /// face, by the closed form at the slack less s, or by the grown column's gap at the slack,
     /// proves the arc. Undecided: not proven.
     fn arc3_below(&self, a: [f64; 3], to: [f64; 3], c: [f64; 2], cw: bool, slack: f64) -> bool {
-        let r = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2)).sqrt();
+        let r = ((a[0] - c[0]).ipow(2) + (a[1] - c[1]).ipow(2)).sqrt();
         let slack = slack.max(0.0);
         if !(r.is_finite() && r > 0.0 && to.iter().all(|v| v.is_finite()) && slack.is_finite() && slack > 0.0)
         {
