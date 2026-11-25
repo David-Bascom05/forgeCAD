@@ -7,9 +7,9 @@ Wound down at the coordinator's request; this is what is where and what is left.
 
 | Branch | Head | State |
 |---|---|---|
-| `bendsim/tools` | `d4e24e06` | Ready to merge (into the bendsim train through BENDSIM-ENV's head). Holds everything below. |
-| `bendsim/hems` | `d4e24e06` | The same commits (hems and offsets were built here, then fast-forwarded into `bendsim/tools`). Can be deleted. |
-| `sheet/near-limit` | `dd48635e` | forge-sheet case 64 (`hunt_by`'s Lipschitz leaf, 322 s to under 1 ms, verdicts identical over 7551 builds, EXACT-CORE approved), with main `c135b274` merged in. Pre-verify re-run at wind-down; its line goes to TRAIN-CONDUCTOR. |
+| `bendsim/tools` | `d9c50840` + this note | Merged by BENDSIM-ENV into the bendsim train head (their combined pre-verify). Holds everything below. |
+| `bendsim/hems` | the same | Hems and offsets were built here, then brought into `bendsim/tools`. Can be deleted. |
+| `sheet/near-limit` | `b9abe851` | forge-sheet case 64 (`hunt_by`'s Lipschitz leaf, 322 s to under 1 ms, verdicts identical over 7551 builds, EXACT-CORE approved), with main `10d87778` (train 8) merged in. Pre-verify at wind-down; its line goes to TRAIN-CONDUCTOR. |
 
 ## What `bendsim/tools` adds (since main)
 
@@ -31,6 +31,8 @@ Wound down at the coordinator's request; this is what is where and what is left.
   catalogue); `Step::mark` marks every bend a step makes (an offset makes two).
 - `examples/sheetmetal/hem_joggle.fg`: the showcase, a hem and a joggle on three stations.
 - `prepare()` keeps a tool shared by stations apart once (was refused as a duplicate).
+- `contacts_of` gives regions only for checks that ran and failed or are Near: a check that could
+  not run (`Check::not_checked`) stays not checked (it gave false self contacts on an offset).
 
 Design and data: `research/bendsim/tools/hems.md`, `research/bendsim/tools/hems-data.md`.
 
