@@ -1,0 +1,4 @@
+{"doc":"examples/thermoform/validation/buntinx2014_tray25.fg"}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"MoveFeature","id":"floor","before":null}
+{"op":"ReplaceFeature","id":"part","text":"part = thermoform(cav, t: 0.4, material: \"PP\", tool: \"female\", flange: 15, shrink: ratio(0), vent: false, temperature: 155, pressure: ratio(0.4))\n"}

@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/asm/order/build/RACK-101_post.fg"}
+{"op":"SetParam","param":"t3","value":{"value":3.1710000000000003,"dim":"Length"}}
+{"op":"SetParam","param":"t2","value":{"value":1.974,"dim":"Length"}}
+{"op":"SetParam","param":"t1","value":{"value":1.596,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"ReplaceFeature","id":"fb","text":"sketch fb(on: leg_b.top) {\n  for i in 0..n_stud {\n    stud = pt(s_stud, L - w_stud[i])\n  }\n  for i in 0..n_pnl {\n    pnl = pt(s_pnl, L - w_pnl[i])\n  }\n  for i in 0..n_hng {\n    hng = pt(s_hng, L - w_hng[i])\n  }\n  for i in 0..n_stk {\n    stk = pt(s_stk, L - w_stk[i])\n  }\n  ax = line((0, 0), (1, 0), construction: true)\n}\n"}

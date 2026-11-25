@@ -1,0 +1,5 @@
+{"doc":"examples/conic/post.fg"}
+{"op":"SetParam","param":"R","value":{"value":21,"dim":"Length"}}
+{"op":"SetParam","param":"L","value":{"value":63,"dim":"Length"}}
+{"op":"SetParam","param":"P","value":{"value":8.4,"dim":"Length"}}
+{"op":"Rename","from":"end","to":"end_r"}

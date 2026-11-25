@@ -1,0 +1,5 @@
+{"doc":"examples/machined/collar.fg"}
+{"op":"SetParam","param":"d","value":{"value":16.8,"dim":"Length"}}
+{"op":"SetParam","param":"dc","value":{"value":25.200000000000003,"dim":"Length"}}
+{"op":"SetParam","param":"l","value":{"value":42,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}

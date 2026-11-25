@@ -1,0 +1,187 @@
+# The cross-platform determinism gate (research/hosted/DESIGN.md §13.2): every platform forgeCAD
+# runs on must build the SAME BITS from the same document and the same op stream, because hosted
+# collaborators each rebuild locally. verify/forge-det prints one line per (document, op) with the
+# exact body hash, mesh hash and error kinds, for every examples/**/*.fg and every recorded op
+# stream in verify/forge-det/streams (hashed after every op, warm and cold). The `compare` job
+# diffs every platform's lines against linux x86-64-v3 with no tolerance and fails naming the
+# document, the op and the field that differs.
+#
+# The runs are deliberately NOT made alike the way the speed gate makes them: no
+# tools/speed/fixedrandom.so preload (std's HashMap is seeded at random per process, so three
+# separate processes per configuration would expose an iteration-order dependence), 1 thread and
+# all threads (a parallel reduction must combine in index order), FORGECAD_CACHE=off (no disk
+# result cache).
+name: determinism
+
+on:
+  pull_request:
+    paths:
+      - "kernel/**"
+      - "interface/forge-lang/**"
+      - "interface/forge-agent/**"
+      - "examples/**"
+      - "rust-toolchain.toml"
+      - ".cargo/**"
+      - "Cargo.lock"
+      - "verify/forge-det/**"
+      - ".github/workflows/determinism.yml"
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_INCREMENTAL: 0
+  FORGECAD_CACHE: "off"
+
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # the reference: .cargo/config.toml's x86-64-v3
+          - { name: linux-x86-64-v3, os: ubuntu-latest, rustflags: "", runs: 3 }
+          # no AVX/FMA unit: the same arithmetic must come out of the older instruction set
+          - { name: linux-x86-64-v2, os: ubuntu-latest, rustflags: "-C target-cpu=x86-64-v2", runs: 3 }
+          - { name: linux-arm64, os: ubuntu-24.04-arm, rustflags: "", runs: 1 }
+          - { name: macos-arm64, os: macos-14, rustflags: "", runs: 1 }
+          - { name: windows-x86-64, os: windows-latest, rustflags: "", runs: 1 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    env:
+      RUSTFLAGS: ${{ matrix.rustflags }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: toolchain (rust-toolchain.toml)
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: det-${{ matrix.name }}
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name != 'pull_request' }}
+      - run: cargo build --release --locked -p forge-det
+      - name: corpus and op streams (1 thread, all threads; separate processes)
+        shell: bash
+        run: |
+          mkdir -p det
+          bin=target/release/forge-det
+          for r in $(seq 1 ${{ matrix.runs }}); do
+            FORGECAD_THREADS=1 "$bin" --corpus --streams > "det/${{ matrix.name }}-t1-r$r.txt"
+            "$bin" --corpus --streams > "det/${{ matrix.name }}-tN-r$r.txt"
+          done
+          wc -l det/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: det-${{ matrix.name }}
+          path: det/
+          retention-days: 7
+
+  wasm-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: toolchain (rust-toolchain.toml, with wasm32-wasip1)
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: det-wasm
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name != 'pull_request' }}
+      # the browser build's profile (fat LTO, one codegen unit): the arithmetic a page runs
+      - run: cargo build --profile wasm --locked --target wasm32-wasip1 -p forge-det
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forge-det-wasm
+          path: target/wasm32-wasip1/wasm/forge-det.wasm
+          retention-days: 1
+
+  wasm-node:
+    needs: wasm-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          name: forge-det-wasm
+      - name: Node's WASI, and Node through the browsers' WASI shim (checks the shim)
+        run: |
+          mkdir -p det
+          node --no-turbo-fast-api-calls tools/wasi-run.mjs forge-det.wasm --root "$PWD" --corpus --streams > det/wasm-node.txt
+          node --no-turbo-fast-api-calls verify/forge-det/web/run.cjs --engine shim --wasm forge-det.wasm --root . \
+            --dirs examples,verify/forge-det/streams -- --corpus --streams > det/wasm-node-shim.txt
+          wc -l det/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: det-wasm-node
+          path: det/
+          retention-days: 7
+
+  wasm-browser:
+    needs: wasm-build
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [chromium, firefox, webkit]
+        shard: [0, 1]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-1.63.0-${{ matrix.engine }}-${{ runner.os }}
+      - name: playwright
+        run: |
+          mkdir -p "$HOME/pw" && cd "$HOME/pw"
+          npm init -y >/dev/null && npm install --no-save playwright@1.63.0
+          npx playwright install --with-deps ${{ matrix.engine }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: forge-det-wasm
+      - name: forge-det in ${{ matrix.engine }} (a dedicated Worker), shard ${{ matrix.shard }}/2
+        run: |
+          mkdir -p det
+          NODE_PATH="$HOME/pw/node_modules" node verify/forge-det/web/run.cjs --engine ${{ matrix.engine }} \
+            --wasm forge-det.wasm --root . --dirs examples,verify/forge-det/streams \
+            -- --corpus --streams --shard ${{ matrix.shard }}/2 > det/wasm-${{ matrix.engine }}-s${{ matrix.shard }}.txt
+          wc -l det/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: det-wasm-${{ matrix.engine }}-s${{ matrix.shard }}
+          path: det/
+          retention-days: 7
+
+  compare:
+    needs: [native, wasm-node, wasm-browser]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: det-*
+          path: det
+          merge-multiple: true
+      - name: every platform bit for bit against linux x86-64-v3 (1 thread, run 1)
+        run: |
+          ls -l det
+          # the browser shards are halves of one run: put each engine's halves together
+          for e in chromium firefox webkit; do
+            if ls det/wasm-$e-s*.txt >/dev/null 2>&1; then cat det/wasm-$e-s*.txt > det/wasm-$e.txt; rm det/wasm-$e-s*.txt; fi
+          done
+          ref=det/linux-x86-64-v3-t1-r1.txt
+          test -s "$ref"
+          others=$(ls det/*.txt | grep -v -x "$ref")
+          python3 verify/forge-det/compare.py "$ref" $others

@@ -1,0 +1,7 @@
+{"doc":"examples/thermoform/cup.fg"}
+{"op":"SetParam","param":"t","value":{"value":1.05,"dim":"Length"}}
+{"op":"SetParam","param":"r","value":{"value":33.6,"dim":"Length"}}
+{"op":"SetParam","param":"D","value":{"value":78.75,"dim":"Length"}}
+{"op":"Rename","from":"footprint","to":"footprint_r"}
+{"op":"MoveFeature","id":"base","before":null}
+{"op":"ReplaceFeature","id":"part","text":"part = thermoform(cup, t: t, material: \"PETG\", tool: \"female\")\n"}

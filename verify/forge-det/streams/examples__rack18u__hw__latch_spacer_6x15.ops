@@ -1,0 +1,5 @@
+{"doc":"examples/rack18u/hw/latch_spacer_6x15.fg"}
+{"op":"SetParam","param":"di","value":{"value":4.515,"dim":"Length"}}
+{"op":"SetParam","param":"do","value":{"value":6.300000000000001,"dim":"Length"}}
+{"op":"SetParam","param":"h","value":{"value":15.75,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}

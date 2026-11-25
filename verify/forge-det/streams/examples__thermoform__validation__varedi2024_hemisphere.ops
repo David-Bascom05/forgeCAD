@@ -1,0 +1,3 @@
+{"doc":"examples/thermoform/validation/varedi2024_hemisphere.fg"}
+{"op":"Rename","from":"half","to":"half_r"}
+{"op":"ReplaceFeature","id":"part","text":"part = thermoform(mould, t: 3, material: \"ABS\", tool: \"male\", from: \"inner\", flange: 85, margin: 5, shrink: ratio(0), vent: false, temperature: 136, pressure: ratio(0.0777))\n"}

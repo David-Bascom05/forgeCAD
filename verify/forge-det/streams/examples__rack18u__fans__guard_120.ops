@@ -1,0 +1,5 @@
+{"doc":"examples/rack18u/fans/guard_120.fg"}
+{"op":"SetParam","param":"gh","value":{"value":5.25,"dim":"Length"}}
+{"op":"SetParam","param":"hs","value":{"value":55.125,"dim":"Length"}}
+{"op":"SetParam","param":"d_ring","value":{"value":1.6800000000000002,"dim":"Length"}}
+{"op":"Rename","from":"base","to":"base_r"}

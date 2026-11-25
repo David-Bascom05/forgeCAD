@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/asm/order/build/RACK-201_rail.fg"}
+{"op":"SetParam","param":"t3","value":{"value":3.1710000000000003,"dim":"Length"}}
+{"op":"SetParam","param":"t2","value":{"value":1.974,"dim":"Length"}}
+{"op":"SetParam","param":"t1","value":{"value":1.596,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"ReplaceFeature","id":"ec","text":"sketch ec(on: mount.top) {\n  for k in 0..n_u * n_o {\n    c = pt(p_eia, r_u + u * u_of(k) + o_eia[k - n_o * u_of(k)])\n  }\n}\n"}

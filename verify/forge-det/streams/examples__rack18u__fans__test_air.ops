@@ -1,0 +1,7 @@
+{"doc":"examples/rack18u/fans/test_air.fg"}
+{"op":"SetParam","param":"pan_z","value":{"value":951.3000000000001,"dim":"Length"}}
+{"op":"SetParam","param":"tray_z","value":{"value":938.049,"dim":"Length"}}
+{"op":"SetParam","param":"rack_y","value":{"value":420,"dim":"Length"}}
+{"op":"Rename","from":"pan","to":"pan_r"}
+{"op":"MoveFeature","id":"at_tray","before":null}
+{"op":"ReplaceFeature","id":"thread_m4","text":"thread_m4 = fit_rule(external_thread, internal_thread, size: m4, min_engagement: min_m4)\n"}

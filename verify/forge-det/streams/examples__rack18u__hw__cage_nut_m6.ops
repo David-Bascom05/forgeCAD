@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/hw/cage_nut_m6.fg"}
+{"op":"SetParam","param":"d","value":{"value":6.300000000000001,"dim":"Length"}}
+{"op":"SetParam","param":"P","value":{"value":1.05,"dim":"Length"}}
+{"op":"SetParam","param":"wx","value":{"value":12.400500000000001,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}
+{"op":"MoveFeature","id":"tcut","before":null}

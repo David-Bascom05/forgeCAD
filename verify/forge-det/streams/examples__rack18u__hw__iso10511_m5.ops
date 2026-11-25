@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/hw/iso10511_m5.fg"}
+{"op":"SetParam","param":"d","value":{"value":5.25,"dim":"Length"}}
+{"op":"SetParam","param":"P","value":{"value":0.8400000000000001,"dim":"Length"}}
+{"op":"SetParam","param":"s","value":{"value":8.4,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}
+{"op":"MoveFeature","id":"hexa","before":null}

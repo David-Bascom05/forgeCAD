@@ -1,0 +1,5 @@
+{"doc":"examples/rack18u/fans/probes/sub_clearance.fg"}
+{"op":"SetParam","param":"gap","value":{"value":10.5,"dim":"Length"}}
+{"op":"SetParam","param":"c","value":{"value":8.4,"dim":"Length"}}
+{"op":"Rename","from":"a","to":"a_r"}
+{"op":"ReplaceFeature","id":"s","text":"s = subassembly(\"sub_one_pin.fg\", at: pose(at: (gap, 0, 0)))\n"}

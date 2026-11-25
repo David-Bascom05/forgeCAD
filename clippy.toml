@@ -14,4 +14,15 @@ disallowed-methods = [
   { path = "f64::exp", reason = "platform libm" },
   { path = "f64::ln", reason = "platform libm" },
   { path = "f64::powf", reason = "platform libm" },
+  # the rest of std's libm-backed f64 methods (none called today; verify/forge-det's gate would
+  # catch one only on a platform whose libm rounds it differently, so keep them out by lint)
+  { path = "f64::tanh", reason = "platform libm" },
+  { path = "f64::sinh", reason = "platform libm" },
+  { path = "f64::cosh", reason = "platform libm" },
+  { path = "f64::asinh", reason = "platform libm" },
+  { path = "f64::atanh", reason = "platform libm" },
+  { path = "f64::exp_m1", reason = "platform libm" },
+  { path = "f64::ln_1p", reason = "platform libm" },
+  { path = "f64::log", reason = "platform libm" },
+  { path = "f64::log2", reason = "platform libm" },
 ]

@@ -1,0 +1,6 @@
+{"doc":"examples/robot/link.fg"}
+{"op":"SetParam","param":"ln","value":{"value":126,"dim":"Length"}}
+{"op":"SetParam","param":"w","value":{"value":25.200000000000003,"dim":"Length"}}
+{"op":"SetParam","param":"t","value":{"value":10.5,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"ReplaceFeature","id":"top","text":"sketch top(on: bar.end) {\n  p1 = pt(ln, 0)\n}\n"}

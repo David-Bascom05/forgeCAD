@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/casters/bearing_inner.fg"}
+{"op":"SetParam","param":"rb","value":{"value":4.2,"dim":"Length"}}
+{"op":"SetParam","param":"rl","value":{"value":6.578775,"dim":"Length"}}
+{"op":"SetParam","param":"hb","value":{"value":3.6750000000000003,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}
+{"op":"ReplaceFeature","id":"groove","text":"groove = revolve(gs.g, axis: gs.zax, cut: true)\n"}

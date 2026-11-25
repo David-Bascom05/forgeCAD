@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/hw/rack_screw_m6x16.fg"}
+{"op":"SetParam","param":"d","value":{"value":6.300000000000001,"dim":"Length"}}
+{"op":"SetParam","param":"P","value":{"value":1.05,"dim":"Length"}}
+{"op":"SetParam","param":"l","value":{"value":16.8,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}
+{"op":"MoveFeature","id":"slotcut","before":null}

@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/casters/pan_standin.fg"}
+{"op":"SetParam","param":"x0","value":{"value":310.233,"dim":"Length"}}
+{"op":"SetParam","param":"y0","value":{"value":39.92100000000001,"dim":"Length"}}
+{"op":"SetParam","param":"y1","value":{"value":800.0790000000001,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"ReplaceFeature","id":"tops","text":"sketch tops(on: floor.end) {\n  for c in 0..4 {\n    for k in 0..4 {\n      s = pt(kx[c] + hx[k], ky[c] + hy[k])\n    }\n  }\n}\n"}

@@ -1,0 +1,7 @@
+{"doc":"examples/unified/nested_boxes.fg"}
+{"op":"SetParam","param":"t","value":{"value":3.1500000000000004,"dim":"Length"}}
+{"op":"SetParam","param":"wide","value":{"value":63,"dim":"Length"}}
+{"op":"SetParam","param":"lid.w","value":{"value":42,"dim":"Length"}}
+{"op":"Rename","from":"lid","to":"lid_r"}
+{"op":"MoveFeature","id":"b1","before":null}
+{"op":"ReplaceFeature","id":"b2","text":"b2 = part(box(w: wide), at: (200, 0, 0), ground: true)\n"}

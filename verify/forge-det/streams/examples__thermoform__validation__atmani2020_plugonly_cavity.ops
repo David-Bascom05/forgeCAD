@@ -1,0 +1,4 @@
+{"doc":"examples/thermoform/validation/atmani2020_plugonly_cavity.fg"}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"MoveFeature","id":"floor","before":null}
+{"op":"ReplaceFeature","id":"part","text":"part = thermoform(cav, t: 1.1, material: \"HIPS\", tool: \"female\", flange: 45, margin: 10, shrink: ratio(0), vent: false, temperature: 130, pressure: ratio(0.000001))\n"}

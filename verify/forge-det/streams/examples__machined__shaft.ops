@@ -1,0 +1,5 @@
+{"doc":"examples/machined/shaft.fg"}
+{"op":"SetParam","param":"d","value":{"value":21,"dim":"Length"}}
+{"op":"SetParam","param":"ds","value":{"value":31.5,"dim":"Length"}}
+{"op":"SetParam","param":"l","value":{"value":57.75,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}

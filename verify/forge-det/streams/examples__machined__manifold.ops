@@ -1,0 +1,7 @@
+{"doc":"examples/machined/manifold.fg"}
+{"op":"SetParam","param":"L","value":{"value":115.5,"dim":"Length"}}
+{"op":"SetParam","param":"W","value":{"value":73.5,"dim":"Length"}}
+{"op":"SetParam","param":"t","value":{"value":27.3,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"MoveFeature","id":"relief","before":null}
+{"op":"ReplaceFeature","id":"cb","text":"cb = hole(at: [bot.h1, bot.h2], screw: \"M5\", seat: \"cbore\", fit: \"normal\", depth: cb_depth)\n"}

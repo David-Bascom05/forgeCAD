@@ -1,0 +1,5 @@
+{"doc":"examples/demo/part_tools.fg"}
+{"op":"SetParam","param":"sk1.x1","value":{"value":-42,"dim":"Length"}}
+{"op":"SetParam","param":"sk1.y2","value":{"value":-31.5,"dim":"Length"}}
+{"op":"SetParam","param":"sk1.w3","value":{"value":84,"dim":"Length"}}
+{"op":"Rename","from":"sk1","to":"sk1_r"}

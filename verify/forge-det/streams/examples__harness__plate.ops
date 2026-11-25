@@ -1,0 +1,6 @@
+{"doc":"examples/harness/plate.fg"}
+{"op":"SetParam","param":"L","value":{"value":336,"dim":"Length"}}
+{"op":"SetParam","param":"W","value":{"value":210,"dim":"Length"}}
+{"op":"SetParam","param":"t","value":{"value":5.25,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"ReplaceFeature","id":"post2","text":"post2 = extrude(pp.c2, post_h)\n"}

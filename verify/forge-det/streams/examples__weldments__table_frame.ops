@@ -1,0 +1,7 @@
+{"doc":"examples/weldments/table_frame.fg"}
+{"op":"SetParam","param":"W","value":{"value":1260,"dim":"Length"}}
+{"op":"SetParam","param":"D","value":{"value":630,"dim":"Length"}}
+{"op":"SetParam","param":"H","value":{"value":756,"dim":"Length"}}
+{"op":"Rename","from":"top","to":"top_r"}
+{"op":"MoveFeature","id":"brace","before":null}
+{"op":"ReplaceFeature","id":"brace2","text":"brace2 = corner_plate(fr[0], fr[5], size: leg_plate, t: t_plate, chamfer: plate_cut)\n"}

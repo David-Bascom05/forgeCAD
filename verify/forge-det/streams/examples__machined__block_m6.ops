@@ -1,0 +1,6 @@
+{"doc":"examples/machined/block_m6.fg"}
+{"op":"SetParam","param":"L","value":{"value":31.5,"dim":"Length"}}
+{"op":"SetParam","param":"W","value":{"value":31.5,"dim":"Length"}}
+{"op":"SetParam","param":"t","value":{"value":14.700000000000001,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"ReplaceFeature","id":"m6","text":"m6 = hole(at: hs.c, screw: \"M6\", fit: \"tap\", depth: hd, point: tip)\n"}

@@ -1,0 +1,5 @@
+{"doc":"examples/rack18u/asm/dummy_d02.fg"}
+{"op":"SetParam","param":"u","value":{"value":46.67250000000001,"dim":"Length"}}
+{"op":"SetParam","param":"h","value":{"value":93.34500000000001,"dim":"Length"}}
+{"op":"Rename","from":"ears","to":"ears_r"}
+{"op":"ReplaceFeature","id":"body","text":"body = extrude(box, -depth)\n"}

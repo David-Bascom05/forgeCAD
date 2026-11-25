@@ -1,0 +1,7 @@
+{"doc":"examples/weldments/handrail.fg"}
+{"op":"SetParam","param":"L1","value":{"value":840,"dim":"Length"}}
+{"op":"SetParam","param":"R","value":{"value":262.5,"dim":"Length"}}
+{"op":"SetParam","param":"L2","value":{"value":630,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"MoveFeature","id":"pad2","before":null}
+{"op":"ReplaceFeature","id":"pad3","text":"pad3 = end_cap(post[2], end: \"end\", t: t_pad)\n"}

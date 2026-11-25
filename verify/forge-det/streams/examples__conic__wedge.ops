@@ -1,0 +1,5 @@
+{"doc":"examples/conic/wedge.fg"}
+{"op":"SetParam","param":"W","value":{"value":31.5,"dim":"Length"}}
+{"op":"SetParam","param":"B","value":{"value":42,"dim":"Length"}}
+{"op":"SetParam","param":"H","value":{"value":31.5,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}

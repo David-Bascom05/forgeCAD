@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/asm/order/build/RACK-312_strike.fg"}
+{"op":"SetParam","param":"t3","value":{"value":3.1710000000000003,"dim":"Length"}}
+{"op":"SetParam","param":"t2","value":{"value":1.974,"dim":"Length"}}
+{"op":"SetParam","param":"t1","value":{"value":1.596,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"ReplaceFeature","id":"webmid","text":"sketch webmid(on: offset(web_f.top, -t2 / 2)) {\n  seat_p = pt(y_seat - t2, bh / 2)\n  stop_p = pt(web - t2, bh / 2)\n  fwd = line((0, 0), (xl, 0), construction: true)\n  up = line((0, 0), (0, xl), construction: true)\n}\n"}

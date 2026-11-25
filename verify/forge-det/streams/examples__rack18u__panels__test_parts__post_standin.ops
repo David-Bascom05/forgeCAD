@@ -1,0 +1,7 @@
+{"doc":"examples/rack18u/panels/test_parts/post_standin.fg"}
+{"op":"SetParam","param":"L","value":{"value":52.5,"dim":"Length"}}
+{"op":"SetParam","param":"t","value":{"value":3.1710000000000003,"dim":"Length"}}
+{"op":"SetParam","param":"H","value":{"value":951.3000000000001,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}
+{"op":"MoveFeature","id":"hb_stk","before":null}
+{"op":"ReplaceFeature","id":"hb_pnl","text":"hb_pnl = hole(at: [fb.pnl[i] for i in 0..n_pnl], d: d_m5, depth: thru)\n"}

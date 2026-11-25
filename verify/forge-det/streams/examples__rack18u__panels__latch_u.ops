@@ -1,0 +1,7 @@
+{"doc":"examples/rack18u/panels/latch_u.fg"}
+{"op":"SetParam","param":"size_m4","value":{"value":4.2,"dim":"Length"}}
+{"op":"SetParam","param":"min_m4","value":{"value":2.9085,"dim":"Length"}}
+{"op":"SetParam","param":"zx_cam","value":{"value":-15.75,"dim":"Length"}}
+{"op":"Rename","from":"hdl","to":"hdl_r"}
+{"op":"MoveFeature","id":"seat0","before":null}
+{"op":"ReplaceFeature","id":"seat1","text":"seat1 = fit(ball1, cam)\n"}

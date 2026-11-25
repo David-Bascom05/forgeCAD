@@ -1,0 +1,6 @@
+{"doc":"examples/conic/slot.fg"}
+{"op":"SetParam","param":"L","value":{"value":42,"dim":"Length"}}
+{"op":"SetParam","param":"R","value":{"value":8.4,"dim":"Length"}}
+{"op":"SetParam","param":"H","value":{"value":10.5,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"ReplaceFeature","id":"rim","text":"rim = fillet(edges(of: base.end), r, conic: rho)\n"}
