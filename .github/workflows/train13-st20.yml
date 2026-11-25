@@ -1,0 +1,53 @@
+name: Train 13 isolated ST20 union
+on:
+  push:
+    branches: [diagnostics/train13-st20]
+permissions:
+  contents: read
+jobs:
+  replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CARGO_INCREMENTAL: 0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 6c6d2d391305cd1ae253d582c93103dff416fdce
+          fetch-depth: 0
+          filter: blob:none
+      - name: Build both stress binaries and extract the full STEP
+        run: |
+          for rev in 18169987f63df6c0ee7ece19aec8d9c2b280bfa1 6c6d2d391305cd1ae253d582c93103dff416fdce; do
+            git checkout --detach "$rev"
+            cargo build --locked --release -p forge-stress
+            cp target/release/forge-stress "$RUNNER_TEMP/${rev:0:8}"
+          done
+          git show origin/haas-3d-models:research/haas-models/ST-20-25_Reboot_Solid_Model_2019-05r2.zip > "$RUNNER_TEMP/model.zip"
+          unzip -p "$RUNNER_TEMP/model.zip" '*ST20-25_Reboot_2-axis_STEP_2019-05.STEP' > "$RUNNER_TEMP/model.step"
+          test -s "$RUNNER_TEMP/model.step"
+      - name: Alternate both kernels with the production watchdog
+        run: |
+          cd "$RUNNER_TEMP"
+          mkdir results
+          i=0
+          for rev in 18169987 6c6d2d39 6c6d2d39 18169987 18169987 6c6d2d39; do
+            i=$((i+1))
+            "./$rev" model.step --timeout 60 --max-solids 24 --only s199:union_over > "results/$i-$rev.jsonl" 2>"results/$i-$rev.log" || true
+          done
+          python - <<'PY'
+          import glob,json
+          reference=None
+          for path in sorted(glob.glob('results/*.jsonl')):
+              rows=[json.loads(line) for line in open(path)]
+              hits=[r for r in rows if r.get('ent')==685618 and r.get('op')=='union_over']
+              print(path,[(r['st'],r['ms']) for r in hits],flush=True)
+              assert len(hits)==1 and hits[0]['st']=='refused'
+              if reference is None: reference=hits[0]['d']
+              assert hits[0]['d']==reference
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: isolated-union
+          path: ${{ runner.temp }}/results
