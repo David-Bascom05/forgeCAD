@@ -830,7 +830,7 @@ fn state_json(g: &Gui, canvas: Json) -> String {
                     ("seq", num(l.seq() as f64)),
                     ("pending", num(l.pending() as f64)),
                     ("text", format!("{:016x}", forge_sync::text_hash(&s.src)).into()),
-                    ("note", s.sync_note.clone().map_or(Json::Null, Json::from)),
+                    ("note", s.sync_said.clone().map_or(Json::Null, Json::from)),
                 ])
             }),
         ),

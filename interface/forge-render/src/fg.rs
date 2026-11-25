@@ -1793,6 +1793,9 @@ pub struct Session {
     pub sync_changed: bool,
     /// The link's first snapshot has been taken in.
     sync_seen: bool,
+    /// The link's last note, kept (the GUI takes `sync_note` for its status line; a test or the
+    /// page's state reads this).
+    pub sync_said: Option<String>,
     /// A SERVED part's file on disk: kept at the server's text, watched for hand edits.
     #[cfg(not(target_arch = "wasm32"))]
     sync_file: Option<crate::sync_link::SyncFile>,
@@ -1897,6 +1900,7 @@ impl Session {
             sync_note: None,
             sync_changed: false,
             sync_seen: false,
+            sync_said: None,
             #[cfg(not(target_arch = "wasm32"))]
             sync_file: None,
         };
@@ -1936,6 +1940,7 @@ impl Session {
     }
 
     /// The link let go: the document stays open, LOCAL, with `why` said.
+    #[cfg(not(target_arch = "wasm32"))]
     fn pause_sync(&mut self, why: String) {
         self.sync = None;
         #[cfg(not(target_arch = "wasm32"))]
@@ -1967,6 +1972,9 @@ impl Session {
                 forge_sync::Event::Closed(why) => self.sync_note = Some(format!("Server: {why}")),
                 forge_sync::Event::Rtt(_) => {}
             }
+        }
+        if self.sync_note.is_some() {
+            self.sync_said = self.sync_note.clone();
         }
         // the file on disk: written with the server's text, and watched for hand edits
         #[cfg(not(target_arch = "wasm32"))]

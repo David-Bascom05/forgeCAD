@@ -45,11 +45,12 @@ const sync = (p) => p.evaluate(() => window.forgecad.state().sync);
 const apply = (p, op) => p.evaluate((o) => window.forgecad.fc.app_apply(JSON.stringify(o)), op);
 const setParam = (param, value) => ({ op: "SetParam", param, value: { value, dim: "Length" } });
 
-async function same(a, b, what) {
+async function same(a, b, what, min = 0) {
   const t0 = Date.now();
   while (Date.now() - t0 < 60000) {
     const [x, y] = [await sync(a), await sync(b)];
-    if (x && y && x.ready && y.ready && !x.pending && !y.pending && x.seq === y.seq && x.text === y.text) return x;
+    if (x && y && x.ready && y.ready && !x.pending && !y.pending && x.seq >= min && x.seq === y.seq && x.text === y.text)
+      return x;
     await new Promise((r) => setTimeout(r, 20));
   }
   throw new Error(`the tabs never agreed on ${what}: ${JSON.stringify([await sync(a), await sync(b)])}`);
@@ -66,20 +67,22 @@ async function same(a, b, what) {
   try {
     const q = `?open=plate.fg&offscreen=640x400&sync=${encodeURIComponent(ws)}&sync_token=${TOKEN}`;
     const [pa, pb] = [await t.page(b, url + q), await t.page(b, url + q)];
-    await t.loaded(pa);
-    await t.loaded(pb);
+    for (const p of [pa, pb]) {
+      await t.until(p, (s) => s.built?.checked, "the first build");
+      await t.loaded(p);
+    }
     const s0 = await same(pa, pb, "the snapshot");
     console.log(`ok - two tabs joined the served part at seq ${s0.seq}`);
 
     // one edits, the other sees it
     await apply(pa, setParam("t", 9));
-    const s1 = await same(pa, pb, "t = 9");
+    const s1 = await same(pa, pb, "t = 9", s0.seq + 1);
     assert.ok(s1.seq >= 1);
     console.log(`ok - a's edit reached b (seq ${s1.seq})`);
 
     // both edit at once
     await Promise.all([apply(pa, setParam("L", 70)), apply(pb, setParam("W", 40))]);
-    const s2 = await same(pa, pb, "two edits at once");
+    const s2 = await same(pa, pb, "two edits at once", s1.seq + 2);
     assert.equal(s2.seq, s1.seq + 2);
     console.log(`ok - concurrent edits merged (seq ${s2.seq})`);
 
@@ -88,7 +91,9 @@ async function same(a, b, what) {
       apply(pa, { op: "Rename", from: "boss", to: "hub" }),
       apply(pb, { op: "Rename", from: "boss", to: "pin" }),
     ]);
-    const s3 = await same(pa, pb, "the rename race");
+    const s3 = await same(pa, pb, "the rename race", s2.seq + 1);
+    // the losing rename's refusal arrives with it: give the tabs a moment to show it
+    await new Promise((r) => setTimeout(r, 500));
     assert.equal(s3.seq, s2.seq + 1, "exactly one rename committed");
     const notes = [(await sync(pa)).note, (await sync(pb)).note].filter(Boolean);
     assert.ok(notes.some((n) => /RenameConflict|renamed/.test(n)), `the loser is told: ${notes}`);
@@ -108,6 +113,7 @@ async function same(a, b, what) {
 
     // a tab with no ?sync= stays LOCAL
     const local = await t.page(b, `${url}?open=plate.fg&offscreen=640x400`);
+    await t.until(local, (s) => s.built?.checked, "the local tab's first build");
     await t.loaded(local);
     assert.equal(await sync(local), null, "no ?sync=: LOCAL, no link");
     console.log("ok - a tab with no ?sync= is LOCAL");
