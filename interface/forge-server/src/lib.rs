@@ -124,6 +124,9 @@ pub struct Config {
     /// Serve on a non-loopback address with no TLS (the token and every op in clear): a LAN demo
     /// only, said loudly.
     pub insecure_lan: bool,
+    /// A document's in-memory log bytes before a compaction: forge-sync's default (1 MiB) unless
+    /// set (tests make compactions frequent with a small one).
+    pub max_log_bytes: Option<usize>,
 }
 
 impl Config {
@@ -143,6 +146,7 @@ impl Config {
             handshake: HANDSHAKE,
             build_budget: BUILD_BUDGET,
             insecure_lan: false,
+            max_log_bytes: None,
         }
     }
 }
@@ -1387,6 +1391,9 @@ fn open_doc(shared: &Shared, doc: &str) -> Result<Room, NotOpened> {
     let mut seq =
         Sequencer::open(store.as_mut(), doc, &text, path.parent().map(Path::to_path_buf)).map_err(io)?;
     seq.root = Some(c.root.clone());
+    if let Some(n) = c.max_log_bytes {
+        seq.limits.max_log_bytes = n;
+    }
     let mine = shared
         .abandoned
         .lock()

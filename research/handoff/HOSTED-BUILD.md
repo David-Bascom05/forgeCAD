@@ -15,6 +15,8 @@ the heads below are those plus the main merge (and, on client-web, the --sync ha
 | `hosted/server-hardening` | N1–N9, the reviews' fixes, load/soak/fault/disk-full tests | 576d8e34. Pre-verify GREEN at bc12d3e0; later commits are tests, the handoff, and the main merge |
 | `hosted/client-native` | the desktop app as a client (forge-render: `sync_link`, `fg::Session`) | f8c9038c. UX-LEAD OK. Main merge conflicts in forge-render (both sides' fields kept) |
 | `hosted/client-web` | the browser app as a client (web-sys WebSocket, `?sync=`, `forgecad web --sync`) | 5aa6912b. Security review SAFE; its two hardening fixes are in (afc58f54: wss:// unless loopback, strict origin parse). Pre-verify pending |
+| `hosted/m5-groups` | M5: an apply-all is one atomic group (PROTOCOL 3, `ops` everywhere), plus HOSTED-DESIGN's M5 review fixes (no guessed base, the inverse inside the check budget, client-side limits, undo barrier, no redo on a second undo) | 068ee583, off server-hardening. Review fixes in; HOSTED-DESIGN's last pass pending |
+| `hosted/m5-clients` | the app on M5: apply_all sends one group; no edit before the server's text; limits refused in the app (EditError) | bda855d6 = client-web 5aa6912b + m5-groups + the app. tests/served.rs passes. Pre-verify after client-web's |
 | `hosted/release-sketches` | forge-lang's `release_sketches()` / `ReleaseOnDrop`: the kept-sketch leak's root fix | a7668e22, GREEN-EXCEPT-RENDER, gate ok |
 | `hosted/lean-rebase` | the Lean model of rebase | LANG-PROOFS' (now inactive) |
 | `ci/determinism` | cross-platform bit identity: forge-det + compare.py; folded-vs-runtime `--consts`; the ipow native and wasm runners | d6083ef8. f6f92445 GREEN |
@@ -81,10 +83,16 @@ tick).
 1. HOSTED-DESIGN re-review of server-hardening. Pre-verify (pv ≥ 13d78f06) for each branch,
    sent to TRAIN-CONDUCTOR (session_01WJtawwrcJMe9MW7GeYQtHw).
 2. Clients review mediums: M3 (report hashes only for builds of exactly the seq's text), M4
-   (hosted undo before an Ack), M5 (apply_all as one atomic group), M6 (done: a re-check right
-   before the rename). Web lows (a stopped link stops; the token is scoped to its address).
+   (done: hosted undo before an Ack), M5 (built: hosted/m5-groups and m5-clients, see above;
+   HOSTED-DESIGN's last pass, then pre-verify), M6 (done: a re-check right before the rename).
+   A served part takes no edit until the server's text has come (an op's base is the seq of
+   the text it was made on): read-only while the server is unreachable at open. Web lows (a stopped link stops; the token is scoped to its address).
 3. Load, soak and fault injection: done (above), and the disk-full test (tests/diskfull.rs:
    refused as not saved, the log stays whole, a close while full loses nothing acked). The
-   ipow wasm runner is in ci/determinism. A 50-minute soak (40 documents, churn) is the
-   check on the ~4 KB/op residual: the in-memory log, capped at 1 MiB per document.
+   ipow wasm runner is in ci/determinism. The 50-minute soak (40 documents × 3 sessions,
+   churn 2; 359,635 edits, 6,000 resumes): RSS rose ~560 B/op until every log reached its
+   1 MiB cap (~4,100 ops a document, t≈1375 s), stepped up once at the 40 near-simultaneous
+   compactions, then stayed flat for 27 minutes (190–202 MB; one +12 MB step at a disk-full
+   on the box). The ~4 KB/op residual was the log filling to its cap. ~5 MB RSS high-water
+   per hot document; 0.66 ms server CPU per op.
 4. Not in scope: users, orgs and auth (HOSTED-DESIGN is writing that plan).

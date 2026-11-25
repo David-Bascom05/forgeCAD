@@ -131,3 +131,111 @@ fn a_full_disk_refuses_edits_keeps_the_log_whole_and_recovers() {
     h.stop();
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// A compaction on a full disk: the ops still fit (each a few hundred bytes) but the snapshot
+/// record (the whole document) does not, so every compaction fails mid-write while edits go on
+/// being acked. Nothing acked is lost: the part-written snapshot is cut back, the log stays
+/// whole, and a restart, with room again, reopens at the last acked text (and compacts then).
+#[test]
+#[ignore]
+fn a_compaction_on_a_full_disk_loses_nothing_acked() {
+    let Ok(base) = std::env::var("FORGE_FULL_DIR") else {
+        eprintln!("FORGE_FULL_DIR (a small filesystem to fill) is not set: skipped");
+        return;
+    };
+    let root = Path::new(&base).join(format!("compact-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    // a document whose snapshot (~70 KB) is far larger than an op's record
+    let mut doc = DOC.to_string();
+    for k in 0..4000 {
+        doc.push_str(&format!("shared q{k} = 1\n"));
+    }
+    std::fs::write(root.join("part.fg"), &doc).unwrap();
+    let serve_small = |at: &str| {
+        let mut c = Config::new(root.to_path_buf(), vec![("dev".into(), TOKEN.into())]);
+        c.store = StoreKind::File;
+        c.max_log_bytes = Some(600);
+        start_on(TcpListener::bind(at).unwrap(), c).unwrap()
+    };
+    let h = serve_small("127.0.0.1:0");
+    let at = h.addr.to_string();
+    let remote = Remote {
+        name: "full".into(),
+        url: format!("ws://{at}/sync"),
+        token: TOKEN.into(),
+    };
+    let s = Session::start(&remote, "part.fg", None).unwrap();
+    wait("joined", || s.ready());
+    s.edit(set(41.0)).unwrap();
+    wait("the first edit acked", || s.pending() == 0);
+    // full, then 32 KiB given back: room for dozens of ops, not for one snapshot
+    let filler = fill(&root);
+    let len = std::fs::metadata(&filler).unwrap().len();
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(&filler)
+        .unwrap()
+        .set_len(len.saturating_sub(32 << 10))
+        .unwrap();
+    let mut acked = 0;
+    for k in 0..20 {
+        s.edit(set(50.0 + k as f64)).unwrap();
+        wait("an answer", || s.pending() == 0);
+        let refused = s
+            .poll()
+            .into_iter()
+            .any(|e| matches!(e, forge_sync::Event::Refused { .. }));
+        if refused {
+            break;
+        }
+        acked += 1;
+    }
+    assert!(
+        acked >= 5,
+        "edits kept being acked while compactions failed: {acked}"
+    );
+    let last = s.text();
+    assert!(
+        last.contains(&format!("shared w = {}", 50 + acked - 1)),
+        "{acked}"
+    );
+    drop(s);
+    h.stop();
+    // the log as written: whole, every op once, seqs without a gap (the failed snapshots cut back)
+    let store = forge_server::store::FileLogStore::new(root.join(".forgecad/server/log")).unwrap();
+    let es = store.history("part.fg").unwrap().expect("a log");
+    assert_eq!(es.len(), 1 + acked, "every acked op is in the log");
+    // past the 600-byte log several times over: each of those compactions was tried and failed
+    let bytes: usize = es
+        .iter()
+        .map(|e| forge_sync::wire::write(&forge_sync::wire::entry_json(e)).len())
+        .sum();
+    assert!(bytes > 3 * 600, "{bytes} bytes of log: compactions were due");
+    let mut seen = std::collections::HashSet::new();
+    for (k, e) in es.iter().enumerate() {
+        assert_eq!(e.seq, k as u64 + 1, "seqs run without a gap");
+        assert!(seen.insert((e.client.clone(), e.id)), "an op once");
+    }
+    // room again: reopened at the last acked text, and it compacts now
+    std::fs::remove_file(&filler).unwrap();
+    let h = serve_small(&at);
+    let s = Session::start(&remote, "part.fg", None).unwrap();
+    wait("rejoined", || s.ready());
+    assert_eq!(s.text(), last, "reopened at the last acked text");
+    for k in 0..10 {
+        s.edit(set(80.0 + k as f64)).unwrap();
+        wait("acked with room", || s.pending() == 0);
+    }
+    let last = s.text();
+    drop(s);
+    h.stop();
+    let h = serve_small(&at);
+    let s = Session::start(&remote, "part.fg", None).unwrap();
+    wait("rejoined after a compaction", || s.ready());
+    assert_eq!(s.text(), last);
+    assert!(last.contains("shared w = 89"));
+    drop(s);
+    h.stop();
+    let _ = std::fs::remove_dir_all(&root);
+}
