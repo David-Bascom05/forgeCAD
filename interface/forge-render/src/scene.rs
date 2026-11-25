@@ -55,6 +55,9 @@ pub struct Scene {
     gone: Vec<bool>,
     /// Drawn only as a ghost (`Overlay::face_ghosts`): left out of the draws and picks.
     ghost: Vec<bool>,
+    /// Every placement left out of the draws and picks for now, the scene kept as it is (the
+    /// CAM simulation draws the part itself, in each setup's frame).
+    pub hidden: bool,
     /// Every placement's rows as the GPU holds them, and the bytes changed since the last upload.
     pub rows_bytes: Vec<u8>,
     dirty: Option<(usize, usize)>,
@@ -90,7 +93,7 @@ impl Scene {
         list.clear();
         draws.clear();
         let mut by_part: Vec<(u32, u32)> = (0..self.placements.len())
-            .filter(|&i| !self.gone[i] && !self.ghost[i])
+            .filter(|&i| !self.hidden && !self.gone[i] && !self.ghost[i])
             .map(|i| (self.placements[i].part, i as u32))
             .collect();
         by_part.sort_unstable();
@@ -163,6 +166,7 @@ impl Scene {
             boxes: Vec::new(),
             gone: placements.iter().map(|p| squashed(&p.rows)).collect(),
             ghost: vec![false; placements.len()],
+            hidden: false,
             placements,
             rows_bytes,
             dirty: None,
@@ -364,7 +368,7 @@ impl Scene {
             (Some(a), Some((b, true))) => away(a, x, y, z, r) || away(b, x, y, z, r),
         };
         for i in 0..self.x.len() {
-            if self.gone[i] || self.ghost[i] {
+            if self.hidden || self.gone[i] || self.ghost[i] {
                 continue;
             }
             let (x, y, z, r) = (self.x[i], self.y[i], self.z[i], -self.r[i]);
