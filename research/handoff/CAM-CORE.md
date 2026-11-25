@@ -122,6 +122,20 @@ squash merges. They have not been checked one by one: the train records are the 
     grid and clamp keep-outs).
   - Until then, a vise with soft jaws or a stand-in plate record is honest, if the doc says which.
 
+- **Passes ending exactly the fixture clearance from a toleranced fixture face** (WORKHOLDING's
+  finding, holding their default2).
+  - The Haas jaws' inner faces carry μ = 1e-5. Facing/clear passes that overrun the stock edge
+    (= the jaw face) end exactly the clearance from it, inside the checker's undecidable band
+    (limit ± μ). certify_bb then spends its full budget, about 5 s a move: over 180 s on a
+    two-setup flange.
+  - Fix (a), CAM-CORE's: keep passes off a fixture by clearance + the fixture faces' largest μ +
+    a little. Not the probing `clear_gap`; find where facing/clear size their region past the
+    stock against the fixture. It moves paths on every doc with a fixture, so it needs a judged
+    re-bless.
+  - Fix (b), EXACT-CORE's or WORKHOLDING's: certify_bb returns Undecided once a sub-resolution
+    cell lies wholly in the band.
+  - Details in research/handoff/WORKHOLDING.md on cam/workholding-default2.
+
 ## Risks
 
 - **"Held by the fixture" tests boxes, not bodies** (forge-cam-lang lib.rs ~2845, the leftover
