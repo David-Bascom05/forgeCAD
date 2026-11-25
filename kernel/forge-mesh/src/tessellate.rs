@@ -363,15 +363,19 @@ fn chain_samples(
 
 /// A cylinder's row spacing (`dv`, along its axis), no closer than the chord tolerance needs. Rows
 /// 2 r du apart keep its triangles shapely, but under a radius smaller than the chord the whole
-/// cylinder lies within the tolerance of a flat strip and rows buy nothing: a 0.025 mm fillet
-/// 663 mm long (ST-30-35Y #716088) was 50,000 rows, and a solid of such fillets ran its drawing's
-/// budget out. There rows are no closer than 2 c max_angle, what they are at r = c; at r >= c
-/// nothing changes. (`old-sampling`: as before.)
+/// cylinder lies within the tolerance of a flat strip and rows buy no accuracy (no chord across it
+/// strays, so nothing is refined): a 0.025 mm fillet 663 mm long (ST-30-35Y #716088) was 50,000
+/// rows, and a solid of such fillets ran its drawing's budget out. Rows still bound how far a long
+/// straight boundary edge's chord reaches across the band's triangles when it is put in (recovering
+/// it costs about the square of the rows it passes: EC-1600ZT #263173's 2.5 m rails of 0.8 mm
+/// radius, at rows 2 c max_angle apart, still 3,277 rows each and the budget run out). There rows
+/// are 4 chords apart: some 430 on such a rail. At r >= c nothing changes. (`old-sampling`: as
+/// before.)
 fn row_floor(r: f64, dv: f64, q: &Quality) -> f64 {
     if cfg!(feature = "old-sampling") || r >= q.chord {
         dv
     } else {
-        dv.max(2.0 * q.chord * q.max_angle)
+        dv.max(4.0 * q.chord)
     }
 }
 
