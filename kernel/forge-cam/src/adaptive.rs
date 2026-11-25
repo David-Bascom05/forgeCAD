@@ -659,7 +659,7 @@ pub fn adaptive(
         let mut entries = 0usize;
         macro_rules! next_sweep {
             () => {{
-                let left_far = left_area(&f, 4.0 * f.r) > 10.0 * f.r * f.r;
+                let left_far = left_area(&f, 4.0 * f.r) > 4.0 * f.map.h * f.map.h;
                 // with crumbs taken back, any material more than a radius from the walls (beyond
                 // the cleanup rings' reach) sends the level round again with every pass kept
                 let left_near = crumbs_now && dir_k >= 3 && left_area(&f, f.r) > f.r * f.r;
@@ -1146,14 +1146,59 @@ pub fn adaptive(
                             }
                         }
                         // gently (10°): the strip a pass cuts follows the edge the last one
-                        // left, so a steep approach would set every strip's slope
+                        // left, so a steep approach would set every strip's slope. But only as
+                        // far toward the material as the engagement the heading meets ahead
+                        // stays within the cap: going straight on, out to a radius past where
+                        // it first meets material (a start whose disk already overlaps a face
+                        // by more than the cap allows would otherwise turn into it and stall at
+                        // the stock's corner, and whether it does would depend on where the
+                        // grids fall). The first heading, from most toward the material to
+                        // away from it, whose engagement ahead is within the cap; none: the one
+                        // meeting the least
                         let gentle = 10f64.to_radians();
-                        if side > 1e-9 {
-                            gentle.clamp(lo_d, hi_d)
+                        let s = if side > 1e-9 {
+                            1.0
                         } else if side < -1e-9 {
-                            (-gentle).clamp(lo_d, hi_d)
+                            -1.0
                         } else {
+                            0.0
+                        };
+                        if s == 0.0 {
                             0.0f64.clamp(lo_d, hi_d)
+                        } else {
+                            // the most engagement met going straight along w from here: out to
+                            // a radius past the first contact, at most four radii (∞ steps off
+                            // the allowed centres end the look)
+                            let ahead_max = |w: [f64; 2]| -> f64 {
+                                let (mut t, mut hit, mut most) = (len, None::<f64>, 0.0f64);
+                                while t <= 4.0 * f.r && hit.is_none_or(|h| t <= h + f.r) {
+                                    let q = [pos[0] + t * w[0], pos[1] + t * w[1], z];
+                                    let ph = f.phi(q, w);
+                                    if !ph.is_finite() {
+                                        break;
+                                    }
+                                    if ph > 0.0 && hit.is_none() {
+                                        hit = Some(t);
+                                    }
+                                    most = most.max(ph);
+                                    t += len;
+                                }
+                                most
+                            };
+                            let mut least: Option<(f64, f64)> = None;
+                            let mut pick = None;
+                            for k in [1.0, 0.5, 0.0, -0.5, -1.0, -2.0] {
+                                let d = (s * k * gentle).clamp(lo_d, hi_d);
+                                let m = ahead_max(rot(u, d));
+                                if m <= cap {
+                                    pick = Some(d);
+                                    break;
+                                }
+                                if least.is_none_or(|(_, lm)| m < lm) {
+                                    least = Some((d, m));
+                                }
+                            }
+                            pick.or(least.map(|(d, _)| d)).unwrap_or(0.0f64.clamp(lo_d, hi_d))
                         }
                     } else if eval(toward).0 <= cap {
                         toward
@@ -1600,32 +1645,9 @@ pub fn adaptive(
             });
             at = Some([p[0], p[1], h.retract]);
         }
-        // after every pass and ring: stock left at this level more than a cell inside the region
-        // (the model holds material to a cell, so nearer the walls is the model's rounding, and
-        // the wall pass's), measured on the map as the level left it. G4 lists what is left
-        // whatever its size; the note says so, so nothing is left silently (the next op meets it
-        // at full depth). More than a 2 x 2 block of cells is reported.
-        {
-            let m = &f.map;
-            let mut left = 0.0;
-            for j in 0..m.ny {
-                let y = m.y0 + (j as f64 + 0.5) * m.h;
-                for i in 0..m.nx {
-                    if m.z[j * m.nx + i] > z + f.eps {
-                        let x = m.x0 + (i as f64 + 0.5) * m.h;
-                        if inside(&f.work, x, y) && edge_dist(&f.work, x, y) > m.h {
-                            left += m.h * m.h;
-                        }
-                    }
-                }
-            }
-            if left > 4.0 * m.h * m.h {
-                notes.push(format!(
-                    "adaptive: at z {z:.3} {left:.0} mm² of stock is left uncut after every pass and \
-                     ring (G4 lists it); the next op meets it at full depth: clear() or pocket() \
-                     takes it"
-                ));
-            }
+        // after every pass and ring: what is left at this level, reported (`left_uncut`)
+        if let Some(n) = left_note_h(z, left_uncut(&f.map, &f.work, z, f.eps), f.map.h) {
+            notes.push(n);
         }
         above = z;
     }
@@ -2230,8 +2252,84 @@ fn claimed(moves: &[([f64; 3], [f64; 3])], z: f64, r_flat: f64, ip: &InProcess, 
     Some(Region { loops })
 }
 
+/// The stock a level left (mm²): the map's cells standing above z (by more than eps) whose centre
+/// is inside the work region and more than a cell from its edge. The model holds material to a
+/// cell, so nearer the walls is the model's rounding, and the wall pass's. G4 lists what is left
+/// whatever its size; this is for the op's own report (`left_note`).
+fn left_uncut(m: &HeightMap, work: &[Vec<(f64, f64)>], z: f64, eps: f64) -> f64 {
+    let mut left = 0.0;
+    for j in 0..m.ny {
+        let y = m.y0 + (j as f64 + 0.5) * m.h;
+        for i in 0..m.nx {
+            if m.z[j * m.nx + i] > z + eps {
+                let x = m.x0 + (i as f64 + 0.5) * m.h;
+                if inside(work, x, y) && edge_dist(work, x, y) > m.h {
+                    left += m.h * m.h;
+                }
+            }
+        }
+    }
+    left
+}
+
+/// The op's note for stock left at a level: more than a 2 x 2 block of cells (`left_uncut`, cell
+/// h), so that nothing is left silently (the next op meets it at full depth).
+fn left_note_h(z: f64, left: f64, h: f64) -> Option<String> {
+    (left > 4.0 * h * h).then(|| {
+        format!(
+            "adaptive: at z {z:.3} {left:.0} mm² of stock is left uncut after every pass and ring \
+             (G4 lists it); the next op meets it at full depth: clear() or pocket() takes it"
+        )
+    })
+}
+
 #[cfg(test)]
 mod tests {
+
+    /// The leftover report: a patch more than a cell inside the work region is measured and
+    /// reported; one cell, or a strip within a cell of the region's edge, is not.
+    #[test]
+    fn stock_left_more_than_a_cell_in_is_reported() {
+        let h = 0.1;
+        let mut m = HeightMap::new([0.0, 0.0, 0.0], [10.0, 10.0, 5.0], h);
+        // all cut to z 1, the level
+        m.z.iter_mut().for_each(|z| *z = 1.0);
+        let work = vec![vec![(1.0, 1.0), (9.0, 1.0), (9.0, 9.0), (1.0, 9.0)]];
+        let raise = |m: &mut HeightMap, x0: f64, x1: f64, y0: f64, y1: f64| {
+            for j in 0..m.ny {
+                let y = m.y0 + (j as f64 + 0.5) * m.h;
+                for i in 0..m.nx {
+                    let x = m.x0 + (i as f64 + 0.5) * m.h;
+                    if (x0..x1).contains(&x) && (y0..y1).contains(&y) {
+                        m.z[j * m.nx + i] = 5.0;
+                    }
+                }
+            }
+        };
+        assert_eq!(left_uncut(&m, &work, 1.0, 1e-3), 0.0);
+        assert!(left_note_h(1.0, 0.0, h).is_none());
+        // a strip along the work's edge, within a cell of it: the model's rounding, not counted
+        let mut e = m.clone();
+        raise(&mut e, 1.0, 9.0, 1.0, 1.08);
+        assert_eq!(left_uncut(&e, &work, 1.0, 1e-3), 0.0);
+        // one cell inside: counted, too small to report
+        let mut c = m.clone();
+        raise(&mut c, 5.0, 5.1, 5.0, 5.1);
+        let a = left_uncut(&c, &work, 1.0, 1e-3);
+        assert!((a - h * h).abs() < 1e-12, "{a}");
+        assert!(left_note_h(1.0, a, h).is_none());
+        // a 1 mm square inside: 1 mm², reported
+        let mut p = m.clone();
+        raise(&mut p, 4.0, 5.0, 4.0, 5.0);
+        let a = left_uncut(&p, &work, 1.0, 1e-3);
+        assert!((a - 1.0).abs() < 1e-9, "{a}");
+        let n = left_note_h(1.0, a, h).expect("reported");
+        assert!(
+            n.starts_with("adaptive: at z 1.000 1 mm² of stock is left uncut"),
+            "{n}"
+        );
+    }
+
     use super::*;
     use crate::ops::{Heights, ToolUse};
 
