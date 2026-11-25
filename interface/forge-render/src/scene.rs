@@ -56,6 +56,9 @@ pub struct Scene {
     gone: Vec<bool>,
     /// Drawn only as a ghost (`Overlay::face_ghosts`): left out of the draws and picks.
     ghost: Vec<bool>,
+    /// Ghosts still cast their shadows (a body seen through, or cut away from the view, is still
+    /// there: the bend simulation's press). Off: a ghost casts none (Compare's other side).
+    pub ghost_shadows: bool,
     /// Every placement left out of the draws and picks for now, the scene kept as it is (the
     /// CAM simulation draws the part itself, in each setup's frame).
     pub hidden: bool,
@@ -94,7 +97,7 @@ impl Scene {
         list.clear();
         draws.clear();
         let mut by_part: Vec<(u32, u32)> = (0..self.placements.len())
-            .filter(|&i| !self.hidden && !self.gone[i] && !self.ghost[i])
+            .filter(|&i| !self.hidden && !self.gone[i] && (!self.ghost[i] || self.ghost_shadows))
             .map(|i| (self.placements[i].part, i as u32))
             .collect();
         by_part.sort_unstable();
@@ -167,6 +170,7 @@ impl Scene {
             boxes: Vec::new(),
             gone: placements.iter().map(|p| squashed(&p.rows)).collect(),
             ghost: vec![false; placements.len()],
+            ghost_shadows: false,
             hidden: false,
             placements,
             rows_bytes,

@@ -315,17 +315,24 @@ speed (cache answering a function of its own key)  @ forge-bool/src/ssi.rs|threa
 no-output (a shortcut of value equality: one Arc is the same curve, and two equal ones take the same path)  @ forge-bool/src/unify.rs|pointer|(Curve::Intersection(a), Curve::Intersection(b)) => !std::sync::Arc::ptr_eq(a, b) && a != b,
 speed (a counter, stats only)  @ forge-brake/src/bb.rs|atomic|pub static CELLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 speed (a counter, stats only)  @ forge-brake/src/bb.rs|static|pub static CELLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-no-output (prints only)  @ forge-brake/src/plan.rs|env|if std::env::var_os("BENDSIM_TRACE").is_some() {
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|dead: HashSet<u64>,
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|fixed: HashMap<(u64, usize, bool, usize), Vec<Check>>,
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|gauges: HashMap<(u64, usize, bool), (Check, Option<crate::sim::Gauged>)>,
+no-output (prints only)  @ forge-brake/src/plan.rs|env|if std::env::var_os("BENDSIM_TRACE").is_some() {  x 2
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|dead: HashSet<u64>,  x 2
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|fixed: HashMap<(u64, usize, bool, usize), Vec<Check>>,  x 2
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|flat_fulls: HashMap<(u64, usize, Setup), Step>,
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|flats: HashMap<(u64, usize), Option<Setup>>,
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|gauges: HashMap<(u64, usize, bool), (Check, Option<crate::sim::Gauged>)>,  x 2
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|kept: HashMap<(u64, usize, usize, usize), Option<Step>>,
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|legs: HashMap<(u64, usize), (f64, f64, f64)>,
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|memo: HashMap<(u64, usize), Option<Step>>,
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|riding: HashMap<(u64, usize, bool, usize, u64), Vec<Check>>,
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|selfs: HashMap<(u64, usize), Check>,
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|legs: HashMap<(u64, usize), (f64, f64, f64)>,  x 2
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|memo: HashMap<(u64, usize), Option<Step>>,  x 2
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|riding: HashMap<(u64, usize, bool, usize, u64), Vec<Check>>,  x 2
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|selfs: HashMap<(u64, usize), Check>,  x 2
+no-output (looked up by key only: get, insert; also moved whole into Caches, never iterated)  @ forge-brake/src/plan.rs|hash-order|contacts: HashMap<(usize, usize, u64), Contact>,  x 2
+no-output (looked up by key only: get, insert; also moved whole into Caches, never iterated)  @ forge-brake/src/plan.rs|hash-order|fulls: HashMap<(u64, usize, Setup), Step>,  x 2
+no-output (looked up by key only: get, insert, clear when full; never iterated)  @ forge-brake/src/scene.rs|hash-order|static KEPT: Mutex<Option<HashMap<String, Option<Tess>>>> = Mutex::new(None);
+speed (cache answering a function of its own key: the region's exact text and the chords)  @ forge-brake/src/scene.rs|static|static KEPT: Mutex<Option<HashMap<String, Option<Tess>>>> = Mutex::new(None);
 no-output (prints only)  @ forge-brake/src/sim.rs|clock|return Some(std::time::Instant::now());
 no-output (prints only)  @ forge-brake/src/sim.rs|env|if std::env::var_os("BENDSIM_TRACE").is_some() {  x 3
+no-output (prints only)  @ forge-brake/src/stage.rs|env|if std::env::var_os("BENDSIM_TRACE").is_some() {  x 2
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/sim.rs|hash-order|pub type Memo = std::collections::HashMap<MemoKey, Verdict>;
 speed (an order hint: which face this thread tests first; the answer, every face near proven clear, is the same in any order)  @ forge-cam-3d/src/surfdrop.rs|static|static LAST_REFUSED: std::cell::Cell<u32> = const { std::cell::Cell::new(u32::MAX) };
 speed (an order hint: which face this thread tests first; the answer, every face near proven clear, is the same in any order)  @ forge-cam-3d/src/surfdrop.rs|thread_local|std::thread_local! {
@@ -363,10 +370,6 @@ no-output (prints only)  @ forge-cam/src/stock.rs|env|if std::env::var("FORGE_CA
 speed (cache answering a function of its own key)  @ forge-cam/src/stock.rs|static|static FACES: std::cell::RefCell<FacesMemo> = const { std::cell::RefCell::new(Vec::new()) };
 speed (cache answering a function of its own key)  @ forge-cam/src/stock.rs|thread_local|thread_local! {
 no-output (prints only)  @ forge-cam/src/surf.rs|env|if std::env::var("FORGE_CAM_DEBUG").is_ok() {
-no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam/src/surf.rs|float|let len = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();  x 3
-no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam/src/surf.rs|float|let len = ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2)).sqrt();
-no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam/src/surf.rs|float|let off = ((mm[0] - 0.5 * (a[0] + b[0])).powi(2) + (mm[1] - 0.5 * (a[1] + b[1])).powi(2)).sqrt();
-no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam/src/surf.rs|float|let r = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2)).sqrt();
 speed (cache answering a function of its own key: a model's compiled faces by its name, whose text is fixed)  @ forge-cam/src/fixture.rs|lazy|static CACHE: std::sync::OnceLock<std::sync::Mutex<Vec<(String, Read)>>> = std::sync::OnceLock::new();
 speed (cache answering a function of its own key: a model's compiled faces by its name, whose text is fixed)  @ forge-cam/src/fixture.rs|static|static CACHE: std::sync::OnceLock<std::sync::Mutex<Vec<(String, Read)>>> = std::sync::OnceLock::new();
 no-output (in-memory filesystem's file times: its count of changes, no clock read; read only for cache staleness and eviction)  @ forge-dirs/src/fs.rs|clock|pub fn accessed(&self) -> io::Result<SystemTime> {

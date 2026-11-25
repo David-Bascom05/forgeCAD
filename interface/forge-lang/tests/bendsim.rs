@@ -619,3 +619,625 @@ fn ranked_programs_are_offered() {
     let plain = ask_src(&channel(), None, None, &Ask::default());
     assert_eq!(plain.json.get("sequence"), a.json.get("sequence"));
 }
+
+/// Stage bending on a real press (`stations auto`): the showcase load tray on a TruBend 5130 with
+/// Trumpf's catalogue tools needs more than one station (its lips and rear want goosenecks, its
+/// tab a short stack); every station on the bed, none overlapping, every step at the station
+/// holding its tools, the program feasible with all of them on the press, and each station says
+/// why its punch.
+#[test]
+fn stations_auto_on_a_real_press() {
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/sheetmetal/load_tray.fg"
+    ))
+    .unwrap();
+    let ask =
+        forge_lang::bendsim::parse(&["press", "trumpf-trubend-5130", "stations", "auto"].map(String::from))
+            .unwrap();
+    assert!(ask.stage);
+    let a = ask_src(&src, None, None, &ask);
+    assert!(a.ok, "{}", a.text);
+    let j = &a.json;
+    assert_eq!(j.get("feasible"), Some(&Json::Bool(true)));
+    let st = j.get("stage").expect("stage");
+    assert_eq!(st.get("ok"), Some(&Json::Bool(true)), "{st:?}");
+    let stations = arr(st, "stations");
+    assert!(stations.len() >= 2, "{stations:?}");
+    let n = |x: &Json, k: &str| x.get(k).and_then(Json::num).unwrap();
+    let mut spans: Vec<(f64, f64)> = Vec::new();
+    for s in &stations {
+        let w = 0.5 * n(s, "punch_length").max(n(s, "die_length"));
+        let y = n(s, "y");
+        assert!(
+            (-1615.0..=1615.0).contains(&(y - w)) && y + w <= 1615.0,
+            "on the bed: {s:?}"
+        );
+        for (a, b) in &spans {
+            assert!(y + w <= *a || y - w >= *b, "stacks overlap");
+        }
+        spans.push((y - w, y + w));
+        assert!(!s.get("why").and_then(Json::str).unwrap_or("").is_empty());
+    }
+    let steps = arr(j, "steps");
+    let at = arr(st, "steps");
+    assert_eq!(steps.len(), at.len());
+    for (s, a) in steps.iter().zip(&at) {
+        let k = n(a, "station") as usize - 1;
+        assert_eq!(s.get("punch"), stations[k].get("punch"));
+        assert_eq!(s.get("die"), stations[k].get("die"));
+        assert_eq!(s.get("pass"), Some(&Json::Bool(true)));
+        // the press's speeds are published: each step's ram time is known
+        assert!(a.get("seconds").and_then(Json::num).is_some_and(|x| x > 0.0));
+    }
+}
+
+/// `lock B=N`: a bend made at the station the user set, the rest searched; a station that is not
+/// there, or a bend that is not, is a typed error.
+#[test]
+fn a_lock_keeps_a_bend_at_its_station() {
+    use forge_lang::bendsim::StationAsk;
+    let st = |punch: &str, y: f64| StationAsk {
+        punch: punch.into(),
+        die: "std-eu/V12-88".into(),
+        y,
+        punch_length: 200.0,
+        die_length: 200.0,
+    };
+    let mut ask = forge_lang::bendsim::parse(&["lock", "left=2"].map(String::from)).unwrap();
+    assert_eq!(ask.locks, vec![("left".to_string(), 1)]);
+    ask.stations = vec![st("std-eu/P85-R08-H120", -600.0), st("std-eu/G88-R08", 600.0)];
+    let a = ask_src(&channel(), None, None, &ask);
+    assert!(a.ok, "{}", a.text);
+    assert_eq!(a.json.get("feasible"), Some(&Json::Bool(true)));
+    for s in arr(&a.json, "steps") {
+        let want = if s.get("bend").and_then(Json::str) == Some("left") {
+            "std-eu/G88-R08"
+        } else {
+            "std-eu/P85-R08-H120"
+        };
+        assert_eq!(s.get("punch").and_then(Json::str), Some(want));
+    }
+    let mut bad = ask.clone();
+    bad.locks = vec![("left".into(), 5)];
+    let e = ask_src(&channel(), None, None, &bad);
+    assert!(!e.ok && e.text.contains("BadStation"), "{}", e.text);
+    bad.locks = vec![("nope".into(), 0)];
+    let e = ask_src(&channel(), None, None, &bad);
+    assert!(!e.ok && e.text.contains("NoSuchBend"), "{}", e.text);
+    assert!(forge_lang::bendsim::parse(&["lock", "left=0"].map(String::from)).is_err());
+}
+
+/// The same question twice in one process (a reopening, Simulate Again on an unchanged part): the
+/// same reply, the second from the kept plan at once; a changed part is planned afresh.
+#[test]
+fn an_unchanged_part_is_answered_from_the_kept_plan() {
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/sheetmetal/load_tray.fg"
+    ))
+    .unwrap();
+    let ask = Ask {
+        programs: Some(3),
+        ..Ask::default()
+    };
+    // a changed part (the lips 1 mm taller) is planned for itself: alongside, on its own thread
+    let changed = src.replace("shared lip = 12", "shared lip = 13");
+    let (a, first, c) = if cfg!(target_os = "wasi") {
+        // WASI (wasip1) starts no threads: the changed part first, then the part, timed alone
+        let c = ask_src(&changed, None, None, &ask);
+        let t0 = std::time::Instant::now();
+        let a = ask_src(&src, None, None, &ask);
+        (a, t0.elapsed(), c)
+    } else {
+        std::thread::scope(|sc| {
+            let c = sc.spawn(|| ask_src(&changed, None, None, &ask));
+            let t0 = std::time::Instant::now();
+            let a = ask_src(&src, None, None, &ask);
+            (a, t0.elapsed(), c.join().unwrap())
+        })
+    };
+    let t1 = std::time::Instant::now();
+    let b = ask_src(&src, None, None, &ask);
+    let second = t1.elapsed();
+    assert!(a.ok, "{}", a.text);
+    assert_eq!(a.json, b.json);
+    assert!(second * 5 < first, "kept plan: {second:?} vs {first:?}");
+    assert!(c.ok);
+    assert_ne!(a.json, c.json);
+}
+
+/// `begin` / `step` / `finish` (what the app drives a slice at a time, or a worker drives) give
+/// the very reply `simulate` gives; the scene (model, tooling) is there before anything is
+/// planned; the simulation can be sent from a worker thread. Each part and question is a test of
+/// its own (within the test-time budget): load_tray, the channel, load_tray asking 2 programs.
+fn planned_a_little_at_a_time(part: &str, ask: &Ask, sliced: bool) {
+    fn send<T: Send>() {}
+    send::<forge_lang::bendsim::Sim>();
+    // the slices, begun with no kept plan; the whole reply alongside on its own thread, which
+    // finds no kept plan either (it looks as it starts, long before the slices keep theirs). Were
+    // its reply ever the slices' kept plan (as fast as a lookup), it is made again, alone.
+    forge_lang::bendsim::forget_plans();
+    let mut p = forge_lang::bendsim::begin(part, None, None, ask).expect("begun");
+    assert!(!p.model().bends.is_empty() && !p.tooling().punches.is_empty());
+    assert!(!p.progress().done);
+    let whole_alone = || {
+        let t = std::time::Instant::now();
+        let a = ask_src(part, None, None, ask);
+        (a, t.elapsed())
+    };
+    let slices = |p: &mut forge_lang::bendsim::Planning| {
+        let t = std::time::Instant::now();
+        let mut ticks = 0;
+        while !p.step(3).done {
+            ticks += 1;
+            assert!(ticks < 100_000);
+        }
+        (ticks, t.elapsed())
+    };
+    let (sim, ticks, sliced_for, whole, whole_for) = if cfg!(target_os = "wasi") {
+        // WASI (wasip1) starts no threads: the whole reply first (it finds no kept plan: the
+        // slices keep theirs only as they finish), then the slices
+        let (whole, whole_for) = whole_alone();
+        let (ticks, sliced_for) = slices(&mut p);
+        (p.finish(), ticks, sliced_for, whole, whole_for)
+    } else {
+        std::thread::scope(|sc| {
+            let w = sc.spawn(whole_alone);
+            let (ticks, sliced_for) = slices(&mut p);
+            let (whole, whole_for) = w.join().unwrap();
+            (p.finish(), ticks, sliced_for, whole, whole_for)
+        })
+    };
+    let whole = if whole_for * 5 < sliced_for {
+        forge_lang::bendsim::forget_plans();
+        ask_src(part, None, None, ask)
+    } else {
+        whole
+    };
+    if sliced {
+        assert!(ticks > 1, "planned in slices");
+    }
+    assert_eq!(sim.answer.json, whole.json);
+}
+
+fn load_tray() -> String {
+    std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/sheetmetal/load_tray.fg"
+    ))
+    .unwrap()
+}
+
+#[test]
+fn a_simulation_planned_a_little_at_a_time_is_the_simulation() {
+    planned_a_little_at_a_time(&load_tray(), &Ask::default(), true);
+}
+
+#[test]
+fn a_simulation_planned_a_little_at_a_time_is_the_simulation_on_a_channel() {
+    planned_a_little_at_a_time(&channel(), &Ask::default(), false);
+}
+
+#[test]
+fn a_simulation_planned_a_little_at_a_time_is_the_simulation_with_programs() {
+    planned_a_little_at_a_time(
+        &load_tray(),
+        &Ask {
+            programs: Some(2),
+            ..Ask::default()
+        },
+        false,
+    );
+}
+
+/// `contacts` and `bendsim collisions [step N]`: where the part and the tools collide, on both
+/// bodies. A narrow, tall channel on straight punches, in a stated order: its second bend runs
+/// its first flange into the punch (a proven hit, its depth, its faces by name, points on both
+/// bodies, a box, when, words); load_tray on its own tooling has none.
+#[test]
+fn collisions_name_both_bodies_and_where() {
+    let src = "shared t = 2\nshared r = 2\nshared k = ratio(0.4)\n\
+sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (30, 200))\n}\n\
+base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
+right = flange(base.edge(plan.outline[1]), height: 60)\n\
+left = flange(base.edge(plan.outline[3]), height: 60)\n";
+    let words = [
+        "punches",
+        "std-eu/P85-R08-H120,std-eu/P88-R08",
+        "sequence",
+        "1,2",
+        "collisions",
+        "step",
+        "2",
+    ];
+    let ask = forge_lang::bendsim::parse(&words.map(String::from)).unwrap();
+    assert!(ask.collisions && ask.step == Some(2));
+    let a = ask_src(src, None, None, &ask);
+    assert!(a.ok, "{}", a.text);
+    let j = &a.json;
+    assert_eq!(
+        j.get("schema").and_then(Json::str),
+        Some("forgecad.bendsim.collisions/1")
+    );
+    let cs = arr(j, "contacts");
+    assert!(!cs.is_empty());
+    for c in &cs {
+        has(
+            c,
+            &[
+                "step", "bend", "rule", "severity", "verdict", "phase", "tool", "estimate", "faces", "depth",
+                "lower", "limit", "when", "region", "text",
+            ],
+        );
+        has(
+            c.get("region").unwrap(),
+            &[
+                "points",
+                "tool_points",
+                "bbox",
+                "cells",
+                "proven",
+                "complete",
+                "exact",
+            ],
+        );
+        assert_eq!(c.get("step").and_then(Json::num), Some(2.0));
+        for f in arr(c, "faces") {
+            has(&f, &["anchor", "strip", "name", "surface", "cells", "proven"]);
+        }
+        assert_eq!(
+            arr(c.get("region").unwrap(), "points").len(),
+            arr(c.get("region").unwrap(), "tool_points").len()
+        );
+    }
+    let hit = cs
+        .iter()
+        .find(|c| {
+            c.get("verdict").and_then(Json::str) == Some("hit")
+                && c.get("rule").and_then(Json::str) == Some("closes_on_punch")
+        })
+        .expect("the flange closes on the punch");
+    let depth = hit.get("depth").and_then(Json::num).unwrap();
+    assert!(depth < 0.0, "into the punch: {depth}");
+    let text = hit.get("text").and_then(Json::str).unwrap();
+    assert!(
+        text.contains("right.top")
+            && text.contains("runs")
+            && text.contains("P85-R08-H120")
+            && text.contains("step 2"),
+        "{text}"
+    );
+    assert!(a.text.contains("runs"));
+    // the same contacts sit in the whole reply
+    let mut whole_ask = ask.clone();
+    whole_ask.collisions = false;
+    let w = ask_src(src, None, None, &whole_ask);
+    assert!(arr(&w.json, "contacts").len() >= cs.len());
+    // a part that bends clear has none
+    let tray = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/sheetmetal/load_tray.fg"
+    ))
+    .unwrap();
+    let t = ask_src(
+        &tray,
+        None,
+        None,
+        &forge_lang::bendsim::parse(&["collisions".to_string()]).unwrap(),
+    );
+    assert!(arr(&t.json, "contacts").is_empty(), "{}", t.text);
+}
+
+/// Part against part: a box whose tooling asks 3 mm between the part's own pieces; its flanges
+/// come within that of their neighbours. Each such contact names the moving faces and the faces
+/// they meet (`others`), and says so in words.
+#[test]
+fn collisions_of_the_part_with_itself_name_both_faces() {
+    let d = forge_dirs::temp_dir().join(format!("fg-bendsim-self-{}", forge_dirs::process_id()));
+    std::fs::create_dir_all(&d).unwrap();
+    std::fs::write(
+        d.join("tight.json"),
+        r#"{"base": "std-eu", "id": "tight", "self_clearance": 3}"#,
+    )
+    .unwrap();
+    let src = "shared t = 1.5\nshared r = 1.5\nshared k = ratio(0.4)\n\
+sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (120, 60))\n}\n\
+base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
+front = flange(base.edge(plan.outline[0]), height: 25)\n\
+right = flange(base.edge(plan.outline[1]), height: 25)\n\
+back = flange(base.edge(plan.outline[2]), height: 25)\n\
+left = flange(base.edge(plan.outline[3]), height: 25)\n";
+    let ask = forge_lang::bendsim::parse(
+        &["tooling", "tight.json", "sequence", "1,2,3,4", "collisions"].map(String::from),
+    )
+    .unwrap();
+    let a = ask_src(src, Some(d.clone()), None, &ask);
+    assert!(a.ok, "{}", a.text);
+    let selfs: Vec<Json> = arr(&a.json, "contacts")
+        .into_iter()
+        .filter(|c| c.get("rule").and_then(Json::str) == Some("self_collision"))
+        .collect();
+    assert!(!selfs.is_empty(), "{}", a.text);
+    for c in &selfs {
+        assert_eq!(c.get("tool").and_then(Json::str), Some("part"));
+        let others = arr(c, "others");
+        assert!(!others.is_empty());
+        let text = c.get("text").and_then(Json::str).unwrap();
+        let other = others[0].get("anchor").and_then(Json::str).unwrap();
+        assert!(text.contains(other), "{text}");
+    }
+    // a flange meets its neighbour: the right flange and the front one
+    assert!(selfs.iter().any(|c| {
+        let t = c.get("text").and_then(Json::str).unwrap_or("");
+        t.starts_with("right.") && t.contains("front.")
+    }));
+}
+
+/// The operator's move is certified (rank 3b): on the staged load tray on a TruBend 5130, with
+/// four stations on the bed, every step after the first has its handling check settled (a proven
+/// pass, Near, or a proven fail), never an undecided envelope; the method says so.
+#[test]
+fn handling_is_certified_on_a_staged_press() {
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/sheetmetal/load_tray.fg"
+    ))
+    .unwrap();
+    let ask =
+        forge_lang::bendsim::parse(&["press", "trumpf-trubend-5130", "stations", "auto"].map(String::from))
+            .unwrap();
+    let a = ask_src(&src, None, None, &ask);
+    assert!(a.ok, "{}", a.text);
+    let steps = arr(&a.json, "steps");
+    let mut n = 0;
+    for (k, st) in steps.iter().enumerate() {
+        for c in arr(st, "checks") {
+            if c.get("rule").and_then(Json::str) != Some("handling") {
+                continue;
+            }
+            n += 1;
+            assert!(k > 0, "the first step has no handling");
+            let v = c.get("verdict").and_then(Json::str).unwrap();
+            assert!(matches!(v, "pass" | "near" | "fail"), "step {k}: {v} {c}");
+            if v != "near" {
+                assert_eq!(c.get("certified"), Some(&Json::Bool(true)), "{c}");
+            }
+            assert!(
+                c.get("method")
+                    .and_then(Json::str)
+                    .unwrap()
+                    .contains("certified search"),
+                "{c}"
+            );
+        }
+    }
+    assert_eq!(n, steps.len() - 1);
+}
+
+/// examples/sheetmetal/narrow_channel.fg, the collision its header names: on straight punches in
+/// that order, step 2 closes the first flange on the punch, a proven hit with its region; left
+/// to itself on std-eu the planner finds no order: both are blocked the same way.
+#[test]
+fn the_narrow_channel_example_collides_as_its_header_says() {
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/sheetmetal/narrow_channel.fg"
+    ))
+    .unwrap();
+    let line = src
+        .lines()
+        .find_map(|l| l.trim_start_matches('#').trim().strip_prefix("bendsim "))
+        .expect("the header names the words");
+    let words: Vec<String> = line.split_whitespace().map(String::from).collect();
+    let ask = forge_lang::bendsim::parse(&words).unwrap();
+    assert!(ask.collisions && ask.step == Some(2));
+    let a = ask_src(&src, None, None, &ask);
+    assert!(a.ok, "{}", a.text);
+    let cs = arr(&a.json, "contacts");
+    assert!(
+        cs.iter()
+            .any(|c| c.get("rule").and_then(Json::str) == Some("closes_on_punch")
+                && c.get("depth").and_then(Json::num).is_some()),
+        "{}",
+        a.text
+    );
+    let free = ask_src(&src, None, None, &Ask::default());
+    assert_eq!(
+        free.json.get("feasible"),
+        Some(&Json::Bool(false)),
+        "{}",
+        free.text
+    );
+    for order in ["right after [left]", "left after [right]"] {
+        assert!(
+            free.text.contains(&format!("blocked: {order}: closes_on_punch")),
+            "{}",
+            free.text
+        );
+    }
+}
+
+/// A hem in a reply: a vendor tooling with an acute pair and a flattening pair (roles from the
+/// file); the hem's bend is two steps, its pre-bend then its flattening, each saying its stroke,
+/// the flattening on the flattening tools.
+#[test]
+fn a_hem_is_answered_as_a_pre_bend_and_a_flattening() {
+    let d = forge_dirs::temp_dir().join(format!("fg-bendsim-hem-{}", forge_dirs::process_id()));
+    std::fs::create_dir_all(&d).unwrap();
+    std::fs::write(
+        d.join("hemming.json"),
+        r#"{"base": "std-eu", "id": "hemming",
+  "punches": [
+    {"id": "acute-30", "kind": "acute", "height": 100, "tip_radius": 0.4, "tip_angle": 30, "tip_height": 25, "width": 20, "max_load": 400, "segments": [{"length": 200}]},
+    {"id": "flat-top", "role": "flatten", "height": 100, "tip_radius": 0, "tip_angle": 90, "tip_height": 10, "width": 40, "segments": [{"length": 200}]}
+  ],
+  "dies": [
+    {"id": "v8-30", "v": 8, "angle": 30, "shoulder_radius": 0.6, "height": 60, "width": 30, "max_load": 300, "segments": [{"length": 200}]},
+    {"id": "flat-bottom", "role": "flatten", "v": 6, "angle": 88, "shoulder_radius": 0.6, "height": 60, "width": 60, "segments": [{"length": 200}]}
+  ]}"#,
+    )
+    .unwrap();
+    let src = "shared t = 1\nshared r = 1\nshared k = ratio(0.4)\n\
+sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (120, 20))\n}\n\
+base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
+lip = hem(base.edge(plan.outline[0]), kind: \"open\", gap: t, length: 10)\n";
+    let ask = forge_lang::bendsim::parse(&["tooling", "hemming.json"].map(String::from)).unwrap();
+    let a = ask_src(src, Some(d.clone()), None, &ask);
+    assert!(a.ok, "{}", a.text);
+    assert_eq!(a.json.get("feasible"), Some(&Json::Bool(true)), "{}", a.text);
+    let steps = arr(&a.json, "steps");
+    let strokes: Vec<&str> = steps
+        .iter()
+        .filter_map(|s| s.get("stroke").and_then(Json::str))
+        .collect();
+    assert_eq!(strokes, ["pre-bend", "flatten"], "{}", a.text);
+    assert_eq!(steps[0].get("punch").and_then(Json::str), Some("acute-30"));
+    assert_eq!(steps[1].get("punch").and_then(Json::str), Some("flat-top"));
+    assert_eq!(steps[1].get("die").and_then(Json::str), Some("flat-bottom"));
+    assert_eq!(steps[0].get("bend"), steps[1].get("bend"));
+}
+
+/// A hem on WILA's catalogue tools: pre-bent on a 28 degree punch in a 30 degree V, flattened
+/// on WILA's flattening pair (BIU-041 over OZU-384, cited from WILA's catalogue p.87).
+#[test]
+fn a_hem_on_wila_tools_is_flattened_on_its_flattening_pair() {
+    let src = "shared t = 1\nshared r = 1\nshared k = ratio(0.4)\n\
+sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (300, 10))\n}\n\
+base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
+lip = hem(base.edge(plan.outline[0]), kind: \"open\", gap: t, length: 10)\n";
+    let ask = forge_lang::bendsim::parse(
+        &[
+            "press",
+            "trumpf-trubend-5130",
+            "punches",
+            "wila/BIU-001,wila/BIU-041",
+            "dies",
+            "wila/OZU-061,wila/OZU-384",
+        ]
+        .map(String::from),
+    )
+    .unwrap();
+    let a = ask_src(src, None, None, &ask);
+    assert!(a.ok, "{}", a.text);
+    assert_eq!(a.json.get("feasible"), Some(&Json::Bool(true)), "{}", a.text);
+    let steps = arr(&a.json, "steps");
+    let strokes: Vec<&str> = steps
+        .iter()
+        .filter_map(|s| s.get("stroke").and_then(Json::str))
+        .collect();
+    assert_eq!(strokes, ["pre-bend", "flatten"], "{}", a.text);
+    assert_eq!(steps[1].get("punch").and_then(Json::str), Some("wila/BIU-041"));
+    assert_eq!(steps[1].get("die").and_then(Json::str), Some("wila/OZU-384"));
+}
+
+/// A Z on WILA's offset tools: a 6 mm offset made in one stroke on the HU-001 / HU-006 holders
+/// with INZU-002 Z6 inserts (cited from WILA's catalogue pp.94-95), the reply saying the stroke
+/// and the offset rule at the part's offset; on Z5 inserts the offset rule refuses them and the
+/// Z is two air bends.
+#[test]
+fn a_z_on_wila_offset_tools_is_one_stroke() {
+    let src = "shared t = 1\nshared r = 1\nshared k = ratio(0.4)\n\
+sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (40, 300))\n}\n\
+base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
+web = flange(base.edge(plan.outline[1]), height: 7)\n\
+far = flange(web.tip, height: 30, side: \"down\")\n";
+    let ask_on = |z: &str| {
+        forge_lang::bendsim::parse(
+            &[
+                "press",
+                "trumpf-trubend-5130",
+                "punches",
+                &format!("wila/BIU-001,wila/HU-001+INZU-002-{z}"),
+                "dies",
+                &format!("wila/OZU-061,wila/HU-006+INZU-002-{z}"),
+            ]
+            .map(String::from),
+        )
+        .unwrap()
+    };
+    let a = ask_src(src, None, None, &ask_on("Z6"));
+    assert!(a.ok, "{}", a.text);
+    let steps = arr(&a.json, "steps");
+    let strokes: Vec<&str> = steps
+        .iter()
+        .filter_map(|s| s.get("stroke").and_then(Json::str))
+        .collect();
+    assert_eq!(strokes, ["offset"], "{}", a.text);
+    let off = arr(&steps[0], "checks")
+        .into_iter()
+        .find(|c| c.get("rule").and_then(Json::str) == Some("offset"))
+        .unwrap_or_else(|| panic!("{}", a.text));
+    assert_eq!(off.get("verdict").and_then(Json::str), Some("pass"), "{off}");
+    let b = ask_src(src, None, None, &ask_on("Z5"));
+    assert!(b.ok, "{}", b.text);
+    let strokes: Vec<String> = arr(&b.json, "steps")
+        .iter()
+        .filter_map(|s| s.get("stroke").and_then(Json::str).map(String::from))
+        .collect();
+    assert!(strokes.iter().all(|s| s == "bend"), "{strokes:?}");
+}
+
+/// examples/sheetmetal/hem_joggle.fg, the special tooling its header names on three stations:
+/// the joggle in one offset stroke, the hem pre-bent then flattened, each at its own station
+/// (offset, acute, flattening), the layout passing.
+#[test]
+fn the_hem_and_joggle_example_runs_on_three_stations() {
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/sheetmetal/hem_joggle.fg"
+    ))
+    .unwrap();
+    let line = src
+        .lines()
+        .find_map(|l| l.trim_start_matches('#').trim().strip_prefix("bendsim "))
+        .expect("the header names the words");
+    let words: Vec<String> = line.split_whitespace().map(String::from).collect();
+    let ask = forge_lang::bendsim::parse(&words).unwrap();
+    let a = ask_src(&src, None, None, &ask);
+    assert!(a.ok, "{}", a.text);
+    assert_eq!(a.json.get("feasible"), Some(&Json::Bool(true)), "{}", a.text);
+    let steps = arr(&a.json, "steps");
+    let strokes: Vec<&str> = steps
+        .iter()
+        .filter_map(|s| s.get("stroke").and_then(Json::str))
+        .collect();
+    assert_eq!(strokes, ["offset", "pre-bend", "flatten"], "{}", a.text);
+    let st = a.json.get("stage").expect("stage");
+    assert_eq!(st.get("ok"), Some(&Json::Bool(true)), "{st}");
+    let stations = arr(st, "stations");
+    assert_eq!(stations.len(), 3, "{st}");
+    let punches: Vec<&str> = stations
+        .iter()
+        .filter_map(|s| s.get("punch").and_then(Json::str))
+        .collect();
+    for p in ["wila/HU-001+INZU-002-Z6", "trumpf/OW222-K", "wila/BIU-041"] {
+        assert!(punches.contains(&p), "{punches:?}");
+    }
+}
+
+/// Stations naming the same punch apart (not neighbours): each tool is put on the press once,
+/// not refused as a duplicate.
+#[test]
+fn a_tool_shared_by_stations_apart_is_one_tool() {
+    use forge_lang::bendsim::StationAsk;
+    let st = |punch: &str, die: &str, y: f64| StationAsk {
+        punch: punch.into(),
+        die: die.into(),
+        y,
+        punch_length: 115.0,
+        die_length: 125.0,
+    };
+    let ask = Ask {
+        press: Some("trumpf-trubend-5130".into()),
+        stations: vec![
+            st("trumpf/OW222-K", "trumpf/EV004_30deg", -265.0),
+            st("trumpf/OW202-S", "trumpf/EV002_30deg", -50.0),
+            st("trumpf/OW222-K", "trumpf/EV001_30deg", 160.0),
+        ],
+        ..Ask::default()
+    };
+    let a = ask_src(&channel(), None, None, &ask);
+    assert!(!a.text.contains("Duplicate"), "{}", a.text);
+    assert!(a.ok, "{}", a.text);
+}
