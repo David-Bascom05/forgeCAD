@@ -40,7 +40,7 @@ pub fn path(root: &Path, name: &str, file: bool) -> Result<PathBuf, String> {
     if !permitted(name) {
         return Err("Use a project-relative path, without hidden, generated, or parent directories".into());
     }
-    let root = root.canonicalize().map_err(|e| e.to_string())?;
+    let root = forge_dirs::fs::canonicalize(root).map_err(|e| e.to_string())?;
     let full = root.join(name);
     if file && !text_file(&full) {
         return Err("Project files must be .fg, .md, .txt, or .csv".into());
