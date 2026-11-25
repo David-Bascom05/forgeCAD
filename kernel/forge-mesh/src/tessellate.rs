@@ -1163,15 +1163,17 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
                     base,
                     part: TriMesh::default(),
                 };
-                mesh_face(
-                    body,
-                    FaceId(k as u32),
-                    preps[k].clone(),
-                    &segments,
-                    q,
-                    mend,
-                    &mut out,
-                )
+                face_within(|| {
+                    mesh_face(
+                        body,
+                        FaceId(k as u32),
+                        preps[k].clone(),
+                        &segments,
+                        q,
+                        mend,
+                        &mut out,
+                    )
+                })
                 .map(|()| out.part)
             },
             Result::is_err,
@@ -1195,8 +1197,12 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
         for (i, prep) in preps.into_iter().enumerate() {
             let f = FaceId(i as u32);
             let prep = prep.expect("every face drawn");
-            mesh_face(body, f, prep, &segments, q, mend, &mut mesh)
-                .map_err(|error| TessError::Face { face: f, error })?;
+            let drawn = if mend {
+                face_within(|| mesh_face(body, f, prep, &segments, q, mend, &mut mesh))
+            } else {
+                mesh_face(body, f, prep, &segments, q, mend, &mut mesh)
+            };
+            drawn.map_err(|error| TessError::Face { face: f, error })?;
         }
     }
     mesh.edges = edge_samples
@@ -1204,6 +1210,30 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
         .map(|s| s.iter().map(|&(_, v)| v).collect())
         .collect();
     Ok(mesh)
+}
+
+/// The most one face of a file's body may spend of a drawing's budget (`face_within`). Over
+/// `FACE` evaluations, the face is not going to be drawn: a drawing of HRT160-2's #42930 spent
+/// 536 M on one face before failing, 4 minutes of the app's read, where the heaviest face of the
+/// whole Haas corpus that does get drawn spends 37 M. The drawing's budget decides as before; this
+/// only stops one face from eating a whole read before the budget notices.
+const FACE: u64 = 1 << 27;
+
+/// `draw` of one face under a budget of its own: at most `FACE`, and never more than the
+/// drawing's budget has left, so a face that would have run that out still does (what it spends
+/// is charged, as it was). A face that runs its own budget out ends the drawing: everything the
+/// drawing had left is charged, so its caller sees the budget run out, exactly as when the face
+/// ran it out itself.
+fn face_within(draw: impl FnOnce() -> Result<(), CdtError>) -> Result<(), CdtError> {
+    let left = forge_geom::budget::left();
+    let most = FACE.min(left);
+    let (spent, done) = forge_geom::budget::isolated(most, draw);
+    if spent >= most && done.is_err() {
+        forge_geom::budget::spend_many(left);
+        return done;
+    }
+    forge_geom::budget::spend_many(spent);
+    done
 }
 
 /// A file's body of at least this many faces has its faces drawn on all cores.
@@ -2985,6 +3015,47 @@ fn strips(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    /// A face's own budget: what it spends is charged, and only that, while it stays under its
+    /// cap; a face that runs its cap out ends the drawing, charging everything the drawing had
+    /// left, so its caller sees the budget run out exactly as when a face ran it out itself.
+    #[test]
+    fn one_face_spends_its_own_budget_and_no_more() {
+        use forge_geom::budget;
+        let spend_then = |n: u64, ok: bool| {
+            move || {
+                budget::spend_many(n);
+                if ok {
+                    Ok(())
+                } else {
+                    Err(CdtError::Internal(Fault::FaceTooLong))
+                }
+            }
+        };
+        // a face well under its cap: charged what it spent
+        let b = budget::scoped(FACE * 4);
+        assert!(face_within(spend_then(1000, true)).is_ok());
+        assert_eq!(budget::left(), FACE * 4 - 1000);
+        // one that fails cheaply: the same, and the drawing goes on
+        assert!(face_within(spend_then(500, false)).is_err());
+        assert_eq!(budget::left(), FACE * 4 - 1500);
+        assert!(!budget::over());
+        // one that runs its cap out: everything left is charged, and the drawing is over
+        assert!(face_within(spend_then(FACE * 2, false)).is_err());
+        assert_eq!(budget::left(), 0);
+        assert!(budget::over());
+        drop(b);
+        // where the drawing has less left than a face's cap, a face that runs that out is just
+        // the budget running out, as before
+        let b = budget::scoped(4096);
+        assert!(face_within(spend_then(8192, false)).is_err());
+        assert_eq!(budget::left(), 0);
+        drop(b);
+        // and a face of a body with no budget set spends from no budget
+        assert!(face_within(spend_then(10, true)).is_ok());
+        assert!(!budget::limited());
+    }
     use super::*;
     use forge_math::rng::Rng;
     use forge_math::{Frame, Point3, Vec3};
