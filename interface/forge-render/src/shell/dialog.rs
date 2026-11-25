@@ -203,3 +203,24 @@ pub(super) fn pick_row(
 
 /// Where a row's field starts, after its word.
 pub(super) const FIELD_AT: f32 = 92.0;
+
+/// STANDARD §9: a dialog whose first input is typed opens with that field focused, its text
+/// selected. Called each frame the dialog is drawn, before the field; `key` names the dialog
+/// (it's fresh when it wasn't drawn the frame before), `id` is the field's TextEdit id.
+pub(crate) fn focus_on_open(ctx: &egui::Context, key: &str, id: egui::Id, text: &str) {
+    let seen = egui::Id::unique(("dialog-shown", key));
+    let frame = ctx.cumulative_frame_nr();
+    let fresh = ctx
+        .data(|d| d.get_temp::<u64>(seen))
+        .is_none_or(|f| f + 1 < frame);
+    ctx.data_mut(|d| d.insert_temp(seen, frame));
+    if fresh {
+        ctx.memory_mut(|m| m.request_focus(id));
+        let mut s = egui::text_edit::TextEditState::load(ctx, id).unwrap_or_default();
+        s.cursor.set_char_range(Some(egui::text::CCursorRange::two(
+            egui::text::CCursor::new(0),
+            egui::text::CCursor::new(text.chars().count()),
+        )));
+        s.store(ctx, id);
+    }
+}

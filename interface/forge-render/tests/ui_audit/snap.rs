@@ -35,6 +35,9 @@ pub struct Snap {
     pub tab: usize,
     pub env: Option<forge_render::shell::env::EnvId>,
     pub focus: Option<Id>,
+    /// Text fields drawn so far (egui keeps each one's state): a dialog that adds none has
+    /// nothing typed to take the keys.
+    pub text_fields: usize,
     pub seq: Option<u64>,
     pub docs: usize,
     pub dirty: bool,
@@ -57,6 +60,7 @@ impl Snap {
             v
         });
         let focus = h.gui.ctx.memory(|m| m.focused());
+        let text_fields = h.gui.ctx.data(|d| d.count::<egui::text_edit::TextEditState>());
         let mut texts = Vec::new();
         let mut fills = Vec::new();
         let mut n = 0;
@@ -83,6 +87,7 @@ impl Snap {
             tab: h.gui.shell.tab,
             env: h.gui.shell.env,
             focus,
+            text_fields,
             seq: h.gui.fg.as_ref().map(|s| s.seq),
             docs: h.gui.documents().len(),
             dirty: h.gui.shell.fg.as_ref().is_some_and(|f| f.dirty),

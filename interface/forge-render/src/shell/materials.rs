@@ -610,9 +610,12 @@ impl Shell {
             pos2(x.left() - 12.0 - 260.0, head.center().y - 14.0),
             vec2(260.0, 28.0),
         );
+        let id = egui::Id::unique("materials-search");
+        super::dialog::focus_on_open(ui.ctx(), "materials", id, &b.search);
         let s = ui.put(
             field,
             egui::TextEdit::singleline(&mut b.search)
+                .id(id)
                 .font(sans(13.0))
                 .margin(vec2(8.0, 6.0))
                 .hint_text("Search names and aliases"),

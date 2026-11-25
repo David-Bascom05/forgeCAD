@@ -529,7 +529,10 @@ impl Shell {
         }
         if rows == 0 {
             ui.add_space(6.0);
-            let word = if nodes.is_empty() {
+            // no part open, "This part" has nothing to be about: say so, and where else to look
+            let word = if self.no_document() && self.versions.filter == Filter::Part {
+                "No part open. Open one to see its versions, or choose Project."
+            } else if nodes.is_empty() {
                 "No saves yet."
             } else {
                 "No named versions yet."
@@ -780,8 +783,11 @@ impl Shell {
                 .constrain_to(area)
                 .show_fit(ctx, |ui| {
                     ui.label(egui::RichText::new("Name").font(sans(12.0)));
+                    let id = egui::Id::unique("versions-create-name");
+                    super::dialog::focus_on_open(ui.ctx(), "versions-create", id, &name);
                     let r = ui.add(
                         egui::TextEdit::singleline(&mut name)
+                            .id(id)
                             .hint_text("v1")
                             .desired_width(320.0),
                     );
@@ -833,8 +839,11 @@ impl Shell {
                     let what = self.versions.doc.as_ref().map_or(String::new(), |d| d.0.clone());
                     ui.label(egui::RichText::new(what).font(mono(12.0)));
                     ui.label(egui::RichText::new("Reason").font(sans(12.0)));
+                    let id = egui::Id::unique("versions-release-reason");
+                    super::dialog::focus_on_open(ui.ctx(), "versions-release", id, &reason);
                     let r = ui.add(
                         egui::TextEdit::multiline(&mut reason)
+                            .id(id)
                             .desired_rows(2)
                             .desired_width(320.0),
                     );

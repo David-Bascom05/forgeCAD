@@ -102,7 +102,11 @@ pub fn popup(s: &Snap, before: &Snap, region: &[Rect], screen: Rect) -> Vec<Find
     }
     for t in &texts {
         let visible = t.rect.intersect(t.clip);
-        let partly = visible.is_positive() && !t.clip.expand(1.0).contains_rect(t.rect);
+        // cut by its clip at the side: a layout too narrow for it. Cut only at the top or bottom
+        // is a scrolling list's edge (the next row scrolls in): not a fault
+        let c = t.clip.expand(1.0);
+        let sideways = t.rect.left() < c.left() || t.rect.right() > c.right();
+        let partly = visible.is_positive() && sideways;
         if partly {
             out.push(f("clipped", true, format!("\"{}\"", short(&t.s))));
         } else if t.elided {

@@ -558,9 +558,17 @@ impl Shell {
             let choices: Vec<String> = choices.into_iter().filter(|c| !own(c)).collect();
             let picked = d.slots[k].picks.clone();
             let mut take = None;
+            // every choice shown while they're few; past that a scroll with its bar always drawn
+            // (a hidden floating bar cut the last ones off with no sign of them: the UI audit)
+            let many = choices.len() > 24;
             egui::ScrollArea::vertical()
                 .id_salt(("sheet-choices", lab))
-                .max_height(96.0)
+                .max_height(if many { 140.0 } else { f32::INFINITY })
+                .scroll_bar_visibility(if many {
+                    egui::scroll_area::ScrollBarVisibility::AlwaysVisible
+                } else {
+                    egui::scroll_area::ScrollBarVisibility::AlwaysHidden
+                })
                 .show(ui, |ui| {
                     ui.horizontal_wrapped(|ui| {
                         ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
