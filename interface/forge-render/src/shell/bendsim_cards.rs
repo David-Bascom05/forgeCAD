@@ -54,7 +54,8 @@ pub fn tool_title(cat: Option<&fb::catalog::Catalog>, id: &str, punch: bool) -> 
             c.dies.iter().find(|r| r.id == id).map(die_title)
         }
     });
-    found.unwrap_or_else(|| id.to_string())
+    // a tool the library has no record of (a stand-in set's): its key in words, as tool_short
+    found.unwrap_or_else(|| tool_short(cat, id, punch))
 }
 
 /// A tool's short name, the library's own designation (UX-LEAD: one name per tool, the same as

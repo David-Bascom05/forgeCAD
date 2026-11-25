@@ -2609,21 +2609,30 @@ pub fn overlay(ui: &egui::Ui, rect: egui::Rect, st: &mut BendSimUi) {
                 None => ("operator handling: the first step, none".into(), look::MUTED),
             });
         }
+        // one line per tool met, by its title (the key on hover; UX-LEAD): a rule failing twice
+        // on the same tool is one line
         for c in s.failures() {
-            lines.push((
-                format!(
-                    "{}{}{}",
-                    cards::rule_label(c.rule),
-                    c.tool
-                        .as_deref()
-                        .map_or(String::new(), |t| format!(" · {}", cards::body_words(cat, t))),
-                    c.phi.map_or(String::new(), |f| format!(
-                        " at {:.1}° of the turn",
-                        f.to_degrees()
-                    ))
-                ),
-                look::FAIL,
-            ));
+            let line = format!(
+                "{}{}{}",
+                cards::rule_label(c.rule),
+                c.tool
+                    .as_deref()
+                    .map_or(String::new(), |t| format!(" · {}", cards::body_words(cat, t))),
+                c.phi.map_or(String::new(), |f| format!(
+                    " at {:.1}° of the turn",
+                    f.to_degrees()
+                ))
+            );
+            let same = |l: &str| {
+                l.split(" at ").next() == line.split(" at ").next()
+            };
+            if lines.iter().any(|(l, _): &(String, egui::Color32)| same(l)) {
+                continue;
+            }
+            if let Some(t) = &c.tool {
+                hovers.push((lines.len(), t.clone()));
+            }
+            lines.push((line, look::FAIL));
         }
     }
     // on a backing plate (the view chips' style), wrapped short of the view cube's corner, so
