@@ -475,7 +475,8 @@ pub fn clear_arc(body: &Body, f: &Face, mv: &Move, limit: f64) -> Option<Verdict
         && t0 <= t1
         && t0.abs() <= 1.5
         && t1.abs() <= 1.5
-        && small(limit))
+        && small(limit)
+        && arc_frame_ok(x, y))
     {
         return None;
     }
@@ -520,6 +521,16 @@ pub fn clear_arc(body: &Body, f: &Face, mv: &Move, limit: f64) -> Option<Verdict
     Some(Verdict::Clear {
         lower: Ival::pt(least).sub(Ival::pt(s)).lo,
     })
+}
+
+/// Whether an arc's frame (x, y) is orthonormal within 1e-13: then every point c + r (u x + v y)
+/// of `Move::Arc`'s rational map (u² + v² = 1) lies within r·4e-13 of the circle of radius r about
+/// c in the plane x, y spans, which the chord bounds' 1e-12·(1 + r + |c|) widening covers. The
+/// checker's arcs (forge-cam ops.rs checker_moves: x = (cos, sin, 0), y = (∓sin, ±cos, 0) of one
+/// angle) pass with room; a frame from anywhere else is checked, not assumed.
+pub fn arc_frame_ok(x: [f64; 3], y: [f64; 3]) -> bool {
+    let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    (dot(x, x) - 1.0).abs() <= 1e-13 && (dot(y, y) - 1.0).abs() <= 1e-13 && dot(x, y).abs() <= 1e-13
 }
 
 /// `clear_arc`'s largest chord sagitta (mm): small beside any tolerance, so the chords' margin is
@@ -829,6 +840,41 @@ mod tests {
     }
 
     /// `clear_arc` refuses non-finite or overflowing data and anything but a level arc.
+    /// An arc whose frame is not orthonormal is refused (its map is no circle of radius r); the
+    /// checker's frames, x = (cos, sin, 0) and y = (∓sin, ±cos, 0) of one angle, are taken.
+    #[test]
+    fn an_arc_frame_must_be_orthonormal() {
+        let b = ball(6.0);
+        let f = sphere([0.0, 0.0, -10.0], 5.0);
+        let arc = |x: [f64; 3], y: [f64; 3]| Move::Arc {
+            c: [0.0, 0.0, 20.0],
+            x,
+            y,
+            r: 3.0,
+            t0: -0.5,
+            t1: 0.5,
+        };
+        for (x, y) in [
+            ([1.001, 0.0, 0.0], [0.0, 1.0, 0.0]),
+            ([1.0, 0.0, 0.0], [0.0, 0.999, 0.0]),
+            ([1.0, 0.0, 0.0], [0.001, 1.0, 0.0]),
+            ([1.0, 0.0, 0.0], [1.0, 0.0, 0.0]),
+        ] {
+            assert!(!arc_frame_ok(x, y), "{x:?} {y:?}");
+            assert!(clear_arc(&b, &f, &arc(x, y), -0.01).is_none(), "{x:?} {y:?}");
+        }
+        // unit vectors rounded as a computed cosine and sine are (each within an ulp or two)
+        for k in 0..1000 {
+            let t = -3.0 + 6.0 * k as f64 / 999.0;
+            let (cs, sn) = ((1.0 - t * t) / (1.0 + t * t), 2.0 * t / (1.0 + t * t));
+            for y in [[-sn, cs, 0.0], [sn, -cs, 0.0]] {
+                let x = [cs, sn, 0.0];
+                assert!(arc_frame_ok(x, y), "t {t}");
+                assert!(clear_arc(&b, &f, &arc(x, y), -0.01).is_some(), "t {t}");
+            }
+        }
+    }
+
     #[test]
     fn arcs_with_bad_data_are_refused() {
         let b = ball(6.0);

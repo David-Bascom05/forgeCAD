@@ -1183,6 +1183,30 @@ pub fn certify_shared(
     budget: usize,
     shared: &mut Option<(Ival, f64)>,
 ) -> (Verdict, usize) {
+    let (v, n) = certify_dispatch(body, f, mv, limit, res, budget, shared);
+    // a pair left undecided against an axis-aligned plane (a fixture's box, a plate, the stock's
+    // faces) may sit exactly at its limit: the closed form decides that exactly (axisplane.rs).
+    // Only where the search did not decide, so every other verdict (and its count) is as before
+    if let Verdict::Undecided { .. } = v
+        && let Some(c) = crate::axisplane::clear(body, f, mv, limit)
+    {
+        return (c, n);
+    }
+    (v, n)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn certify_dispatch(
+    body: &Body,
+    f: &Face,
+    mv: &Move,
+    limit: f64,
+    res: f64,
+    budget: usize,
+    shared: &mut Option<(Ival, f64)>,
+) -> (Verdict, usize) {
+    // the closed forms (contact.rs: 3D finishing's pairs), which prove Clear or pass on
+    // (an early Clear leaves `shared` as it was: the next body's call recomputes what it needs)
     if let Some(v) = closed_form(body, f, mv, limit) {
         return (v, 0);
     }
