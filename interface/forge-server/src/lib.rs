@@ -296,10 +296,22 @@ impl Outbox {
     fn down(&self, d: &Down) -> bool {
         self.send(Out::Text(d.text()))
     }
+    /// Closes the connection; `why` is said first, as a passing state (the client reconnects).
     fn close(&self, why: Option<&str>) {
         if let Some(w) = why {
-            let _ = self.down(&Down::Error { text: w.into() });
+            let _ = self.down(&Down::Closing {
+                text: w.into(),
+                retry: true,
+            });
         }
+        let _ = self.send(Out::Close);
+    }
+    /// Closes the connection for good: it will not be served as it is (the client stops).
+    fn stop(&self, why: &str) {
+        let _ = self.down(&Down::Closing {
+            text: why.into(),
+            retry: false,
+        });
         let _ = self.send(Out::Close);
     }
 }
@@ -729,7 +741,14 @@ fn connection(
     });
     let Ok((mut r, mut w, _)) = accepted else { return };
     let fail = |w: &mut forge_ws::Writer, text: &str| {
-        let _ = w.send(&Down::Error { text: text.into() }.text());
+        // refused at the door: as it is, it will never be served (the client stops)
+        let _ = w.send(
+            &Down::Closing {
+                text: text.into(),
+                retry: false,
+            }
+            .text(),
+        );
         w.close();
     };
     let hello = match r.read() {
@@ -854,7 +873,7 @@ fn connection(
                 }
             }
             Err(e) => {
-                out.close(Some(&format!("a bad message: {e}")));
+                out.stop(&format!("a bad message: {e}"));
                 break;
             }
         }
@@ -949,7 +968,7 @@ fn hub(shared: &Arc<Shared>, rx: Receiver<Ev>, tx: SyncSender<Ev>, stop: &Atomic
             .collect();
         for k in gone {
             if let Some((_, out)) = conns.remove(&k) {
-                out.close(Some(why));
+                out.stop(why);
             }
         }
     };
@@ -994,7 +1013,7 @@ fn hub(shared: &Arc<Shared>, rx: Receiver<Ev>, tx: SyncSender<Ev>, stop: &Atomic
                     panic!("test hook: a panic in the hub");
                 }
                 if quarantined.contains(&doc) {
-                    out.close(Some("this document is quarantined after a server error"));
+                    out.stop("this document is quarantined after a server error");
                     continue;
                 }
                 let j = DocEv::Join {
@@ -1021,7 +1040,7 @@ fn hub(shared: &Arc<Shared>, rx: Receiver<Ev>, tx: SyncSender<Ev>, stop: &Atomic
                             docs.insert(doc.clone(), h);
                         }
                         Err(e) => {
-                            out.close(Some(&e));
+                            out.stop(&e);
                             continue;
                         }
                     }
@@ -1031,11 +1050,16 @@ fn hub(shared: &Arc<Shared>, rx: Receiver<Ev>, tx: SyncSender<Ev>, stop: &Atomic
                     out.close(Some("too many people in this document"));
                     continue;
                 }
-                if d.tx.try_send(j).is_err() {
-                    out.close(Some("this document is too busy: try again"));
-                    continue;
+                match d.tx.try_send(j) {
+                    Ok(()) => d.members += 1,
+                    Err(TrySendError::Full(_)) => {
+                        out.close(Some("this document is too busy: try again"));
+                        continue;
+                    }
+                    // the actor already ended (it could not open the document): its Ended,
+                    // on the way, tells this connection why
+                    Err(TrySendError::Disconnected(_)) => {}
                 }
-                d.members += 1;
                 conns.insert(conn, (doc, out));
             }
             Ev::Up { conn, up } => {
@@ -1198,7 +1222,7 @@ fn open_actor(
                     // the joins queued meanwhile hear why
                     while let Ok(ev) = rx.try_recv() {
                         if let DocEv::Join { out, .. } = ev {
-                            out.close(Some(&e));
+                            out.stop(&e);
                         }
                     }
                     return ended(End::NeverOpened(e));
@@ -1227,7 +1251,7 @@ fn open_actor(
             if catch_unwind(AssertUnwindSafe(|| a.run(rx))).is_err() {
                 eprintln!("forge-server: {doc2}: a panic in its actor: quarantined");
                 for out in a.outs.values() {
-                    out.close(Some("this document is quarantined after a server error"));
+                    out.stop("this document is quarantined after a server error");
                 }
                 if let Some((_, _, st)) = a.building.take() {
                     a.free_build(&st);

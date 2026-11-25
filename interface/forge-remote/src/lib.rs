@@ -447,10 +447,18 @@ fn run(addr: &str, path: &str, shared: &Mutex<Shared>, stop: &AtomicBool, waker:
                     {
                         s.acks_ms.push(t0.elapsed().as_secs_f64() * 1e3);
                     }
-                    let closed = ev.iter().any(|e| matches!(e, Event::Closed(_)));
+                    let closed = ev
+                        .iter()
+                        .any(|e| matches!(e, Event::Closed(_) | Event::Stopped(_)));
+                    // refused for good (a bad token, another kernel, a quarantined document):
+                    // reconnecting would be refused the same way, for ever
+                    let stopped = ev.iter().any(|e| matches!(e, Event::Stopped(_)));
                     s.events.extend(ev);
                     s.flush();
                     drop(s);
+                    if stopped {
+                        stop.store(true, Ordering::SeqCst);
+                    }
                     wake();
                     if closed {
                         break;

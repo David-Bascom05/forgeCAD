@@ -456,7 +456,8 @@ fn refusals_at_the_door() {
         (TOKENS[0].1, "missing.fg", "no such"),
     ] {
         match hello(tok, doc) {
-            forge_sync::Down::Error { text } => assert!(text.contains(want), "{doc}: {text}"),
+            // refused for good: the client does not reconnect
+            forge_sync::Down::Closing { text, retry: false } => assert!(text.contains(want), "{doc}: {text}"),
             d => panic!("{doc}: {d:?}"),
         }
     }

@@ -42,8 +42,13 @@ pub enum Event {
     },
     /// A round trip measured (ms).
     Rtt(f64),
-    /// The server closed the session with this.
+    /// The server closed the connection with this; the host reconnects.
     Closed(String),
+    /// The server will not serve this client as it is (a bad token, another kernel, a
+    /// quarantined document): the host stops reconnecting and stops syncing, and says why.
+    Stopped(String),
+    /// Something the server said about the last message (the connection stays).
+    Said(String),
 }
 
 #[derive(Clone, Debug)]
@@ -326,7 +331,9 @@ impl Client {
             }),
             Down::Versioned { name, seq, commit } => ev.push(Event::Versioned { name, seq, commit }),
             Down::Pong { t } => ev.push(Event::Rtt(t)),
-            Down::Error { text } => ev.push(Event::Closed(text)),
+            Down::Error { text } => ev.push(Event::Said(text)),
+            Down::Closing { text, retry: true } => ev.push(Event::Closed(text)),
+            Down::Closing { text, retry: false } => ev.push(Event::Stopped(text)),
         }
         ev
     }
