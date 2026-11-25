@@ -2396,6 +2396,17 @@ fn section(segs: &[CSeg], a: f64) -> Option<Vec<CSeg>> {
     }
 }
 
+/// x − y when it is exact (Knuth's two-sum: its rounding error, computed exactly, is 0), else
+/// None.
+fn exact_diff(x: f64, y: f64) -> Option<f64> {
+    let s = x - y;
+    let ny = -y;
+    let bv = s - x;
+    let av = s - bv;
+    let e = (x - av) + (ny - bv);
+    (s.is_finite() && e == 0.0).then_some(s)
+}
+
 /// `section` for a bull-nose column: a flat ring from the axis, (0, z0) to (f, z0), then a
 /// quarter arc about (f, z0 + r) up to (R, z0 + r), R = f + r. Its section at a is
 /// b_a(u) = b(√(u² + a²)), |u| ≤ √(R² − a²): bounded below by the same shape, a flat ring to w
@@ -2426,8 +2437,9 @@ fn bull_section(segs: &[CSeg], a: f64) -> Option<Vec<CSeg>> {
     }
     let r_big = ab[0];
     let z0 = la[1];
-    // the arc a quarter turn of radius r exactly: its ends on its circle (differences exact)
-    if !(c[1] - z0 == r && c[1] - r == z0 && ab[0] - c[0] == r && ab[0] - r == c[0]) {
+    // the arc a quarter turn of radius r exactly: its ends on its circle, each difference
+    // proven exact by two-sum (a pair of plain subtractions does not prove it when signs differ)
+    if !(exact_diff(c[1], z0) == Some(r) && exact_diff(ab[0], c[0]) == Some(r)) {
         return None;
     }
     if !(a < r_big) {
@@ -2443,10 +2455,6 @@ fn bull_section(segs: &[CSeg], a: f64) -> Option<Vec<CSeg>> {
     let e = w + r;
     let (bv, av) = (e - w, e - (e - w));
     if !(e.is_finite() && (w - av) + (r - bv) == 0.0) {
-        return None;
-    }
-    // the arc's start on its circle too: zc − z0 = r exactly
-    if c[1] - z0 != r || c[1] - r != z0 {
         return None;
     }
     let zc = c[1];
@@ -2620,6 +2628,42 @@ mod tests {
     /// A bull-nose column's section at a (`bull_section`) is below the true section
     /// b(√(u² + a²)) everywhere across it, and at least as wide: sampled densely for several
     /// bull-noses and offsets, including the ones where the flat ring has gone (a near R).
+    /// A profile whose arc only seems to start on its ring (EXACT-CORE's case: z0 < 0, the
+    /// centre's z a denormal, both plain subtractions passing) gets no section; an exact one
+    /// with z0 < 0 still does.
+    #[test]
+    #[cfg(not(feature = "old-closed-form"))]
+    fn a_bull_section_needs_its_arc_exactly_on_its_ring() {
+        for cz in [5e-324, -5e-324] {
+            let segs = [
+                CSeg::Line {
+                    a: [0.0, -3.0],
+                    b: [4.0, -3.0],
+                },
+                CSeg::Arc {
+                    a: [4.0, -3.0],
+                    b: [7.0, cz],
+                    c: [4.0, cz],
+                    r: 3.0,
+                },
+            ];
+            assert!(bull_section(&segs, 1.0).is_none(), "centre z {cz:e}");
+        }
+        let segs = [
+            CSeg::Line {
+                a: [0.0, -3.0],
+                b: [4.0, -3.0],
+            },
+            CSeg::Arc {
+                a: [4.0, -3.0],
+                b: [7.0, 0.0],
+                c: [4.0, 0.0],
+                r: 3.0,
+            },
+        ];
+        assert!(bull_section(&segs, 1.0).is_some());
+    }
+
     #[test]
     #[cfg(not(feature = "old-closed-form"))]
     fn a_bull_noses_section_is_below_and_as_wide_as_the_true_one() {
