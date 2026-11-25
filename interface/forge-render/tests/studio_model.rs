@@ -91,11 +91,12 @@ fn a_click_in_the_view_paints_the_part_with_the_brush() {
     assert!(h.gui.shell.view_over_tex.is_none(), "the noise is shown");
     assert!(h.gui.shell.studio.samples < forge_render::shell::studio_env::READABLE);
     shot(&h, "painted");
-    for _ in 0..80 {
+    // (the live trace goes a band of rows a frame, as the GPU allows: waited for by time)
+    let start = std::time::Instant::now();
+    while h.gui.shell.studio.samples < 2 * forge_render::shell::studio_env::READABLE
+        && start.elapsed().as_secs() < 120
+    {
         h.step();
-        if h.gui.shell.studio.samples >= 2 * forge_render::shell::studio_env::READABLE {
-            break;
-        }
     }
     h.step();
     assert!(
@@ -153,11 +154,9 @@ fn many_parts_take_one_look_and_the_filter_finds_them() {
     assert_eq!(rows(st), vec![Row::Part(1)]);
     st.filter.clear();
     // the picture is made again with them, however they were changed: the samples start over
-    for _ in 0..40 {
+    let start = std::time::Instant::now();
+    while h.gui.shell.studio.samples < 4 && start.elapsed().as_secs() < 120 {
         h.step();
-        if h.gui.shell.studio.samples >= 4 {
-            break;
-        }
     }
     let before = h.gui.shell.studio.samples;
     assert!(before >= 4, "{before}");
@@ -203,15 +202,19 @@ fn render_image_shows_its_progress_at_once_then_its_result() {
     let dir = std::env::temp_dir().join(format!("fg-studio-render-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
+    h.gui.shell.capture.folder = dir.to_string_lossy().into_owned();
     let st = &mut h.gui.shell.studio;
     st.size = (64, 48);
     st.spp = 64;
-    st.out = dir.join("r.png").to_string_lossy().into_owned();
-    // a plain Studio frame, the same view with nothing traced (the live view stopped), for the
-    // click frame to be measured against
+    // no file named: a fresh one where captures go (BUTTON-AUDITOR: not the process's folder)
+    assert!(st.out.is_empty());
+    // a plain Studio frame, the same view with nothing traced (the live view stopped, its last
+    // denoise done), for the click frame to be measured against
     let l = h.gui.studio_live().unwrap();
-    l.target = l.samples();
-    h.step();
+    l.target = l.traced();
+    for _ in 0..20 {
+        h.step();
+    }
     let plain = (0..5)
         .map(|_| {
             let t = std::time::Instant::now();
@@ -262,10 +265,17 @@ fn render_image_shows_its_progress_at_once_then_its_result() {
     }
     let res = h.gui.shell.studio.result.clone().unwrap();
     let path = res.said.clone().expect("it saved");
-    assert!(std::path::Path::new(&path).is_file(), "{path}");
+    let p = std::path::Path::new(&path);
+    assert!(p.is_file(), "{path}");
+    assert_eq!(p.parent(), Some(dir.as_path()), "{path}");
+    let name = p.file_name().unwrap().to_string_lossy();
+    assert!(
+        name.starts_with("flange-render-") && name.ends_with(".png"),
+        "{name}"
+    );
     assert_eq!(res.thumb.map(|t| t.1), Some((64, 48)), "the picture shown");
     assert!(h.gui.shell.studio.rendering.is_none());
-    assert_eq!(h.gui.shell.status, format!("Render saved: {path}"));
+    assert_eq!(h.gui.shell.status, format!("Wrote {path}"));
     h.step();
     shot(&h, "rendered");
     // a failure is said, not silent
@@ -354,12 +364,141 @@ fn shots_for_review() {
         forge_render::shell::studio_model::apply(&mut g.gui.shell.studio, &hw, Some("Steel, black oxide"));
         g.gui.shell.studio.open.insert("frame".into());
         g.gui.shell.studio.selected = frame.clone();
-        for _ in 0..60 {
+        let start = std::time::Instant::now();
+        while g.gui.shell.studio.samples < 16 && start.elapsed().as_secs() < 120 {
             g.step();
-            if g.gui.shell.studio.samples >= 16 {
-                break;
-            }
         }
         snap(&mut g, "overrides");
     }
+}
+
+/// The live trace keeps the window answering: the trace and its denoise go a band of rows a
+/// frame, as many as the GPU does in the pace's budget (8 ms), so a Studio frame while it runs
+/// costs at most `LIVE_MS`, or a quarter of a frame on a GPU slow enough that frames take more
+/// than 120 ms, more than one with it stopped (p90 against the median), a software GPU too.
+/// Before the bands, every frame traced a whole sample and denoised it: about 230 ms a frame on
+/// lavapipe here, over 16 ms stopped. Release only: a debug build's own frames are no measure.
+#[test]
+fn the_live_trace_keeps_studio_frames_within_budget() {
+    let _gpu = one_at_a_time();
+    const LIVE_MS: f64 = 30.0;
+    if cfg!(debug_assertions) {
+        return;
+    }
+    let Some(mut h) = studio("machined/flange.fg") else {
+        return;
+    };
+    let timed = |h: &mut Headless, n: usize| {
+        let mut ms: Vec<f64> = (0..n)
+            .map(|_| {
+                let t = std::time::Instant::now();
+                h.step();
+                t.elapsed().as_secs_f64() * 1e3
+            })
+            .collect();
+        ms.sort_by(f64::total_cmp);
+        ms
+    };
+    // the pace fitted to this GPU, and a picture shown (a denoise run): then frames as they go
+    let start = std::time::Instant::now();
+    while h.gui.shell.studio.samples < 2 * forge_render::shell::studio_env::READABLE {
+        h.step();
+        assert!(
+            start.elapsed().as_secs() < 180,
+            "the live view never showed a picture"
+        );
+    }
+    let traced = h.gui.studio_live().unwrap().traced();
+    let live = timed(&mut h, 60);
+    let more = h.gui.studio_live().unwrap().traced() - traced;
+    assert!(more > 0, "nothing traced while timed");
+    // stopped: the same frames, the trace done
+    let l = h.gui.studio_live().unwrap();
+    l.target = l.traced();
+    for _ in 0..30 {
+        h.step();
+    }
+    let idle = timed(&mut h, 30);
+    let at = |v: &[f64], q: f64| v[((v.len() - 1) as f64 * q) as usize];
+    let rows = h.gui.studio_live().unwrap().pace.rows;
+    eprintln!(
+        "studio frames: tracing median {:.1} ms, p90 {:.1}, max {:.1}; stopped median {:.1} ms; \
+         {more} samples in 60 frames, {rows} rows a frame",
+        at(&live, 0.5),
+        at(&live, 0.9),
+        at(&live, 1.0),
+        at(&idle, 0.5)
+    );
+    let limit = LIVE_MS.max(0.25 * at(&idle, 0.5));
+    assert!(
+        at(&live, 0.9) - at(&idle, 0.5) <= limit,
+        "a traced frame costs {:.1} ms more than a stopped one, over {limit:.0} ms (p90 {:.1} ms, \
+         stopped {:.1} ms)",
+        at(&live, 0.9) - at(&idle, 0.5),
+        at(&live, 0.9),
+        at(&idle, 0.5)
+    );
+}
+
+/// The pictures UX-LEAD reviews (research/render/studio/11-13), only with STUDIO_UX_SHOTS=DIR, at
+/// 1400×860 in the dark theme: the live view still refining between its denoise steps (the badge
+/// says so), the Output fold's File field empty with its hint, the recording pill.
+#[test]
+fn shots_for_ux() {
+    let Ok(dir) = std::env::var("STUDIO_UX_SHOTS") else {
+        return;
+    };
+    let _gpu = one_at_a_time();
+    let Some(mut h) = studio("machined/flange.fg") else {
+        return;
+    };
+    let tmp = std::env::temp_dir().join(format!("fg-studio-ux-{}", std::process::id()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    h.gui.shell.capture.folder = tmp.to_string_lossy().into_owned();
+    let save =
+        |h: &Headless, name: &str| std::fs::write(format!("{dir}/{name}.png"), h.png().unwrap()).unwrap();
+    // 1. a picture shown (16 samples), more going in
+    let start = std::time::Instant::now();
+    while !(h.gui.shell.studio.samples >= 16 && h.gui.shell.studio.traced > h.gui.shell.studio.samples + 4) {
+        h.step();
+        assert!(
+            start.elapsed().as_secs() < 180,
+            "the live view never refined past 16"
+        );
+    }
+    assert!(forge_render::shell::studio_env::refining(&h.gui.shell.studio));
+    let words = forge_render::shell::studio_env::live_words(&h.gui.shell.studio);
+    assert!(words.starts_with("Tracing · "), "{words}");
+    // the pointer over the badge: its hover says what it does
+    let v = h.gui.shell.view_rect;
+    h.move_to(v.left() + 40.0, v.bottom() - 24.0);
+    // (a tooltip waits for the pointer to rest: 1.5 s of the frames' clock)
+    for _ in 0..90 {
+        h.step();
+    }
+    save(&h, "11-live-refining");
+    // 2. Output open: the File field empty, its hint
+    h.move_to(v.center().x, v.center().y);
+    assert!(h.gui.shell.studio.out.is_empty());
+    assert!(h.click("studio:fold:output"), "no Output fold");
+    // (the fold opens over a few frames)
+    for _ in 0..30 {
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    save(&h, "12-render-file-hint");
+    // 3. a recording under way: its pill, Cancel and Esc
+    h.gui
+        .capture_command("record 320x200 fps=10 seconds=8 frames")
+        .unwrap();
+    // (the pill fades in)
+    for _ in 0..10 {
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(30));
+    }
+    assert!(h.gui.shell.place("capture:stop").is_some(), "no recording pill");
+    save(&h, "13-recording-pill");
+    assert!(h.click("capture:stop"));
+    h.step();
+    let _ = std::fs::remove_dir_all(&tmp);
 }
