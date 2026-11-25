@@ -54,7 +54,11 @@ Each of these is bit-identical by construction, and was diffed over the whole co
 10. `forge_geom::budget::isolated(limit, f) -> (spent, T)`: one piece under a budget of its own,
     its spend handed back. KERNEL-STRESS is adding the same primitive on op-budget; same signature.
 11. `forge-mesh`: a face of a file's body drawn within at most `FACE` = 2^27 evaluations (see below).
-12. `forge-render`: a part with faces that cannot be meshed is drawn without them, not blank.
+12. `forge-render`: a part with faces that cannot be meshed is drawn without them, not blank —
+    **split out of this branch** at TRAIN-CONDUCTOR's request, onto `fix/undrawn-face` (off main),
+    because the gap it leaves needs UX-LEAD's marking to ride with it (`ux/undrawn-faces`, stacked
+    on it). `build_part_reporting` gives each left-out face as (face id in the part's body, why);
+    the border edges are the face's loops' coedges' edges and the box is `body.face_box`.
 13. `forge-step` `times` feature (off by default): each read phase's CPU time, for CHECKS.md.
 
 ## Open threads, in the order I would pick them up
