@@ -89,12 +89,30 @@ pub fn file_tris(path: &Path) -> Result<Arc<Tris>, String> {
     r
 }
 
-/// A STEP or IGES file's triangles as soon as they can be shown: from the cache, else from
-/// `forge_step::open`, its checks finishing on a job whose final triangles come through
-/// [`pending_files`] (where jobs run inline, the single-threaded page, the final ones at once).
+/// Whether a model is shown before its read's checks finish ([`set_show_early`]): off unless
+/// asked for. Off, nothing is shown that the checks could then take away.
+static SHOW_EARLY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Shows a STEP or IGES model as soon as its solids are drawn, before the checks that may still
+/// refuse some of them finish (their final triangles then replace the shown ones). Off by default.
+pub fn set_show_early(on: bool) {
+    SHOW_EARLY.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// A STEP or IGES file's triangles: from the cache, else read whole (`import_drawn`). With
+/// [`set_show_early`], as soon as `forge_step::open` draws them, its checks finishing on a job whose
+/// final triangles come through [`pending_files`] (where jobs run inline, the single-threaded page,
+/// the final ones at once).
 fn shown(name: &str, bytes: Vec<u8>, key: &Key) -> Result<Arc<Tris>, String> {
     let ck = cached::key(&bytes);
     if let Some((meshes, failed)) = cached::load(ck) {
+        return tris_of(name, meshes.iter(), failed).map(Arc::new);
+    }
+    if !SHOW_EARLY.load(std::sync::atomic::Ordering::Relaxed) {
+        let imp = forge_step::import_drawn(&bytes, &forge_step::Limits::default())
+            .map_err(|_| format!("{name}: not a model this reads"))?;
+        let (meshes, failed) = drawn(imp);
+        cached::store(ck, &meshes, failed);
         return tris_of(name, meshes.iter(), failed).map(Arc::new);
     }
     let (shown_tx, shown_rx) = std::sync::mpsc::channel();
