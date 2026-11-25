@@ -874,6 +874,10 @@ pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
     tessellate_with(body, q, false)
 }
 
+/// What drawing one body from a file may spend outside an import: eight files' reads' worth, as
+/// much as a top-level op (a boolean) is given.
+pub const MESH: u64 = 8 * forge_geom::budget::FILE;
+
 /// `tessellate`, but a body from a file (`Body::from_file`), whose edges may meet only within their
 /// tolerance and so cross where its faces are laid flat, has those faces drawn as they are: the mesh
 /// parts from the next face by that little there instead of failing. On a body made here a crossing
@@ -885,8 +889,10 @@ pub fn tessellate_tolerant(body: &Body, q: &Quality) -> Result<TriMesh, TessErro
     if body.dead > 0 {
         return tessellate_tolerant(&body.compact(), q);
     }
-    // a file's body is drawn within a file's budget, the import's own where one is live
-    let _b = (!forge_geom::budget::limited()).then(|| forge_geom::budget::scoped(forge_geom::budget::FILE));
+    // a file's body is drawn within a budget of its own, MESH, or the import's where one is live.
+    // A file's (FILE) refused 102 of the Haas machine models' solids that mesh in under a second
+    // or a few (HFL-1313-3 #69702: 150M evaluations, 0.7 s; research/kernel-stress).
+    let _b = (!forge_geom::budget::limited()).then(|| forge_geom::budget::scoped(MESH));
     tessellate_with(body, q, true)
 }
 
