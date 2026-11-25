@@ -1399,6 +1399,9 @@ pub struct SetupView<'a> {
     pub at: Option<[f64; 3]>,
     pub clear: f64,
     pub retract: f64,
+    /// What holds the stock (its bodies as the checker sees them; for a workholding library
+    /// device, the table plane and the placement too), if the setup names a fixture.
+    pub fixture: Option<&'a forge_cam::fixture::Fixture>,
 }
 
 pub struct Cam {
@@ -1424,6 +1427,9 @@ pub struct Cam {
     pub programs: Vec<ProgramOut>,
     lib: std::sync::Arc<Library>,
     jaws: Vec<forge_cam::fixture::SoftJaws>,
+    /// The workholding library (kernel/forge-workholding): the built-in set, with the project's
+    /// `cam/workholding/*.toml` beside the document on top.
+    wh: std::sync::Arc<forge_workholding::Library>,
     /// The sketches the document's engrave and slot ops cut, by the part statement they are
     /// of (`frames_wanted`): such a part is loaded with its anchors and those sketches asked,
     /// so the ops' sketch frames come from that run. Empty for most documents.
@@ -1963,7 +1969,19 @@ impl Cam {
                             );
                         }
                     };
-                    self.lib.vise(&name).map_err(|e| format!("{e:?}"))?;
+                    if self.wh.get(&name).is_err()
+                        && !VISE_SUCCESSOR.iter().any(|(f, _)| *f == name)
+                        && self.lib.vise(&name).is_err()
+                    {
+                        let near = match self.wh.get(&name) {
+                            Err(forge_workholding::WhError::Unknown { near, .. }) => near,
+                            _ => vec![],
+                        };
+                        return Err(format!(
+                            "vise(\"{name}\"): no such vise in the workholding library; near: {}",
+                            near.join(", ")
+                        ));
+                    }
                     let axis = match get_str(&a, "across", Some("x"))?.as_str() {
                         "x" => 0,
                         "y" => 1,
@@ -2349,6 +2367,69 @@ fn get_str(m: &BTreeMap<String, V>, k: &str, default: Option<&str>) -> Result<St
     }
 }
 
+/// The workholding library a document sees: the built-in set (read once, shared), with the
+/// project's `cam/workholding/*.toml` beside the document on top when there are any (a file that
+/// does not read leaves the built-in set; `vise(..)` then names what it cannot find).
+fn workholding_library(dir: &Path) -> std::sync::Arc<forge_workholding::Library> {
+    static BUILTIN: std::sync::OnceLock<std::sync::Arc<forge_workholding::Library>> =
+        std::sync::OnceLock::new();
+    let b = BUILTIN
+        .get_or_init(|| std::sync::Arc::new(forge_workholding::Library::builtin()))
+        .clone();
+    let pdir = dir.join("cam").join("workholding");
+    if forge_dirs::fs::exists(&pdir) {
+        let mut l = (*b).clone();
+        if l.add_dir(&pdir).is_ok() {
+            return std::sync::Arc::new(l);
+        }
+    }
+    b
+}
+
+/// A library vise placed on the setup's stock (forge_workholding::mill::vise) as forge-cam's
+/// fixture: its bodies are what the checker keeps every tool body from. The document's
+/// `parallel: W` is the parallels' width; their height is what fills the gap between the bed and
+/// the stock's seat (as the boxes `forge_cam::fixture::vise` makes), so the parallels are the
+/// job's own (a stand-in set of that one height, said in the record's basis).
+fn library_vise(
+    v: &ViseSpec,
+    r: &forge_workholding::Record,
+    stock: &Stock,
+    clamp: f64,
+) -> Result<forge_cam::fixture::Fixture, String> {
+    let st = forge_workholding::Box3 {
+        min: stock.min,
+        max: stock.max,
+    };
+    let jh = r.get("jaw_height").map_err(|e| format!("fixture: {e}"))?;
+    let gap = jh - clamp;
+    let par = if gap > 1e-9 {
+        let jw = r.get("jaw_width").map_err(|e| format!("fixture: {e}"))?;
+        let t = format!(
+            "[[workholding]]\nname = \"job-parallels\"\nkind = \"parallels\"\nstandin = true\nbasis = \"the job's parallels: {w} mm wide (vise(.., parallel:)), {gap} mm high to fill the jaws below the grip\"\nheights = [{gap:?}]\nwidth = {w:?}\nlength = {jw:?}\n",
+            w = v.parallel
+        );
+        Some(
+            forge_workholding::parse_file("job", &t)
+                .map_err(|e| format!("fixture: parallels: {e}"))?
+                .remove(0),
+        )
+    } else {
+        None
+    };
+    let p = forge_workholding::mill::vise(&v.name, r, &st, v.axis, clamp, par.as_ref(), None)
+        .map_err(|e| format!("fixture: {e}"))?;
+    Ok(forge_cam::fixture::Fixture::from_workholding(
+        &p,
+        v.axis,
+        v.clearance,
+    ))
+}
+
+/// Old forge-tooling vise names and their workholding-library successors (same jaw width,
+/// height and thickness and the same opening; the successor adds the body under the jaws).
+const VISE_SUCCESSOR: &[(&str, &str)] = &[("generic-vise-150", "standin-vise-150")];
+
 /// Runs a machining document (its file's directory finds the part) on the built-in library.
 pub fn run(src: &str, dir: &Path) -> Cam {
     // the built-in library, shared: read once (Library::builtin), and copied only if the
@@ -2389,6 +2470,7 @@ fn run_shared(src: &str, dir: &Path, lib: std::sync::Arc<Library>) -> Cam {
         programs: vec![],
         lib,
         jaws: vec![],
+        wh: workholding_library(dir),
         frames: BTreeMap::new(),
     };
     let prog = match syntax::parse(src) {
@@ -3033,29 +3115,28 @@ impl Cam {
                 let fixture = match a.get("fixture") {
                     None => self.parts[part].hold.clone(),
                     Some(V::Vise(v)) => {
-                        let l = self.lib.vise(&v.name).map_err(|e| format!("{e:?}"))?;
-                        let size = forge_cam::fixture::ViseSize {
-                            jaw_width: l.jaw_width,
-                            jaw_height: l.jaw_height,
-                            jaw_thickness: l.jaw_thickness,
-                            max_opening: l.max_opening,
-                            bed_depth: l.bed_depth,
-                        };
+                        let v = v.clone();
                         let clamp = v
                             .clamp
                             .ok_or("fixture: vise(.., clamp: MM): how much of the stock the jaws grip")?;
-                        Some(
-                            forge_cam::fixture::vise(
-                                &v.name,
-                                size,
-                                &stock,
-                                v.axis,
-                                clamp,
-                                v.parallel,
-                                v.clearance,
-                            )
-                            .map_err(|e| format!("fixture: {e}"))?,
-                        )
+                        match self.vise_record(&v.name)? {
+                            Some(r) => Some(library_vise(&v, &r, &stock, clamp)?),
+                            None => {
+                                let size = self.vise_size(&v.name)?;
+                                Some(
+                                    forge_cam::fixture::vise(
+                                        &v.name,
+                                        size,
+                                        &stock,
+                                        v.axis,
+                                        clamp,
+                                        v.parallel,
+                                        v.clearance,
+                                    )
+                                    .map_err(|e| format!("fixture: {e}"))?,
+                                )
+                            }
+                        }
                     }
                     Some(V::Jaws(j, _)) => {
                         if from.is_none() {
@@ -3241,6 +3322,90 @@ impl Cam {
         }
     }
 
+    /// The vise a document names: the workholding library's record (a vise or a self-centring
+    /// vise), an old forge-tooling name resolved to its library successor (with a warning
+    /// saying so), or None when only the old forge-tooling record knows the name (its boxes:
+    /// no body under the bed, no table plane; warned).
+    fn vise_record(&mut self, name: &str) -> Result<Option<forge_workholding::Record>, String> {
+        use forge_workholding::Kind;
+        let is_vise = |r: &forge_workholding::Record| matches!(r.kind, Kind::Vise | Kind::SelfCentring);
+        if let Ok(r) = self.wh.get(name) {
+            if !is_vise(r) {
+                return Err(format!(
+                    "vise(\"{name}\"): `{name}` is a {}, not a vise",
+                    r.kind.name()
+                ));
+            }
+            return Ok(Some(r.clone()));
+        }
+        if let Some((_, to)) = VISE_SUCCESSOR.iter().find(|(from, _)| *from == name)
+            && let Ok(r) = self.wh.get(to)
+        {
+            let w = format!(
+                "vise(\"{name}\"): now the workholding library's `{to}`: the same jaws and opening, with the vise body under them down to the table{}",
+                if r.standin {
+                    " (a stand-in: measure your vise)"
+                } else {
+                    ""
+                }
+            );
+            if !self.warnings.contains(&w) {
+                self.warnings.push(w);
+            }
+            return Ok(Some(r.clone()));
+        }
+        match self.lib.vise(name) {
+            Ok(_) => {
+                let w = format!(
+                    "vise(\"{name}\"): an old forge-tooling record (boxes for the jaws and a {} mm bed slab, no body under it, no table plane): give a workholding library vise (forgecad workholding list vise)",
+                    self.lib.vise(name).map(|v| v.bed_depth).unwrap_or(f64::NAN)
+                );
+                if !self.warnings.contains(&w) {
+                    self.warnings.push(w);
+                }
+                Ok(None)
+            }
+            Err(_) => {
+                let near = match self.wh.get(name) {
+                    Err(forge_workholding::WhError::Unknown { near, .. }) => near,
+                    _ => vec![],
+                };
+                Err(format!(
+                    "vise(\"{name}\"): no such vise in the workholding library; near: {}",
+                    near.join(", ")
+                ))
+            }
+        }
+    }
+
+    /// The vise's sizes as forge-cam's soft jaws take them: from a library record (the bed's
+    /// depth is the body under it: height less the jaws), or from the old record.
+    fn vise_size(&mut self, name: &str) -> Result<forge_cam::fixture::ViseSize, String> {
+        match self.vise_record(name)? {
+            Some(r) => {
+                let g = |k: &str| r.get(k).map_err(|e| format!("vise(\"{name}\"): {e}"));
+                let jh = g("jaw_height")?;
+                Ok(forge_cam::fixture::ViseSize {
+                    jaw_width: g("jaw_width")?,
+                    jaw_height: jh,
+                    jaw_thickness: g("jaw_thickness")?,
+                    max_opening: g("max_opening")?,
+                    bed_depth: g("height")? - jh,
+                })
+            }
+            None => {
+                let l = self.lib.vise(name).map_err(|e| format!("{e:?}"))?;
+                Ok(forge_cam::fixture::ViseSize {
+                    jaw_width: l.jaw_width,
+                    jaw_height: l.jaw_height,
+                    jaw_thickness: l.jaw_thickness,
+                    max_opening: l.max_opening,
+                    bed_depth: l.bed_depth,
+                })
+            }
+        }
+    }
+
     /// Soft jaws for the part as setup `from:` left it, turned over: the pocket is what the jaw
     /// tool cuts of the part's sections in the grip band grown by `fit`; refused unless the
     /// part, and everything `from:` left in the band, seats in it, and the seat carries at least
@@ -3258,7 +3423,7 @@ impl Cam {
             Some(V::Tool(t)) => 0.5 * self.tools[*t].tool.dc,
             _ => return Err("soft_jaw(.., tool: TOOL): the tool that cuts the jaws' pocket".into()),
         };
-        let vl = self.lib.vise(&v.name).map_err(|e| format!("{e:?}"))?.clone();
+        let vsize = self.vise_size(&v.name)?;
         let bl = self
             .lib
             .jaw_blank(&get_str(a, "blank", None)?)
@@ -3343,13 +3508,7 @@ impl Cam {
         let height = part.bbox.1[2] - part.bbox.0[2];
         let sj = forge_cam::fixture::soft_jaws(
             name,
-            forge_cam::fixture::ViseSize {
-                jaw_width: vl.jaw_width,
-                jaw_height: vl.jaw_height,
-                jaw_thickness: vl.jaw_thickness,
-                max_opening: vl.max_opening,
-                bed_depth: vl.bed_depth,
-            },
+            vsize,
             forge_cam::fixture::BlankSize {
                 width: bl.width,
                 height: bl.height,
@@ -10612,6 +10771,7 @@ impl Cam {
             at: s.at,
             clear: s.heights.clear,
             retract: s.heights.retract,
+            fixture: s.fixture.as_ref(),
         })
     }
 

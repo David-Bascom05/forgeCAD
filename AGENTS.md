@@ -100,3 +100,6 @@ Machine models, by the repo owner's explicit decision: the machine makers' publi
 committed: per-body meshes under `kernel/forge-machine/data/models/` (Git LFS, excluded from
 normal clones by `.lfsconfig`), test fixtures and regions cut from them, and clips or images
 rendered with them. No licence record is needed for these. Keep raw vendor archives out of main.
+Haas Tooling workholding models likewise (David, of the `haas-tooling-step` upload: "They are totally ok to
+include in the repo I checked."): the STEP files used and their per-body meshes under
+`kernel/forge-workholding/data/models/haas-tooling/` (Git LFS, excluded from normal clones).

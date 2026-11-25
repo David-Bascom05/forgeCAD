@@ -24,3 +24,5 @@ vendor-parts/
 
 # forgecad's shipped machine models (Git LFS: .gitattributes)
 !kernel/forge-machine/data/models/**/*.stl
+# and its shipped workholding models (AGENTS.md: the Haas Tooling models)
+!kernel/forge-workholding/data/models/**/*.stl

@@ -13,6 +13,7 @@ forge-geom = { path = "../forge-geom" }
 forge-topo = { path = "../forge-topo" }
 forge-tooling = { path = "../forge-tooling" }
 forge-post = { path = "../forge-post" }
+forge-workholding = { path = "../forge-workholding" }
 
 [lints]
 workspace = true
