@@ -11,8 +11,8 @@
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 const NOT_OPS: &[&str] = &[
-    "part", "machine", "tool", "setup", "program", "box", "fixture", "vise", "jaws", "soft_jaw",
-    "stock", "probe", "holder",
+    "part", "machine", "tool", "setup", "program", "box", "fixture", "vise", "jaws", "soft_jaw", "stock",
+    "probe", "holder",
 ];
 
 /// CPU seconds of this process so far (user + system, /proc's clock ticks).
@@ -120,13 +120,17 @@ fn stmts(src: &str) -> Vec<(usize, String, String)> {
         if t.starts_with('#') {
             continue;
         }
-        let Some((n, rest)) = t.split_once('=') else { continue };
+        let Some((n, rest)) = t.split_once('=') else {
+            continue;
+        };
         let n = n.trim();
         if n.is_empty() || !n.chars().all(|c| c.is_alphanumeric() || c == '_') {
             continue;
         }
         let rest = rest.trim_start();
-        let Some((f, _)) = rest.split_once('(') else { continue };
+        let Some((f, _)) = rest.split_once('(') else {
+            continue;
+        };
         if f.chars().all(|c| c.is_alphanumeric() || c == '_') {
             v.push((i, n.to_string(), f.to_string()));
         }
@@ -165,7 +169,10 @@ fn fmt(x: f64) -> String {
     s.to_string()
 }
 
-fn op_edit(src: &str, which: &dyn Fn(&[(usize, String, String)]) -> Option<usize>) -> Option<(String, String)> {
+fn op_edit(
+    src: &str,
+    which: &dyn Fn(&[(usize, String, String)]) -> Option<usize>,
+) -> Option<(String, String)> {
     let st: Vec<_> = stmts(src)
         .into_iter()
         .filter(|s| !NOT_OPS.contains(&s.2.as_str()))
@@ -202,7 +209,9 @@ fn part_edit(src: &str) -> Option<(String, String)> {
         if !(t.starts_with("shared ") || t.starts_with("param ")) {
             continue;
         }
-        let Some((lhs, rhs)) = t.split_once('=') else { continue };
+        let Some((lhs, rhs)) = t.split_once('=') else {
+            continue;
+        };
         let r = rhs.trim();
         let end = r
             .find(|c: char| !(c.is_ascii_digit() || c == '.'))
@@ -263,22 +272,39 @@ fn main() {
         std::fs::write(std::path::Path::new(o).join(format!("{stem}.out")), &cold.text).expect("out");
     }
     rs.push(cold);
-    rs.push(run("rerun", &work, &doc));
-    let orig = std::fs::read_to_string(work.join(&doc)).unwrap();
-    let edit = |what: &str, file: &str, new: Option<(String, String)>, rs: &mut Vec<R>| {
-        let Some((text, label)) = new else { return };
-        let p = work.join(file);
-        let before = std::fs::read_to_string(&p).unwrap();
-        std::fs::write(&p, text).unwrap();
-        rs.push(run(&format!("{what}: {label}"), &work, &doc));
-        std::fs::write(&p, before).unwrap();
-    };
-    edit("edit_last_op", &doc, op_edit(&orig, &|s| s.len().checked_sub(1)), &mut rs);
-    edit("edit_first_op", &doc, op_edit(&orig, &|s| (!s.is_empty()).then_some(0)), &mut rs);
-    edit("edit_tool", &doc, tool_edit(&orig), &mut rs);
-    if let Some(pf) = part_file(&orig) {
-        let ps = std::fs::read_to_string(work.join(&pf)).unwrap_or_default();
-        edit("edit_part", &pf, part_edit(&ps), &mut rs);
+    // CAM_BENCH_COLD=1: the cold run only (for a profiler)
+    let cold_only = std::env::var_os("CAM_BENCH_COLD").is_some();
+    if cold_only {
+        STOP.store(true, Ordering::Relaxed);
+    }
+    if !cold_only {
+        rs.push(run("rerun", &work, &doc));
+        let orig = std::fs::read_to_string(work.join(&doc)).unwrap();
+        let edit = |what: &str, file: &str, new: Option<(String, String)>, rs: &mut Vec<R>| {
+            let Some((text, label)) = new else { return };
+            let p = work.join(file);
+            let before = std::fs::read_to_string(&p).unwrap();
+            std::fs::write(&p, text).unwrap();
+            rs.push(run(&format!("{what}: {label}"), &work, &doc));
+            std::fs::write(&p, before).unwrap();
+        };
+        edit(
+            "edit_last_op",
+            &doc,
+            op_edit(&orig, &|s| s.len().checked_sub(1)),
+            &mut rs,
+        );
+        edit(
+            "edit_first_op",
+            &doc,
+            op_edit(&orig, &|s| (!s.is_empty()).then_some(0)),
+            &mut rs,
+        );
+        edit("edit_tool", &doc, tool_edit(&orig), &mut rs);
+        if let Some(pf) = part_file(&orig) {
+            let ps = std::fs::read_to_string(work.join(&pf)).unwrap_or_default();
+            edit("edit_part", &pf, part_edit(&ps), &mut rs);
+        }
     }
     STOP.store(true, Ordering::Relaxed);
     let _ = sampler.join();
