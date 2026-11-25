@@ -23,7 +23,7 @@ static FONTS: Cache<forge_font::Font> = Mutex::new(None);
 static SOLIDS: Cache<Body> = Mutex::new(None);
 
 const FONT_KINDS: &[&str] = &["ttf", "otf"];
-const SOLID_KINDS: &[&str] = &["step", "stp", "brep", "igs", "iges", "x_t", "x_b", "xmt_txt", "xmt_bin"];
+pub(crate) const SOLID_KINDS: &[&str] = &["step", "stp", "brep", "igs", "iges", "x_t", "x_b", "xmt_txt", "xmt_bin"];
 /// The most a file may be: larger ones are refused unread.
 const LIMIT: u64 = 64 << 20;
 

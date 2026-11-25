@@ -18,7 +18,7 @@ type Tool = (
     &'static [(&'static str, &'static str)],
 );
 
-const TOOLS: [Tool; 18] = [
+const TOOLS: [Tool; 19] = [
     (
         "import",
         "A model file (STEP, IGES, .brep, Parasolid .x_t/.x_b) under the root as a part: the file kept in `out` beside a new `<stem>.fg` that imports it (writable sessions). Replies with its solids and what was refused",
@@ -29,6 +29,20 @@ const TOOLS: [Tool; 18] = [
                 "out",
                 "the directory under the root for the part (default: the model's own)",
             ),
+        ],
+    ),
+    (
+        "simplify",
+        "Preview or create a linked simplified part, or refresh, pause, resume or detach it. Writes require a writable session.",
+        2,
+        &[
+            ("file", "source or derived file under the project root"),
+            ("action", "preview|create|refresh|pause|resume|detach"),
+            (
+                "rules",
+                "array of CLI option strings, for example [\"--holes\",\"1\"]",
+            ),
+            ("out", "derived .fg path under the root, required for create"),
         ],
     ),
     (
@@ -412,6 +426,26 @@ fn call(forge: &mut fg::Session, name: &str, p: &Json) -> Reply {
             },
         };
     }
+    if name == "simplify" {
+        let result = FENCE
+            .get()
+            .ok_or_else(|| "no session root".into())
+            .and_then(|(root, writable)| crate::simplify::rpc(root, *writable, p));
+        return match result {
+            Ok((json, text)) => Reply {
+                ok: true,
+                json,
+                text,
+                png: None,
+            },
+            Err(e) => Reply {
+                ok: false,
+                json: Json::obj(vec![("ok", false.into()), ("error", e.as_str().into())]),
+                text: e,
+                png: None,
+            },
+        };
+    }
     if name == "import" {
         return model_import(p);
     }
@@ -688,6 +722,10 @@ fn tool(t: &Tool) -> Json {
             match *p {
                 "px" => f.insert(0, ("type", "number".into())),
                 "op" | "ops" => {}
+                "rules" if name == "simplify" => {
+                    f.push(("type", "array".into()));
+                    f.push(("items", Json::obj(vec![("type", "string".into())])));
+                }
                 _ => f.insert(0, ("type", "string".into())),
             }
             (p.to_string(), Json::obj(f))

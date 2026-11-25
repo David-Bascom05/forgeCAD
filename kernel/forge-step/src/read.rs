@@ -2023,6 +2023,9 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
 pub struct Occurrence {
     pub solid: u32,
     pub path: Vec<String>,
+    /// Product path with named uses (for example PCB reference designators) in place of
+    /// product names where provided by the exporter.
+    pub instance_path: Vec<String>,
     pub frame: Frame,
 }
 
@@ -2045,7 +2048,7 @@ fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> Vec<Occurrence> {
     let mut linked: BTreeMap<u32, Vec<u32>> = BTreeMap::new(); // representations related untransformed
     let mut shape_of: BTreeMap<u32, u32> = BTreeMap::new(); // product definition shape -> definition
     let mut sdr: Vec<(u32, u32)> = Vec::new(); // (product definition shape, representation)
-    let mut nauo: Vec<(u32, u32, u32)> = Vec::new(); // (id, parent definition, child definition)
+    let mut nauo = Vec::new(); // (id, parent definition, child definition, instance name)
     let mut cdsr: Vec<(u32, u32)> = Vec::new(); // (relationship, product definition shape)
     let mut rep_name: BTreeMap<u32, String> = BTreeMap::new();
     let mut pd_formation: BTreeMap<u32, u32> = BTreeMap::new();
@@ -2070,7 +2073,7 @@ fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> Vec<Occurrence> {
                 }
                 "NEXT_ASSEMBLY_USAGE_OCCURRENCE" => {
                     if let (Some(Value::Ref(p)), Some(Value::Ref(c))) = (a.get(3), a.get(4)) {
-                        nauo.push((id, *p, *c));
+                        nauo.push((id, *p, *c, text(a.get(1))));
                     }
                 }
                 "CONTEXT_DEPENDENT_SHAPE_REPRESENTATION" => {
@@ -2191,10 +2194,10 @@ fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> Vec<Occurrence> {
             a1.compose(&a2.inverse())
         })
     };
-    let children: BTreeMap<u32, Vec<(u32, u32)>> = nauo.iter().fold(BTreeMap::new(), |mut m, &(id, p, c)| {
-        m.entry(p).or_default().push((id, c));
-        m
-    });
+    let mut children: BTreeMap<u32, Vec<_>> = BTreeMap::new();
+    for (id, p, c, label) in &nauo {
+        children.entry(*p).or_default().push((*id, *c, label.as_str()));
+    }
     let used: std::collections::BTreeSet<u32> = nauo.iter().map(|x| x.2).collect();
     let mut tops: Vec<u32> = reps_of
         .keys()
@@ -2205,12 +2208,15 @@ fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> Vec<Occurrence> {
     tops.sort_unstable();
     tops.dedup();
     let mut out = Vec::new();
-    // (definition, path, frame), depth bounded: a file can make its uses circular
-    let mut todo: Vec<(u32, Vec<String>, Frame)> = tops
+    // Depth bounded: a file can make its uses circular.
+    let mut todo: Vec<_> = tops
         .into_iter()
-        .map(|d| (d, vec![name_of(d)], Frame::WORLD))
+        .map(|d| {
+            let path = vec![name_of(d)];
+            (d, path.clone(), path, Frame::WORLD)
+        })
         .collect();
-    while let Some((d, path, frame)) = todo.pop() {
+    while let Some((d, path, instance_path, frame)) = todo.pop() {
         if out.len() > 1_000_000 || path.len() > 64 {
             break;
         }
@@ -2219,15 +2225,24 @@ fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> Vec<Occurrence> {
                 out.push(Occurrence {
                     solid: s,
                     path: path.clone(),
+                    instance_path: instance_path.clone(),
                     frame,
                 });
             }
         }
-        for &(id, c) in children.get(&d).into_iter().flatten() {
+        for &(id, c, label) in children.get(&d).into_iter().flatten() {
             let Some(p) = placement(id, c) else { continue };
-            let mut q = path.clone();
-            q.push(name_of(c));
-            todo.push((c, q, frame.compose(&p)));
+            let name = name_of(c);
+            let mut products = path.clone();
+            products.push(name.clone());
+            let mut instances = instance_path.clone();
+            // Open CASCADE writes an internal reference of this form for unnamed uses.
+            instances.push(if label.is_empty() || label.starts_with("=>[") {
+                name
+            } else {
+                label.to_owned()
+            });
+            todo.push((c, products, instances, frame.compose(&p)));
         }
     }
     out
