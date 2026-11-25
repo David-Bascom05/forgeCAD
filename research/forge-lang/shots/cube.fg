@@ -1,0 +1,4 @@
+sketch s(on: xy) {
+  o = rect(corner: (0, 0), size: (10, 10))
+}
+b = extrude(s, 10)

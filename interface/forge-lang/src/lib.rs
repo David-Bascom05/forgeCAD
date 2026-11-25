@@ -19,6 +19,7 @@ pub mod drawing;
 pub mod edit;
 pub mod edit_ops;
 pub mod error;
+pub mod expect_words;
 pub mod eval;
 pub mod explode;
 pub mod export;

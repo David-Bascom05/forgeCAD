@@ -628,6 +628,7 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
                 _ => None,
             },
             stale: false,
+            detail: e.detail(),
         }
     };
     let mut issues: Vec<Issue> = run.errors.iter().map(|e| issue(e, Severity::Error)).collect();
@@ -653,6 +654,7 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
                     feature: Some(n.id.clone()),
                     asm: None,
                     stale: false,
+                    detail: None,
                 });
                 continue;
             }
@@ -672,6 +674,7 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
                     feature: Some(n.id.clone()),
                     asm: None,
                     stale: false,
+                    detail: None,
                 });
                 continue;
             }
@@ -687,6 +690,7 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
                     feature: feature_at(Some(n.span)),
                     asm: Some(n.issue.clone()),
                     stale: false,
+                    detail: n.issue.detail(),
                 });
                 continue;
             }
@@ -709,6 +713,7 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
             feature: feature_at(Some(span)),
             asm: None,
             stale: false,
+            detail: None,
         });
     }
     (feats, params, issues)

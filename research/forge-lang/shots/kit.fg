@@ -1,0 +1,4 @@
+a = part("cube.fg", ground: true)
+b = part("cube.fg", at: (5, 0, 0), ground: true)
+expect interferences = 0
+expect mobility = 1
