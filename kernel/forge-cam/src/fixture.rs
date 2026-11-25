@@ -537,10 +537,21 @@ impl Fixture {
         let jaw_top = if jaw_top.is_finite() {
             jaw_top
         } else {
-            p.bodies
+            let low = p
+                .bodies
                 .iter()
                 .map(|b| b.bounds().0[2])
-                .fold(f64::INFINITY, f64::min)
+                .fold(f64::INFINITY, f64::min);
+            // a device with no bodies at all: the table it stands on (written in the reply and
+            // the clamp report, so finite)
+            if low.is_finite() {
+                low
+            } else {
+                match p.mount {
+                    Mount::Table { z } => z,
+                    _ => 0.0,
+                }
+            }
         };
         Fixture {
             name: p.name.clone(),
@@ -692,6 +703,21 @@ impl Fixture {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_device_with_no_bodies_has_a_finite_jaw_top() {
+        let p = forge_workholding::Placed {
+            name: "none".into(),
+            kind: forge_workholding::Kind::Custom,
+            bodies: vec![],
+            mount: forge_workholding::Mount::Table { z: -12.5 },
+            held: vec![],
+            notes: vec![],
+        };
+        let f = Fixture::from_workholding(&p, 0, 1.0);
+        assert_eq!(f.jaw_top, -12.5);
+        assert!(f.faces().is_empty() && f.enveloped.is_empty());
+    }
 
     #[test]
     fn a_library_vise_as_the_checkers_fixture() {
