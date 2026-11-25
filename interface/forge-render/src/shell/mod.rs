@@ -95,6 +95,10 @@ pub const WELD_TAB: usize = 10;
 /// A machining document's Manufacture tab: setups, operations, posts (`cam/`).
 pub const CAM_TAB: usize = 11;
 
+/// The narrowest the view is beside an environment's properties column; narrower, the two take
+/// turns (UX-LEAD: about 320 px).
+const VIEW_MIN_W: f32 = 320.0;
+
 const TITLE_H: f32 = 36.0;
 const TABS_H: f32 = 34.0;
 /// A marking menu's dead zone, the ring its wedges light to, how far from it the pointer still
@@ -393,6 +397,14 @@ pub struct Shell {
     pub sketch_pick: bool,
     /// What's on the model and takes the pointer from the view.
     pub view_blocks: Vec<Rect>,
+    /// A window too narrow for the view beside an environment's properties column (the view
+    /// would get under `VIEW_MIN_W`): the two take turns in the view's place (UX-LEAD).
+    pub props_alternate: bool,
+    /// Taking turns: the column is the one shown (else the view). A new sheet in the column
+    /// shows it again.
+    pub column_shown: bool,
+    /// The view is behind the column this frame: not drawn over, not clicked, its tools hidden.
+    pub view_hidden: bool,
     /// The browser's width as dragged; None for the mode's default.
     pub side_px: Option<f32>,
     /// Place from Content Center: the standard parts library's dialog.
@@ -488,6 +500,9 @@ impl Default for Shell {
             origin_hover: None,
             origin_selected: None,
             view_blocks: Vec::new(),
+            props_alternate: false,
+            column_shown: true,
+            view_hidden: false,
             side_px: None,
             content: Default::default(),
             fg: None,
@@ -797,9 +812,18 @@ impl Shell {
         let snap = |v: f32| (v * ppp).round() / ppp;
         // an environment's docked properties take the right of the window
         let props_w = self.env_properties_width();
+        // too narrow for both (a phone-wide window): the column and the view take turns in the
+        // view's place, the view keeping the whole of it (framed for its own rect whichever shows)
+        let room = s.width() - side_w - 1.0;
+        self.props_alternate = props_w > 0.0 && room - props_w < VIEW_MIN_W;
+        if !self.props_alternate {
+            self.column_shown = true;
+        }
+        self.view_hidden = self.props_alternate && self.column_shown;
+        let view_right = if self.props_alternate { s.width() } else { s.width() - props_w };
         self.view_rect = Rect::from_min_max(
             pos2(snap(side_w + 1.0), snap(top)),
-            pos2(snap(s.width() - props_w), snap(bottom)),
+            pos2(snap(view_right), snap(bottom)),
         );
 
         p.rect_filled(
@@ -807,7 +831,7 @@ impl Shell {
             0.0,
             egui::Color32::from_rgb((t.view >> 16) as u8, (t.view >> 8) as u8, t.view as u8),
         );
-        if let Some(tex) = self.view_tex {
+        if let Some(tex) = self.view_tex.filter(|_| !self.view_hidden) {
             let whole = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
             p.image(tex, self.view_rect, whole, Color32::WHITE);
             // what an environment lays over a picture of its own (the Render Studio's view cube)
@@ -816,8 +840,11 @@ impl Shell {
                 p.image(over, self.view_rect, whole, Color32::from_white_alpha(a));
             }
         }
-        self.view_owned = false;
-        self.env_draw(ui);
+        // behind the column: nothing of the view's is drawn, and it takes no clicks
+        self.view_owned = self.view_hidden;
+        if !self.view_hidden {
+            self.env_draw(ui);
+        }
         if !self.view_owned {
             self.cube_words(ui, ppp);
         }
@@ -831,9 +858,17 @@ impl Shell {
         self.tabs_row(ui, s.width());
         self.ribbon(ui, s.width());
         self.side(ui, side);
-        if props_w > 0.0 {
+        if props_w > 0.0 && self.view_hidden {
+            // the column in the view's place, the whole of it
+            let r = Rect::from_min_max(pos2(self.view_rect.left(), top), pos2(s.width(), bottom));
+            self.view_blocks.push(self.view_rect);
+            self.env_properties(ui, r);
+        } else if props_w > 0.0 && !self.props_alternate {
             let r = Rect::from_min_max(pos2(s.width() - props_w, top), pos2(s.width(), bottom));
             self.env_properties(ui, r);
+        } else if self.props_alternate {
+            // the view shown: the way back to the column, named as its tab is
+            self.column_chip(ui);
         }
         self.side_splitter(ui, side, s.width());
         self.docs_and_status(ui, s, bottom);
@@ -877,6 +912,31 @@ impl Shell {
 
     /// The cube's words, painted on its faces: each glyph's corners go through the face's own
     /// projection, so a word foreshortens with its face.
+    /// Taking turns, the view shown: a chip at its bottom left back to the column, named by the
+    /// column's tab ("Simulation").
+    fn column_chip(&mut self, ui: &mut Ui) {
+        // (words only: the arrows are not in the UI's font)
+        let label = self.env_properties_label().unwrap_or_else(|| "Properties".into());
+        let t = self.theme;
+        let g = ui.fonts_mut(|f| f.layout_no_wrap(label.clone(), sans(13.0), t.ink));
+        // the bottom left: the top is the view's own chips and its cube, which fill a narrow view
+        let r = Rect::from_min_size(
+            pos2(self.view_rect.left() + 8.0, self.view_rect.bottom() - 36.0),
+            vec2(g.size().x + 20.0, 28.0),
+        );
+        let resp = ui.interact(r, ui.scope_id().with("column-chip"), Sense::click());
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &label));
+        let p = ui.painter();
+        p.rect_filled(r, 6.0, if resp.hovered() { t.raised } else { t.surface });
+        p.rect_stroke(r, 6.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
+        p.galley(pos2(r.left() + 10.0, r.center().y - g.size().y * 0.5), g, t.ink);
+        self.view_blocks.push(r);
+        self.note("view:column", r);
+        if resp.clicked() {
+            self.column_shown = true;
+        }
+    }
+
     fn cube_words(&self, ui: &mut Ui, ppp: f32) {
         let t = self.theme;
         let (Some((camera, _)), Some(place)) = (self.camera, self.cube_place) else {
@@ -1308,6 +1368,10 @@ impl Shell {
                 r = r.on_hover_text(h);
             }
             r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
+            // an export the host has not answered: Try again's hover
+            if let Some(tip) = self.cam.as_ref().and_then(cam::status_fix_tip) {
+                r = r.on_hover_text(tip);
+            }
             p.rect_filled(
                 fr,
                 3.0,

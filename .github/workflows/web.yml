@@ -221,11 +221,14 @@ jobs:
           node web/tests/e2e.cjs "$GITHUB_WORKSPACE/target/web"
           node web/tests/idle.cjs "$GITHUB_WORKSPACE/target/web"
           node web/tests/cam.cjs "$GITHUB_WORKSPACE/target/web"
-      # the Render Studio's tracer on WebGPU against the native golden picture
+      # the Render Studio's tracer on WebGPU against the native golden picture; its live view
+      # within a frame budget, its samples going on
       - name: render studio
         if: matrix.test == 'e2e' && !matrix.threaded
         working-directory: interface/forge-render
-        run: node web/tests/studio.cjs "$GITHUB_WORKSPACE/target/web"
+        run: |
+          node web/tests/studio.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/studio_live.cjs "$GITHUB_WORKSPACE/target/web"
       # the paths that reached std's browser panics (Versions, Agent, Check Forming) are clicked
       # through, parts of any size are drawn shaded, history is kept where the project is, and
       # frames keep up with the mouse
