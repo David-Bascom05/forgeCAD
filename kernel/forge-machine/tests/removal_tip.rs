@@ -124,43 +124,57 @@ fn height_bound(s: &Setup, seg: &Segment, t: u32, corner: f64) -> f64 {
 /// The forms over a program on the flange's stock and grid: every tip of the affine form within
 /// its bound of the chained one; every height of the closed form (what `mill` uses) and of the
 /// affine form with the search within their bounds of the reference (chained tip, search).
+/// A scoped thread's result, its panic passed on as it was.
+fn joined<T>(h: std::thread::ScopedJoinHandle<'_, T>) -> T {
+    h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))
+}
+
 fn compare(s: &Setup, prog: &str, min_cutting: usize) {
     let tl = sim::simulate(prog, s).unwrap();
-    let mut worst_tip = 0.0f64;
-    let mut max_bound = 0.0f64;
-    let mut max_h = 0.0f64;
-    let mut cutting = 0;
     let corner = match s.tools[0].cut {
         Cut::Mill { corner, .. } => corner,
         _ => unreachable!(),
     };
-    for seg in &tl.segments {
-        let Some(t) = seg.tool else { continue };
-        let (Some(a), Some(c)) = (s.tip_affine(seg, t), s.tip_along(seg, t)) else {
-            continue;
-        };
-        cutting += 1;
-        let b = bound(s, seg, t);
-        max_bound = max_bound.max(b);
-        max_h = max_h.max(height_bound(s, seg, t, corner));
-        for i in 0..=1024 {
-            let u = i as f64 / 1024.0;
-            let (x, y) = (a(u), c(u));
-            let gap = (0..3).map(|k| (x[k] - y[k]).abs()).fold(0.0, f64::max);
-            assert!(
-                gap <= b,
-                "line {} s {u}: {x:?} vs {y:?}, gap {gap:e} > {b:e}",
-                seg.line
-            );
-            worst_tip = worst_tip.max(gap);
-        }
-    }
-    assert!(cutting >= min_cutting, "{cutting}");
     let (lo, hi) = ([-43.0, -43.0, 0.0], [43.0, 43.0, 23.0]);
-    let rr = removal::mill_with(s, &tl, lo, hi, 0.5, TipForm::Chained).unwrap();
+    // the tips sampled, and the three height maps (the reference and the two forms), side by
+    // side: each is the same computation as one after another, and none reads another's result
+    let tl = &tl;
+    let ((worst_tip, max_bound, max_h, cutting), rr, ra, rc) = std::thread::scope(|sc| {
+        let tips = sc.spawn(|| {
+            let mut worst_tip = 0.0f64;
+            let mut max_bound = 0.0f64;
+            let mut max_h = 0.0f64;
+            let mut cutting = 0;
+            for seg in &tl.segments {
+                let Some(t) = seg.tool else { continue };
+                let (Some(a), Some(c)) = (s.tip_affine(seg, t), s.tip_along(seg, t)) else {
+                    continue;
+                };
+                cutting += 1;
+                let b = bound(s, seg, t);
+                max_bound = max_bound.max(b);
+                max_h = max_h.max(height_bound(s, seg, t, corner));
+                for i in 0..=1024 {
+                    let u = i as f64 / 1024.0;
+                    let (x, y) = (a(u), c(u));
+                    let gap = (0..3).map(|k| (x[k] - y[k]).abs()).fold(0.0, f64::max);
+                    assert!(
+                        gap <= b,
+                        "line {} s {u}: {x:?} vs {y:?}, gap {gap:e} > {b:e}",
+                        seg.line
+                    );
+                    worst_tip = worst_tip.max(gap);
+                }
+            }
+            (worst_tip, max_bound, max_h, cutting)
+        });
+        let map = |form: TipForm| sc.spawn(move || removal::mill_with(s, tl, lo, hi, 0.5, form).unwrap());
+        let (rr, ra, rc) = (map(TipForm::Chained), map(TipForm::Affine), map(TipForm::Closed));
+        (joined(tips), joined(rr), joined(ra), joined(rc))
+    });
+    assert!(cutting >= min_cutting, "{cutting}");
     let mut gaps = Vec::new();
-    for form in [TipForm::Affine, TipForm::Closed] {
-        let r = removal::mill_with(s, &tl, lo, hi, 0.5, form).unwrap();
+    for (form, r) in [(TipForm::Affine, ra), (TipForm::Closed, rc)] {
         assert_eq!(r.map.z.len(), rr.map.z.len());
         let worst = r
             .map

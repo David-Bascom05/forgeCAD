@@ -83,8 +83,12 @@ fn a_number_edited_patches_to_the_parse_of_the_edit() {
     let counts = forge_math::par::map(files.len(), |i| {
         let (mut patched, mut refused) = (0usize, 0usize);
         let src = std::fs::read_to_string(&files[i]).expect("a .fg file");
-        let Ok(toks) = syntax::lex(&src) else { return (0, 0) };
-        let Ok(parsed) = syntax::parse(&src) else { return (0, 0) };
+        let Ok(toks) = syntax::lex(&src) else {
+            return (0, 0);
+        };
+        let Ok(parsed) = syntax::parse(&src) else {
+            return (0, 0);
+        };
         let mut check = |old: &str, new: &str, patched: &mut usize, refused: &mut usize| {
             check_parsed(old, &parsed, new, patched, refused)
         };
