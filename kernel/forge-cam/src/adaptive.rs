@@ -203,6 +203,10 @@ struct Field {
     /// The highest map cell of each block of BLOCK × BLOCK cells (built on the first
     /// `max_in`), a block stale once a sweep's box meets it, refreshed when asked.
     blocks: std::cell::RefCell<Option<Blocks>>,
+    /// The stock before the op, and every move swept since, in order: `descent_meets` rebuilds
+    /// the stock round a point from them, never below the material.
+    ip: InProcess,
+    swept: Vec<([f64; 3], [f64; 3])>,
 }
 
 /// The cells per side of a `max_in` block.
@@ -228,6 +232,7 @@ impl Field {
             self.dirty[3].max(a[1]).max(b[1]),
         ];
         let prof = self.prof;
+        self.swept.push((a, b));
         let removed = self.map.sweep(a, b, &prof);
         // the blocks the swept box meets (the tool's radius, a cell more each side): stale
         if let Some(bl) = self.blocks.get_mut().as_mut() {
@@ -350,6 +355,93 @@ impl Field {
     }
 
     /// The highest the stock stood before this op within `rr` of (x, y) (−∞: none).
+    /// Whether any material above z may stand within the tool's disk at (x, y): the stock round
+    /// the point rebuilt from the op's start and every move swept since, never below the material
+    /// (`HeightMap::lower_voids_under`, `sweep_under`: a cell lowered only where wholly cut), and
+    /// any cell meeting the disk above z. Exact up to the cells' size the safe way: it may see
+    /// material that is not there, never miss material that is.
+    fn descent_meets(&self, x: f64, y: f64, z: f64) -> bool {
+        // on a grid an eighth of the map's (the cells' error, which makes the answer safe, also
+        // widens it: at the map's own cell a park beside a wall was judged too near; at an eighth
+        // the descents slowed cost under 1.2 % of any part's time), at most 400 cells a side
+        let r = self.r;
+        let hm = self.map.h;
+        let h = (0.125 * hm).max(2.0 * (r + hm) / 400.0);
+        let hh = h * std::f64::consts::FRAC_1_SQRT_2;
+        // a cell meets the disk where its centre is within r + h/√2 of the axis
+        let reach = r + hh;
+        let lo = [(x - reach).max(self.ip.min[0]), (y - reach).max(self.ip.min[1]), self.ip.min[2]];
+        let hi = [(x + reach).min(self.ip.max[0]), (y + reach).min(self.ip.max[1]), self.ip.max[2]];
+        if lo[0] >= hi[0] || lo[1] >= hi[1] || hi[2] <= z + self.eps {
+            return false;
+        }
+        // the stock before the op round the point, each void lowering only the cells wholly in it
+        let mut m = HeightMap::new(lo, hi, h);
+        m.lower_voids_under(&self.ip);
+        // the moves that can bring a cell of the window down to z: near enough, and at or under
+        // it; the latest first (the pass that cleared round the point is the likeliest to cover a
+        // cell)
+        let near: Vec<&([f64; 3], [f64; 3])> = self
+            .swept
+            .iter()
+            .rev()
+            .filter(|(a, b)| {
+                a[2].min(b[2]) <= z + self.eps
+                    && a[0].min(b[0]) - r <= hi[0]
+                    && a[0].max(b[0]) + r >= lo[0]
+                    && a[1].min(b[1]) - r <= hi[1]
+                    && a[1].max(b[1]) + r >= lo[1]
+            })
+            .collect();
+        // whether one position of one move covers the square of half-diagonal `half` about c
+        // whole, with the body at or under z there (as `HeightMap::sweep_under` lowers a cell)
+        let covers = |c: (f64, f64), half: f64| {
+            near.iter().any(|&&(a, b)| {
+                let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+                let ll = dx * dx + dy * dy;
+                let t = if ll > 0.0 {
+                    (((c.0 - a[0]) * dx + (c.1 - a[1]) * dy) / ll).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+                let (px, py) = (a[0] + t * dx, a[1] + t * dy);
+                let d = ((c.0 - px) * (c.0 - px) + (c.1 - py) * (c.1 - py)).sqrt();
+                d + half <= r && a[2] + t * (b[2] - a[2]) + self.prof.at(d + half) <= z + self.eps
+            })
+        };
+        // blocks of k × k cells (about the map's cell) first: a block covered whole needs no look
+        // at its cells
+        let k = ((hm / h).round() as usize).max(1);
+        for bj in (0..m.ny).step_by(k) {
+            for bi in (0..m.nx).step_by(k) {
+                let (j1, i1) = ((bj + k).min(m.ny), (bi + k).min(m.nx));
+                let bc = (
+                    m.x0 + 0.5 * (bi + i1) as f64 * h,
+                    m.y0 + 0.5 * (bj + j1) as f64 * h,
+                );
+                let half = 0.5 * h * (((i1 - bi) * (i1 - bi) + (j1 - bj) * (j1 - bj)) as f64).sqrt();
+                if covers(bc, half) {
+                    continue;
+                }
+                for j in bj..j1 {
+                    let cy = m.y0 + (j as f64 + 0.5) * h;
+                    for i in bi..i1 {
+                        let cx = m.x0 + (i as f64 + 0.5) * h;
+                        if (cx - x) * (cx - x) + (cy - y) * (cy - y) > reach * reach
+                            || m.z[j * m.nx + i] <= z + self.eps
+                        {
+                            continue;
+                        }
+                        if !covers((cx, cy), hh) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
     fn top0(&self, x: f64, y: f64, rr: f64) -> f64 {
         let h = self.map0.h;
         let n = (rr / h).ceil() as i64;
@@ -433,8 +525,11 @@ impl Field {
         }
         // the rest of the way: where the tool's disk meets no material above the level (the map is
         // a height field: then the whole column is cut away), air: a link at the feed; else into
-        // material at the plunge feed
-        let air = !self.disk_has_material(target[0], target[1], target[2]);
+        // material at the plunge feed. The map's cells are lowered by their centres, so a skin
+        // finer than a cell may stand in a disk the map shows clear: `descent_meets` looks again
+        // without that error
+        let air = !self.disk_has_material(target[0], target[1], target[2])
+            && !self.descent_meets(target[0], target[1], target[2]);
         mv.push(PMove::Line {
             to: target,
             f: if air { feed.0 } else { feed.1 },
@@ -527,6 +622,8 @@ pub fn adaptive(
         eps: 1e-3,
         dirty: NO_BOX,
         blocks: std::cell::RefCell::new(None),
+        ip: ip.clone(),
+        swept: Vec::new(),
     };
     let cap = prm.phi_max.clamp(5.0, 180.0).to_radians();
     let mut sweep_dir: [f64; 2];
@@ -985,6 +1082,7 @@ pub fn adaptive(
             let target = if snap { cur } else { [p[0], p[1], z] };
             // what the pass changes, kept so a crumb pass can be taken back
             let undo_map = if crumbs_now { f.map.z.clone() } else { Vec::new() };
+            let undo_swept = f.swept.len();
             let undo = (
                 mv.len(),
                 hist.clone(),
@@ -1208,6 +1306,7 @@ pub fn adaptive(
             // its link, the sliver left to the cleanup rings below, and counted as a stall
             if crumbs_now && keep <= CRUMB_STEPS {
                 f.map.z = undo_map;
+                f.swept.truncate(undo_swept);
                 *f.blocks.get_mut() = None;
                 mv.truncate(undo.0);
                 hist = undo.1;
