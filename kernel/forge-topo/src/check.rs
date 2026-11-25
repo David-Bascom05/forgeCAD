@@ -1537,9 +1537,23 @@ fn check_shells(body: &Body, known: &Known, out: &mut Vec<Problem>) {
     }
 }
 
+#[cfg(feature = "reference_sampling")]
 fn edge_length(body: &Body, e: EdgeId) -> f64 {
     let pts = body.edge_points(e, 16);
     pts.windows(2).map(|w| w[0].distance(w[1])).sum()
+}
+
+#[cfg(not(feature = "reference_sampling"))]
+fn edge_length(body: &Body, e: EdgeId) -> f64 {
+    let mut samples = body.edge_samples(e, 16);
+    let mut previous = samples.next().expect("the range includes sample zero");
+    samples
+        .map(|point| {
+            let length = previous.distance(point);
+            previous = point;
+            length
+        })
+        .sum()
 }
 
 fn check_names(body: &Body, out: &mut Vec<Problem>) {
