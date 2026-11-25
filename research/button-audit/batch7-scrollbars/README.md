@@ -11,3 +11,14 @@ Branch `ui/audit-scrollbars`, stacked on `ui/audit-b6`. This was CAM-UI's findin
 
 - `tests/scrollbars.rs` draws a solid bar and a floating always-visible bar with the app's theme applied, in both themes. It reads the colours egui paints for track and handle, and needs at least 3:1. Without the fix the solid bar measures 1.0:1 and the test fails.
 - Crawler: the new judge rule `!scrollbar` fails any scroll bar a click brings up whose handle is under 3:1 against its track, or against the panel when the bar floats. On the plate at 1400 without the fix it flags Materials, Settings and Machine Builder (1.0:1). With the fix it flags nothing.
+
+## 3. The status bar after the train-7 merge (UX-LEAD's check of 0fcbe327)
+
+Main now cuts the line between its parts to fit and puts Manufacture's fix chip beside it. The audit adds one thing on top: a file's path is said by its name, with the whole line on hover.
+
+- **(a) 480 × 860**, a release refusal ("Program prog can't be released: setup op1 isn't placed on the machine."). The chip "Place the setup…" stays whole, with the warning before it. There is too little room for any of the words beside it, so they move to the chip's hover (main's rule: a lone "…" says nothing). Shots: after-3a-status-480-fix-chip, after-3a-…-hover.
+- **(b) 760 × 860**, the same refusal. The words are cut short of the chip and end in "…", with the whole line and the rule's detail on hover. Shot: after-3b-status-760-cut-hover.
+- **(c) 1400 × 860**, Setup Sheet in a deep folder. "Wrote /tmp/…/customer-acme-industrial/brackets-and-flanges/revision-c-for-the-shop/bracket_cam-sheet.html" reads "Wrote bracket_cam-sheet.html", with the whole path on hover. Shot: after-3c-status-1400-path-hover.
+- **Fixed while making these shots:** paths were shortened only in the shell's own line, not in an environment's line such as Manufacture's "Wrote …". Both are shortened now. `tests/status_paths.rs` checks it.
+- **Order:** a path is shortened first, and only its folders go: the file name always stays. The line is then cut between its parts from the end, so the message's first words win over anything after them. The refusal (chip) line carries no path, so (a) and (b) cannot show a path. Manufacture writes that line itself every frame.
+- **Not this branch's issue:** at 480, a CAM document's simulation panel trips egui's negative-width assertion (gui_camsim_panel.rs:475) a few seconds after it starts. CAM-UI has fixed it on cam/narrow-fixes (d203a64c), which isn't in main yet.

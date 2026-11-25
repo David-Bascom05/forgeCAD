@@ -1341,22 +1341,24 @@ impl Shell {
         let x = self.voice_status(ui, 6.0, st);
         // an environment owns the status bar too
         let env_line = self.env_status();
-        let full = shown(&self.status);
-        // a file's path said by its name; the whole line (the paths) on hover
-        let status = brief(&full);
-        let pathed = env_line.is_none() && status != full;
+        let status = shown(&self.status);
         // markup for the agent, on or off
         let mr = Rect::from_min_size(
             pos2(s.width() - 330.0, st.top() + 2.0),
             vec2(78.0, STATUS_H - 4.0),
         );
-        let words = if let Some(l) = &env_line {
+        let full = if let Some(l) = &env_line {
             l.as_str()
         } else if self.status.is_empty() && self.unshown {
             "This part built but some of it can't be drawn: fix or delete what the tree marks"
         } else {
             &*status
         };
+        // a file's path said by its name, in the shell's line or an environment's (Manufacture's
+        // "Wrote …"); the whole line, paths and all, on hover. The names are kept: only folders go
+        let briefed = brief(full);
+        let pathed = briefed != full;
+        let words = briefed.as_str();
         // a refusal's fix a click away (Manufacture: the unplaced setup's dialog): always seen,
         // right after the words, which are cut to leave it room short of Markup
         let fix = if self.tab == CAM_TAB {
@@ -1416,7 +1418,7 @@ impl Shell {
             None
         };
         // (a line whose paths were shortened to their names: the whole, paths and all)
-        let whole = if pathed { &*full } else { words };
+        let whole = if pathed { full } else { words };
         let hover = match (cut || pathed, detail) {
             (true, Some(d)) => Some(format!("{whole}\n\n{d}")),
             (false, Some(d)) => Some(d),
