@@ -56,22 +56,34 @@ if stage == "render":
                    cwd=os.path.join(repo, "interface/forge-render"), capture_output=True)
 def make_room(need=15):
     """Under NEED GB free: whole build profiles (target/{debug,release,wasm32-*}, the root's and
-    forge-render's), least recently used first, until there is room (a profile goes whole: cargo
-    rebuilds it next time; a profile half pruned could be trusted with outputs gone)."""
+    forge-render's), until there is room (a profile goes whole: cargo rebuilds it next time; a
+    profile half pruned could be trusted with outputs gone). Profiles of 1 GB or more go first,
+    least recently used first; small ones (forge-render's wasm32 clippy, ~0.2 GB) only after,
+    since dropping them frees little and costs a rebuild."""
     import shutil
     free = lambda: shutil.disk_usage(repo).free / 2**30
     if free() >= need:
         return
+    def size(d):
+        n = 0
+        for root, _, files in os.walk(d):
+            for f in files:
+                try:
+                    n += os.lstat(os.path.join(root, f)).st_size
+                except OSError:
+                    pass
+        return n / 2**30
     profs = []
     for t in (os.path.join(repo, "target"), os.path.join(repo, "interface/forge-render/target")):
         for d in ([os.path.join(t, x) for x in ("debug", "release")] +
                   [os.path.join(t, x) for x in (os.listdir(t) if os.path.isdir(t) else []) if x.startswith("wasm32")]):
             if os.path.isdir(d):
-                profs.append((os.path.getmtime(d), d))
-    for _, d in sorted(profs):
+                gb = size(d)
+                profs.append((gb < 1, os.path.getmtime(d), gb, d))
+    for _, _, gb, d in sorted(profs):
         if free() >= need:
             break
-        print(f"(only {free():.0f} GB free: removing {d}, the least recently used build)", flush=True)
+        print(f"(only {free():.0f} GB free: removing {d}, {gb:.1f} GB, the least recently used large build)", flush=True)
         shutil.rmtree(d, ignore_errors=True)
 
 
