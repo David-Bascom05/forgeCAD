@@ -51,7 +51,8 @@ pub fn keep() {
         }
         merged.gaps.sort_by_key(|x| x.0);
         merged.gaps.dedup_by(|a, b| a.0 == b.0);
-        merged.narrows.sort_by_key(|x| x.0);
+        // for a key kept twice, the answer that also knows the depth (codes 3 and 4) over 0's
+        merged.narrows.sort_by_key(|x| (x.0, x.1 == 0));
         merged.narrows.dedup_by(|a, b| a.0 == b.0);
         merged.volumes.sort_by_key(|x| x.0);
         merged.volumes.dedup_by(|a, b| a.0 == b.0);
