@@ -735,3 +735,64 @@ fn a_hub_panic_exits_70() {
     assert_eq!(code, Some(70));
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// A client that drops its connection in the middle of an op's frame (its header, or half its
+/// payload) commits nothing: the server goes on, and the next edit is seq 1.
+#[test]
+fn a_connection_dropped_mid_frame_commits_nothing() {
+    let root = project("midframe");
+    let (addr, h) = serve_with(&root, |_| {});
+    let frame_len = |n: usize| -> Vec<u8> {
+        if n < 126 {
+            vec![n as u8]
+        } else {
+            vec![126, (n >> 8) as u8, n as u8]
+        }
+    };
+    for cut in ["header", "payload", "after-hello"] {
+        let mut s = upgrade(&addr);
+        let hello = Up::Hello {
+            doc: "part.fg".into(),
+            client: format!("drop-{cut}"),
+            token: ADA.into(),
+            seq: None,
+            proto: forge_sync::PROTOCOL,
+            kernel: forge_sync::KERNEL.into(),
+        }
+        .text();
+        s.write_all(&masked(true, 0x1, &frame_len(hello.len()), hello.as_bytes()))
+            .unwrap();
+        let op = Up::Op {
+            base: 0,
+            id: 1,
+            ops: vec![set_w(99.0)],
+        }
+        .text();
+        let whole = masked(true, 0x1, &frame_len(op.len()), op.as_bytes());
+        match cut {
+            "header" => s.write_all(&whole[..2]).unwrap(),
+            "payload" => s.write_all(&whole[..whole.len() / 2]).unwrap(),
+            _ => {}
+        }
+        drop(s);
+    }
+    std::thread::sleep(Duration::from_millis(300));
+    let (mut r, mut w, seq) = joined(&addr, BO, "c-bo");
+    assert_eq!(seq, 0, "nothing committed by the dropped connections");
+    w.send(
+        &Up::Op {
+            base: 0,
+            id: 1,
+            ops: vec![set_w(41.0)],
+        }
+        .text(),
+    )
+    .unwrap();
+    match next(&mut r) {
+        Down::Ack { seq, .. } => assert_eq!(seq, 1),
+        d => panic!("{d:?}"),
+    }
+    assert_eq!(h.stats.lock().unwrap().committed, 1);
+    h.stop();
+    let _ = std::fs::remove_dir_all(&root);
+}
