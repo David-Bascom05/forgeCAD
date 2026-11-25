@@ -798,6 +798,8 @@ impl Body {
     pub fn append(&mut self, other: &Body) {
         self.from_file |= other.from_file;
         self.unplaced |= other.unplaced;
+        // its tolerant vertices come too: the bound over every vertex's tolerance with them
+        self.note_vertex_tol(other.vertex_tol());
         let join = |a: &mut Option<String>, b: &Option<String>| {
             if let Some(b) = b {
                 *a = Some(a.take().map_or_else(|| b.clone(), |a| format!("{a}; {b}")));
@@ -1601,5 +1603,27 @@ impl Unlinked {
             at = end as usize;
         }
         body
+    }
+}
+
+#[cfg(test)]
+mod append_tests {
+    use super::*;
+
+    /// A body taken into another brings its tolerant vertices' bound: every vertex stays within
+    /// `vertex_tol` (what point_in_face looks as far as).
+    #[test]
+    fn appending_keeps_the_vertex_tolerance_bound() {
+        let mut a = Body::new();
+        a.add_vertex(Point3::ORIGIN, Name::feature(1));
+        let mut b = Body::new();
+        b.add_tolerant_vertex(Point3::new(1.0, 0.0, 0.0), 0.02, Name::feature(2));
+        a.append(&b);
+        assert!(
+            a.vertices.iter().all(|v| v.tol <= a.vertex_tol()),
+            "{}",
+            a.vertex_tol()
+        );
+        assert!(a.vertex_tol() >= 0.02);
     }
 }

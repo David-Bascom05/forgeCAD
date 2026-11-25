@@ -15,6 +15,7 @@
 //! what the estimate leaves out.
 use crate::engage::{HeightMap, Profile, Sched, move_len, schedule_samples};
 use crate::ops::{OpPath, PMove, Phase};
+use forge_math::ipow::Powi as _;
 use forge_tooling::feeds::effective_diameter;
 use forge_tooling::life::Cut;
 
@@ -85,7 +86,7 @@ fn scan_entries(path: &OpPath, map: &HeightMap, prof: &Profile, d: f64) -> Vec<E
             }
             PMove::Line { to, f, .. } => {
                 if to[2] < at[2] && in_stock(&m, to, r) {
-                    let dxy = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
+                    let dxy = ((to[0] - at[0]).ipow(2) + (to[1] - at[1]).ipow(2)).sqrt();
                     if dxy < 1e-9 {
                         out.push(Entry::Plunge { mv: i, feed: f });
                     } else {
@@ -97,10 +98,10 @@ fn scan_entries(path: &OpPath, map: &HeightMap, prof: &Profile, d: f64) -> Vec<E
                 at = to;
             }
             PMove::Arc { to, c, .. } => {
-                let rr = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
+                let rr = ((at[0] - c[0]).ipow(2) + (at[1] - c[1]).ipow(2)).sqrt();
                 let len = move_len(at, mv);
                 if to[2] < at[2] && in_stock(&m, to, r) {
-                    let xy = (len * len - (to[2] - at[2]).powi(2)).max(0.0).sqrt();
+                    let xy = (len * len - (to[2] - at[2]).ipow(2)).max(0.0).sqrt();
                     let deg = forge_math::dmath::atan2(at[2] - to[2], xy).to_degrees();
                     out.push(Entry::Helix {
                         mv: i,

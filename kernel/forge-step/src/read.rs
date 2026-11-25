@@ -72,6 +72,8 @@ pub enum ImportError {
     Brep,
     /// An IGES file that does not read as one.
     Iges,
+    /// A Parasolid transmit file that does not read as one.
+    Xt(crate::xt::XtError),
     NoSolids,
 }
 
@@ -81,6 +83,7 @@ impl std::fmt::Display for ImportError {
             ImportError::Parse(e) => write!(f, "{e}"),
             ImportError::Brep => write!(f, "not a readable OpenCascade .brep file"),
             ImportError::Iges => write!(f, "not a readable IGES file"),
+            ImportError::Xt(e) => write!(f, "not a readable Parasolid file: {e}"),
             ImportError::NoSolids => write!(f, "the file holds no solid"),
         }
     }
@@ -1481,7 +1484,17 @@ fn mesh_agrees(body: &Body, m: &forge_topo::mass::MassProps) -> Result<Option<St
             },
         )
     };
-    let diagonal = body.faces_box().diagonal();
+    // the chord from the edges' box: a face's box can be far looser (a closed extrusion's is its
+    // whole sweep, a million mm), and a chord from it draws the face too coarsely to check
+    let edges = body.edge_ids().fold(Box3::EMPTY, |b, e| {
+        let ed = body.edge(e);
+        b.hull(&ed.curve.bbox(ed.range))
+    });
+    let diagonal = if edges.is_empty() || !edges.diagonal().is_finite() {
+        body.faces_box().diagonal()
+    } else {
+        edges.diagonal()
+    };
     let (mesh, chord) = match mesh_at(5e-4 * diagonal) {
         Ok(x) => (x, 5e-4 * diagonal),
         Err(_) => match mesh_at(5e-3 * diagonal) {
@@ -1808,6 +1821,9 @@ pub fn import(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
     }
     if crate::iges::is_iges(text) {
         return crate::iges::import(text, lim);
+    }
+    if crate::xt::is_xt(text) {
+        return crate::xt::import(text, lim);
     }
     read_file(text, lim, false)
 }

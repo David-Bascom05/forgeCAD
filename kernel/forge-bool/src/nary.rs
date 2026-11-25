@@ -23,6 +23,7 @@ use crate::shape::{Member, Shape};
 use crate::ssi;
 use forge_geom::intersect::{Contact, CurveSurface, SurfaceSurface, curve_surface};
 use forge_geom::{Curve, CurveGeom, SurfaceGeom};
+use forge_math::ipow::Powi as _;
 use forge_math::{Interval, Point2, Point3, tol};
 use forge_topo::{Body, EdgeId, FaceId, Name, VertexId};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -3120,7 +3121,7 @@ fn holes_only(
                 // along e, at most), a line by its ends, else by its box's corners
                 let conic = |f: &forge_math::Frame, a: f64, b: f64| {
                     let (x, y) = (f.x().get(), f.y().get());
-                    let r = |e: forge_math::Vec3| ((a * x.dot(e)).powi(2) + (b * y.dot(e)).powi(2)).sqrt();
+                    let r = |e: forge_math::Vec3| ((a * x.dot(e)).ipow(2) + (b * y.dot(e)).ipow(2)).sqrt();
                     (mirror(face.surface.project(f.origin)), r(eu), r(ev))
                 };
                 match &pc.curve {

@@ -304,36 +304,49 @@ pub(super) fn ui(ui: &mut Ui, s: &Shell, st: &mut StudioUi, lib: &Appearances) {
         .stroke(Stroke::new(1.0, t.line))
         .corner_radius(6.0)
         .inner_margin(vec2(8.0, 6.0));
+    // the words wrap beside the button, or (a narrow panel) the button goes below them
+    let narrow = ui.available_width() < 300.0;
     frame.show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        let name = brush.map_or("No appearance chosen", |a| a.name.as_str());
+        let hint = if st.painting {
+            "click parts in the view · Esc stops"
+        } else if brush.is_some() {
+            "Apply to parts, then click them in the view"
+        } else {
+            "choose one below"
+        };
+        let words = |ui: &mut Ui| {
+            ui.vertical(|ui| {
+                ui.add(egui::Label::new(RichText::new(name).color(t.ink)).wrap());
+                ui.add(egui::Label::new(RichText::new(hint).small().color(t.ink2)).wrap());
+            });
+        };
+        let mut button = |ui: &mut Ui| {
+            let r = ui.add_enabled(
+                brush.is_some(),
+                egui::Button::new("Apply to parts").selected(st.painting),
+            );
+            if r.clicked() {
+                st.painting = !st.painting;
+            }
+        };
         ui.horizontal(|ui| {
             let (r, _) = ui.allocate_exact_size(vec2(CHIP + 8.0, CHIP + 4.0), Sense::hover());
             chip(ui, r.center(), CHIP / 2.0 + 1.0, brush, t.ink2);
-            ui.vertical(|ui| {
-                ui.label(
-                    RichText::new(brush.map_or("No appearance chosen", |a| a.name.as_str())).color(t.ink),
-                );
-                ui.label(
-                    RichText::new(if st.painting {
-                        "click parts in the view · Esc stops"
-                    } else if brush.is_some() {
-                        "Apply to parts, then click them in the view"
-                    } else {
-                        "choose one below"
-                    })
-                    .small()
-                    .color(t.ink2),
-                );
-            });
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let r = ui.add_enabled(
-                    brush.is_some(),
-                    egui::Button::new("Apply to parts").selected(st.painting),
-                );
-                if r.clicked() {
-                    st.painting = !st.painting;
-                }
-            });
+            if narrow {
+                words(ui);
+            } else {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    button(ui);
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), words);
+                });
+            }
         });
+        if narrow {
+            ui.add_space(4.0);
+            button(ui);
+        }
     });
     let mut pick = None;
     palette_ui(ui, s, st, lib, &mut pick);

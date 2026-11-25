@@ -1,6 +1,7 @@
 //! L6: on forge-post's own output, the interpreter does what forge-post's reader says the control
 //! does, motion for motion, on every dialect.
 use forge_machine::gcode::{self, Centre, Control, Ev};
+use forge_math::ipow::Powi as _;
 use forge_post::{Coolant, CycleKind, Dialect, Motion, Program, Rec};
 
 struct Lcg(u64);
@@ -47,7 +48,7 @@ fn random_program(r: &mut Lcg, dialect: &str) -> Program {
             4 | 5 => {
                 // an arc about a centre at radius from the current point
                 let c = [p[0] + r.f(-10.0, 10.0), p[1] + r.f(-10.0, 10.0)];
-                let rad = ((p[0] - c[0]).powi(2) + (p[1] - c[1]).powi(2)).sqrt();
+                let rad = ((p[0] - c[0]).ipow(2) + (p[1] - c[1]).ipow(2)).sqrt();
                 let a = r.f(0.0, forge_math::dmath::TAU);
                 let full = r.pick(5) == 0;
                 let to = if full {

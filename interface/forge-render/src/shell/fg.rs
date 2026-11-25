@@ -9,6 +9,7 @@ use egui::{Align2, Color32, Rect, Sense, Stroke, Ui, pos2, vec2};
 use forge_lang::error::{Literal, Op, ParamKey, Scope, parse_path, path_text};
 use forge_lang::syntax::Seg;
 use forge_lang::values::Dim;
+use forge_math::ipow::Powi as _;
 use std::collections::HashSet;
 
 pub(super) const WARN: Color32 = Color32::from_rgb(0xE0, 0xA0, 0x30);
@@ -18,6 +19,82 @@ pub(super) const WARN: Color32 = Color32::from_rgb(0xE0, 0xA0, 0x30);
 pub fn issue_counts(issues: &[Issue]) -> (usize, usize) {
     let e = issues.iter().filter(|i| i.severity == Severity::Error).count();
     (e, issues.iter().filter(|i| !is_note(i)).count() - e)
+}
+
+/// What of the part the view could not draw: faces the mesher failed on, left out of the
+/// drawing (the part itself is unchanged). Kept in step with the mesh the view shows.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Undrawn {
+    /// The faces left out (at most the mesher's limit), each with its border and where it is.
+    pub faces: Vec<UndrawnFace>,
+    /// Past that limit nothing of the part is drawn.
+    pub none_drawn: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct UndrawnFace {
+    /// The face's id in the part's body.
+    pub face: u32,
+    /// The mesher's reason, as it gives it (shown on hover only).
+    pub why: String,
+    /// The B-rep edges bounding it: drawn by the faces beside it, outlined in the warning colour.
+    pub edges: Vec<u32>,
+    /// Where it is, for Show: its middle and how far round it (mm).
+    pub center: [f64; 3],
+    pub radius: f64,
+}
+
+impl Undrawn {
+    /// Whether there's anything to say: one warning for the part when there is.
+    pub fn any(&self) -> bool {
+        self.none_drawn || !self.faces.is_empty()
+    }
+
+    /// The Issues line: what the view leaves out and that the part is unchanged.
+    pub fn line(&self, part: &str) -> String {
+        if self.none_drawn {
+            format!("{part} couldn't be drawn: its faces couldn't be meshed. The part itself is unchanged.")
+        } else {
+            let n = self.faces.len();
+            format!(
+                "{part}: {} couldn't be drawn and {} left out of the view. The part itself is unchanged.",
+                if n == 1 { "1 face".to_string() } else { format!("{n} faces") },
+                if n == 1 { "is" } else { "are" }
+            )
+        }
+    }
+
+    /// The hover: each face and the mesher's reason.
+    pub fn detail(&self) -> String {
+        if self.none_drawn {
+            return "The mesher failed on too many of its faces (or its only one) to draw any of it".into();
+        }
+        self.faces
+            .iter()
+            .map(|f| format!("face {}: Mesher: {}", f.face, f.why))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Show's place: the middle of the faces left out and how far round them.
+    pub fn place(&self) -> Option<([f64; 3], f64)> {
+        let (lo, hi) = self.faces.iter().fold(
+            ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]),
+            |(mut lo, mut hi), f| {
+                for k in 0..3 {
+                    lo[k] = lo[k].min(f.center[k] - f.radius);
+                    hi[k] = hi[k].max(f.center[k] + f.radius);
+                }
+                (lo, hi)
+            },
+        );
+        if !lo[0].is_finite() {
+            return None;
+        }
+        let c = [0, 1, 2].map(|k| (lo[k] + hi[k]) / 2.0);
+        let r = (0..3).map(|k| ((hi[k] - lo[k]) / 2.0).ipow(2)).sum::<f64>().sqrt();
+        Some((c, r.max(1.0)))
+    }
 }
 
 pub fn is_note(i: &Issue) -> bool {
@@ -219,6 +296,9 @@ pub struct Issue {
     /// An assembly's result as forge-lang types it: what to highlight (a conflict's set, the
     /// two parts that interfere).
     pub asm: Option<forge_lang::asm::Issue>,
+    /// From the last checked build, kept while the new build's checks run (an assembly's shape
+    /// comes first): shown as "checking…", replaced when they are done.
+    pub stale: bool,
 }
 
 /// What the browser and the dialogs ask of the host.
@@ -334,11 +414,18 @@ pub struct FgPanel {
     pub edit_fresh: bool,
     /// Every issue listed, not the first few.
     pub all_issues: bool,
+    /// What of the part the view could not draw (faces the mesher failed on).
+    pub undrawn: Undrawn,
     /// A browser row being renamed in place: its statement and the name typed so far.
     pub renaming: Option<(String, String)>,
     pub rename_fresh: bool,
     /// The last op the host refused, and why.
     pub refused: Option<String>,
+    /// What the last applied edit said ("Move hole1 above fillet1"), kept to lead the build's
+    /// summary when it comes, so the reply isn't replaced by the statistics.
+    /// The build it belongs to, once one comes: every build of that edit (its checks, its final
+    /// mesh) keeps the words in front; the next edit's doesn't.
+    pub said: Option<(String, Option<u64>)>,
     pub collapsed: HashSet<String>,
     pub sheets: Vec<SheetRow>,
     /// The part's thermoforms, and whether their wall thickness is mapped on the view.
@@ -665,6 +752,13 @@ fn keys(ks: &[ParamKey]) -> String {
 }
 
 impl FgPanel {
+    /// The Issues window's and status bar's counts: the build's issues, and a warning for what
+    /// of the part the view could not draw.
+    pub fn counts(&self) -> (usize, usize) {
+        let (e, w) = issue_counts(&self.issues);
+        (e, w + usize::from(self.undrawn.any()))
+    }
+
     pub fn tree(&self) -> Vec<TreeRow> {
         tree_rows(&self.feats)
     }
@@ -845,6 +939,8 @@ impl Shell {
         let rows = fg.tree();
         let mut places: Vec<(String, Rect)> = Vec::new();
         let mut chosen = None;
+        // what a menu's "Select …" says it chose, in the status line
+        let mut select_said: Option<String> = None;
         let mut toggle = None;
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(area));
         let planes = self.overlays().planes;
@@ -852,6 +948,31 @@ impl Shell {
         let sheet = !fg.sheets.is_empty();
         let mut flat_row = false;
         let stmts = statements(&fg.feats);
+        // a menu item that can only be refused is drawn off with the reason (STANDARD §7):
+        // while a sketch is open, and a delete or move another statement's reading stops
+        let sketching = self.sketch.is_some();
+        let source = fg.source.clone();
+        let refusal = |op: &Op| -> Option<String> {
+            if sketching {
+                return Some("Finish or cancel the sketch first".into());
+            }
+            match forge_lang::edit::apply_all_checked(&source, std::slice::from_ref(op)) {
+                Ok(_) => None,
+                Err(forge_lang::error::Error::StillRead { name, reader, .. }) => {
+                    // a delete names up to three that use it; a move, the one in the way
+                    let mut users = match op {
+                        Op::DeleteFeature { .. } => readers(&source, &name),
+                        _ => vec![],
+                    };
+                    if users.is_empty() {
+                        users.push(reader);
+                    }
+                    let them = if users.len() == 1 { users[0].clone() } else { "them".into() };
+                    Some(format!("Used by {}: delete or change {them} first", listed(&users)))
+                }
+                Err(e) => Some(e.text()),
+            }
+        };
         let mut menu_places: Vec<(String, Rect)> = Vec::new();
         egui::ScrollArea::vertical()
             .id_salt("fg-tree")
@@ -1083,8 +1204,16 @@ impl Shell {
                     let edit = row.feat.is_some() && statement_of(&key) == key;
                     resp.context_menu(|ui| {
                         ui.set_min_width(150.0);
-                        let mut item = |ui: &mut Ui, label: &str, name: &str| {
-                            let b = ui.button(egui::RichText::new(label).font(sans(12.0)));
+                        let mut off_item = |ui: &mut Ui, label: &str, name: &str, why: Option<String>| {
+                            let b = ui.add_enabled(why.is_none(), egui::Button::new(egui::RichText::new(label).font(sans(12.0))));
+                            // an item that's off says why under itself, muted, in the menu: no
+                            // tooltip over the items below it (UX-LEAD)
+                            if let Some(w) = why {
+                                ui.horizontal(|ui| {
+                                    ui.add_space(8.0);
+                                    ui.label(egui::RichText::new(w).font(sans(11.0)).color(t.ink2));
+                                });
+                            }
                             menu_places.push((format!("fg:menu:{name}:{key}"), b.rect));
                             let hit = b.clicked();
                             if hit {
@@ -1093,42 +1222,59 @@ impl Shell {
                             hit
                         };
                         if is_sketch {
-                            if item(ui, "Edit Sketch", "edit-sketch") {
+                            if off_item(ui, "Edit Sketch", "edit-sketch", None) {
                                 fg.out.push(FgAct::EditSketch(key.clone()));
                             }
-                        } else if edit && item(ui, "Edit Feature", "edit") {
+                        } else if edit && off_item(ui, "Edit Feature", "edit", None) {
                             fg.out.push(FgAct::EditFeature(key.clone()));
                         }
                         let at = stmts.iter().position(|s| *s == key);
                         if let Some(k) = at {
-                            if item(ui, "Rename", "rename") {
+                            if off_item(ui, "Rename", "rename", None) {
                                 fg.renaming = Some((key.clone(), key.clone()));
                                 fg.rename_fresh = true;
                             }
-                            if k > 0 && item(ui, "Move Up", "up") {
-                                fg.out.push(FgAct::Apply(Op::MoveFeature {
+                            if k > 0 {
+                                let op = Op::MoveFeature {
                                     id: key.clone(),
                                     before: Some(stmts[k - 1].clone()),
-                                }));
+                                };
+                                if off_item(ui, "Move Up", "up", refusal(&op)) {
+                                    fg.out.push(FgAct::Apply(op));
+                                }
                             }
-                            if k + 1 < stmts.len() && item(ui, "Move Down", "down") {
-                                fg.out.push(FgAct::Apply(Op::MoveFeature {
+                            if k + 1 < stmts.len() {
+                                let op = Op::MoveFeature {
                                     id: key.clone(),
                                     before: stmts.get(k + 2).cloned(),
-                                }));
+                                };
+                                if off_item(ui, "Move Down", "down", refusal(&op)) {
+                                    fg.out.push(FgAct::Apply(op));
+                                }
                             }
                             ui.separator();
-                            if item(ui, "Suppress Features", "suppress") {
+                            if off_item(ui, "Suppress Features", "suppress", None) {
                                 fg.out.push(FgAct::Apply(Op::Suppress { id: key.clone() }));
                             }
                             // Inventor's End of Part dragged here: what follows isn't built
                             if fg.rollback.as_deref() != Some(key.as_str())
-                                && item(ui, "Move End of Part Here", "rollback")
+                                && off_item(ui, "Move End of Part Here", "rollback", None)
                             {
                                 fg.out.push(FgAct::Rollback(Some(key.clone())));
                             }
-                            if item(ui, "Delete", "delete") {
-                                fg.out.push(FgAct::Apply(Op::DeleteFeature { id: key.clone() }));
+                            let op = Op::DeleteFeature { id: key.clone() };
+                            let why = refusal(&op);
+                            let used = why.is_some() && !sketching;
+                            if off_item(ui, "Delete", "delete", why) {
+                                fg.out.push(FgAct::Apply(op));
+                            }
+                            // what stops the delete, a click away (STANDARD §9: naming it selects it)
+                            if used
+                                && let Some(first) = readers(&source, &key).into_iter().next()
+                                && off_item(ui, &format!("Select {first}"), "select-user", None)
+                            {
+                                select_said = Some(format!("{first} uses {key}: change or delete it first"));
+                                chosen = Some(first);
                             }
                         }
                         // one instance of a loop or a call: a shared param of its own
@@ -1138,7 +1284,7 @@ impl Shell {
                                 Op::SplitInstance { param, .. } => format!("split:{param}"),
                                 _ => unreachable!("just made"),
                             };
-                            if item(ui, &op_label(&op), &name) {
+                            if off_item(ui, &op_label(&op), &name, None) {
                                 fg.out.push(FgAct::Apply(op));
                             }
                         }
@@ -1231,15 +1377,62 @@ impl Shell {
             return;
         }
         if let Some(k) = chosen {
-            fg.selected = if fg.selected.as_deref() == Some(k.as_str()) {
+            // a menu's "Select …" selects (a row's click toggles)
+            fg.selected = if select_said.is_none() && fg.selected.as_deref() == Some(k.as_str()) {
                 None
             } else {
                 Some(k)
             };
             fg.editing = None;
         }
+        if let Some(w) = select_said {
+            self.status = w;
+        }
         self.places.extend(places);
         self.fg = Some(fg);
+    }
+
+    /// The Issues row for what the view could not draw: a warning in words, the mesher's reasons
+    /// on hover, Show to frame the faces left out (outlined in the view in the warning colour).
+    fn undrawn_row(
+        ui: &mut Ui,
+        t: &super::theme::Theme,
+        fg: &FgPanel,
+        out: &mut Vec<FgAct>,
+        places: &mut Vec<(String, Rect)>,
+    ) {
+        let u = &fg.undrawn;
+        ui.add_space(super::theme::S1);
+        let r = ui
+            .horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = super::theme::S2;
+                egui::Frame::new()
+                    .fill(WARN.gamma_multiply(0.16))
+                    .corner_radius(super::theme::R1)
+                    .inner_margin(egui::Margin::symmetric(6, 1))
+                    .show(ui, |ui| {
+                        ui.label(egui::RichText::new("Warning").font(medium(11.0)).color(WARN));
+                    });
+                ui.label(egui::RichText::new("Drawing").font(super::theme::caption()).color(t.ink2));
+            })
+            .response;
+        places.push(("fg:undrawn".into(), r.rect));
+        ui.add_space(2.0);
+        let part = fg.file.rsplit(['/', '\\']).next().unwrap_or(&fg.file);
+        let line = ui
+            .label(egui::RichText::new(u.line(part)).font(sans(12.0)).color(t.ink))
+            .on_hover_text(u.detail());
+        places.push(("fg:undrawn:line".into(), line.rect));
+        if let Some((c, r)) = u.place() {
+            ui.add_space(2.0);
+            if Self::fg_button(ui, "Show", "fg:undrawn:show".into(), places) {
+                out.push(FgAct::Locate(c, r));
+            }
+        }
+        if !fg.issues.iter().all(is_note) {
+            ui.add_space(super::theme::S1);
+            ui.separator();
+        }
     }
 
     pub(super) fn fg_button(
@@ -1505,7 +1698,7 @@ impl Shell {
         out: &mut Vec<FgAct>,
         places: &mut Vec<(String, Rect)>,
     ) {
-        let (errors, warnings) = issue_counts(&fg.issues);
+        let (errors, warnings) = fg.counts();
         let head = format!("{} · {}", plural(errors, "error"), plural(warnings, "warning"));
         let ink = if errors > 0 {
             t.error
@@ -1514,9 +1707,21 @@ impl Shell {
         } else {
             t.ink2
         };
-        let r = ui.label(egui::RichText::new(head).font(medium(12.0)).color(ink));
+        // an assembly's last checks still listed while the new ones run: the shared spinner
+        let checking = fg.issues.iter().any(|i| i.stale);
+        let r = ui
+            .horizontal(|ui| {
+                ui.label(egui::RichText::new(head).font(medium(12.0)).color(ink));
+                if checking {
+                    super::ux::loading(ui, t, "checking");
+                }
+            })
+            .response;
         places.push(("fg:issues".into(), r.rect));
         ui.add_space(super::theme::S1);
+        if fg.undrawn.any() {
+            Self::undrawn_row(ui, t, fg, out, places);
+        }
         let issues = std::mem::take(&mut fg.issues);
         // a long list shows its first few until asked
         let cap = if fg.all_issues { 300 } else { 8 };
@@ -1533,6 +1738,8 @@ impl Shell {
                 Severity::Error => t.error,
                 _ => WARN,
             };
+            // the last checks' finding, kept while the new checks run: dimmed, said so
+            let colour = if is.stale { colour.gamma_multiply(0.5) } else { colour };
             let word = match is.severity {
                 Severity::Error => "Error",
                 Severity::Lint => "Lint",
@@ -1556,15 +1763,38 @@ impl Shell {
                             ui.label(egui::RichText::new(word).font(medium(11.0)).color(colour));
                         });
                     ui.label(
-                        egui::RichText::new(format!("{} · line {}:{}", is.kind, is.line, is.col))
-                            .font(super::theme::caption())
-                            .color(t.ink2),
+                        egui::RichText::new(format!(
+                            "{} · line {}:{}{}",
+                            is.kind,
+                            is.line,
+                            is.col,
+                            if is.stale { " · checking" } else { "" }
+                        ))
+                        .font(super::theme::caption())
+                        .color(t.ink2),
                     );
                 })
                 .response;
             places.push((format!("fg:issue:{i}"), r.rect));
             ui.add_space(2.0);
-            ui.label(egui::RichText::new(&is.text).font(sans(12.0)).color(t.ink));
+            // a failed exact intersection said in words; the kernel's reason only on hover
+            let (text, why) = match &is.asm {
+                Some(forge_lang::asm::Issue::Interference {
+                    a,
+                    b,
+                    volume: None,
+                    boolean_failed: Some(why),
+                    ..
+                }) => (
+                    format!("{a} and {b} overlap by their meshes; the exact intersection failed, so the volume is unconfirmed"),
+                    Some(why),
+                ),
+                _ => (is.text.clone(), None),
+            };
+            let row = ui.label(egui::RichText::new(text).font(sans(12.0)).color(if is.stale { t.ink2 } else { t.ink }));
+            if let Some(why) = why {
+                row.on_hover_text(why.as_str());
+            }
             if !is.fixes.is_empty() || is.asm.is_some() {
                 ui.add_space(2.0);
                 ui.horizontal_wrapped(|ui| {
@@ -1757,5 +1987,51 @@ mod tests {
         // nothing it builds changes
         let run = |t: &str| forge_lang::run(t, forge_lang::Options::default(), Default::default()).0;
         assert!(run(&inch).errors.is_empty());
+    }
+}
+
+/// The statements that read `name`, in order: what a delete of it would leave reading nothing.
+fn readers(source: &str, name: &str) -> Vec<String> {
+    use forge_lang::syntax::StmtKind;
+    let Ok(prog) = forge_lang::syntax::parse(source) else {
+        return vec![];
+    };
+    prog.iter()
+        .filter_map(|s| match &s.kind {
+            StmtKind::Assign { name: n, .. } | StmtKind::Block { name: n, .. }
+                if n != name && forge_lang::edit::mentions(s).contains(name) =>
+            {
+                Some(n.clone())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// "a", "a and b", "a, b and c", "a, b, c and 2 more".
+fn listed(names: &[String]) -> String {
+    match names {
+        [] => String::new(),
+        [a] => a.clone(),
+        [a, b] => format!("{a} and {b}"),
+        [a, b, c] => format!("{a}, {b} and {c}"),
+        [a, b, c, rest @ ..] => format!("{a}, {b}, {c} and {} more", rest.len()),
+    }
+}
+
+#[cfg(test)]
+mod used_by_tests {
+    use super::{listed, readers};
+
+    #[test]
+    fn a_delete_names_up_to_three_users() {
+        let src = "sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (60, 40))\n}\n\
+plate = extrude(plan, 6)\nlid = extrude(plan, 2)\n";
+        assert_eq!(readers(src, "plan"), ["plate", "lid"]);
+        let n: Vec<String> = ["a", "b", "c", "d", "e"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(listed(&n[..1]), "a");
+        assert_eq!(listed(&n[..2]), "a and b");
+        assert_eq!(listed(&n[..3]), "a, b and c");
+        assert_eq!(listed(&n), "a, b, c and 2 more");
     }
 }

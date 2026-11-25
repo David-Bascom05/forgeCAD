@@ -1335,6 +1335,7 @@ pub(crate) fn ray_hits_box(o: Point3, d: Vec3, b: &Box3) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use forge_math::ipow::Powi as _;
     use forge_math::rng::Rng;
     use forge_math::{Frame, Vec2, dmath};
     use forge_ops::{Axis2, Profile, ProfileLoop, Segment, extrude, revolve};
@@ -1400,7 +1401,7 @@ mod tests {
         agree(
             &b,
             |p| {
-                let hole = 4.0 - ((p.x - 15.0).powi(2) + (p.y - 10.0).powi(2)).sqrt();
+                let hole = 4.0 - ((p.x - 15.0).ipow(2) + (p.y - 10.0).ipow(2)).sqrt();
                 margin(
                     (-p.x)
                         .max(p.x - 30.0)

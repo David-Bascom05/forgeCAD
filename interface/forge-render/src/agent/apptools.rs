@@ -115,10 +115,14 @@ impl AppTools {
                     return Reply::err(e);
                 }
             }
-            return match super::project::call(name, &args, &dir) {
+            let r = match super::project::call(name, &args, &dir) {
                 Ok(j) => Reply::ok(j.to_string()),
                 Err(e) => Reply::err(e),
             };
+            // the sketches its runs kept: freed as it ends (this thread lives as long as the
+            // connection, and forge-lang frees none itself)
+            crate::plat::release_sketches();
+            return r;
         }
         // the fg tools build on the caller's thread, never the frame's
         if name.starts_with("fg_") {
@@ -126,6 +130,7 @@ impl AppTools {
                 return Reply::err("no document is open");
             };
             let (text, error) = super::tools::fg_call(name, &args, &dir);
+            crate::plat::release_sketches();
             return Reply {
                 text,
                 png: None,

@@ -5,6 +5,7 @@
 
 use forge_lang::syntax::{self, BinOp, Expr, ExprKind, StmtKind, Unit};
 use forge_math::dmath;
+use forge_math::ipow::Powi as _;
 
 /// A value: its number, and whether it is an angle (then in degrees).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -121,7 +122,7 @@ impl Ev<'_> {
                     },
                     // Forge's: a whole power
                     BinOp::Pow if b.v.fract() == 0.0 && !b.angle => Val {
-                        v: a.v.powi(b.v as i32),
+                        v: a.v.ipow(b.v as i32),
                         angle: false,
                     },
                     BinOp::Pow => return Err(format!("'{}': ^ takes a whole power", self.text)),

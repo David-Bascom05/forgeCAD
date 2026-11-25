@@ -12,6 +12,10 @@ repository.workspace = true
 # std Vec growth serves several element types and loses its u32 specialisation, which every crate's
 # `Vec<u32>::push` shares (shared generics): kernel regen lines paid ~10 Ir a push for nothing.
 real = []
+# CAM's interval rules without the exact-zero rule (an exact zero operand rounded outward like any
+# other): the rules as they were, kept one train for comparison. A build feature, never a runtime
+# switch.
+ival-strict = ["real"]
 
 [dependencies]
 

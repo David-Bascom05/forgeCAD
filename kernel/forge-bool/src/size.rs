@@ -78,10 +78,11 @@ pub(crate) fn debug_check(_bodies: &[&Body]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use forge_math::ipow::Powi as _;
 
     #[test]
     fn floor_is_two_to_the_minus_480() {
-        assert_eq!(INPUT_FLOOR, 2f64.powi(-480));
+        assert_eq!(INPUT_FLOOR, 2f64.ipow(-480));
     }
 
     #[test]

@@ -15,6 +15,7 @@ use forge_dwg::io::{Color, Href};
 use forge_dwg::scene::{Options, Plan, Scene, Space};
 use forge_dwg::types::Data;
 use forge_dwg::version::Version;
+use forge_math::ipow::Powi as _;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
@@ -1143,7 +1144,7 @@ impl DwgDoc {
                 let len: f64 = (0..segs)
                     .map(|k| {
                         let (a, b) = (p.points[k], p.points[(k + 1) % n]);
-                        ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt()
+                        ((b[0] - a[0]).ipow(2) + (b[1] - a[1]).ipow(2)).sqrt()
                     })
                     .sum();
                 geo("Length (chords)", num(len));

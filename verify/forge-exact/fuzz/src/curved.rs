@@ -13,6 +13,7 @@
 use crate::{Class, Kernel, Reference, exact, guarded, judge_body, short};
 use forge_bool::Where;
 use forge_geom::{Surface, SurfaceGeom};
+use forge_math::ipow::Powi as _;
 use forge_math::{Point2, Point3, Vec3, tol::LINEAR};
 use forge_model::{Combine, Feature, History, Part};
 use forge_topo::Body;
@@ -70,7 +71,7 @@ fn face_of(body: &Body, f: forge_topo::FaceId) -> Result<Face, String> {
                 ),
                 q: Box::new(move |p: Point3| {
                     let d = p - o;
-                    d.dot(d) - d.dot(z).powi(2) - r * r
+                    d.dot(d) - d.dot(z).ipow(2) - r * r
                 }),
             })
         }

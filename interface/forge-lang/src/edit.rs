@@ -447,12 +447,33 @@ fn splice(src: &str, lo: u32, hi: u32, text: &str) -> String {
 }
 
 /// The dimension a param's definition gives, from a check of the document.
-pub(crate) fn param_dim(src: &str, key: &ParamKey) -> Option<Dim> {
-    let opts = crate::Options {
-        build: false,
-        ..crate::Options::default()
-    };
-    let (run, _) = crate::run(src, opts, Default::default());
+pub(crate) fn param_dim(src: &str, key: &ParamKey, at: &At) -> Option<Dim> {
+    let (run, _) = crate::run(src, at.options(), Default::default());
+    dim_in(&run, key)
+}
+
+/// Where a document is, for every evaluation an edit makes of it: its directory (where `use`,
+/// fonts and media are found) and the session's root (nothing outside it is read: `fg serve`, MCP,
+/// a hosted session). `At::default()` is a text with neither: no file beside it is found.
+#[derive(Clone, Debug, Default)]
+pub struct At {
+    pub dir: Option<std::path::PathBuf>,
+    pub root: Option<std::path::PathBuf>,
+}
+
+impl At {
+    fn options(&self) -> crate::Options {
+        crate::Options {
+            build: false,
+            dir: self.dir.clone(),
+            root: self.root.clone(),
+            ..crate::Options::default()
+        }
+    }
+}
+
+/// A param's dimension in an evaluation of the document.
+fn dim_in(run: &crate::Run, key: &ParamKey) -> Option<Dim> {
     run.shared
         .iter()
         .chain(&run.locals)
@@ -489,7 +510,13 @@ fn rename(src: &str, from: &str, to: &str) -> R<String> {
 }
 
 pub fn apply(src: &str, op: &Op) -> R<String> {
-    apply_with(src, op, &|k| param_dim(src, k))
+    apply_at(src, op, &At::default())
+}
+
+/// `apply` for a document in `at` (its directory and the session's root): a param's dimension is
+/// read from an evaluation fenced as the document's own.
+pub fn apply_at(src: &str, op: &Op, at: &At) -> R<String> {
+    apply_with(src, op, &|k| param_dim(src, k, at))
 }
 
 /// `apply`, a param's dimension in `src` asked of `dim_of` (one who already evaluated `src`).
@@ -918,6 +945,11 @@ fn lit_expr(l: &Literal) -> Expr {
 
 /// The same op on the syntax tree.
 pub fn apply_ast(src: &str, op: &Op) -> R<Vec<Stmt>> {
+    apply_ast_at(src, op, &At::default())
+}
+
+/// `apply_ast` for a document in `at` (`apply_at`).
+pub fn apply_ast_at(src: &str, op: &Op, at: &At) -> R<Vec<Stmt>> {
     let reserved = matches!(op, Op::Rename { from, .. } if syntax::RESERVED.contains(&from.as_str()));
     if reserved
         || matches!(
@@ -925,14 +957,14 @@ pub fn apply_ast(src: &str, op: &Op) -> R<Vec<Stmt>> {
             Op::SetProperty { .. } | Op::Suppress { .. } | Op::Unsuppress { .. } | Op::Respell { .. }
         )
     {
-        return syntax::parse(&apply(src, op)?);
+        return syntax::parse(&apply_at(src, op, at)?);
     }
     let mut prog = syntax::parse(src)?;
     // an edit of a component's header (its defaults), at any depth: the text's edit, read back
     if on_header(&prog, op) {
-        return syntax::parse(&apply(src, op)?);
+        return syntax::parse(&apply_at(src, op, at)?);
     }
-    let dim_of = |k: &ParamKey| param_dim(src, k);
+    let dim_of = |k: &ParamKey| param_dim(src, k, at);
     ast_scoped(&mut prog, op, &dim_of)?;
     Ok(prog)
 }
@@ -1316,8 +1348,19 @@ pub fn apply_checked(src: &str, op: &Op) -> R<(String, Option<Reach>)> {
 /// `apply_checked` for a document in `dir`: the files it places are read for the reach (a
 /// `part(FILE, with: ..)` is a call whose values its params drive).
 pub fn apply_checked_in(src: &str, op: &Op, dir: Option<std::path::PathBuf>) -> R<(String, Option<Reach>)> {
-    let text = apply(src, op)?;
-    let after = checked_in(src, &text, dir)?;
+    apply_checked_at(src, op, &At { dir, root: None })
+}
+
+/// `apply_checked` for a document in `at`: every evaluation it makes (a param's dimension, the
+/// source's errors, the edited text's) has the document's directory and the session's root.
+pub fn apply_checked_at(src: &str, op: &Op, at: &At) -> R<(String, Option<Reach>)> {
+    // the source evaluated once, when first asked: for a param's dimension (SetParam) and for the
+    // errors the edit is checked against (it was two runs of the same text)
+    let opts = at.options();
+    let before = std::cell::OnceCell::new();
+    let run_src = || before.get_or_init(|| crate::run(src, opts.clone(), Default::default()).0);
+    let text = apply_with(src, op, &|k| dim_in(run_src(), k))?;
+    let after = checked_against(run_src(), &text, opts.clone())?;
     let reach = match op {
         Op::SetParam { param, .. } => {
             // the param, and every param linked to it (transitively)
@@ -1374,6 +1417,11 @@ pub(crate) fn checked_in(src: &str, text: &str, dir: Option<std::path::PathBuf>)
         ..crate::Options::default()
     };
     let (before, _) = crate::run(src, opts.clone(), Default::default());
+    checked_against(&before, text, opts)
+}
+
+/// The edited text's run, or its first typed error that `before` (the source's run) hadn't.
+fn checked_against(before: &crate::Run, text: &str, opts: crate::Options) -> R<crate::Run> {
     let (after, _) = crate::run(text, opts, Default::default());
     // refused when it adds an error, of a kind already there too (proof: an IndexOut more is a
     // new error, not the old one): counted by kind, spans move with the edit
@@ -1381,7 +1429,7 @@ pub(crate) fn checked_in(src: &str, text: &str, dir: Option<std::path::PathBuf>)
     if let Some(e) = after
         .errors
         .iter()
-        .find(|e| count(&after, e.kind()) > count(&before, e.kind()))
+        .find(|e| count(&after, e.kind()) > count(before, e.kind()))
     {
         return Err(e.clone());
     }
@@ -1391,10 +1439,16 @@ pub(crate) fn checked_in(src: &str, text: &str, dir: Option<std::path::PathBuf>)
 /// Several ops as one edit (an app's one undo step): each applied to the text the last one made,
 /// the result checked once, as `apply_checked` checks one.
 pub fn apply_all_checked(src: &str, ops: &[Op]) -> R<String> {
+    apply_all_checked_at(src, ops, &At::default())
+}
+
+/// `apply_all_checked` for a document in `at` (`apply_checked_at`).
+pub fn apply_all_checked_at(src: &str, ops: &[Op], at: &At) -> R<String> {
     let mut text = src.to_string();
     for op in ops {
-        text = apply(&text, op)?;
+        text = apply_at(&text, op, at)?;
     }
-    checked(src, &text)?;
+    let (before, _) = crate::run(src, at.options(), Default::default());
+    checked_against(&before, &text, at.options())?;
     Ok(text)
 }

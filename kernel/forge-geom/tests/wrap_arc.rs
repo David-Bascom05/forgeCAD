@@ -7,6 +7,7 @@ use forge_geom::ruled::{Rail, Ruled, line_wall, meet_ruled, wrap_wall};
 use forge_geom::testing::rand_frame;
 use forge_geom::wrap::{Flat, Wrap, wrap_surface};
 use forge_geom::{Curve, Line, Parabola, Plane, Surface, SurfaceGeom};
+use forge_math::ipow::Powi as _;
 use forge_math::rng::Rng;
 use forge_math::{Frame, Interval, Point2, Point3, Vec3, dmath};
 
@@ -82,7 +83,7 @@ fn a_wrapped_circle_is_an_ellipse_and_its_wall_a_right_conoid() {
         // in (phi, h) the ellipse with semi-axes radius / unroll and radius
         let q = unwrapped(&axis, p, unroll, center.x);
         let phi = q.x / unroll;
-        let e = ((phi - center.x / unroll) * unroll / radius).powi(2) + ((q.y - center.y) / radius).powi(2);
+        let e = ((phi - center.x / unroll) * unroll / radius).ipow(2) + ((q.y - center.y) / radius).ipow(2);
         assert!((e - 1.0).abs() < 1e-12, "{e}");
         let l = axis.point_to_local(p);
         assert!(((l.x * l.x + l.y * l.y).sqrt() - w.radius).abs() < 1e-12);

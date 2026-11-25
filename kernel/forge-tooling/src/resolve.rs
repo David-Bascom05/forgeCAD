@@ -19,6 +19,7 @@ use crate::feeds::{
     self, Beam, Cut, DrillRow, Generic, Group, Quantiles, Stock, Substrate, THIN_CAP, TapRow,
 };
 use crate::{Cite, Preset};
+use forge_math::ipow::Powi as _;
 use std::f64::consts::PI;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1886,7 +1887,7 @@ pub fn reaming(
         None => g.clone(),
     });
     let area = if allow.v.is_finite() {
-        0.25 * PI * (d * d - (d - allow.v).max(0.0).powi(2))
+        0.25 * PI * (d * d - (d - allow.v).max(0.0).ipow(2))
     } else {
         f64::NAN
     };

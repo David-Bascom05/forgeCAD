@@ -20,6 +20,7 @@
 //! the pdf the whole mixture's.
 
 use super::v3::{V3, v3};
+use forge_math::ipow::Powi as _;
 use std::f32::consts::PI;
 
 /// The roughest a surface can be smooth: below this GGX's peak no longer fits in f32 well.
@@ -142,14 +143,14 @@ pub fn schlick(f0: f32, c: f32) -> f32 {
 /// The F82-tint conductor Fresnel: Schlick bent down to meet F82 at cos = 1/7.
 pub fn conductor_fresnel(f0: V3, f82: V3, c: f32) -> V3 {
     let mb: f32 = 1.0 / 7.0;
-    let k = 1.0 / (mb * (1.0 - mb).powi(6));
+    let k = 1.0 / (mb * (1.0 - mb).ipow(6));
     let fs = |f0: f32| schlick(f0, mb);
     let a = v3(
         (fs(f0.x) - f82.x * fs(f0.x)) * k,
         (fs(f0.y) - f82.y * fs(f0.y)) * k,
         (fs(f0.z) - f82.z * fs(f0.z)) * k,
     );
-    let t = c * (1.0 - c).powi(6);
+    let t = c * (1.0 - c).ipow(6);
     v3(
         (schlick(f0.x, c) - a.x * t).clamp(0.0, 1.0),
         (schlick(f0.y, c) - a.y * t).clamp(0.0, 1.0),
@@ -160,7 +161,7 @@ pub fn conductor_fresnel(f0: V3, f82: V3, c: f32) -> V3 {
 /// Its cosine-weighted hemispherical mean: Schlick's is F0 + (1 - F0) / 21, the bend's 1/126.
 pub fn conductor_fresnel_avg(f0: V3, f82: V3) -> V3 {
     let mb: f32 = 1.0 / 7.0;
-    let k = 1.0 / (mb * (1.0 - mb).powi(6));
+    let k = 1.0 / (mb * (1.0 - mb).ipow(6));
     let one = |f0: f32, f82: f32| {
         let fs = schlick(f0, mb);
         let a = (fs - f82 * fs) * k;

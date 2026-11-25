@@ -43,6 +43,7 @@ use crate::check::{Face, Move, Surf, V3};
 use crate::dual::{D, Num};
 use crate::ival::Ival;
 use crate::tool::{Body, PSeg};
+use forge_math::ipow::Powi as _;
 
 /// One piece of a lower profile, ρ increasing from `a` to `b`.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1489,8 +1490,8 @@ fn wall_drop(
             if within {
                 p
             } else {
-                let da = (a[0] - x).powi(2) + (a[1] - y).powi(2);
-                let db = (b[0] - x).powi(2) + (b[1] - y).powi(2);
+                let da = (a[0] - x).ipow(2) + (a[1] - y).ipow(2);
+                let db = (b[0] - x).ipow(2) + (b[1] - y).ipow(2);
                 if da <= db { a } else { b }
             }
         }
