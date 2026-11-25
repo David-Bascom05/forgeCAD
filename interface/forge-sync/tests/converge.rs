@@ -645,3 +645,42 @@ fn a_saved_client_restores_its_pending_ops_and_ids() {
     assert_eq!(back.edit(set_w(43.0)).unwrap(), 3, "op ids continue");
     assert!(Client::restore("part.fg", "t", "not json").is_none());
 }
+
+/// The clients review, M4: undo while the latest edit is unacked would take back the op before
+/// it; it is refused until the edit lands, then undoes that edit.
+#[test]
+fn undo_waits_for_the_latest_edit_to_land() {
+    let mut st = MemStore::default();
+    let mut room = Room::new(Sequencer::open(&mut st, "part.fg", DOC, None).unwrap());
+    let mut c = Client::new("part.fg", "ada/c", "t");
+    let pump = |c: &mut Client, room: &mut Room, st: &mut MemStore| {
+        for up in std::mem::take(&mut c.outbox) {
+            let (out, _) = if matches!(up, Up::Hello { .. }) {
+                (room.join(0, "ada/c", "ada", None), vec![])
+            } else {
+                room.receive(st, 0, up)
+            };
+            for (_, d) in out {
+                c.receive(d);
+            }
+        }
+    };
+    pump(&mut c, &mut room, &mut st);
+    c.edit(set_w(41.0)).unwrap();
+    pump(&mut c, &mut room, &mut st);
+    assert!(c.pending().is_empty());
+    c.edit(set_w(42.0)).unwrap(); // not yet sent
+    assert!(
+        matches!(c.undo(), Some(Err(_))),
+        "refused while the latest is on its way"
+    );
+    pump(&mut c, &mut room, &mut st);
+    assert!(c.pending().is_empty());
+    assert!(matches!(c.undo(), Some(Ok(_))));
+    pump(&mut c, &mut room, &mut st);
+    assert!(
+        c.text().contains("shared w = 41"),
+        "the latest edit was undone: {}",
+        c.text()
+    );
+}

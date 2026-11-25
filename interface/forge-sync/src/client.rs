@@ -228,6 +228,13 @@ impl Client {
     /// None: nothing to undo. The inverse is applied locally at once (Err if it no longer applies
     /// here; it is then not sent).
     pub fn undo(&mut self) -> Option<Result<u64, Refusal>> {
+        // the user's latest edit is still on its way: undoing now would take back the op before
+        // it (the undo list holds only committed ops), so it waits for the Ack
+        if !self.pending.is_empty() && !self.undo.is_empty() {
+            return Some(Err(Refusal::Invalid {
+                why: "an edit is still on its way to the server: undo once it has landed".into(),
+            }));
+        }
         let (seq, inv) = self.undo.pop()?;
         // the inverse as it reads now: through others' renames since that seq
         let op = match rebase(&inv, &self.id, self.recent.iter().filter(|e| e.seq > seq)) {
