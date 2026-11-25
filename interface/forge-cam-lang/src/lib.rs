@@ -9090,7 +9090,7 @@ fn boxes_of(rg: &Region) -> Option<Region> {
                     take(b.x, b.y);
                 }
                 Seg::Arc { a, c, .. } => {
-                    let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+                    let r = ((a.x - c.x).ipow(2) + (a.y - c.y).ipow(2)).sqrt();
                     take(c.x - r, c.y - r);
                     take(c.x + r, c.y + r);
                 }

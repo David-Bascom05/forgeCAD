@@ -5,6 +5,7 @@
 //! rectangular stock (a first pass) and of that stock less a first pass's slot (a second pass
 //! beside it), over sub-cell changes of the stock's extent and the passes' offsets.
 use forge_cam::engage::{HeightMap, Profile};
+use forge_math::ipow::Powi as _;
 
 const R: f64 = 5.0;
 const EPS: f64 = 1e-3;
@@ -139,7 +140,7 @@ fn a_pass_beside_a_slanted_slot_is_never_under_read() {
                     let (dx, dy) = (x - p0[0], y - p0[1]);
                     let t = (dx * u[0] + dy * u[1]).clamp(0.0, 60.0);
                     let (qx, qy) = (p0[0] + t * u[0], p0[1] + t * u[1]);
-                    ((x - qx).powi(2) + (y - qy).powi(2)).sqrt() > R
+                    ((x - qx).ipow(2) + (y - qy).ipow(2)).sqrt() > R
                 };
                 for &so in &[3.0, 5.0, 7.0, 8.5] {
                     for k in 0..20 {
