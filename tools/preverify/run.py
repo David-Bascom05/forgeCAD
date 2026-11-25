@@ -39,6 +39,11 @@ def git(*args):
     return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout.strip()
 
 
+# the wasm targets any step builds, for the pinned toolchain, before anything else (rust-toolchain.toml
+# lists wasm32-wasip1 only; forge-render's clippy builds wasm32-unknown-unknown, its dependencies
+# forge-par, forge-alloc, forge-num included): without it, E0463 "can't find crate for std"
+WASM_UNKNOWN = subprocess.run(["rustup", "target", "add", "wasm32-unknown-unknown", "wasm32-wasip1"],
+                              cwd=root, capture_output=True).returncode == 0
 head, base = git("rev-parse", "HEAD"), git("rev-parse", a.base)
 if subprocess.run(["git", "merge-base", "--is-ancestor", base, head]).returncode:
     sys.exit(f"pre-verify: {a.base} ({base[:8]}) is not in this branch: merge it first")
@@ -315,9 +320,7 @@ if pk:
 # forge-render's clippy is for wasm32-unknown-unknown, which rust-toolchain.toml does not list (CI
 # adds it by hand): added here for the pinned toolchain; where it cannot be, render is NOT RUN,
 # not a RED (E0463 "can't find crate for std" is the machine, not the branch)
-if render and subprocess.run(["rustup", "target", "add", "wasm32-unknown-unknown"],
-                             cwd=os.path.join(root, "interface/forge-render"),
-                             capture_output=True).returncode != 0:
+if render and not WASM_UNKNOWN:
     record["steps"]["render"] = {"ok": None, "not_run": "no wasm32-unknown-unknown target (rustup target add failed)"}
     print("pre-verify render  NOT RUN here: `rustup target add wasm32-unknown-unknown` failed; "
           "ask VERIFY-RENDER for this sha (via TRAIN-CONDUCTOR)", flush=True)
