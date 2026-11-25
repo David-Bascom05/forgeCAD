@@ -273,3 +273,95 @@ fn a_flange_under_the_flattening_punch_is_a_proven_hit() {
     ctx0.collisions(Phase::Bend, None, &mut c0, false);
     assert!(c0.iter().all(|c| c.pass), "{c0:?}");
 }
+
+/// A closed hem (the shop's table giving its allowance) is pre-bent and flattened, closed on the
+/// die at two thicknesses and the shop's closed gap; a teardrop (past half a turn) is refused:
+/// a flat face meets only its apex, and the tool that closes one is not published.
+#[test]
+fn a_closed_hem_flattens_and_a_teardrop_is_refused() {
+    use forge_brake::{Options, Stroke, plan};
+    use forge_sheet::{HemName, HemRow, HemTable};
+    let table = HemTable {
+        closed_gap: forge_sheet::GAP_FLOOR,
+        rows: vec![HemRow {
+            kind: HemName::Closed,
+            thickness: 1.0,
+            radius: 0.0,
+            angle: dmath::PI,
+            allowance: 2.0,
+        }],
+    };
+    let (mut s, base) = Sheet::face(
+        FeatureId(1),
+        Gauge {
+            thickness: 1.0,
+            radius: 1.0,
+            rule: BendRule::K(0.4),
+        },
+        Frame::WORLD,
+        &[rect(120.0, 20.0)],
+    )
+    .unwrap();
+    s.hem(
+        base,
+        0,
+        HemSpec {
+            kind: HemKind::Closed,
+            // a closed hem's fold is tight: the 8 mm V needs a longer leg than an open hem's
+            leg: 14.0,
+            up: true,
+        },
+        Some(&table),
+    )
+    .unwrap();
+    let m = Model::new(&s).unwrap();
+    let tl = with_flattening();
+    let p = plan(&m, &tl, &Options::default());
+    assert!(p.feasible, "{:?}", p.blocking);
+    assert!(matches!(p.steps[1].stroke, Stroke::Flatten { .. }));
+    let mut sc = forge_brake::scene::Scene::new(&m, &tl, &p);
+    let hi = sc
+        .bodies(1, 0.84)
+        .iter()
+        .filter(|b| b.look.is_sheet())
+        .map(|b| b.mesh.bounds().unwrap().1[2])
+        .fold(f32::MIN, f32::max);
+    assert!(
+        (f64::from(hi) - (2.0 + forge_sheet::GAP_FLOOR)).abs() < 1e-3,
+        "{hi}"
+    );
+    // a teardrop: pre-bent, then refused for want of a flattening that closes it
+    let t = hemmed_on(
+        HemKind::Teardrop {
+            radius: 2.0,
+            angle: 1.1 * dmath::PI,
+        },
+        true,
+        120.0,
+        20.0,
+        0,
+    );
+    let m = Model::new(&t).unwrap();
+    let p = plan(&m, &tl, &Options::default());
+    assert!(!p.feasible);
+    let su = forge_brake::sim::Setup {
+        punch: tl
+            .punches
+            .iter()
+            .position(|p| p.id == "test/flatten-top")
+            .unwrap(),
+        die: tl
+            .dies
+            .iter()
+            .position(|d| d.id == "test/flatten-bottom")
+            .unwrap(),
+        rotate: false,
+    };
+    let from = dmath::PI - 30f64.to_radians();
+    assert!(
+        forge_brake::sim::StepCtx::new(&m, &tl, &[false], 0, su, 0.0)
+            .flattening(from)
+            .is_none(),
+        "a flat face does not close a teardrop"
+    );
+}

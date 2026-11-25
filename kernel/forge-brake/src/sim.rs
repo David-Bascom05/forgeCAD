@@ -831,7 +831,11 @@ impl<'a> StepCtx<'a> {
     /// `flattening` in place: false (nothing changed) where it does not model the stroke.
     pub fn set_flattening(&mut self, from: f64) -> bool {
         let b = self.bj;
-        if from < 0.5 * dmath::PI
+        // past half a turn (a teardrop, a roll) the leg drops below the fold's apex: a flat face
+        // coming down meets the apex alone and cannot close it further (the tool that closes a
+        // teardrop is not published: research/bendsim/tools/hems-data.md)
+        if b.theta > dmath::PI + 1e-9
+            || from < 0.5 * dmath::PI
             || self
                 .pieces
                 .iter()
@@ -1650,9 +1654,10 @@ impl<'a> StepCtx<'a> {
                 if mv.side == Side::J && (wall_of(st) == Some(a) || wall_of(st) == Some(b)) {
                     continue;
                 }
-                // flattening: the hem's leg closing on its base is the hem (its gap is the
-                // sheet's own, built and checked there)
-                if self.flatten.is_some() && wall_of(mv) == Some(b) && wall_of(st) == Some(a) {
+                // a hem's leg closing on its base, in either stroke, is the hem: the two meet
+                // only at the fold, whose radius here is the hem's own (a closed hem's next to
+                // none), and their gap is the sheet's, built and checked there
+                if self.bj.hem.is_some() && wall_of(mv) == Some(b) && wall_of(st) == Some(a) {
                     continue;
                 }
                 let pb = SelfPb {
@@ -1739,7 +1744,7 @@ impl<'a> StepCtx<'a> {
             for st in self.pieces.iter().filter(|p| p.side != Side::J) {
                 if st.side == mv.side
                     || (mv.side == Side::J && (wall_of(st) == Some(a) || wall_of(st) == Some(b)))
-                    || (self.flatten.is_some() && wall_of(mv) == Some(b) && wall_of(st) == Some(a))
+                    || (self.bj.hem.is_some() && wall_of(mv) == Some(b) && wall_of(st) == Some(a))
                 {
                     continue;
                 }
