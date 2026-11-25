@@ -96,8 +96,9 @@ def prune_stale(text):
     (target/.../deps/NAME-HASH)" lines in TEXT) keeps only the copies that ran; other hashed copies
     of the same NAME are from earlier commits. Each commit leaves one more copy of every forge-render
     test binary (~130 MB each, 28 GB after three commits), none of which the next commit runs. An
-    older copy goes with its .d file and its .fingerprint/ directory, so if a later commit maps to
-    that hash again, cargo finds no fingerprint and rebuilds it: nothing stale is ever reused.
+    older copy goes with its .d file. If a later commit maps to that hash again, cargo finds the
+    output missing (its fingerprint check stats every output) and rebuilds it. Fingerprint dirs are
+    named by package, not by binary, and are small, so they are left alone.
     Names this run did not run, and libraries, are left alone."""
     import shutil
     # (profile, file): "debug", "release" or "wasm32-.../debug", as the Running line names it
@@ -140,7 +141,6 @@ def prune_stale(text):
                             os.remove(os.path.join(deps, x))
                         except OSError:
                             pass
-                    shutil.rmtree(os.path.join(prof, ".fingerprint", f"{name}-{h}"), ignore_errors=True)
             if freed > 2**30:
                 print(f"(pruned {freed / 2**30:.1f} GB of older test binaries from {prof})", flush=True)
 
