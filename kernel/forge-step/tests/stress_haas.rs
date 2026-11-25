@@ -334,11 +334,22 @@ fn a_surface_model_shell_that_closes_is_a_solid() {
     let want = forge_math::dmath::PI * 25.0 * 10.0;
     let v = forge_topo::mass::mass(b).unwrap().volume;
     assert!((v - want).abs() < 1e-6 * want, "{v} vs {want}");
-    // one face less: a sheet
+    // its flat end left out (a surface model missing a cap: 08-1717, 05-0807, Haas Tooling): the
+    // hole lies in a plane, and is filled; the same bar
     let sh = sm.find("OPEN_SHELL('',(").unwrap() + 15;
     let comma = sh + sm[sh..].find(',').unwrap();
-    let sheet = format!("{}{}", &sm[..sh], &sm[comma + 1..]);
-    let r = import(sheet.as_bytes(), &Limits::default());
+    let capless = format!("{}{}", &sm[..sh], &sm[comma + 1..]);
+    let imp = import(capless.as_bytes(), &Limits::default()).unwrap();
+    assert!(imp.refusals.is_empty(), "{:?}", imp.refusals);
+    let b = &imp.solids[0].body;
+    assert!(check(b).is_empty(), "{:?}", check(b));
+    let v = forge_topo::mass::mass(b).unwrap().volume;
+    assert!((v - want).abs() < 1e-6 * want, "{v} vs {want}");
+    // its round side left out: holes not flat, a sheet still
+    let close = sh + sm[sh..].find(')').unwrap();
+    let last = sh + sm[sh..close].rfind(',').unwrap();
+    let wall_less = format!("{}{}", &sm[..last], &sm[close..]);
+    let r = import(wall_less.as_bytes(), &Limits::default());
     assert!(r.map_or(true, |i| i.solids.is_empty()
         && i.refusals.iter().any(|x| x.kind == "OPEN_SHELL")));
 }
