@@ -89,7 +89,7 @@ fn a_number_edited_patches_to_the_parse_of_the_edit() {
         let Ok(parsed) = syntax::parse(&src) else {
             return (0, 0);
         };
-        let mut check = |old: &str, new: &str, patched: &mut usize, refused: &mut usize| {
+        let check = |old: &str, new: &str, patched: &mut usize, refused: &mut usize| {
             check_parsed(old, &parsed, new, patched, refused)
         };
         for (k, t) in toks.iter().enumerate() {
