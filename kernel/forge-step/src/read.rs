@@ -1281,6 +1281,7 @@ impl Build<'_, '_> {
             shell,
             loops,
         });
+        self.p.face_ids.push(id);
         Ok(())
     }
 
@@ -1664,9 +1665,25 @@ fn debug_head(x: &impl std::fmt::Debug, n: usize) -> String {
     h.0
 }
 
-/// How far a file's geometry misses itself, before anything is changed.
-fn measure_gaps(proto: &Proto, stats: &mut Stats) {
-    for fa in &proto.faces {
+/// A face's edges lie off its surface by more than both of these (mm, and of the part's size)
+/// only where the file gives the face a surface somewhere else: the solid is refused, saying so.
+const FAR_FACE_MM: f64 = 1.0;
+const FAR_FACE_PART: f64 = 0.01;
+
+/// A distance in mm, in words.
+fn far(mm: f64) -> String {
+    if mm >= 1000.0 {
+        format!("{:.1} m", mm / 1000.0)
+    } else {
+        format!("{mm:.1} mm")
+    }
+}
+
+/// How far a file's geometry misses itself, before anything is changed; and each face's largest
+/// gap, by face.
+fn measure_gaps(proto: &Proto, stats: &mut Stats) -> Vec<f64> {
+    let mut by_face = vec![0.0_f64; proto.faces.len()];
+    for (fi, fa) in proto.faces.iter().enumerate() {
         for u in fa.loops.iter().flatten() {
             let e = &proto.edges[u.0];
             let w = e.range.width();
@@ -1674,6 +1691,7 @@ fn measure_gaps(proto: &Proto, stats: &mut Stats) {
                 .map(|k| fa.surface.distance(e.curve.eval(e.range.lo + w * k as f64 / 8.0)))
                 .fold(0.0, f64::max);
             stats.curve_off_surface = stats.curve_off_surface.max(worst);
+            by_face[fi] = by_face[fi].max(worst);
             if worst > forge_math::tol::LINEAR {
                 stats.edges_off += 1;
             }
@@ -1689,6 +1707,7 @@ fn measure_gaps(proto: &Proto, stats: &mut Stats) {
             en.2 = en.2.max(worst);
         }
     }
+    by_face
 }
 
 /// From a read file's topology to a body, and its integrals where the check worked them out: seams,
@@ -1862,7 +1881,7 @@ fn finish_root(f: &File<'_>, id: u32, r: Record, b: Built, lim: &Limits, only_me
         match built {
             Ok(proto) => {
                 if only_measure {
-                    measure_gaps(&proto, stats);
+                    let _ = measure_gaps(&proto, stats);
                     break;
                 }
                 out.finished = true;
@@ -1961,7 +1980,18 @@ fn healed(
             return Err("a face's loops go along one edge twice the same way".into());
         }
     }
-    measure_gaps(&proto, stats);
+    let gaps = measure_gaps(&proto, stats);
+    // a face whose edges lie far off its surface has the wrong surface in the file (VS-3 #478011:
+    // a B-spline patch 5 m from its face's edges): nothing in the file says where it is
+    let size = Box3::from_points(proto.verts.iter().map(|v| v.0)).diagonal();
+    if let Some((fi, &gap)) = gaps
+        .iter()
+        .enumerate()
+        .find(|&(_, &g)| g > FAR_FACE_MM && g > FAR_FACE_PART * size)
+    {
+        let face = proto.face_ids.get(fi).map_or(String::new(), |id| format!(" #{id}"));
+        return Err(format!("face{face} lies {} from its edges: the file gives it another surface", far(gap)));
+    }
     let budget = forge_geom::budget::scoped(lim.max_evals);
     // a loop running out and back along two edges that lie on each other (a slit of no width)
     proto.cancel_slits(uncertainty.max(forge_math::tol::LINEAR));

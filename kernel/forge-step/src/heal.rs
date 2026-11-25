@@ -40,6 +40,8 @@ pub struct Proto {
     /// Names made here: unique by a running count under a salt.
     pub salt: Name,
     pub made: u64,
+    /// Each face's entity in the file, in the order read (only until healing adds or drops faces).
+    pub face_ids: Vec<u32>,
 }
 
 /// What tightening does to an edge: nothing, a new curve (over a range, its ends swapped where the

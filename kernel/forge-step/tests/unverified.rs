@@ -60,3 +60,22 @@ fn a_volume_that_cannot_be_worked_out_imports_with_a_warning() {
     let why = read(&text).unverified.expect("warned");
     assert!(why.starts_with("its volume cannot be worked out"), "{why}");
 }
+
+/// The bottom's plane 50 below its edges (more than 1 mm and more than 1% of the part): the file
+/// gives the face a surface somewhere else, which nothing can put right. Refused at once, saying
+/// which face and how far, not after its checks run the budget out (VS-3 #478011: a patch 4.2 m
+/// from its face's edges). 0.3 off is still a warning, above.
+#[test]
+fn a_face_far_from_its_edges_is_refused_saying_so() {
+    let text = moved(
+        &plate(),
+        "#33=CARTESIAN_POINT('',(0.,0.,0.));",
+        "#33=CARTESIAN_POINT('',(0.,0.,-50.));",
+    );
+    let got = import(text.as_bytes(), &Limits::default()).expect("reads");
+    assert!(got.solids.is_empty());
+    assert_eq!(got.refusals.len(), 1);
+    let why = &got.refusals[0].why;
+    assert!(why.contains("lies 50.0 mm from its edges"), "{why}");
+    assert!(why.starts_with("face #"), "{why}");
+}
