@@ -639,7 +639,11 @@ pub fn adaptive(
     // the entries a sweep of a level may make before it stops
     let max_entries = 20usize;
     // the cleanup rings' spacing: a radius (half a radius was tried: slower, no more complete)
-    let ring_step = 0.5 * tool.tool.dc;
+    let ring_step = match std::env::var("FORGE_RING_AE").ok().and_then(|v| v.parse::<f64>().ok()) {
+        // the radial width a ring may take at the cap: r (1 − cos φ), times the factor given
+        Some(k) => k * 0.5 * tool.tool.dc * (1.0 - dmath::cos(prm.phi_max.clamp(5.0, 180.0).to_radians())),
+        None => 0.5 * tool.tool.dc,
+    };
     // the tightest a pass may curve: the tool's radius. A control holds a feed F round a curve of
     // radius R only while F <= sqrt(A R) (A its acceleration); at R = r that is about 47 mm/s at
     // 750 mm/s^2 for a 6 mm tool, above roughing feeds, so passes keep their feed through turns
@@ -1413,7 +1417,7 @@ pub fn adaptive(
         // entered at a vertex whose disk is clear (else left), the wall ring always, last
         if prm.wall_pass {
             let mut rings: Vec<(usize, Vec<Seg>)> = Vec::new();
-            for k in 0..64 {
+            for k in 0..4096 {
                 let Ok((ring, _)) = offset(rg, r + k as f64 * ring_step) else {
                     break;
                 };
@@ -1479,15 +1483,37 @@ pub fn adaptive(
                             i = m + 1;
                             let target = pts[0];
                             let cur = at.unwrap_or(target);
+                            let mut link = Vec::new();
                             if cur[2] == z && f.link_clear([cur[0], cur[1]], [target[0], target[1]], z) {
-                                mv.push(PMove::Line {
+                                link.push(PMove::Line {
                                     to: target,
                                     f: lf,
                                     phase: Phase::Link,
                                 });
                             } else {
-                                f.retract_link(&mut mv, cur, target, h.retract, (lf, feed.1), &[]);
+                                f.retract_link(&mut link, cur, target, h.retract, (lf, feed.1), &[]);
                             }
+                            let ring_cap = std::env::var_os("FORGE_RING_CAP").is_some();
+                            let mut pts = pts;
+                            if ring_cap {
+                                // the run only as far as it keeps the cap (swept as it goes)
+                                let mut keep = pts.len();
+                                for i in 1..pts.len() {
+                                    let (a, b) = (pts[i - 1], pts[i]);
+                                    let l = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+                                    if l > 0.0 && f.phi(b, [(b[0] - a[0]) / l, (b[1] - a[1]) / l]) > cap {
+                                        keep = i;
+                                        break;
+                                    }
+                                    f.sweep(a, b);
+                                    moves_at_level.push((a, b));
+                                }
+                                pts.truncate(keep);
+                                if pts.len() < 2 {
+                                    continue;
+                                }
+                            }
+                            mv.extend(link);
                             // straight stretches as one move each (within 2 µm of the ring,
                             // which runs at least 2r from every wall), then arcs fitted
                             let pts: Vec<[f64; 3]> =
@@ -1496,9 +1522,11 @@ pub fn adaptive(
                                     .map(|q| [q[0], q[1], z])
                                     .collect();
                             let first = mv.len();
-                            for w in pts.windows(2) {
-                                f.sweep(w[0], w[1]);
-                                moves_at_level.push((w[0], w[1]));
+                            if !ring_cap {
+                                for w in pts.windows(2) {
+                                    f.sweep(w[0], w[1]);
+                                    moves_at_level.push((w[0], w[1]));
+                                }
                             }
                             fit_pass(&pts, f.r, feed.0, &mut mv);
                             rings_log.push(RingRun {
