@@ -54,7 +54,8 @@ What's on the branch:
 23 of 56 archives were done at wind-down (results.md, last section).
 - 4 pairs are verified but disagree with STEP, all near misses at 1.8–2.5e-4. HRTA5 #45 was
   examined: every file face is read, and the plane-only area gap points to an export difference.
-  The other 3 are not examined.
+  The coordinator accepted it as a probable export difference. DS-40Y #25, MM #171 and
+  ST-10Y/15Y #11 are probably export differences too, but this is unproven.
 - Every larger disagreement is unverified or refused.
 - Next: finish the remaining 33 archives with the same command. For each verified pair that
   disagrees, cut the body (extract.py --bare) and compare kind areas with XT_DETAIL against the
@@ -64,12 +65,18 @@ What's on the branch:
 
 XT reads ran 3.1× slower than STEP over the corpus. Callgrind on CM-1 (`forge_step::import`,
 release):
-- **Done (62ac5a04 + e004f79a):** 45% went to evaluating exact intersection curves, each
-  point a Newton search on both surfaces. An intersection edge is now a C1 cubic through its
-  densified chain with exact tangents, as STEP gives it. Each piece is checked at ¼, ½ and ¾
-  against both surfaces to tol::LINEAR (1e-5 mm), refined ten times finer once, else the exact
-  curve stays. CM-1 went from 4.23 s to 3.52 s, volumes the same to 7e-9. STEP takes 1.77 s.
-  This is a sampled check, not a proven bound.
+- **Tried, then reverted at the coordinator's ruling (commits 62ac5a04 and e004f79a,
+  reverted on the branch):** 45% of CM-1's read went to evaluating exact intersection curves,
+  each point a Newton search on both surfaces. Making each intersection edge a C1 cubic
+  through its densified chain, with exact tangents, cut CM-1 from 4.23 s to 3.52 s (with the
+  check) and kept volumes the same to 7e-9. The check sampled each piece at ¼, ½ and ¾ against
+  both surfaces to tol::LINEAR. That is **not a bound**, and "probably within tolerance" is not
+  allowed for speed. **Condition to bring it back:** a proven bound on the cubic's distance from
+  the true intersection over each whole piece, for example the chain's own error (densify_to's
+  chord sag) plus the cubic Hermite interpolation error from a certified bound on the curve's
+  fourth derivative there. Fall back to the exact curve wherever the bound exceeds tol::LINEAR.
+  The code is in the two commits above (geom.rs `splined`/`cubic_within`, build.rs `edge`, the
+  test `an_intersection_as_a_cubic_keeps_to_both_surfaces`).
 - **Next (not started):**
   - `forge_geom::blend::Pipe::project_near` → `rail_polish` (an 80-step golden-section
     search) → `Spline::closest` is 42% of what's left. Its callers are `finish`'s uv layout
