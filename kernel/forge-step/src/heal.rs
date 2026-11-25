@@ -42,6 +42,14 @@ pub struct Proto {
     pub made: u64,
 }
 
+/// What tightening does to an edge: nothing, a new curve (over a range, its ends swapped where the
+/// curve runs against the edge), or nothing because its faces touch along it.
+enum Tightened {
+    Kept,
+    Curve(Curve, Interval, bool),
+    Tangent,
+}
+
 impl Proto {
     fn fresh(&mut self) -> Name {
         self.made += 1;
@@ -760,34 +768,56 @@ impl Proto {
     #[allow(clippy::needless_range_loop)]
     pub fn tighten(&mut self, limit: f64) {
         let adj = self.faces_of_edges();
-        for e in 0..self.edges.len() {
-            if adj[e].len() != 2 || forge_geom::budget::over() {
-                continue;
+        // each edge's new curve worked out from the edges as read (one edge's reads no other's
+        // curve, and the vertices move only after), on all cores as edge after edge under the
+        // read's budget would (`budget::map`), then set in edge order
+        let plans = {
+            let this = &*self;
+            forge_geom::budget::map(self.edges.len(), |e| this.tighten_edge(e, &adj, limit))
+        };
+        for (e, plan) in plans.into_iter().enumerate() {
+            match plan {
+                Tightened::Kept => {}
+                Tightened::Tangent => self.tangent += 1,
+                Tightened::Curve(c, range, flip) => {
+                    self.edges[e].curve = c;
+                    self.edges[e].range = range;
+                    if flip {
+                        self.flip(e);
+                    }
+                }
             }
-            let (a, b) = (
-                self.faces[adj[e][0]].surface.clone(),
-                self.faces[adj[e][1]].surface.clone(),
-            );
-            let dev = self.off(e, &a).max(self.off(e, &b));
-            if dev <= 0.5 * tol::LINEAR {
-                continue;
-            }
-            if self.closed_form_edge(e, &a, &b, limit) {
-                continue;
-            }
-            // near enough on a spline surface: a chain there is a search at every point of it, on
-            // what may be a fit of a thousand spans, for an edge that is already as good as the fit
-            let spline = matches!(a, Surface::Procedural(_)) || matches!(b, Surface::Procedural(_));
-            if spline && dev <= 20.0 * tol::LINEAR {
-                continue;
-            }
-            if self.chain_edge(e, a, b, limit) {
-                continue;
-            }
-            self.tangent += 1;
         }
         self.settle_vertices();
         self.collapse_slivers(limit);
+    }
+
+    /// What [`Proto::tighten`] does to edge `e`.
+    fn tighten_edge(&self, e: usize, adj: &[Vec<usize>], limit: f64) -> Tightened {
+        if adj[e].len() != 2 || forge_geom::budget::over() {
+            return Tightened::Kept;
+        }
+        let (a, b) = (
+            self.faces[adj[e][0]].surface.clone(),
+            self.faces[adj[e][1]].surface.clone(),
+        );
+        let dev = self.off(e, &a).max(self.off(e, &b));
+        if dev <= 0.5 * tol::LINEAR {
+            return Tightened::Kept;
+        }
+        if let Some((c, range, same)) = self.closed_form_edge(e, &a, &b, limit) {
+            return Tightened::Curve(c, range, !same);
+        }
+        // near enough on a spline surface: a chain there is a search at every point of it, on
+        // what may be a fit of a thousand spans, for an edge that is already as good as the fit
+        let spline = matches!(a, Surface::Procedural(_)) || matches!(b, Surface::Procedural(_));
+        if spline && dev <= 20.0 * tol::LINEAR {
+            return Tightened::Kept;
+        }
+        if let Some((c, range)) = self.chain_edge(e, a, b, limit) {
+            return Tightened::Curve(c, range, false);
+        }
+        Tightened::Tangent
     }
 
     /// An edge shorter than the balls of its ends, or than the tolerance, is a sliver a file's
@@ -847,14 +877,20 @@ impl Proto {
         self.settle_vertices();
     }
 
-    fn closed_form_edge(&mut self, e: usize, a: &Surface, b: &Surface, limit: f64) -> bool {
+    fn closed_form_edge(
+        &self,
+        e: usize,
+        a: &Surface,
+        b: &Surface,
+        limit: f64,
+    ) -> Option<(Curve, Interval, bool)> {
         use forge_geom::intersect::{SurfaceSurface, plane_surface};
         let r = match (a, b) {
             (Surface::Plane(p), s) | (s, Surface::Plane(p)) => plane_surface(p, s),
-            _ => return false,
+            _ => return None,
         };
         let SurfaceSurface::Curves(curves) = r else {
-            return false;
+            return None;
         };
         let ed = &self.edges[e];
         let w = ed.range.width();
@@ -895,14 +931,9 @@ impl Proto {
                 }
                 None => Interval::new(t0.min(t1), t0.max(t1)),
             };
-            self.edges[e].curve = c;
-            self.edges[e].range = range;
-            if !same {
-                self.flip(e);
-            }
-            return true;
+            return Some((c, range, same));
         }
-        false
+        None
     }
 
     fn flip(&mut self, e: usize) {
@@ -919,7 +950,7 @@ impl Proto {
         }
     }
 
-    fn chain_edge(&mut self, e: usize, a: Surface, b: Surface, limit: f64) -> bool {
+    fn chain_edge(&self, e: usize, a: Surface, b: Surface, limit: f64) -> Option<(Curve, Interval)> {
         use forge_geom::intcurve::{IntCurve, direction, refine};
         let ed = &self.edges[e];
         let closed = ed.start == ed.end;
@@ -935,24 +966,24 @@ impl Proto {
             let t = ed.range.lo + w * k as f64 / n as f64;
             let d = ed.curve.deriv(t);
             let Some(p) = refine(&a, &b, d.p) else {
-                return false;
+                return None;
             };
             if p.distance(d.p) > limit {
-                return false;
+                return None;
             }
             // surfaces all but touching here would give a curve that wanders: leave the edge be
             let (na, nb) = (a.gradient(p), b.gradient(p));
             if na.cross(nb).length() < 0.02 * na.length() * nb.length() {
-                return false;
+                return None;
             }
             let Some(g) = direction(&a, &b, p) else {
-                return false;
+                return None;
             };
             let g = if g.dot(d.d1) < 0.0 { -g } else { g };
             if let Some(&q) = pts.last()
                 && g.dot(p - q) <= 0.0
             {
-                return false;
+                return None;
             }
             pts.push(p);
             tans.push(g);
@@ -966,15 +997,13 @@ impl Proto {
                 // landing further than the links are long: the surfaces all but touch between
                 // these points too, and the curve would wander there
                 if q.distance(m) > 0.25 * pts[k].distance(pts[k + 1]) {
-                    return false;
+                    return None;
                 }
                 sag = sag.max(q.distance(m));
             }
         }
         let c = IntCurve::new(a, b, pts, tans, closed, sag);
-        self.edges[e].curve = Curve::Intersection(Arc::new(c));
-        self.edges[e].range = Interval::new(0.0, hi);
-        true
+        Some((Curve::Intersection(Arc::new(c)), Interval::new(0.0, hi)))
     }
 
     /// Each vertex at the middle of its edges' ends, with a ball that holds them where that is
