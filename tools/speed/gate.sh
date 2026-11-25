@@ -85,9 +85,12 @@ case $counter in
         only=${vgonly:-"--toggle-collect=$(basename "$1")::main"}
         # (TMPDIR the gate directory's own: benchparts writes its font to a fixed name in the temp
         # folder on every run, and two gates counting at once read each other's half-written
-        # font, gearbox edit off by 364; a path of one length, as FORGE_BENCH_PARTS)
+        # font, gearbox edit off by 364; a path of one length, as FORGE_BENCH_PARTS. And no
+        # result cache (FORGECAD_CACHE=off): forge-lang keeps assemblies' results under
+        # $HOME/.cache, which every gate and run shares; no bench part is an assembly today, so it
+        # is never read, but a count must not depend on what an earlier run left there)
         (cd / && env -i PATH=/usr/bin:/bin HOME=/tmp LD_PRELOAD="$bin/fixedrandom.so" \
-          FORGE_BENCH_PARTS="$bin/parts" TMPDIR="$bin/tmp" taskset -c "${GATE_CPU:-0}" setarch -R \
+          FORGE_BENCH_PARTS="$bin/parts" TMPDIR="$bin/tmp" FORGECAD_CACHE=off taskset -c "${GATE_CPU:-0}" setarch -R \
           valgrind --fair-sched=yes --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null $only "$@")
       else
         valgrind --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null $vgonly "$@"
