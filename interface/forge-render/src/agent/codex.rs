@@ -1,7 +1,7 @@
 //! Codex CLI JSONL, one process per turn, resumed by thread id. Authentication stays in Codex.
 // desktop only: a page starts no CLI (std's threads and sleeps never run there)
 #![cfg_attr(target_arch = "wasm32", allow(clippy::disallowed_methods))]
-use super::{Backend, Event, Out, Watch, claude::Config, clean_env};
+use super::{Backend, Event, Out, Watch, claude::Config, clean_env, spawn};
 use forge_agent::json::Json;
 use std::collections::HashSet;
 use std::io::{BufRead, BufReader, Write};
@@ -177,7 +177,7 @@ impl Codex {
         // An app-launched Codex is its own session, not a child turn of this coding agent.
         command.env_remove("CODEX_THREAD_ID");
         let mut watch = Watch::new(&self.root);
-        let child = command.spawn();
+        let child = spawn(&mut command);
         let mut child = match child {
             Ok(c) => c,
             Err(e) => {

@@ -305,3 +305,33 @@ fn codex_live_uses_the_apps_mcp_tools_and_resumes_with_an_image() {
     drop(b);
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+/// train 7's GPU job: an agent started while its program is still open for writing somewhere (a
+/// fake agent just written, as another test's thread forks) failed with "Text file busy", and the
+/// turn ended as a Problem, not stopped. The start waits that moment out.
+#[test]
+fn an_agent_still_open_for_writing_starts_once_it_is_closed() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = scratch();
+    let program = dir.join("fake-agent");
+    let mut held = std::fs::File::create(&program).unwrap();
+    std::io::Write::write_all(&mut held, b"#!/bin/sh\nexit 0\n").unwrap();
+    std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+    // open for writing: exec refuses it, as it did in the race
+    let refused = std::process::Command::new(&program).spawn();
+    assert_eq!(
+        refused.map(|_| ()).unwrap_err().kind(),
+        std::io::ErrorKind::ExecutableFileBusy
+    );
+    let closer = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(80));
+        drop(held);
+    });
+    let status = forge_render::agent::spawn(&mut std::process::Command::new(&program))
+        .expect("started once it was closed")
+        .wait()
+        .unwrap();
+    assert!(status.success());
+    closer.join().unwrap();
+    std::fs::remove_dir_all(dir).unwrap();
+}

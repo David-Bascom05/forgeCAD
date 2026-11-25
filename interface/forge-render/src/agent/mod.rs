@@ -445,6 +445,26 @@ pub fn program(name: &str) -> String {
     name.to_string()
 }
 
+/// Start an agent's process. A program that a moment ago was written (an update being installed;
+/// in the tests, a fake agent script) can still be open for writing in a process another thread
+/// just forked, until that one runs its own program: exec then fails with "Text file busy"
+/// (ETXTBSY). That passes in a moment, so it's tried again a few times before it's an error.
+// (an agent's process is started only natively: a page never gets here, so the sleep is not the
+// page's, as in codex.rs and claude.rs)
+#[cfg_attr(target_arch = "wasm32", allow(clippy::disallowed_methods))]
+pub fn spawn(c: &mut std::process::Command) -> std::io::Result<std::process::Child> {
+    let mut tries = 0;
+    loop {
+        match c.spawn() {
+            Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy && tries < 50 => {
+                tries += 1;
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            r => return r,
+        }
+    }
+}
+
 pub fn clean_env(c: &mut std::process::Command) {
     // Drop only parent-session markers. Preserve user tool, provider and policy settings.
     for k in [
