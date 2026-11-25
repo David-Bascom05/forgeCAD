@@ -1212,15 +1212,12 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
     Ok(mesh)
 }
 
-/// The most one face of a file's body may spend of a drawing's budget (`face_within`), and no
-/// less than a drawing of its own is given (`MESH`): over this, a face is not going to be drawn.
-/// A drawing of HRT160-2's #42930 spent 536 M evaluations on one face and then failed, four
-/// minutes of the app's read (which draws display models within sixteen times a read's budget),
-/// where the heaviest face anywhere that does get drawn is HFL-1313-3 #69702's #10 at 141 M
-/// (`forge-step/tests/mesh_budget.rs`), and the heaviest in the Haas corpus's own files is 75 M.
-/// The drawing's budget decides as before; this only stops one face from eating a whole read
-/// before the budget notices.
-const FACE: u64 = 1 << 28;
+/// The most one face of a file's body may spend of a drawing's budget (`face_within`). Over
+/// `FACE` evaluations, the face is not going to be drawn: a drawing of HRT160-2's #42930 spent
+/// 536 M on one face before failing, 4 minutes of the app's read, where the heaviest face of the
+/// whole Haas corpus that does get drawn spends 37 M. The drawing's budget decides as before; this
+/// only stops one face from eating a whole read before the budget notices.
+const FACE: u64 = 1 << 27;
 
 /// `draw` of one face under a budget of its own: at most `FACE`, and never more than the
 /// drawing's budget has left, so a face that would have run that out still does (what it spends

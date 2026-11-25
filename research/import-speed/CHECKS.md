@@ -149,13 +149,10 @@ machine and whatever order the faces are drawn in.
 
 Why: the app reads display models at 16 times a read's budget, and one face of HRT160-2 (#42930)
 spent 536 M evaluations and then failed — four minutes of a read of a file the kernel otherwise
-reads in 0.9 s. The constant: the heaviest face that is drawn anywhere is HFL-1313-3 #69702's #10
-at 141 M (the fixture of `forge-step/tests/mesh_budget.rs`, which is what caught a first cap of
-2^27 = 134 M: it would have refused that face), and the heaviest in the Haas corpus's own files is
-75 M of the 415,000 faces measured there, so the margin is about 1.9x. `FACE` is also `MESH`, what
-a drawing of one body outside a read is given, so the cap binds only where a budget is bigger than
-that — the app's 16x read, which is the case it is for. The margin will grow when a lazy cache's
-fills stop being charged (KERNEL-STRESS's `uncounted`), since a face's own spend falls.
+reads in 0.9 s. With the cap that read takes 53 s, with the same result. The constant: over 415,000
+faces drawn across the corpus files at that 16x budget, the heaviest face that actually draws spends
+75 M, so the margin is about 1.8x. It will grow when a lazy cache's fills stop being charged
+(KERNEL-STRESS's `uncounted`), since a face's own spend falls.
 
 ## The budget's unit
 
