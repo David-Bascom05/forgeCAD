@@ -25,7 +25,7 @@ pub mod toollib;
 pub mod schema;
 pub mod turnview;
 mod ui;
-pub use ui::{CYCLE_TIP, alt_clear_words, certified_words, check_lines, cycle_words, text_panel_h};
+pub use ui::{CYCLE_TIP, alt_clear_words, said_words, certified_words, check_lines, cycle_words, text_panel_h};
 pub use ui::{Blocked, disabled_why, groups, release_block, release_words, status_fix, status_fix_tip, status_line};
 
 use doc::{Edit, Role, Stmt};

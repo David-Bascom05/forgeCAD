@@ -7,6 +7,12 @@ use super::Gui;
 use crate::origin::WorldVert;
 use crate::shell::cam::{CamWs, run};
 
+/// In a narrow view: the height the half-size cube takes at the top (its margin, half of
+/// `viewcube::WIDGET_PX`, a margin), and the width of the tool strip at the right (its 32 px, its
+/// 12 px from the edge, a margin).
+const CUBE_HALF_COVER: f32 = 8.0 + 0.5 * crate::viewcube::WIDGET_PX + 8.0;
+const STRIP_COVER: f32 = 32.0 + 12.0 + 8.0;
+
 impl Gui {
     /// Opens a machining document: the workspace, over its part (opened as the view's model).
     pub(super) fn open_cam(&mut self, path: &str, text: &str) -> bool {
@@ -331,12 +337,19 @@ impl Gui {
                 crate::frame::Bounds::new([c[0] - r, c[1] - r, c[2] - r], [c[0] + r, c[1] + r, c[2] + r])
             }
         };
+        // a narrow view: its tool strip (the right edge) and its cube (half size, the top right)
+        // cover the part where they are drawn, so it is framed clear of them (UX-LEAD)
+        let (narrow_top, narrow_right) = if vr.width() < crate::nav::NARROW_VIEW_PX {
+            (CUBE_HALF_COVER, STRIP_COVER)
+        } else {
+            (0.0, 0.0)
+        };
         let view = crate::frame::ViewRect {
             width: vr.width(),
             height: vr.height(),
             // the simulation's panel is in the properties column (outside `vr`) whenever there is
             // one, docked or not yet: only its timeline covers the view
-            covered: [0.0, 0.0, side[0], cover + side[1]],
+            covered: [0.0, narrow_top, side[0] + narrow_right, cover + side[1]],
         };
         // from the direction the view is seen from now, the subject at the standard's 70 %
         let (yaw, pitch) = (v.nav.camera.yaw.to_degrees(), v.nav.camera.pitch.to_degrees());

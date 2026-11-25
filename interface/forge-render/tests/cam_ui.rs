@@ -817,7 +817,10 @@ fn manufacture_opens_in_a_phone_wide_window() {
     for _ in 0..10 {
         h.step();
     }
-    assert!(h.gui.shell.view_rect.width() < 300.0, "a narrow view: {:?}", h.gui.shell.view_rect);
+    // a view too narrow to have the column beside it (not a pixel count: the browser's own
+    // width at 480 px is UX-LEAD's to choose)
+    assert!(h.gui.shell.props_alternate, "a narrow view: {:?}", h.gui.shell.view_rect);
+    assert!(h.gui.shell.view_rect.width() < forge_render::nav::NARROW_VIEW_PX);
     // folded, and the framing agrees: no timeline drawn, and nothing kept for it at the view's
     // bottom (UX-LEAD: the fold and the free rect must not disagree)
     let timeline = egui::LayerId::new(egui::Order::Middle, egui::Id::unique("camsim:timeline"));
@@ -851,6 +854,38 @@ fn manufacture_opens_in_a_phone_wide_window() {
     assert!(sh.place("view:column").is_some());
     assert_eq!(h.gui.shell.cam.as_ref().unwrap().col_label, "Simulation");
     assert_eq!(h.gui.shell.camsim.as_ref().map(|s| s.playing), playing, "the simulation as it was");
+    // the cube at half size, and the part framed clear of it and of the tool strip (UX-LEAD)
+    let cube = h.gui.shell.cube_place.expect("the cube");
+    assert_eq!(cube.side, 0.5 * forge_render::viewcube::WIDGET_PX * cube.scale, "half size");
+    {
+        let sh = &h.gui.shell;
+        let vr = sh.view_rect;
+        let cam = sh.cam.as_ref().unwrap().framed.expect("framed");
+        let scene = &h.gui.view.as_ref().unwrap().scene;
+        let (lo, hi) = scene.shown_box().unwrap_or_else(|| {
+            let (c, r) = scene.bounds();
+            ([c[0] - r, c[1] - r, c[2] - r], [c[0] + r, c[1] + r, c[2] + r])
+        });
+        let b = forge_render::frame::Bounds::new(lo, hi);
+        let px: Vec<egui::Pos2> = b
+            .corners()
+            .iter()
+            .filter_map(|c| cam.pixel_of(*c, vr.width() as u32, vr.height() as u32))
+            .map(|(x, y)| egui::pos2(vr.left() + x, vr.top() + y))
+            .collect();
+        let part = egui::Rect::from_points(&px);
+        let strip = ["nav:select", "nav:orbit", "nav:pan", "nav:zoom", "nav:fit"]
+            .iter()
+            .filter_map(|n| sh.place(n))
+            .reduce(|a, b| a.union(b))
+            .expect("the tool strip");
+        let cube_r = egui::Rect::from_min_size(
+            egui::pos2(vr.left() + cube.at.0 / cube.scale, vr.top() + cube.at.1 / cube.scale),
+            egui::vec2(cube.side / cube.scale, cube.side / cube.scale),
+        );
+        assert!(!part.intersects(strip), "the part {part:?} under the tool strip {strip:?}");
+        assert!(!part.intersects(cube_r), "the part {part:?} under the cube {cube_r:?}");
+    }
     shot(&mut h, "cam-480-view");
     // back to the column by its name
     tap(&mut h, "view:column");
@@ -930,6 +965,22 @@ fn the_tool_library_scrolls_at_a_laptops_height() {
         .filter(|&y| (view.right() as usize..(view.right() as usize + 14).min(1399)).any(|x| px.at(x, y).iter().all(|&c| c > 120)))
         .count();
     assert!(bar > 20, "the scroll bar drawn ({bar} rows)");
+}
+
+/// Setup Sheet written: said by the file's name in the note's ink, its folders on hover (UX-LEAD:
+/// the whole path, in amber, read as a warning).
+#[test]
+fn a_written_sheet_is_said_by_its_name() {
+    let Some((mut h, _)) = open("sheet-said") else { return };
+    h.gui.shell.cam.as_mut().unwrap().command(forge_render::shell::cam::Cmd::SetupSheet);
+    let t0 = std::time::Instant::now();
+    while !h.gui.shell.cam.as_ref().unwrap().said.as_deref().is_some_and(|s| s.starts_with("Wrote ")) {
+        assert!(t0.elapsed().as_secs() < 30, "never written: {:?}", h.gui.shell.cam.as_ref().unwrap().said);
+        h.step();
+    }
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert!(w.said.as_deref().unwrap().contains('/'), "the path kept, for the hover");
+    assert_eq!(forge_render::shell::cam::status_line(w), "Wrote flange_cam-sheet.html");
 }
 
 /// A cycle time is the lower bound and the estimate together (never the estimate alone), and the
