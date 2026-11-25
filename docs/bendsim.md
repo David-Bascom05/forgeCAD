@@ -137,6 +137,9 @@ turn. The part itself (every piece, exactly as the step places it) is carried th
 the same certified search as the bends' checks, against every body of the press as it stands (the
 station's tools, the other stations', the ram, the bed, the frame, the fingers): a pass is proven
 clear, a fail names a real point of the part, at a real instant of the move, proven to meet a body.
+First the part's boxes (grown by how far the true surface lies off its samples) and its sphere
+are swept through the move: when they clear every body by the clearance the move is proven clear
+at a fraction of the cost (most moves); otherwise the search settles it.
 Lifting off (setting down onto) the bed or a die without a profile is not checked against them: a
 point above such a body moving straight up only moves away from it, and the part resting on it is
 the step's own check. A fail says the planned move meets that body; the operator may still find
