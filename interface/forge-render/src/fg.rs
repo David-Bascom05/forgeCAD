@@ -936,6 +936,11 @@ struct Worker {
     to_mesh: Sender<Whole>,
     /// A drive sent after a text, kept till that text is built.
     next: Option<Work>,
+    /// An assembly whose shape was sent (`Built { checked: false }`): its seq, so the run of the
+    /// same job that follows is the one with the overlap check and the expects.
+    asm_shaped: Option<u64>,
+    /// That checks run, waiting behind a drive that holds `next`.
+    asm_checks: Option<Job>,
 }
 
 impl Worker {
@@ -969,6 +974,8 @@ impl Worker {
             #[cfg(not(target_arch = "wasm32"))]
             to_mesh,
             next: None,
+            asm_shaped: None,
+            asm_checks: None,
         }
     }
 
@@ -1029,6 +1036,10 @@ impl Worker {
                 if !self.send(Msg::Posed { seq: *seq, poses, ms }) {
                     return false;
                 }
+                // an assembly's checks that waited behind this drive
+                if self.next.is_none() {
+                    self.next = self.asm_checks.take().map(Work::Text);
+                }
                 return true;
             }
         }
@@ -1051,13 +1062,19 @@ impl Worker {
         if is_assembly(&job.1) {
             // the document's own model named too: picks in the posed view feed 3D Model's tools
             let want = self.anchored.as_deref() != Some(job.1.as_str());
+            // the overlap check and the expects are the slow part of a big assembly: on request,
+            // and then shape first (the posed parts on screen, `checked: false`), the checks in
+            // the step after, on the warm cache; a newer text in between replaces both
+            let checks = job.2 && self.asm_shaped == Some(job.0);
+            if self.asm_checks.as_ref().is_some_and(|c| c.0 != job.0) {
+                self.asm_checks = None;
+            }
             let opts = Options {
                 anchors: want,
                 dir: self.dir.clone(),
                 render: true,
-                // the overlap check and the expects are the slow part of a big assembly: on request
-                overlap: job.2,
-                expects: job.2,
+                overlap: checks,
+                expects: checks,
                 ..Options::default()
             };
             let watch = forge_lang::deps::watch();
@@ -1098,7 +1115,7 @@ impl Worker {
                 anchors,
                 inspect: asm.as_ref().map(|a| a.inspect.clone()),
                 preview: false,
-                checked: true,
+                checked: checks || !job.2,
                 cutlist: None,
                 asm,
                 build_ms,
@@ -1106,6 +1123,17 @@ impl Worker {
             };
             if !self.send(Msg::Built(Box::new(built))) {
                 return false;
+            }
+            if job.2 && !checks {
+                // the checks next: after a drive that waits in `next`, else at once
+                self.asm_shaped = Some(job.0);
+                if self.next.is_none() {
+                    self.next = Some(Work::Text(job));
+                } else {
+                    self.asm_checks = Some(job);
+                }
+            } else {
+                self.asm_shaped = None;
             }
             return true;
         }
