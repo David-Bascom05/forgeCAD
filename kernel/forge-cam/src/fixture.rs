@@ -602,8 +602,10 @@ fn model_faces(e: &forge_workholding::Exact, keepout: f64) -> Result<Vec<Face>, 
 /// A model's compiled faces, read once a process: its text is fixed for its name (a built-in's
 /// is in the binary, a runtime one's name is its content's hash), so every setup and run after
 /// the first shares the faces read.
-fn parsed(m: &forge_workholding::model::Model) -> Result<std::sync::Arc<Vec<(String, Vec<Face>)>>, String> {
-    type Read = std::sync::Arc<Vec<(String, Vec<Face>)>>;
+type ModelFaces = std::sync::Arc<Vec<(String, Vec<Face>)>>;
+
+fn parsed(m: &forge_workholding::model::Model) -> Result<ModelFaces, String> {
+    type Read = ModelFaces;
     static CACHE: std::sync::OnceLock<std::sync::Mutex<Vec<(String, Read)>>> = std::sync::OnceLock::new();
     let c = CACHE.get_or_init(|| std::sync::Mutex::new(Vec::new()));
     if let Some(r) = c
