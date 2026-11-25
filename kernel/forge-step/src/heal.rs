@@ -1033,7 +1033,13 @@ impl Proto {
             let m = lo + (hi - lo) * 0.5;
             let r = list.iter().map(|q| q.distance(m)).fold(0.0, f64::max);
             self.verts[v].0 = m;
-            self.vtol[v] = if r > tol::LINEAR { r } else { 0.0 };
+            // with room over the gap, as an edge's (`record_deviations`): measured again after a
+            // move, the gap must not come out over its own tolerance by the last bit
+            self.vtol[v] = if r > tol::LINEAR {
+                r * (1.0 + 1e-6) + 1e-9
+            } else {
+                0.0
+            };
         }
     }
 

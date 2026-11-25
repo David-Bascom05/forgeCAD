@@ -128,6 +128,14 @@ struct Units {
     uncertainty: f64,
 }
 
+/// Where a placement's origin may move without moving the shape on it (`Reader::placement_with`).
+#[derive(Clone, Copy)]
+enum Slide {
+    No,
+    Along,
+    Across,
+}
+
 struct Reader<'a> {
     f: &'a File<'a>,
     u: Units,
@@ -317,6 +325,33 @@ impl<'a> Reader<'a> {
     }
 
     fn point(&self, id: u32) -> R<Point3> {
+        let p = self.point_anywhere(id)?;
+        if !forge_math::tol::in_model_box(p) {
+            return refuse(id, "CARTESIAN_POINT", "outside the 1 km model box");
+        }
+        Ok(p)
+    }
+
+    /// A point that anchors an axis (a line's, a cylinder's): anywhere along it is the same
+    /// shape, and files put it far out (TR210: a cylinder's origin 500 m along its axis). It is
+    /// slid along `dir` to the foot nearest the world's origin, and only then held to the box.
+    /// Only one outside the box is moved.
+    fn point_on_axis(&self, id: u32, dir: UnitVec3) -> R<Point3> {
+        let p = self.point_anywhere(id)?;
+        // one inside the box is taken as written: a slide would round it, and move the shape's
+        // parameters with it (HRTA6 #56170's pair with #35491 then refused)
+        if forge_math::tol::in_model_box(p) {
+            return Ok(p);
+        }
+        let d = Vec3::from(dir);
+        let foot = p - d * (p - Point3::ORIGIN).dot(d);
+        if !forge_math::tol::in_model_box(foot) {
+            return refuse(id, "CARTESIAN_POINT", "outside the 1 km model box");
+        }
+        Ok(foot)
+    }
+
+    fn point_anywhere(&self, id: u32) -> R<Point3> {
         let a = self.args_of(id, "CARTESIAN_POINT")?;
         let c = self.list(id, "CARTESIAN_POINT", a.get(1))?;
         if c.len() != 3 {
@@ -328,7 +363,10 @@ impl<'a> Reader<'a> {
             self.real(id, "CARTESIAN_POINT", c.get(1))? * m,
             self.real(id, "CARTESIAN_POINT", c.get(2))? * m,
         );
-        if !forge_math::tol::in_model_box(p) {
+        // far past the box, a slide along an axis would lose the point's last digits
+        let far = p.x.abs().max(p.y.abs()).max(p.z.abs());
+        // (a NaN is past it too)
+        if far.is_nan() || far > 1e3 * forge_math::tol::MODEL_HALF_SIZE {
             return refuse(id, "CARTESIAN_POINT", "outside the 1 km model box");
         }
         Ok(p)
@@ -352,11 +390,34 @@ impl<'a> Reader<'a> {
     }
 
     fn placement(&self, id: u32) -> R<Frame> {
+        self.placement_with(id, Slide::No)
+    }
+
+    /// `placement`, its origin moved where that changes nothing of the shape on it: along z
+    /// for a cylinder's axis, within the x-y plane for a plane (TR210: a plane's origin 500 m out
+    /// on it), to the place nearest the world's origin. Only an origin outside the box is moved.
+    fn placement_with(&self, id: u32, slide: Slide) -> R<Frame> {
         let a = self.args_of(id, "AXIS2_PLACEMENT_3D")?;
-        let origin = self.point(self.reference(id, "AXIS2_PLACEMENT_3D", a.get(1))?)?;
         let z = match a.get(2) {
             Some(Value::Ref(r)) => Some(self.direction(*r)?),
             _ => None,
+        };
+        let at = self.reference(id, "AXIS2_PLACEMENT_3D", a.get(1))?;
+        let origin = match slide {
+            Slide::No => self.point(at)?,
+            Slide::Along => self.point_on_axis(at, z.unwrap_or(UnitVec3::Z))?,
+            Slide::Across => {
+                let n = Vec3::from(z.unwrap_or(UnitVec3::Z));
+                let p = self.point_anywhere(at)?;
+                let foot = Point3::ORIGIN + n * (p - Point3::ORIGIN).dot(n);
+                if forge_math::tol::in_model_box(p) {
+                    p // as written, as `point_on_axis` takes one inside the box
+                } else if forge_math::tol::in_model_box(foot) {
+                    foot
+                } else {
+                    return refuse(at, "CARTESIAN_POINT", "outside the 1 km model box");
+                }
+            }
         };
         let x = match a.get(3) {
             Some(Value::Ref(r)) => Some(self.direction(*r)?),
@@ -557,10 +618,10 @@ impl<'a> Reader<'a> {
         match name {
             "LINE" => {
                 let a = self.args_of(id, "LINE")?;
-                let origin = self.point(self.reference(id, "LINE", a.get(1))?)?;
                 let v = self.reference(id, "LINE", a.get(2))?;
                 let va = self.args_of(v, "VECTOR")?;
                 let dir = self.direction(self.reference(v, "VECTOR", va.get(1))?)?;
+                let origin = self.point_on_axis(self.reference(id, "LINE", a.get(1))?, dir)?;
                 Ok(Curve::Line(Line { origin, dir }))
             }
             "CIRCLE" => {
@@ -654,12 +715,12 @@ impl<'a> Reader<'a> {
             "PLANE" => {
                 let a = self.args_of(id, name)?;
                 Ok(Surface::Plane(Plane {
-                    frame: self.placement(self.reference(id, name, a.get(1))?)?,
+                    frame: self.placement_with(self.reference(id, name, a.get(1))?, Slide::Across)?,
                 }))
             }
             "CYLINDRICAL_SURFACE" => {
                 let a = self.args_of(id, name)?;
-                let frame = self.placement(self.reference(id, name, a.get(1))?)?;
+                let frame = self.placement_with(self.reference(id, name, a.get(1))?, Slide::Along)?;
                 let radius = self.real(id, name, a.get(2))? * m;
                 if !positive(radius) {
                     return refuse(id, name, "radius not positive");
@@ -1134,8 +1195,13 @@ impl Build<'_, '_> {
         } else {
             (id, flip)
         };
-        let a = self.r.args_of(id, "CLOSED_SHELL")?;
-        let faces = self.r.list(id, "CLOSED_SHELL", a.get(1))?;
+        let kind = if kw(self.r.f, id) == Some("OPEN_SHELL") {
+            "OPEN_SHELL"
+        } else {
+            "CLOSED_SHELL"
+        };
+        let a = self.r.args_of(id, kind)?;
+        let faces = self.r.list(id, kind, a.get(1))?;
         let shell = self.p.shells;
         self.p.shells += 1;
         for x in faces {
@@ -1215,6 +1281,12 @@ fn record_deviations(body: &mut Body, stats: &mut Stats) {
     };
     for (e, dev) in ids.into_iter().zip(devs) {
         if dev > LINEAR {
+            // with room over what was measured: `check` measures again, after any rigid move and,
+            // once a boolean has trimmed the edge, at other points, where a gap that peaks between
+            // these samples comes out larger (by 1.7e-5 of it on a spline edge of GM2-5AX, by
+            // 1.3e-3 on a piece of TRT210's cylinder-cylinder intersection a boolean split off): a
+            // tolerance of exactly the gap fails it. A hundredth of the gap is room for both
+            let dev = dev * (1.0 + 1e-2) + 1e-9;
             body.edges[e.index()].tol = dev;
             stats.tolerant_edges += 1;
             stats.max_edge_tol = stats.max_edge_tol.max(dev);
@@ -1236,7 +1308,9 @@ fn edge_deviation(body: &Body, e: forge_topo::EdgeId) -> f64 {
         || faces
             .iter()
             .any(|&f| matches!(body.face(f).surface, Surface::Procedural(_)));
-    let measure = |n: usize| {
+    let measure = |n: usize, refine: bool| {
+        let x = body.edge(e);
+        let at = |i: usize| x.range.lo + x.range.width() * (i as f64 / n as f64);
         let pts = body.edge_points(e, n);
         faces
             .iter()
@@ -1244,19 +1318,49 @@ fn edge_deviation(body: &Body, e: forge_topo::EdgeId) -> f64 {
                 let s = &body.face(f).surface;
                 // each point from the one before, where the walk holds
                 let mut near = None;
-                let mut worst = 0.0_f64;
+                let mut gaps: Vec<(f64, forge_math::Point2)> = Vec::with_capacity(pts.len());
                 for &p in &pts {
                     let uv = near.map_or_else(|| s.project(p), |uv| s.project_near(p, uv));
                     near = Some(uv);
-                    worst = worst.max(s.eval(uv).distance(p));
+                    gaps.push((s.eval(uv).distance(p), uv));
+                }
+                let mut worst = gaps.iter().fold(0.0_f64, |m, g| m.max(g.0));
+                if refine && gaps.len() > 2 {
+                    // a gap can peak sharply between samples (a free-form edge's came out 1.15%
+                    // over 256 samples' on MM 2024): around the three highest local peaks, 32
+                    // more each, what 2048 evenly would find at a twentieth of the work
+                    let mut peaks: Vec<usize> = (0..gaps.len())
+                        .filter(|&i| {
+                            (i == 0 || gaps[i].0 >= gaps[i - 1].0)
+                                && (i + 1 == gaps.len() || gaps[i].0 >= gaps[i + 1].0)
+                        })
+                        .collect();
+                    peaks.sort_by(|&a, &b| gaps[b].0.total_cmp(&gaps[a].0));
+                    for &i in peaks.iter().take(3) {
+                        let (lo, hi) = (at(i.saturating_sub(1)), at((i + 1).min(n)));
+                        let mut uv = gaps[i].1;
+                        for k in 0..=32 {
+                            let t = lo + (hi - lo) * (k as f64 / 32.0);
+                            let p = x.curve.eval(t.min(x.range.hi));
+                            uv = s.project_near(p, uv);
+                            worst = worst.max(s.eval(uv).distance(p));
+                        }
+                    }
                 }
                 worst
             })
             .fold(0.0, f64::max)
     };
-    let dev = measure(16);
+    let dev = measure(16, false);
     if free_form || dev > LINEAR {
-        dev.max(measure(256))
+        let fine = measure(256, false);
+        // an edge off its faces: its peaks looked at closely, as `check` will ask between these
+        // samples once a boolean has trimmed it
+        if fine > LINEAR {
+            dev.max(measure(256, true))
+        } else {
+            dev.max(fine)
+        }
     } else {
         dev
     }
@@ -1569,6 +1673,9 @@ fn build_shell(
         salt: Name::feature(u64::from(id)).with_str("step"),
     };
     let built = (|| {
+        if f.name(&r) == "OPEN_SHELL" {
+            return b.shell(id, false);
+        }
         let a = f.args(&r);
         let outer = b.r.reference(id, "solid", a.get(1))?;
         b.shell(outer, false)?;
@@ -1580,7 +1687,30 @@ fn build_shell(
         }
         Ok(())
     })();
-    built.map(|()| b.p)
+    let proto = b.p;
+    built?;
+    // an open shell is a solid only if it closes: every edge between two faces' uses
+    if f.name(&r) == "OPEN_SHELL" {
+        let mut uses = vec![0u32; proto.edges.len()];
+        for face in &proto.faces {
+            for l in &face.loops {
+                for &(e, _) in l {
+                    uses[e] += 1;
+                }
+            }
+        }
+        match uses.iter().filter(|&&n| n != 2).count() {
+            0 => {}
+            n => {
+                return refuse(
+                    id,
+                    "OPEN_SHELL",
+                    format!("a sheet, not a solid: {n} edges not between two faces"),
+                );
+            }
+        }
+    }
+    Ok(proto)
 }
 
 /// One solid root of a file read, as far as its topology (as `read_file` did each in turn).
@@ -1892,12 +2022,29 @@ fn head<'a>(text: &'a [u8], lim: &Limits) -> Result<Head<'a>, ImportError> {
     let mut ctx_of: BTreeMap<u32, u32> = BTreeMap::new();
     let mut any_ctx = None;
     let mut roots = Vec::new();
+    // open shells read as solids, and the surface model each is in (for its context)
+    let mut open_of: Vec<(u32, u32)> = Vec::new();
     for &(id, at, n) in &f.ids {
         let recs = &f.records[at as usize..(at + n) as usize];
         for r in recs {
             let name = f.name(r);
             if name == "MANIFOLD_SOLID_BREP" || name == "BREP_WITH_VOIDS" {
                 roots.push((id, *r));
+            }
+            // a surface model's shells: SolidWorks writes some whole machines so (TRT160), each
+            // body a shell of faces that closes; read as a solid when it does
+            if name == "SHELL_BASED_SURFACE_MODEL"
+                && let Some(Value::List(l, ln)) = f.args(r).get(1)
+            {
+                for v in f.run(*l, *ln) {
+                    if let Value::Ref(x) = v
+                        && kw(&f, *x) == Some("OPEN_SHELL")
+                        && let Some(sr) = f.records_of(*x).and_then(|rs| rs.first())
+                    {
+                        roots.push((*x, *sr));
+                        open_of.push((*x, id));
+                    }
+                }
             }
             if name.ends_with("_REPRESENTATION") || name == "SHAPE_REPRESENTATION" {
                 let a = f.args(r);
@@ -1910,6 +2057,11 @@ fn head<'a>(text: &'a [u8], lim: &Limits) -> Result<Head<'a>, ImportError> {
                     }
                 }
             }
+        }
+    }
+    for &(shell, model) in &open_of {
+        if let Some(&c) = ctx_of.get(&model) {
+            ctx_of.entry(shell).or_insert(c);
         }
     }
     let assembly = match any_ctx.and_then(|c| units_of(&f, c)) {

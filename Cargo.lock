@@ -641,6 +641,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-stress"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-asm",
+ "forge-bool",
+ "forge-geom",
+ "forge-math",
+ "forge-mesh",
+ "forge-ops",
+ "forge-step",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-thermo"
 version = "0.1.0"
 dependencies = [
