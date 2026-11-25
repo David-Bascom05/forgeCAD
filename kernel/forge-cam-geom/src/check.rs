@@ -1576,6 +1576,138 @@ pub fn apart(a: &[Ival; 3], b: &[Ival; 3], gap: f64) -> bool {
 #[cfg(test)]
 mod tests {
 
+    /// Faces of every kind of box: triangles (mu 0.02, as a model's meshed faces), small and
+    /// large planes (mu ~1e-9), spread over x, y and z, some at the grid's edges.
+    fn mixed_faces(seed: u64) -> Vec<Face> {
+        let mut r = seed;
+        let mut rnd = move || {
+            r = r
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            ((r >> 11) as f64) / ((1u64 << 53) as f64)
+        };
+        let mut out = vec![];
+        for i in 0..400 {
+            let o = [
+                rnd() * 300.0 - 150.0,
+                rnd() * 200.0 - 100.0,
+                rnd() * 120.0 - 100.0,
+            ];
+            let s = if i % 7 == 0 { 60.0 } else { 0.5 + rnd() * 8.0 };
+            let (u, v) = (
+                [s * rnd(), s * rnd(), s * (rnd() - 0.5)],
+                [s * (rnd() - 0.5), s * rnd(), s * rnd()],
+            );
+            let mu = if i % 3 == 0 { 0.02 } else { 1e-9 };
+            out.push(Face::new(
+                Surf::Plane { o, u, v },
+                Ival::new(0.0, 1.0),
+                Ival::new(0.0, 1.0),
+                None,
+                mu,
+                i as u32,
+            ));
+        }
+        out
+    }
+
+    /// A face in its own mu band just past a cell's edge: the checker keeps it (its box is
+    /// within the limit plus its mu of the move's), so the grid must list it for that move, and
+    /// does only when its pad takes the faces' mu (as ops::certify_with's fixture grid now
+    /// does); padded by the limit alone, as it was, it is not listed.
+    #[test]
+    fn a_face_in_its_mu_band_past_a_cell_edge_is_listed_only_when_the_pad_takes_its_mu() {
+        let (limit, mu) = (1.0, 0.02);
+        let slab = |x0: f64, x1: f64, mu: f64, id: u32| {
+            Face::new(
+                Surf::Plane {
+                    o: [x0, 0.0, 0.0],
+                    u: [x1 - x0, 0.0, 0.0],
+                    v: [0.0, 1.0, 1.0],
+                },
+                Ival::new(0.0, 1.0),
+                Ival::new(0.0, 1.0),
+                None,
+                mu,
+                id,
+            )
+        };
+        for (pad, listed) in [(limit + 1e-6, false), (limit + mu + 1e-6, true)] {
+            // two anchors set the grid's extent; with three faces it has three columns
+            let (x0, cw) = (-pad, (100.0 + 2.0 * pad) / 3.0);
+            let edge = x0 + cw;
+            // the move's box ends just before the edge; the face starts 1.015 past it: further
+            // than the limit, nearer than the limit plus its mu
+            let lo = edge - 1e-4 + 1.015;
+            let faces = [
+                slab(0.0, 1.0, 1e-9, 0),
+                slab(99.0, 100.0, 1e-9, 1),
+                slab(lo, lo + 1.0, mu, 2),
+            ];
+            let g = Grid::new(&faces, pad);
+            assert_eq!(g.nx, 3);
+            assert!((g.x0 - x0).abs() < 1e-9 && (g.cw - cw).abs() < 1e-9);
+            let q = [
+                Ival::new(edge - 10.0, edge - 1e-4),
+                Ival::new(0.0, 1.0),
+                Ival::new(0.0, 1.0),
+            ];
+            assert!(!apart(&q, &faces[2].bbox, limit + mu), "the checker keeps it");
+            let (mut out, mut seen) = (vec![], Seen::default());
+            g.near(&q, &mut out, &mut seen);
+            assert_eq!(out.contains(&2), listed, "pad {pad}: {out:?}");
+            g.near_z(&q, pad - 1e-6, &mut out, &mut seen);
+            assert_eq!(out.contains(&2), listed, "pad {pad}, near_z: {out:?}");
+        }
+    }
+
+    /// `near_z` keeps every face `apart` keeps, in `near`'s order: after `apart` (each face at
+    /// limit + its own mu) the candidates are the same list either way, over random query boxes,
+    /// for the gap a fixture grid uses (the limit plus the largest mu); and no face `apart`
+    /// keeps is outside the grid's cells when the grid is padded by that gap (the pad once left
+    /// out the faces' mu, and a meshed face at mu 0.02 just past the clearance went unlisted).
+    #[test]
+    fn near_z_keeps_what_apart_keeps_in_near_order() {
+        for seed in 1..4u64 {
+            let faces = mixed_faces(seed);
+            let limit = 1.0;
+            let gap = limit + faces.iter().map(|f| f.mu).fold(0.0f64, f64::max);
+            let grid = Grid::new(&faces, gap + 1e-6);
+            let (mut a, mut b, mut seen) = (vec![], vec![], Seen::default());
+            let mut r = seed.wrapping_mul(977);
+            let mut rnd = move || {
+                r = r
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                ((r >> 11) as f64) / ((1u64 << 53) as f64)
+            };
+            for _ in 0..3000 {
+                let c = [
+                    rnd() * 360.0 - 180.0,
+                    rnd() * 260.0 - 130.0,
+                    rnd() * 160.0 - 120.0,
+                ];
+                let h = [rnd() * 20.0, rnd() * 20.0, rnd() * 30.0];
+                let q = [
+                    Ival::new(c[0] - h[0], c[0] + h[0]),
+                    Ival::new(c[1] - h[1], c[1] + h[1]),
+                    Ival::new(c[2] - h[2], c[2] + h[2]),
+                ];
+                let keep = |i: &u32| !apart(&q, &faces[*i as usize].bbox, limit + faces[*i as usize].mu);
+                grid.near(&q, &mut a, &mut seen);
+                let via_near: Vec<u32> = a.iter().copied().filter(keep).collect();
+                grid.near_z(&q, gap, &mut b, &mut seen);
+                let via_z: Vec<u32> = b.iter().copied().filter(keep).collect();
+                assert_eq!(via_near, via_z, "seed {seed} box {q:?}");
+                // and the grid lists every face `apart` keeps (none outside its cells)
+                let all: Vec<u32> = (0..faces.len() as u32).filter(keep).collect();
+                let mut got = via_near.clone();
+                got.sort_unstable();
+                assert_eq!(got, all, "seed {seed} box {q:?}");
+            }
+        }
+    }
+
     /// A face's kept trim answers are the answers made fresh: boxes of a midpoint subdivision
     /// of the face's box (as the branch and bounds make them), each asked twice (the second
     /// from the kept answers) and against a face built anew; and a clone whose trim was then
