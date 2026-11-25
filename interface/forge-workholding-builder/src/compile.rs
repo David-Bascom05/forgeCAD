@@ -87,12 +87,6 @@ fn stl(tris: &[[[f64; 3]; 3]], header: &str) -> Vec<u8> {
 
 /// Compiles the STEP text by `spec`.
 pub fn compile(step: &[u8], spec: &Spec) -> Result<Compiled, String> {
-    if !fixture_model::is_rot(&spec.rot) {
-        return Err("rot: a proper rotation permuting the axes".into());
-    }
-    if spec.chord <= 0.0 || spec.chord.is_nan() {
-        return Err("chord > 0".into());
-    }
     let im = forge_step::import(step, &forge_step::Limits::default()).map_err(|e| format!("{e:?}"))?;
     if !im.refusals.is_empty() {
         return Err(format!(
@@ -101,6 +95,29 @@ pub fn compile(step: &[u8], spec: &Spec) -> Result<Compiled, String> {
             im.refusals
         ));
     }
+    let bodies: Vec<&forge_topo::Body> = im.solids.iter().map(|s| &s.body).collect();
+    compile_bodies(&bodies, spec)
+}
+
+/// `compile` on solids already made (a `.fg` part built, or a file read): the same faces.
+/// A spec with no groups makes one rigid body, `fixture`, of every solid.
+pub fn compile_bodies(solids: &[&forge_topo::Body], spec: &Spec) -> Result<Compiled, String> {
+    if !fixture_model::is_rot(&spec.rot) {
+        return Err("rot: a proper rotation permuting the axes".into());
+    }
+    if spec.chord <= 0.0 || spec.chord.is_nan() {
+        return Err("chord > 0".into());
+    }
+    if solids.is_empty() {
+        return Err("no solid to hold with".into());
+    }
+    let all;
+    let wanted: &[(String, Vec<usize>)] = if spec.groups.is_empty() {
+        all = vec![("fixture".to_string(), (0..solids.len()).collect())];
+        &all
+    } else {
+        &spec.groups
+    };
     let rot = spec.rot;
     let r = |v: [f64; 3]| {
         [
@@ -112,24 +129,22 @@ pub fn compile(step: &[u8], spec: &Spec) -> Result<Compiled, String> {
     let ro = r(spec.origin);
     let shift = [-ro[0], -ro[1], -ro[2]];
     let mut c = Compiled {
-        solids: im.solids.len(),
+        solids: solids.len(),
         ..Default::default()
     };
-    let mut used = vec![false; im.solids.len()];
+    let mut used = vec![false; solids.len()];
     let mut groups: Vec<(String, Vec<Face>, [[f64; 3]; 2])> = Vec::new();
-    for (name, sol) in &spec.groups {
+    for (name, sol) in wanted {
         let mut faces = Vec::new();
         let mut draw = Vec::new();
         let (mut tlo, mut thi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
         for &si in sol {
-            let s = im
-                .solids
+            let body: &forge_topo::Body = solids
                 .get(si)
-                .ok_or_else(|| format!("{name}: no solid {si} (the file has {})", im.solids.len()))?;
+                .ok_or_else(|| format!("{name}: no solid {si} (the file has {})", solids.len()))?;
             if std::mem::replace(&mut used[si], true) {
                 return Err(format!("solid {si} is in two groups"));
             }
-            let body = &s.body;
             let mut left = std::collections::BTreeSet::new();
             let mut fs = Vec::new();
             for (k, f) in body.face_ids().enumerate() {
