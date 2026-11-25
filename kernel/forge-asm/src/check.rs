@@ -1292,6 +1292,9 @@ pub fn rigid_copy(b: &forge_topo::Body, f: &Frame) -> forge_topo::Body {
                         };
                         let (s, t) = (vert(edge.start), vert(edge.end));
                         let e = out.add_edge(edge.curve.transformed(f), edge.range, s, t, edge.name);
+                        // a file's edge keeps the tolerance it was read with: the copy's booleans
+                        // (interference) must not take it for an edge made here
+                        out.edges[e.index()].tol = edge.tol;
                         emap[co.edge.index()] = Some(e);
                         e
                     }
@@ -1304,6 +1307,12 @@ pub fn rigid_copy(b: &forge_topo::Body, f: &Frame) -> forge_topo::Body {
     for &w in &b.split {
         out.note_split(w);
     }
+    // what is true of the part is true of its copy: read from a file (meshed with its tolerances),
+    // its placement, and what the reader could not check or left out
+    out.from_file = b.from_file;
+    out.unplaced = b.unplaced;
+    out.unverified.clone_from(&b.unverified);
+    out.left_out.clone_from(&b.left_out);
     out
 }
 
