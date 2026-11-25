@@ -118,14 +118,28 @@ fn exact_normal(body: &Body, f: FaceId, p: Point3, near: Vec3) -> Vec3 {
     }
 }
 
-/// Meshes the body at this quality into one level of detail.
+/// At most this many faces of a part are left out of its drawing (`build_lod_reporting`); past
+/// that it is not drawn.
+pub const MOST_LEFT_OUT: usize = 32;
+
+/// A face a part's drawing left out: its id in the part, and why it could not be meshed.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LeftOut {
+    pub face: u32,
+    pub why: String,
+}
+
+/// Meshes the body at this quality into one level of detail (`build_lod_reporting`, without
+/// saying which faces were left out).
 pub fn build_lod(body: &Body, q: &Quality) -> Result<Lod, TessError> {
-    let mut lod = Lod {
-        chord: q.chord as f32,
-        ..Lod::default()
-    };
-    let mut vertices = 0u32;
-    let mut fins = Vec::new();
+    build_lod_reporting(body, q).map(|(l, _)| l)
+}
+
+/// Meshes the body at this quality into one level of detail, every face that can be meshed: one
+/// that cannot (a file's face whose boundary crosses itself) is left out, and said, and the rest
+/// meshed again, so one bad face does not blank the part. A body that meshes whole is drawn as it
+/// always was. An error only where no face can be drawn, or more than `MOST_LEFT_OUT` cannot.
+pub fn build_lod_reporting(body: &Body, q: &Quality) -> Result<(Lod, Vec<LeftOut>), TessError> {
     // ids index the body's arrays only once the dead are gone
     let compacted;
     let body = if body.dead > 0 {
@@ -134,6 +148,95 @@ pub fn build_lod(body: &Body, q: &Quality) -> Result<Lod, TessError> {
     } else {
         body
     };
+    let mut err = match lod_whole(body, q) {
+        Ok(l) => return Ok((l, Vec::new())),
+        Err(e) => e,
+    };
+    let mut work = body.clone();
+    let mut left = Vec::new();
+    loop {
+        let TessError::Face { face, error } = &err;
+        // the failing face's index is in the live faces' order (what `compact` numbers)
+        let live: Vec<FaceId> = work.face_ids().collect();
+        let Some(&f) = live.get(face.index()) else {
+            return Err(err);
+        };
+        if left.len() == MOST_LEFT_OUT || live.len() == 1 {
+            return Err(err);
+        }
+        left.push(LeftOut {
+            face: f.0,
+            why: format!("{error:?}"),
+        });
+        work.kill_face(f);
+        let (rest, ids) = compacted_with_ids(&work);
+        match lod_whole(&rest, q) {
+            Ok(mut l) => {
+                for r in &mut l.faces {
+                    r.face = ids.faces[r.face as usize];
+                }
+                for r in &mut l.edges {
+                    r.edge = ids.edges[r.edge as usize];
+                    r.start = ids.vertices[r.start as usize];
+                    r.end = ids.vertices[r.end as usize];
+                }
+                return Ok((l, left));
+            }
+            Err(e) => err = e,
+        }
+    }
+}
+
+/// A body's live entities' ids in the body, by their ids in `body.compact()`.
+struct Ids {
+    faces: Vec<u32>,
+    edges: Vec<u32>,
+    vertices: Vec<u32>,
+}
+
+/// `body.compact()`, and its ids' in `body`: faces in order, edges and vertices in the order of
+/// first use along the faces' loops, as `compact` makes them.
+fn compacted_with_ids(body: &Body) -> (Body, Ids) {
+    let rest = body.compact();
+    let mut ids = Ids {
+        faces: Vec::new(),
+        edges: Vec::new(),
+        vertices: Vec::new(),
+    };
+    let (mut edge_seen, mut vertex_seen) = (vec![false; body.edges.len()], vec![false; body.vertices.len()]);
+    for f in body.face_ids() {
+        ids.faces.push(f.0);
+        for &l in &body.face(f).loops {
+            for c in body.lp(l).coedges() {
+                let e = body.coedge(c).edge;
+                if std::mem::replace(&mut edge_seen[e.index()], true) {
+                    continue;
+                }
+                for v in [body.edge(e).start, body.edge(e).end] {
+                    if !std::mem::replace(&mut vertex_seen[v.index()], true) {
+                        ids.vertices.push(v.0);
+                    }
+                }
+                ids.edges.push(e.0);
+            }
+        }
+    }
+    debug_assert!(
+        ids.faces.len() == rest.faces.len()
+            && ids.edges.len() == rest.edges.len()
+            && ids.vertices.len() == rest.vertices.len()
+    );
+    (rest, ids)
+}
+
+/// `build_lod` of a body with no dead entities, all its faces or none.
+fn lod_whole(body: &Body, q: &Quality) -> Result<Lod, TessError> {
+    let mut lod = Lod {
+        chord: q.chord as f32,
+        ..Lod::default()
+    };
+    let mut vertices = 0u32;
+    let mut fins = Vec::new();
     let m = tessellate_tolerant(body, q)?;
 
     // triangles by face
@@ -448,6 +551,12 @@ pub fn cluster(src: &Lod, center: [f32; 3], chord: f32) -> Lod {
 
 /// All of a part's levels: those the kernel can't mesh at that coarseness are left out.
 pub fn build_part(body: &Body) -> Result<PartMesh, TessError> {
+    build_part_from(body, 0).map(|(p, _)| p)
+}
+
+/// `build_part`, and the faces its finest level left out (`build_lod_reporting`): a part with
+/// faces that cannot be meshed is drawn without them, and the view can say which and why.
+pub fn build_part_reporting(body: &Body) -> Result<(PartMesh, Vec<LeftOut>), TessError> {
     build_part_from(body, 0)
 }
 
@@ -463,19 +572,25 @@ pub fn build_part_coarse(body: &Body) -> Result<PartMesh, TessError> {
         .iter()
         .position(|c| c.0 >= size / 500.0)
         .unwrap_or(CHORDS.len() - 1);
-    build_part_from(body, first)
+    build_part_from(body, first).map(|(p, _)| p)
 }
 
 /// The levels from `CHORDS[first]` down, then clustered ones.
-fn build_part_from(body: &Body, first: usize) -> Result<PartMesh, TessError> {
+fn build_part_from(body: &Body, first: usize) -> Result<(PartMesh, Vec<LeftOut>), TessError> {
     let mut lods: Vec<Lod> = Vec::new();
+    let mut left = Vec::new();
     for (i, &(chord, turn)) in CHORDS.iter().enumerate().skip(first) {
         let q = Quality {
             chord,
             max_angle: turn * core::f64::consts::PI / 180.0,
         };
-        match build_lod(body, &q) {
-            Ok(l) => lods.push(l),
+        match build_lod_reporting(body, &q) {
+            Ok((l, out)) => {
+                if i == first {
+                    left = out;
+                }
+                lods.push(l);
+            }
             Err(e) if i == first => return Err(e),
             Err(_) => {}
         }
@@ -508,7 +623,7 @@ fn build_part_from(body: &Body, first: usize) -> Result<PartMesh, TessError> {
         }
         lods.push(l);
     }
-    Ok(PartMesh { center, radius, lods })
+    Ok((PartMesh { center, radius, lods }, left))
 }
 
 /// A wire's tube (forge-harness's mesh) as a part: one level, one face, no edges.
@@ -602,6 +717,43 @@ mod tests {
         };
         assert!(l.edges.windows(2).all(|w| w[0].first + w[0].count == w[1].first));
         assert!(l.edges.windows(2).all(|w| long(&w[0]) >= long(&w[1]) - 1e-3));
+    }
+
+    /// One face that cannot be meshed (an edge of its outline used the wrong way round): the part is drawn without it, every other face as before, and the
+    /// left-out face named, with why.
+    #[test]
+    fn one_face_that_cannot_be_meshed_leaves_the_rest_drawn() {
+        let body = crank();
+        let q = Quality::default();
+        let whole = build_lod(&body, &q).unwrap();
+        // a body that meshes is drawn as it always was, nothing left out
+        let (same, none) = build_lod_reporting(&body, &q).unwrap();
+        assert!(none.is_empty() && same.vertices == whole.vertices && same.indices == whole.indices);
+        let bad = body
+            .face_ids()
+            .find(|&f| matches!(body.face(f).surface, forge_geom::Surface::Plane(_)))
+            .expect("a plane face");
+        let mut broken = body.clone();
+        // one use of an edge in the face's outline turned the wrong way: the outline is no loop
+        let c = broken.lp(body.face(bad).loops[0]).coedges().next().unwrap();
+        broken.coedges[c.index()].forward ^= true;
+        assert!(forge_mesh::tessellate(&broken, &q).is_err(), "the broken face must not mesh");
+        let (l, left) = build_lod_reporting(&broken, &q).unwrap();
+        assert_eq!(left.len(), 1, "{left:?}");
+        assert_eq!(left[0].face, bad.0);
+        assert!(!left[0].why.is_empty());
+        // every other face drawn, under its own id; the bad one not
+        let drawn: Vec<u32> = l.faces.iter().map(|r| r.face).collect();
+        let want: Vec<u32> = body.face_ids().map(|f| f.0).filter(|&f| f != bad.0).collect();
+        assert_eq!(drawn, want);
+        // and its edges and vertices under their own ids too
+        for e in &l.edges {
+            let x = body.edge(EdgeId(e.edge));
+            assert_eq!((x.start.0, x.end.0), (e.start, e.end));
+        }
+        let (part, left) = build_part_reporting(&broken).unwrap();
+        assert_eq!(left.len(), 1);
+        assert!(part.lods[0].tris() > 0);
     }
 
     #[test]
