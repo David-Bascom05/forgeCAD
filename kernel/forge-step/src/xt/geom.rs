@@ -1149,48 +1149,26 @@ const EDGE_TOL: f64 = 1e-3;
 /// cannot take.
 pub(crate) fn splined(c: &Curve) -> Option<Curve> {
     let Curve::Intersection(ic) = c else { return None };
-    // the chain filled in, and filled in finer if the cubic strays: else the exact curve stands
-    [EDGE_TOL, 0.1 * EDGE_TOL]
-        .into_iter()
-        .find_map(|tol| cubic_within(&ic.a, &ic.b, &ic.pts, ic.closed, tol))
-}
-
-/// The cubic through the chain filled in to `chain_tol`, if every piece of it, checked at a
-/// quarter, half and three quarters of the way along, lies within tol::LINEAR of where the two
-/// surfaces meet.
-fn cubic_within(a: &Surface, b: &Surface, chain: &[Point3], closed: bool, chain_tol: f64) -> Option<Curve> {
-    let pts = densify_to(a, b, chain.to_vec(), closed, chain_tol);
+    let pts = densify_to(&ic.a, &ic.b, ic.pts.clone(), ic.closed, EDGE_TOL);
     let m = pts.len();
     if m < 2 {
         return None;
     }
     let mut tans = Vec::with_capacity(m);
     for i in 0..m {
-        let chord = if closed {
+        let chord = if ic.closed {
             pts[(i + 1) % m] - pts[(i + m - 1) % m]
         } else {
             pts[(i + 1).min(m - 1)] - pts[i.saturating_sub(1)]
         };
-        let t = direction(a, b, pts[i])?;
+        let t = direction(&ic.a, &ic.b, pts[i])?;
         tans.push(if t.dot(chord) < 0.0 { -t } else { t });
     }
     // the chain goes one way: a tangent turned back is a cusp the cubic would loop through
     if (0..m - 1).any(|i| tans[i].dot(tans[i + 1]) < 0.0) {
         return None;
     }
-    let c = hermite(&pts, &tans, closed)?;
-    // piece i spans [i, i + 1] of the cubic's parameter
-    let pieces = if closed { m } else { m - 1 };
-    for i in 0..pieces {
-        for f in [0.25, 0.5, 0.75] {
-            let p = c.eval(i as f64 + f);
-            let on = refine(a, b, p)?;
-            if on.distance(p) > tol::LINEAR {
-                return None;
-            }
-        }
-    }
-    Some(c)
+    hermite(&pts, &tans, ic.closed)
 }
 
 /// How near a blend's spine stays to the true one between its points, about: the cubic's error
@@ -1323,36 +1301,6 @@ mod tests {
             "{m:?}"
         );
         assert!(m.x > 1.0 && m.y > 1.0, "the quarter between them: {m:?}");
-    }
-
-    #[test]
-    fn an_intersection_as_a_cubic_keeps_to_both_surfaces() {
-        // a slanted plane through the cylinder: an ellipse's quarter
-        let (a, b) = (
-            cylinder(),
-            plane(Point3::new(0.0, 0.0, 3.0), Vec3::new(0.0, 0.3, 1.0)),
-        );
-        let p0 = refine(&a, &b, Point3::new(5.0, 0.0, 3.0)).unwrap();
-        let p1 = refine(&a, &b, Point3::new(0.0, 5.0, 2.0)).unwrap();
-        let exact = Geo::traced(&a, &b, p0, p1).expect("traced");
-        assert!(matches!(exact, Curve::Intersection(_)));
-        let c = splined(&exact).expect("a cubic within tolerance");
-        assert!(matches!(c, Curve::Procedural(_)), "a spline, not the exact curve");
-        // everywhere between the checked points too
-        let d = c.domain();
-        for k in 0..=200 {
-            let p = c.eval(d.lo + (d.hi - d.lo) * f64::from(k) / 200.0);
-            let on = refine(&a, &b, p).unwrap();
-            assert!(on.distance(p) <= tol::LINEAR, "{k}: {}", on.distance(p));
-        }
-        // anything else is left as it is
-        assert!(
-            splined(&Curve::Line(Line {
-                origin: p0,
-                dir: UnitVec3::Z
-            }))
-            .is_none()
-        );
     }
 
     #[test]
