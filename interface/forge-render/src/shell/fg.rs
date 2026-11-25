@@ -219,6 +219,9 @@ pub struct Issue {
     /// An assembly's result as forge-lang types it: what to highlight (a conflict's set, the
     /// two parts that interfere).
     pub asm: Option<forge_lang::asm::Issue>,
+    /// From the last checked build, kept while the new build's checks run (an assembly's shape
+    /// comes first): shown as "checking…", replaced when they are done.
+    pub stale: bool,
 }
 
 /// What the browser and the dialogs ask of the host.
@@ -1503,7 +1506,11 @@ impl Shell {
         places: &mut Vec<(String, Rect)>,
     ) {
         let (errors, warnings) = issue_counts(&fg.issues);
-        let head = format!("{} · {}", plural(errors, "error"), plural(warnings, "warning"));
+        let mut head = format!("{} · {}", plural(errors, "error"), plural(warnings, "warning"));
+        // an assembly's last checks still listed while the new ones run
+        if fg.issues.iter().any(|i| i.stale) {
+            head.push_str(" · checking…");
+        }
         let ink = if errors > 0 {
             t.error
         } else if warnings > 0 {
@@ -1530,6 +1537,8 @@ impl Shell {
                 Severity::Error => t.error,
                 _ => WARN,
             };
+            // the last checks' finding, kept while the new checks run: dimmed, said so
+            let colour = if is.stale { colour.gamma_multiply(0.5) } else { colour };
             let word = match is.severity {
                 Severity::Error => "Error",
                 Severity::Lint => "Lint",
@@ -1553,15 +1562,21 @@ impl Shell {
                             ui.label(egui::RichText::new(word).font(medium(11.0)).color(colour));
                         });
                     ui.label(
-                        egui::RichText::new(format!("{} · line {}:{}", is.kind, is.line, is.col))
-                            .font(super::theme::caption())
-                            .color(t.ink2),
+                        egui::RichText::new(format!(
+                            "{} · line {}:{}{}",
+                            is.kind,
+                            is.line,
+                            is.col,
+                            if is.stale { " · checking…" } else { "" }
+                        ))
+                        .font(super::theme::caption())
+                        .color(t.ink2),
                     );
                 })
                 .response;
             places.push((format!("fg:issue:{i}"), r.rect));
             ui.add_space(2.0);
-            ui.label(egui::RichText::new(&is.text).font(sans(12.0)).color(t.ink));
+            ui.label(egui::RichText::new(&is.text).font(sans(12.0)).color(if is.stale { t.ink2 } else { t.ink }));
             if !is.fixes.is_empty() || is.asm.is_some() {
                 ui.add_space(2.0);
                 ui.horizontal_wrapped(|ui| {

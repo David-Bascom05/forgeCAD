@@ -618,6 +618,7 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
                 Error::Asm(n) => Some(n.issue.clone()),
                 _ => None,
             },
+            stale: false,
         }
     };
     let mut issues: Vec<Issue> = run.errors.iter().map(|e| issue(e, Severity::Error)).collect();
@@ -642,6 +643,7 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
                     fixes: n.fixes.clone(),
                     feature: Some(n.id.clone()),
                     asm: None,
+                    stale: false,
                 });
                 continue;
             }
@@ -660,6 +662,7 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
                     fixes: n.fixes.clone(),
                     feature: Some(n.id.clone()),
                     asm: None,
+                    stale: false,
                 });
                 continue;
             }
@@ -674,6 +677,7 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
                     fixes: n.fixes(),
                     feature: feature_at(Some(n.span)),
                     asm: Some(n.issue.clone()),
+                    stale: false,
                 });
                 continue;
             }
@@ -695,6 +699,7 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
             fixes: vec![],
             feature: feature_at(Some(span)),
             asm: None,
+            stale: false,
         });
     }
     (feats, params, issues)
@@ -941,6 +946,9 @@ struct Worker {
     asm_shaped: Option<u64>,
     /// That checks run, waiting behind a drive that holds `next`.
     asm_checks: Option<Job>,
+    /// The last checked assembly build's issue rows: what its checks found stays listed, marked
+    /// stale, while the next build's checks run.
+    asm_checked_rows: Vec<Issue>,
 }
 
 impl Worker {
@@ -976,6 +984,7 @@ impl Worker {
             next: None,
             asm_shaped: None,
             asm_checks: None,
+            asm_checked_rows: vec![],
         }
     }
 
@@ -1095,7 +1104,21 @@ impl Worker {
             }
             let (asm, view) = asm_view(&run, &mut self.asm_meshes, &mut self.gpu, &mut self.asm_shape);
             let mesh_ms = t.elapsed().as_secs_f64() * 1e3;
-            let (feats, params, issues) = rows(&run, &job.1);
+            let (feats, params, mut issues) = rows(&run, &job.1);
+            if checks || !job.2 {
+                // what the checks found now (or none asked for): the rows to keep for next time
+                self.asm_checked_rows = if checks { issues.clone() } else { vec![] };
+            } else {
+                // the shape alone: the last checks' findings stay, marked stale, till these
+                // checks are done (a clash never seems to vanish and come back)
+                let kept: Vec<Issue> = self
+                    .asm_checked_rows
+                    .iter()
+                    .filter(|r| !issues.iter().any(|i| i.kind == r.kind && i.text == r.text))
+                    .map(|r| Issue { stale: true, ..r.clone() })
+                    .collect();
+                issues.extend(kept);
+            }
             let built = Built {
                 seq: job.0,
                 ok: run.ok(),
