@@ -6,7 +6,7 @@ A designer draws a circuit, places it on a board, installs the board in an assem
 
 ## First milestone
 
-Study how code-first and drawing-first tools encode intent across source, schematic and physical board. Decide which facts each view owns, how graphical edits write back to generated code, and what survives regeneration, synchronization and import. The deliverable is a reviewed representation and edit contract grounded in real designs. The acceptance fixture below follows that decision. [Prior art, traced records, edit matrix and exit criteria](design-intent.md)
+Determine how ForgeCAD can infer **which components serve which pins or functional groups**, and what that implies for placement, from an ordinary hand-drawn schematic. Start with bypass capacitors. Evaluate the inferred assignments against documented reference designs before looking at their layouts. The cross-view contract supports carrying those findings into the PCB. [Worked RP2040 example, inference design and benchmark](design-intent.md#inferring-which-pins-a-capacitor-serves)
 
 ## Design decisions
 

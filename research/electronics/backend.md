@@ -184,7 +184,7 @@ The [per-frame performance gates](live-checks.md#performance-gates-that-can-chan
 
 **Dependency order and exit criteria**
 
-The first milestone is the [cross-view design-intent study and representation decision](design-intent.md). The implementation sequence below begins after that contract is reviewed.
+The first milestone is [inferring functional placement intent from a drawn circuit](design-intent.md#inferring-which-pins-a-capacitor-serves). Use that evidence to review the representation and edit contract before the implementation sequence below.
 
 Begin each increment with its graphical/textual authoring equivalence, applicability and typed failures, proof ledger rows, cold oracle, and drag replay. The [end-to-end acceptance scenario](design.md#first-acceptance-test) is the first vertical slice.
 
