@@ -126,6 +126,16 @@ the user cannot settle.
   enclosure holds every point of the part at every instant of the move.
 - Value: high now that stations are planned: it turns most staged programs' amber rows into
   answers.
+- Status: done (bendsim/tools, after train 7). `StepCtx::handling` over `Moving` (the scene's
+  `HandlingPath`: its knots, its interval form; the turn by Rodrigues with interval sine and
+  versine); targets from `StepCtx::handle_targets` (the bed and profile-less dies left out of the
+  vertical spans: moving straight up off a terrain only moves away from it). Decided, not
+  measured (measuring every near pair past the limit cost 0.86 s on load_tray; decided, 0.11-0.19
+  s per reply). On the ten-case set every former undecided is settled: the staged TruBend tray
+  all pass; the forced sequence 3,1,2,4,5,6's last step a proven fail (the tray's right bend
+  lifted into the punch body: the planned move, not every move). Tests: the enclosure against
+  the move at samples (every span), a proven hit and a terrain left out, the real check against
+  a brute-force sample, and the staged reply all settled.
 
 ### Rank 4. (d1) Hemming, two stages
 

@@ -1986,8 +1986,9 @@ fn check(sh: &SheetOut, c: &Check) -> Json {
     if c.rule == Rule::Handling {
         f.push((
             "method",
-            "the part's boxes and bounding sphere swept through the operator's move, against the press's bodies' boxes: \
-             a pass is proven; an overlap is of these envelopes (value: how far they overlap), not a measured collision of the part"
+            "the part itself carried through the planned operator's move (lift, pull out, turn, push in, set down; the ram \
+             at top dead centre), against every body of the press, by the same certified search the bends use: a pass is \
+             proven clear, a fail a real point of the part proven to meet the body (value: its distance, negative inside)"
                 .into(),
         ));
     }
