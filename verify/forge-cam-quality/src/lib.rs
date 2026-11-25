@@ -853,7 +853,11 @@ pub fn measure_op_unless(
                         q.fast_cuts += 1;
                         q.fast_cut_at.get_or_insert(b);
                         if std::env::var_os("FORGE_QUALITY_FAST").is_some() {
-                            eprintln!("fast {} f={f:.1} removed={removed:.6} a={a:?} b={b:?} mv={mv:?} side={:?}", q.name, eng.map(|e| (e.0.phi, e.0.ap)));
+                            eprintln!(
+                                "fast {} f={f:.1} removed={removed:.6} a={a:?} b={b:?} mv={mv:?} side={:?}",
+                                q.name,
+                                eng.map(|e| (e.0.phi, e.0.ap))
+                            );
                         }
                     }
                     moved_in = true;
