@@ -30,7 +30,7 @@
 #   ORDER-SAFE  |  interface/forge-lang/src/build.rs:268  |  Kept.stages  |  HashMap<u128, Vec<Entry>>  |  build.rs:333-336 iterated for LRU eviction via min_by_key on tick; ticks are unique, so the evicted entry is order-independent
 #   ORDER-SAFE  |  interface/forge-lang/src/builtins.rs:2506  |  from  |  HashSet<Name>  |  builtins.rs:2512 `from.iter()` mapped into another HashSet `to` (lookups only)
 #   ORDER-SAFE  |  interface/forge-lang/src/eval.rs:309  |  Eval.fns  |  HashMap<String, Rc<FnDef>>  |  eval.rs:1478 `.keys()` feed edit_ops::nearest, a min over (dist, builtin, name) with a total tie-break (edit_ops.rs:385); uses.rs:279 iterates sub.fns into a BTreeMap; clone at eval.rs:493
-#   LOOKUP  |  kernel/forge-asm/src/check.rs:686  |  NARROWS  |  HashMap<NarrowKey=(u128,u128,[u64;9]), Narrow>  |  lookups only (get/insert, clear past 1<<20 at :1395)
+#   LOOKUP  |  kernel/forge-asm/src/check.rs  |  NARROWS  |  HashMap<NarrowKey=(u128,u128,[u64;9]), (Narrow, Option<bool>)>  |  lookups only (get/insert, clear past 1<<20); the near answer is a function of the same key (narrow_near)
 #   LOOKUP  |  kernel/forge-asm/src/check.rs:746  |  GAPS  |  HashMap<GapKey=(u128,u128,[u64;9],u64), Gap>  |  lookups only (get/insert/clear)
 #   LOOKUP  |  kernel/forge-asm/src/check.rs:873  |  VOLUMES  |  HashMap<VolumeKey=(u128,u128,[u64;9]), Result<f64, ExactFail>>  |  lookups only
 #   LOOKUP  |  kernel/forge-geom/src/corner/rational.rs:1259  |  cache() C  |  Mutex<HashMap<Vec<u64>, bool>>  |  lookups only (:1126 get, :1135 insert, :1255 clear)
@@ -176,7 +176,7 @@ no-output (allocator bookkeeping: spin locks, page owners and heaps, never a val
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|thread_local|std::thread_local! {
 no-output (work index, counter or stop flag)  @ forge-asm/src/check.rs|atomic|let next = std::sync::atomic::AtomicUsize::new(0);
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-asm/src/check.rs|hash-order|static GAPS: std::sync::Mutex<Option<std::collections::HashMap<GapKey, Gap>>> = std::sync::Mutex::new(None);
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-asm/src/check.rs|hash-order|static NARROWS: std::sync::Mutex<Option<std::collections::HashMap<NarrowKey, Narrow>>> =
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-asm/src/check.rs|hash-order|type NarrowMemo = std::collections::HashMap<NarrowKey, NarrowAnswer>;
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-asm/src/check.rs|hash-order|static VOLUMES: std::sync::Mutex<Option<std::collections::HashMap<VolumeKey, Result<f64, ExactFail>>>> =
 speed (lazy field or constant table)  @ forge-asm/src/check.rs|lazy|boxes: OnceLock::new(),
 speed (lazy field or constant table)  @ forge-asm/src/check.rs|lazy|boxes: OnceLock<Vec<Box3>>,
@@ -189,7 +189,7 @@ speed (lazy field or constant table)  @ forge-asm/src/check.rs|lazy|sharp: OnceL
 speed (lazy field or constant table)  @ forge-asm/src/check.rs|lazy|use std::sync::{Arc, OnceLock};
 speed (cache answering a function of its own key)  @ forge-asm/src/check.rs|static|static FRESH: std::sync::Mutex<Option<Learned>> = std::sync::Mutex::new(None);
 speed (cache answering a function of its own key)  @ forge-asm/src/check.rs|static|static GAPS: std::sync::Mutex<Option<std::collections::HashMap<GapKey, Gap>>> = std::sync::Mutex::new(None);
-speed (cache answering a function of its own key)  @ forge-asm/src/check.rs|static|static NARROWS: std::sync::Mutex<Option<std::collections::HashMap<NarrowKey, Narrow>>> =
+speed (cache answering a function of its own key)  @ forge-asm/src/check.rs|static|static NARROWS: std::sync::Mutex<Option<NarrowMemo>> = std::sync::Mutex::new(None);
 speed (cache answering a function of its own key)  @ forge-asm/src/check.rs|static|static VOLUMES: std::sync::Mutex<Option<std::collections::HashMap<VolumeKey, Result<f64, ExactFail>>>> =
 no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-asm/src/check.rs|threads|let mut got: Vec<(usize, T)> = forge_math::par::scope(|s| {
 no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-asm/src/solve.rs|threads|forge_math::par::scope(|s| {
