@@ -362,3 +362,55 @@ fn a_lost_reference_refuses_its_solid_not_the_file() {
         Err(forge_step::ImportError::Parse(_))
     ));
 }
+
+/// An O-ring as SolidWorks writes one: a solid of one torus face with no edges at all. It was
+/// refused, "a whole torus with no edges" (05-0335, Haas Tooling workholding). It is read as two
+/// half rings between meridians, each seamed as a band: 2 pi^2 R r^2.
+#[test]
+fn a_whole_torus_with_no_edges_is_an_o_ring() {
+    for (z, x) in [
+        ("0.,0.,1.", "1.,0.,0."),
+        ("0.,1.,0.", "0.,0.,1."),
+        ("0.6,0.,0.8", "0.8,0.,-0.6"),
+    ] {
+        let text = format!(
+            "ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('oring','',(''),(''),'','','');
+FILE_SCHEMA(('AUTOMOTIVE_DESIGN'));
+ENDSEC;
+DATA;
+#1=DIRECTION('',({z}));
+#2=DIRECTION('',({x}));
+#10=CARTESIAN_POINT('',(3.,-2.,1.));
+#20=AXIS2_PLACEMENT_3D('',#10,#1,#2);
+#30=TOROIDAL_SURFACE('',#20,53.25,1.);
+#100=ADVANCED_FACE('',(),#30,.T.);
+#110=CLOSED_SHELL('',(#100));
+#111=MANIFOLD_SOLID_BREP('oring',#110);
+#120=(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(.MILLI.,.METRE.));
+#121=(NAMED_UNIT(*)PLANE_ANGLE_UNIT()SI_UNIT($,.RADIAN.));
+#122=(NAMED_UNIT(*)SI_UNIT($,.STERADIAN.)SOLID_ANGLE_UNIT());
+#123=UNCERTAINTY_MEASURE_WITH_UNIT(LENGTH_MEASURE(1.E-06),#120,'','');
+#124=(GEOMETRIC_REPRESENTATION_CONTEXT(3)GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT((#123))GLOBAL_UNIT_ASSIGNED_CONTEXT((#120,#121,#122))REPRESENTATION_CONTEXT('',''));
+#125=ADVANCED_BREP_SHAPE_REPRESENTATION('',(#111),#124);
+ENDSEC;
+END-ISO-10303-21;
+"
+        );
+        let imp = import(text.as_bytes(), &Limits::default()).unwrap();
+        assert!(imp.refusals.is_empty(), "{z}: {:?}", imp.refusals);
+        let b = &imp.solids[0].body;
+        let p = check(b);
+        assert!(p.is_empty(), "{z}: {p:?}");
+        let pi = forge_math::dmath::PI;
+        let want = 2.0 * pi * pi * 53.25 * 1.0;
+        let m = forge_topo::mass::mass(b).unwrap();
+        assert!(
+            (m.volume - want).abs() < 1e-6 * want,
+            "{z}: {} vs {want}",
+            m.volume
+        );
+    }
+}
