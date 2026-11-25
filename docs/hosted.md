@@ -40,5 +40,7 @@ refuses a folder that holds `.forgecad/server/`.
 
 ## Browser
 
-Open the app with `?sync=ws://127.0.0.1:7878/sync&sync_token=TOKEN` (this machine only), and
-start forge-server with `--origin` set to the page's origin.
+Serve the app with `forgecad web DIR --sync ws://127.0.0.1:7878/sync` (the page's security
+policy lets it connect to that server and no other), open it with
+`?sync=ws://127.0.0.1:7878/sync&sync_token=TOKEN` (this machine only), and start forge-server
+with `--origin` set to the page's origin (`http://localhost:PORT`).
