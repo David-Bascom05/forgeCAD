@@ -1,0 +1,95 @@
+docs 251
+== DIFFERENT TARGETS
+pair commute diverge refuse_ab refuse_ba refuse_both total
+AddFeature+AddFeature 0 102 0 0 0 102
+AddFeature+DeleteFeature 144 0 0 0 0 144
+AddFeature+MoveFeature 0 132 0 0 0 132
+AddFeature+Rename 746 0 0 0 0 746
+AddFeature+ReplaceFeature 362 0 0 0 0 362
+AddFeature+SetParam 694 0 0 0 0 694
+DeleteFeature+DeleteFeature 35 0 0 0 0 35
+DeleteFeature+MoveFeature 79 0 0 0 0 79
+DeleteFeature+Rename 443 0 0 0 0 443
+DeleteFeature+ReplaceFeature 205 0 0 0 0 205
+DeleteFeature+SetParam 446 0 0 0 0 446
+MoveFeature+MoveFeature 0 32 0 0 0 32
+MoveFeature+Rename 404 0 0 0 0 404
+MoveFeature+ReplaceFeature 193 0 0 0 0 193
+MoveFeature+SetParam 419 0 0 0 0 419
+Rename+Rename 1065 0 0 0 0 1065
+Rename+ReplaceFeature 825 0 140 140 0 1105
+Rename+SetParam 2703 0 15 17 0 2735
+ReplaceFeature+ReplaceFeature 281 0 0 0 0 281
+ReplaceFeature+SetParam 1316 1 0 0 0 1317
+SetParam+SetParam 2342 0 0 0 1 2343
+== SAME TARGET (same feature/param)
+pair commute diverge refuse_ab refuse_ba refuse_both total
+DeleteFeature+MoveFeature 0 0 27 34 0 61
+DeleteFeature+Rename 0 0 0 0 136 136
+DeleteFeature+ReplaceFeature 0 0 35 36 0 71
+MoveFeature+Rename 0 0 62 54 0 116
+MoveFeature+ReplaceFeature 0 51 0 0 0 51
+Rename+Rename 0 0 0 0 171 171
+Rename+ReplaceFeature 0 0 206 175 0 381
+SetParam+SetParam 0 168 0 0 0 168
+== samples
+boss.fg | {"op":"Rename","from":"root","to":"root_b"} vs {"op":"SetParam","param":"root.rho","value":{"value":0.55,"dim":"Ratio"}} | class=refuse_ab | ab=UnknownParam ba=ok
+post.fg | {"op":"ReplaceFeature","id":"bar","text":"bar = extrude(end.c, sym(L))\n  # edited"} vs {"op":"Rename","from":"end","to":"end_a"} | class=refuse_ba | ab=ok ba=UnknownName
+post.fg | {"op":"Rename","from":"bar","to":"bar_b"} vs {"op":"ReplaceFeature","id":"root","text":"root = fillet(edges(between: (bar.side(end.c), post.side(foot.c))), r, conic: rho)\n  # edited"} | class=refuse_ab | ab=UnknownName ba=ok
+post.fg | {"op":"ReplaceFeature","id":"root","text":"root = fillet(edges(between: (bar.side(end.c), post.side(foot.c))), r, conic: rho)\n  # edited"} vs {"op":"Rename","from":"foot","to":"foot_b"} | class=refuse_ba | ab=ok ba=UnknownName
+rim.fg | {"op":"AddFeature","before":null,"text":"shared hosted_b = 2"} vs {"op":"MoveFeature","id":"rim","before":null} | class=diverge | ab=ok ba=ok
+slot.fg | {"op":"SetParam","param":"rim.rho","value":{"value":0.45,"dim":"Ratio"}} vs {"op":"SetParam","param":"rim.rho","value":{"value":0.55,"dim":"Ratio"}} | class=diverge | ab=ok ba=ok
+slot.fg | {"op":"SetParam","param":"R","value":{"value":7.2,"dim":"Length"}} vs {"op":"SetParam","param":"R","value":{"value":8.8,"dim":"Length"}} | class=diverge | ab=ok ba=ok
+slot.fg | {"op":"Rename","from":"rim","to":"rim_b"} vs {"op":"SetParam","param":"rim.r","value":{"value":2.7,"dim":"Length"}} | class=refuse_ab | ab=UnknownParam ba=ok
+slot.fg | {"op":"ReplaceFeature","id":"base","text":"base = extrude(plan, H)\n  # edited"} vs {"op":"Rename","from":"base","to":"base_a"} | class=refuse_ba | ab=ok ba=UnknownFeature
+step.fg | {"op":"ReplaceFeature","id":"fill","text":"fill = fillet(edges(between: (base.side(plan.outline[2]), base.side(plan.outline[3]))), r, conic: rho)\n  # edited"} vs {"op":"Rename","from":"base","to":"base_a"} | class=refuse_ba | ab=ok ba=UnknownName
+step.fg | {"op":"SetParam","param":"fill.rho","value":{"value":0.33,"dim":"Ratio"}} vs {"op":"Rename","from":"fill","to":"fill_a"} | class=refuse_ba | ab=ok ba=UnknownParam
+step.fg | {"op":"MoveFeature","id":"fill","before":null} vs {"op":"AddFeature","before":null,"text":"shared hosted_b = 2"} | class=diverge | ab=ok ba=ok
+step.fg | {"op":"Rename","from":"fill","to":"fill_a"} vs {"op":"MoveFeature","id":"fill","before":null} | class=refuse_ab | ab=UnknownFeature ba=ok
+wedge.fg | {"op":"Rename","from":"round","to":"round_a"} vs {"op":"SetParam","param":"round.r","value":{"value":4.4,"dim":"Length"}} | class=refuse_ab | ab=UnknownParam ba=ok
+sheet_tools.fg | {"op":"SetParam","param":"sk1.h4","value":{"value":88,"dim":"Length"}} vs {"op":"SetParam","param":"sk1.h4","value":{"value":72,"dim":"Length"}} | class=diverge | ab=ok ba=ok
+loom.fg | {"op":"AddFeature","before":null,"text":"shared hosted_a = 1"} vs {"op":"AddFeature","before":null,"text":"shared hosted_b = 2"} | class=diverge | ab=ok ba=ok
+loom.fg | {"op":"AddFeature","before":null,"text":"shared hosted_b = 2"} vs {"op":"AddFeature","before":null,"text":"shared hosted_a = 1"} | class=diverge | ab=ok ba=ok
+loom.fg | {"op":"AddFeature","before":null,"text":"shared hosted_a = 1"} vs {"op":"AddFeature","before":null,"text":"shared hosted_b = 2"} | class=diverge | ab=ok ba=ok
+loom.fg | {"op":"AddFeature","before":null,"text":"shared hosted_a = 1"} vs {"op":"AddFeature","before":null,"text":"shared hosted_b = 2"} | class=diverge | ab=ok ba=ok
+loom.fg | {"op":"AddFeature","before":null,"text":"shared hosted_b = 2"} vs {"op":"AddFeature","before":null,"text":"shared hosted_a = 1"} | class=diverge | ab=ok ba=ok
+loom.fg | {"op":"AddFeature","before":null,"text":"shared hosted_b = 2"} vs {"op":"AddFeature","before":null,"text":"shared hosted_a = 1"} | class=diverge | ab=ok ba=ok
+loom.fg | {"op":"AddFeature","before":null,"text":"shared hosted_a = 1"} vs {"op":"AddFeature","before":null,"text":"shared hosted_b = 2"} | class=diverge | ab=ok ba=ok
+loom.fg | {"op":"AddFeature","before":null,"text":"shared hosted_a = 1"} vs {"op":"AddFeature","before":null,"text":"shared hosted_b = 2"} | class=diverge | ab=ok ba=ok
+loom.fg | {"op":"AddFeature","before":null,"text":"shared hosted_b = 2"} vs {"op":"AddFeature","before":null,"text":"shared hosted_a = 1"} | class=diverge | ab=ok ba=ok
+blind_holes.fg | {"op":"SetParam","param":"cbh.depth","value":{"value":8.8,"dim":"Length"}} vs {"op":"Rename","from":"cbh","to":"cbh_b"} | class=refuse_ba | ab=ok ba=UnknownParam
+block_m6.fg | {"op":"SetParam","param":"t","value":{"value":12.6,"dim":"Length"}} vs {"op":"SetParam","param":"t","value":{"value":15.4,"dim":"Length"}} | class=diverge | ab=ok ba=ok
+block_m6.fg | {"op":"SetParam","param":"t","value":{"value":15.4,"dim":"Length"}} vs {"op":"SetParam","param":"t","value":{"value":12.6,"dim":"Length"}} | class=diverge | ab=ok ba=ok
+bracket.fg | {"op":"Rename","from":"hs","to":"hs_a"} vs {"op":"ReplaceFeature","id":"hs","text":"sketch hs(on: plate.end) {\n  c = pt(L / 2, bore_y)\n}\n  # edited"} | class=refuse_ab | ab=UnknownFeature ba=ok
+collar.fg | {"op":"SetParam","param":"d","value":{"value":14.4,"dim":"Length"}} vs {"op":"SetParam","param":"d","value":{"value":17.6,"dim":"Length"}} | class=diverge | ab=ok ba=ok
+flange.fg | {"op":"ReplaceFeature","id":"boss","text":"boss = extrude(bk.outline, boss_h)\n  # edited"} vs {"op":"Rename","from":"bk","to":"bk_b"} | class=refuse_ba | ab=ok ba=UnknownName
+mold_core.fg | {"op":"ReplaceFeature","id":"top","text":"sketch top(on: plate.end) {\n  outline = rect(center: (0, 0), size: (bw, bd))\n}\n  # edited"} vs {"op":"Rename","from":"plate","to":"plate_a"} | class=refuse_ba | ab=ok ba=UnknownName
+nut.fg | {"op":"SetParam","param":"g1","value":{"value":19.8,"dim":"Length"}} vs {"op":"SetParam","param":"g0","value":{"value":20.9,"dim":"Length"}} | class=refuse_both | ab=SketchProfile ba=SketchProfile
+nut.fg | {"op":"SetParam","param":"d","value":{"value":55,"dim":"Length"}} vs {"op":"SetParam","param":"d","value":{"value":45,"dim":"Length"}} | class=diverge | ab=ok ba=ok
+plate_break.fg | {"op":"MoveFeature","id":"corners","before":null} vs {"op":"DeleteFeature","id":"corners"} | class=refuse_ba | ab=ok ba=UnknownFeature
+plate_break.fg | {"op":"AddFeature","before":null,"text":"shared hosted_b = 2"} vs {"op":"MoveFeature","id":"bore","before":null} | class=diverge | ab=ok ba=ok
+plate_mark.fg | {"op":"Rename","from":"g","to":"g_b"} vs {"op":"ReplaceFeature","id":"g","text":"sketch g(on: plate.end) {\n  s = rect(center: (L / 2, W / 2), size: (L - 2 * m, groove_w))\n}\n  # edited"} | class=refuse_ab | ab=UnknownFeature ba=ok
+plate_mark.fg | {"op":"Rename","from":"plate","to":"plate_a"} vs {"op":"ReplaceFeature","id":"plate","text":"plate = extrude(plan, t)\n  # edited"} | class=refuse_ab | ab=UnknownFeature ba=ok
+slot_plate.fg | {"op":"ReplaceFeature","id":"grooves","text":"sketch grooves(on: plate.end) {\n  a = slot((x0, y0), (x1, y0), w / 2)\n  b = slot((x0, y1), (x1, y1), w / 2)\n}\n  # edited"} vs {"op":"Rename","from":"grooves","to":"grooves_b"} | class=refuse_ba | ab=ok ba=UnknownFeature
+slot_plate.fg | {"op":"AddFeature","before":null,"text":"shared hosted_a = 1"} vs {"op":"MoveFeature","id":"groove2","before":null} | class=diverge | ab=ok ba=ok
+slot_plate.fg | {"op":"MoveFeature","id":"groove","before":null} vs {"op":"DeleteFeature","id":"groove"} | class=refuse_ba | ab=ok ba=UnknownFeature
+two_wells.fg | {"op":"MoveFeature","id":"deep","before":null} vs {"op":"MoveFeature","id":"shal","before":null} | class=diverge | ab=ok ba=ok
+two_wells.fg | {"op":"Rename","from":"plate","to":"plate_b"} vs {"op":"ReplaceFeature","id":"pk","text":"sketch pk(on: plate.end) {\n  dw = rect(corner: (6, 6), size: (20, 28))\n  sw = rect(corner: (34, 6), size: (20, 28))\n}\n  # edited"} | class=refuse_ab | ab=UnknownName ba=ok
+well_island.fg | {"op":"Rename","from":"pocket","to":"pocket_b"} vs {"op":"ReplaceFeature","id":"bs","text":"sketch bs(on: pocket.floor) {\n  c = circle((L / 2, W / 2), boss_r)\n}\n  # edited"} | class=refuse_ab | ab=UnknownName ba=ok
+well_island.fg | {"op":"Rename","from":"plan","to":"plan_b"} vs {"op":"ReplaceFeature","id":"plan","text":"sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (L, W))\n}\n  # edited"} | class=refuse_ab | ab=UnknownFeature ba=ok
+well_island.fg | {"op":"Rename","from":"pocket","to":"pocket_b"} vs {"op":"ReplaceFeature","id":"pocket","text":"pocket = cut(pk.well, depth)\n  # edited"} | class=refuse_ab | ab=UnknownFeature ba=ok
+well_island.fg | {"op":"ReplaceFeature","id":"pocket","text":"pocket = cut(pk.well, depth)\n  # edited"} vs {"op":"Rename","from":"pk","to":"pk_b"} | class=refuse_ba | ab=ok ba=UnknownName
+well_island_step.fg | {"op":"Rename","from":"body","to":"body_a"} vs {"op":"ReplaceFeature","id":"body","text":"body = import(file: \"well_island.step\")\n  # edited"} | class=refuse_ab | ab=UnknownFeature ba=ok
+well_island_step.fg | {"op":"ReplaceFeature","id":"body","text":"body = import(file: \"well_island.step\")\n  # edited"} vs {"op":"Rename","from":"body","to":"body_b"} | class=refuse_ba | ab=ok ba=UnknownFeature
+well_island_step.fg | {"op":"Rename","from":"body","to":"body_b"} vs {"op":"Rename","from":"body","to":"body_a"} | class=refuse_both | ab=UnknownFeature ba=UnknownFeature
+well_island_step.fg | {"op":"DeleteFeature","id":"body"} vs {"op":"Rename","from":"body","to":"body_a"} | class=refuse_both | ab=UnknownFeature ba=UnknownFeature
+well_island_step.fg | {"op":"Rename","from":"body","to":"body_a"} vs {"op":"DeleteFeature","id":"body"} | class=refuse_both | ab=UnknownFeature ba=UnknownFeature
+carrier_kit.fg | {"op":"Rename","from":"carrier","to":"carrier_b"} vs {"op":"Rename","from":"carrier","to":"carrier_a"} | class=refuse_both | ab=UnknownFeature ba=UnknownFeature
+carrier_kit.fg | {"op":"Rename","from":"carrier","to":"carrier_b"} vs {"op":"Rename","from":"carrier","to":"carrier_a"} | class=refuse_both | ab=UnknownFeature ba=UnknownFeature
+dummy_d04.fg | {"op":"Rename","from":"ear_plate","to":"ear_plate_a"} vs {"op":"MoveFeature","id":"ear_plate","before":null} | class=refuse_ab | ab=UnknownFeature ba=ok
+RACK-101_post.fg | {"op":"SetParam","param":"bd","value":{"value":4.432,"dim":"Length"}} vs {"op":"SetParam","param":"bd","value":{"value":5.416,"dim":"Length"}} | class=diverge | ab=ok ba=ok
+RACK-141_side_panel.fg | {"op":"ReplaceFeature","id":"cutback","text":"cutback = cutout(cut_s, wall: rtn)\n  # edited"} vs {"op":"MoveFeature","id":"cutback","before":null} | class=diverge | ab=ok ba=ok
+RACK-141_side_panel.fg | {"op":"SetParam","param":"t2","value":{"value":2.068,"dim":"Length"}} vs {"op":"SetParam","param":"t2","value":{"value":1.692,"dim":"Length"}} | class=diverge | ab=ok ba=ok
+RACK-201_rail.fg | {"op":"AddFeature","before":null,"text":"shared hosted_b = 2"} vs {"op":"AddFeature","before":null,"text":"shared hosted_a = 1"} | class=diverge | ab=ok ba=ok
+RACK-301_door.fg | {"op":"SetParam","param":"h_pin","value":{"value":14.3,"dim":"Length"}} vs {"op":"SetParam","param":"h_pin","value":{"value":11.7,"dim":"Length"}} | class=diverge | ab=ok ba=ok
+RACK-311_hinge_bracket.fg | {"op":"Rename","from":"leg","to":"leg_a"} vs {"op":"ReplaceFeature","id":"vert","text":"vert = flange(leg.edge(plan.outline[2]), height: hv)\n  # edited"} | class=refuse_ab | ab=UnknownName ba=ok
