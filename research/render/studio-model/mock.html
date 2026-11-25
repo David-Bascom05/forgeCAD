@@ -1,0 +1,64 @@
+<!doctype html><meta charset="utf-8">
+<style>
+:root{--bg:#141a22;--panel:#1b222c;--raised:#222b37;--ink:#e6eaf0;--ink2:#8d97a6;--line:#2e3846;--accent:#4a9eff;--hover:#2a3442}
+*{box-sizing:border-box}body{margin:0;background:#0f141a;font:13px/1.35 "Inter",system-ui,sans-serif;color:var(--ink)}
+.wrap{display:flex;gap:28px;padding:20px}
+.panel{width:320px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 10px 14px}
+h3{font:600 13px system-ui;margin:12px 0 6px;display:flex;justify-content:space-between;align-items:center;color:var(--ink)}
+h3 small{font-weight:400;color:var(--ink2)}
+.tabs{display:flex;gap:14px;border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:6px;color:var(--ink2)}.tabs b{color:var(--ink);border-bottom:2px solid var(--accent);padding-bottom:4px}
+.brush{display:flex;align-items:center;gap:8px;background:var(--raised);border:1px solid var(--line);border-radius:6px;padding:7px 8px}
+.chip{width:18px;height:18px;border-radius:50%;flex:none;border:1px solid #0006;box-shadow:inset 0 -3px 6px #0005,inset 0 2px 3px #fff5}
+.chip.own{background:none;border:1.5px dashed var(--ink2);box-shadow:none}
+.btn{margin-left:auto;background:var(--accent);color:#fff;border-radius:4px;padding:3px 8px;font-size:12px}
+.btn.ghost{background:none;border:1px solid var(--line);color:var(--ink)}
+.search{background:#11161d;border:1px solid var(--line);border-radius:4px;padding:5px 8px;color:var(--ink2);margin:6px 0}
+.fam{color:var(--ink2);font-size:11px;margin:6px 0 3px}
+.sw{display:flex;flex-wrap:wrap;gap:6px}.sw .chip{width:22px;height:22px}.sw .on{outline:2px solid var(--accent);outline-offset:2px}
+.row{display:flex;align-items:center;gap:8px;height:24px;padding:0 6px;border-radius:4px}
+.row:hover{background:var(--hover)}.row.sel{background:#2b4f7d}
+.row .n{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.row .c{color:var(--ink2);font-size:11px}
+.tw{width:10px;color:var(--ink2)}.ind{padding-left:22px}
+.collapsed{color:var(--ink2);display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--line);margin-top:8px}
+.note{width:420px;color:#c7cdd6}.note h2{font:600 16px system-ui;margin:0 0 8px}.note li{margin:4px 0}
+.view{width:420px;height:300px;border-radius:6px;background:linear-gradient(#cfd2d6,#a9adb2);position:relative;border:1px solid var(--line)}
+.cursor{position:absolute;left:210px;top:120px;font-size:22px}
+.tip{position:absolute;left:225px;top:150px;background:#1b222cee;border:1px solid var(--line);padding:4px 8px;border-radius:4px;font-size:12px}
+.box{position:absolute;left:120px;top:70px;width:180px;height:160px;background:#5b6068;border-radius:4px;outline:2px solid var(--accent)}
+.banner{position:absolute;left:10px;top:10px;background:#1b222cee;border:1px solid var(--line);padding:4px 8px;border-radius:4px;font-size:12px}
+</style>
+<div class="wrap">
+<div class="panel">
+  <div class="tabs"><b>Model</b><span>Agent</span><span>Versions</span></div>
+  <h3>Appearance</h3>
+  <div class="brush"><span class="chip" style="background:#2b2d31"></span><div><div>Paint, machine gloss</div><div style="color:var(--ink2);font-size:11px">click parts in the view to apply</div></div><span class="btn">Apply</span></div>
+  <div class="search">🔍 Find an appearance…</div>
+  <div class="fam">Metal</div>
+  <div class="sw"><span class="chip" style="background:#cfd3d6"></span><span class="chip" style="background:#b9babb"></span><span class="chip" style="background:#8e8f90"></span><span class="chip" style="background:#d8b36a"></span><span class="chip" style="background:#d39a7a"></span><span class="chip" style="background:#b1a99c"></span><span class="chip" style="background:#9aa0a6"></span><span class="chip" style="background:#202124"></span></div>
+  <div class="fam">Paint & coating</div>
+  <div class="sw"><span class="chip on" style="background:#2b2d31"></span><span class="chip" style="background:#c33"></span><span class="chip" style="background:#e9e9e9"></span><span class="chip" style="background:#3a6ea5"></span><span class="chip" style="background:#e0a92a"></span></div>
+  <div class="fam">Plastic · Rubber · Glass · Other <span style="float:right">▸ 21 more</span></div>
+  <h3>Parts <small>68 · 860 in the assembly</small></h3>
+  <div class="search">🔍 Filter parts…</div>
+  <div class="row"><span class="tw">▾</span><span class="chip own"></span><span class="n">Frame</span><span class="c">12</span></div>
+  <div class="row ind sel"><span class="chip" style="background:#2b2d31"></span><span class="n">post_kit</span><span class="c">×4</span></div>
+  <div class="row ind sel"><span class="chip" style="background:#2b2d31"></span><span class="n">top_pan</span><span class="c">×1</span></div>
+  <div class="row ind"><span class="chip own"></span><span class="n">cage_half</span><span class="c">×2</span></div>
+  <div class="row"><span class="tw">▸</span><span class="chip own"></span><span class="n">Panels & doors</span><span class="c">9</span></div>
+  <div class="row"><span class="tw">▸</span><span class="chip" style="background:#cfd3d6"></span><span class="n">Hardware & fasteners</span><span class="c">31</span></div>
+  <div class="row"><span class="tw">▸</span><span class="chip own"></span><span class="n">Casters</span><span class="c">4</span></div>
+  <div class="row" style="margin-top:4px"><span style="color:var(--ink2);font-size:11px">2 selected</span><span class="btn" style="margin-left:auto">Apply Paint, machine gloss</span><span class="btn ghost">Reset</span></div>
+  <div class="collapsed"><span>Overrides</span><span>3 ▸</span></div>
+  <div class="collapsed"><span>Lighting · Studio Small 09</span><span>▸</span></div>
+  <div class="collapsed"><span>Camera · 50 mm</span><span>▸</span></div>
+  <div class="collapsed"><span>Output · 1920 × 1080, 512 samples</span><span>▸</span></div>
+</div>
+<div>
+  <div class="view"><div class="banner">Applying Paint, machine gloss · click parts · Esc to stop</div><div class="box"></div><div class="cursor">🪣</div><div class="tip">top_pan → Paint, machine gloss</div></div>
+  <div class="note"><h2>Render Studio › Model, redesigned (mock)</h2><ul>
+  <li><b>Appearance brush</b>: one active swatch. Pick it from the palette (search, by family); <b>click parts in the view</b> to apply; Esc stops. Drag a swatch onto a row or the view does the same.</li>
+  <li><b>Parts</b>: the model's tree (assembly → browser groups → parts; a single part → its bodies), <b>collapsed</b>, filterable, virtualised. Each row: its look as a chip (dashed ring = its material's own), name, count. Ctrl/Shift multi-select → <b>Apply</b> / Reset. Clicking a chip opens the palette for that row.</li>
+  <li><b>Overrides</b>: only what was changed, with Reset each / all.</li>
+  <li>Lighting, Camera, Output fold to one-line summaries; each part's default comes from its <b>own</b> material (today every part takes the assembly's).</li>
+  <li>No dropdown per part. 200+ parts: rows virtualised, frame time flat.</li></ul></div>
+</div></div>

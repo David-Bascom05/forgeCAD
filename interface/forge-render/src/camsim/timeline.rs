@@ -19,7 +19,21 @@ pub enum Kind {
     Cut,
     Plunge,
     Link,
+    /// A tool change between two paths of different tools: up clear of the work, the swap (the
+    /// machine record's time, else a short pause said as such), the new tool across and down to
+    /// where its path starts. Not a move of any path (`mv` is `NO_MOVE`).
+    Change,
 }
+
+/// A piece that is no path's move (a tool change's).
+pub const NO_MOVE: u32 = u32::MAX;
+
+/// The pause shown for a tool change whose time the machine record does not cite, seconds:
+/// display only (said so in the status line), never counted as the machine's.
+pub const CHANGE_SHOWN: f64 = 2.0;
+
+/// How far above the higher of its two ends a tool change goes, mm.
+pub const CHANGE_RISE: f64 = 50.0;
 
 impl Kind {
     pub fn name(self) -> &'static str {
@@ -28,6 +42,7 @@ impl Kind {
             Kind::Cut => "cut",
             Kind::Plunge => "plunge",
             Kind::Link => "link",
+            Kind::Change => "tool change",
         }
     }
 
@@ -137,6 +152,20 @@ pub struct Timeline {
     pub segs: Vec<Seg>,
     pub ops: Vec<OpSpan>,
     pub total: f64,
+    /// Each tool change: its first piece, the tool before and after (`Cam::sim_tools`
+    /// indices), and whether its pause is the machine record's (else `CHANGE_SHOWN`).
+    pub changes: Vec<ToolChange>,
+}
+
+/// A tool change on the timeline.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ToolChange {
+    pub first: usize,
+    pub t0: f64,
+    pub t1: f64,
+    pub from: u32,
+    pub to: u32,
+    pub cited: bool,
 }
 
 fn dist(a: [f64; 3], b: [f64; 3]) -> f64 {
@@ -302,13 +331,43 @@ impl Timeline {
     pub fn of(cam: &Cam) -> Timeline {
         let mut tl = Timeline::default();
         let mut t = 0.0;
+        // the tool last cutting, and where it ended, in its setup
+        let mut last: Option<(u32, [f64; 3], usize)> = None;
         for (oi, op) in cam.ops.iter().enumerate() {
             let first = tl.segs.len();
             let t0 = t;
             let paths = cam.sim_paths(oi);
             let rapids = cam.sim_rapids(op.setup);
             for (pi, p) in paths.iter().enumerate() {
-                t = push_path_at(oi as u32, pi as u32, p, &mut tl.segs, t, rapids);
+                // the path on its own, to know where it starts
+                let mut own = vec![];
+                push_path_at(oi as u32, pi as u32, p, &mut own, 0.0, rapids);
+                let Some(start) = own.first().map(|g| g.a) else {
+                    continue;
+                };
+                let tool = p.tool as u32;
+                if let Some((was, at, s)) = last
+                    && was != tool
+                    && s == op.setup
+                {
+                    let swap = cam.sim_tool_change(op.setup);
+                    t = Self::push_change(
+                        &mut tl,
+                        oi as u32,
+                        pi as u32,
+                        (was, at),
+                        (tool, start),
+                        t,
+                        rapids,
+                        swap,
+                    );
+                }
+                for mut g in own {
+                    g.t0 += t;
+                    tl.segs.push(g);
+                }
+                t = tl.segs.last().map_or(t, Seg::t1);
+                last = tl.segs.last().map(|g| (tool, g.b, op.setup));
             }
             tl.ops.push(OpSpan {
                 name: op.name.clone(),
@@ -324,6 +383,67 @@ impl Timeline {
         }
         tl.total = t;
         tl
+    }
+
+    /// A tool change from `from` (the old tool, where it stopped) to `to` (the new one, where its
+    /// path starts), at time t: up to `CHANGE_RISE` above the higher of the two, the swap (`swap`
+    /// seconds, the machine record's; else `CHANGE_SHOWN`), across and down to the start, at the
+    /// machine's rapid rates. Its pieces carry the next path's op and path, `NO_MOVE` as move.
+    #[allow(clippy::too_many_arguments)]
+    fn push_change(
+        tl: &mut Timeline,
+        op: u32,
+        path: u32,
+        from: (u32, [f64; 3]),
+        to: (u32, [f64; 3]),
+        mut t: f64,
+        rapids: Option<[f64; 3]>,
+        swap: Option<f64>,
+    ) -> f64 {
+        let ((old, a), (new, b)) = (from, to);
+        let z = a[2].max(b[2]) + CHANGE_RISE;
+        let (up, over) = ([a[0], a[1], z], [b[0], b[1], z]);
+        let first = tl.segs.len();
+        let t0 = t;
+        let rate = |p: [f64; 3], q: [f64; 3]| -> f64 {
+            // the slowest axis's time, as a rapid is timed (mm/min)
+            let r = rapids.unwrap_or([RAPID; 3]);
+            (0..3)
+                .map(|k| (q[k] - p[k]).abs() / r[k].max(1.0) * 60.0)
+                .fold(0.0, f64::max)
+        };
+        let mut piece = |p: [f64; 3], q: [f64; 3], tool: u32, dt: f64, t: &mut f64| {
+            tl.segs.push(Seg {
+                op,
+                path,
+                mv: NO_MOVE,
+                tool,
+                kind: Kind::Change,
+                a: p,
+                b: q,
+                arc: None,
+                f: RAPID,
+                t0: *t,
+                dt,
+                len: dist(p, q),
+            });
+            *t += dt;
+        };
+        let pause = swap.unwrap_or(CHANGE_SHOWN);
+        piece(a, up, old, rate(a, up), &mut t);
+        piece(up, up, old, 0.5 * pause, &mut t);
+        piece(up, up, new, 0.5 * pause, &mut t);
+        piece(up, over, new, rate(up, over), &mut t);
+        piece(over, b, new, rate(over, b), &mut t);
+        tl.changes.push(ToolChange {
+            first,
+            t0,
+            t1: t,
+            from: old,
+            to: new,
+            cited: swap.is_some(),
+        });
+        t
     }
 
     /// The piece playing at time t (the last one at or past the end).
