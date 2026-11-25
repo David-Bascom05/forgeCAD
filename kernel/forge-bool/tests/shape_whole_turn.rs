@@ -1,9 +1,10 @@
-//! shape.rs's screen takes an arc within 1e-12 rad of a whole turn as whole. That is sound only
-//! for a whole circle alone in its loop: with another segment closing the profile, the ray's
-//! parity would count the arc across its gap and the closing segment both. What keeps such an
-//! arc out of every shape is the profile's refusal (`Segment::degenerate`, forge-ops
-//! profile.rs: an arc within `ANGULAR` = 1e-11 rad of whole), at any radius; the model's size
-//! plays no part. Both halves, at 1 mm, the 5e5 model half size and `InputSize`'s 1.6e7.
+//! shape.rs's screen once took an arc within 1e-12 rad of a whole turn as whole. That is sound
+//! only for a whole circle alone in its loop: with another segment closing the profile, the ray's
+//! parity counted the arc across its gap and the closing segment both, and the disc's centre read
+//! Out at any radius. Two guards, each enough: the profile's refusal (`Segment::degenerate`,
+//! forge-ops profile.rs: an arc within `ANGULAR` = 1e-11 rad of whole), at any radius, so no
+//! shape holds such an arc; and the screen itself, which now takes only an exact whole turn as
+//! whole. Both held at 1 mm up to `InputSize`'s 1.6e7.
 
 use forge_bool::{Member, Seg2, Shape};
 use forge_math::{Frame, Point2, Point3};
@@ -88,5 +89,37 @@ fn the_screen_answers_an_arc_the_profile_admits_exactly() {
             Member::In,
             "r {r:e}"
         );
+    }
+}
+
+#[test]
+fn the_screen_takes_only_an_exact_whole_turn_as_whole() {
+    // a shape built by hand past the profile's refusal: never Out at the disc's centre (In, or
+    // Near where the ray grazes the arc's ends)
+    for r in [1.0, 1e3, 1e5, 5e5, 1.2e7, 1.6e7] {
+        for g in [1e-12, 5e-13, 1e-13] {
+            let e = Point2::new(r * (TAU - g).cos(), r * (TAU - g).sin());
+            let segs: std::sync::Arc<[Seg2]> = vec![
+                Seg2::Arc {
+                    c: Point2::ORIGIN,
+                    r,
+                    start: 0.0,
+                    sweep: TAU - g,
+                },
+                Seg2::Line {
+                    a: e,
+                    b: Point2::new(r, 0.0),
+                },
+            ]
+            .into();
+            let sh = Shape::Prism {
+                frame: Frame::WORLD,
+                segs,
+                lo: 0.0,
+                hi: 1.0,
+            };
+            let m = sh.member(Point3::new(0.0, e.y / 2.0, 0.5), 1e-5);
+            assert_ne!(m, Member::Out, "r {r:e} g {g:e}");
+        }
     }
 }
