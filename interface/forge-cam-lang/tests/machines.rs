@@ -73,7 +73,7 @@ fn two_records_that_disagree_are_refused() {
 /// refused saying so; where it agrees it is one machine with the record.
 #[test]
 fn a_projects_disagreeing_copy_is_refused_not_shadowed() {
-    let dir = std::env::temp_dir().join(format!("fg-machines-{}", std::process::id()));
+    let dir = forge_dirs::temp_dir().join(format!("fg-machines-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(dir.join("cam")).unwrap();
     std::fs::copy(machined().join("flange.fg"), dir.join("flange.fg")).unwrap();
     let src = std::fs::read_to_string(machined().join("flange_cam.fg"))
@@ -156,7 +156,7 @@ fn every_records_planner_axes_are_right_handed() {
 /// first planned on and the other ignored.
 #[test]
 fn two_differing_copies_of_an_unrecorded_machine_are_refused() {
-    let dir = std::env::temp_dir().join(format!("fg-machines-mine-{}", std::process::id()));
+    let dir = forge_dirs::temp_dir().join(format!("fg-machines-mine-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(dir.join("cam")).unwrap();
     std::fs::copy(machined().join("flange.fg"), dir.join("flange.fg")).unwrap();
     let src = std::fs::read_to_string(machined().join("flange_cam.fg"))
