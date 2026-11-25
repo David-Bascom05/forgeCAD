@@ -66,32 +66,34 @@ clips.
 1. `showcase-1-load-tray-trubend-stations-1080p.mp4`: the load tray on four planned stations.
    The eye goes to each station, with captions and the Why row.
 2. `showcase-2-narrow-channel-collision-1080p.mp4`: the narrow channel on straight punches,
-   bent right then left. The second bend closes the flange on the punch, and the region is
-   drawn red.
+   right then left. The second bend closes the flange on the punch, and the region is drawn
+   red.
 3. `showcase-3-hem-joggle-wila-trubend-1080p.mp4`: the hem and joggle strip on WILA tools. It
    shows an offset stroke, a pre-bend and a flatten.
-4. Station pickers: NOT RENDERED. It waits on the forge-lang dedup fix below.
+4. `showcase-4-station-pickers-1080p.mp4`: station 1's punch is picked by hand, so bend 1 meets
+   the ram (shown red). Simulate Again plans around the stations and the new program plays.
+
+## Fixed late
+
+- **Red first frame.** The caches were keyed by the simulation's address, which a re-plan can
+  reuse. They are now keyed by `BendSimUi::made`. Collision regions now come only from checks
+  that ran. A check that could not run reads `pass: false`; BENDSIM-TOOLS is fixing
+  `contacts_of` on their side. Test: `a_replans_first_frame_draws_its_own_plan`.
+- **Duplicate tools.** The same tool at two stations that are not next to each other was
+  rejected as a duplicate (BENDSIM-TOOLS, 2d35af2d). The pickers test passes.
 
 ## Unfinished, and next steps
 
-- **Blocker for the pickers.** forge-lang `bendsim.rs::prepare()` dedups station tools with
-  `Vec::dedup`, which only drops adjacent duplicates. So the same punch or die at non-adjacent
-  stations fails with `BadTooling: Duplicate`. Until BENDSIM-TOOLS lands the fix, the test
-  `a_stations_tools_are_changed_by_hand` fails. The fix is an order-keeping `retain` with a
-  `HashSet`, plus a test. Then render showcase 4 with a variant of `a_staged_clip` that swaps a
-  station's punch midway.
-- **UX-LEAD sign-off** for the commits after c8e8b058: the tint, the pickers and the stroke
-  words.
-- **Wind-down.** Merge main once TRAIN-CONDUCTOR announces the gate-memfns re-baseline. Then run
-  PRE-VERIFY with `/tmp/pv` at 13d78f06 or later, re-fetched, and send its line to
-  TRAIN-CONDUCTOR. TRAIN-CONDUCTOR takes the band on the train.
-- **A red first frame** in showcase 3. After seeking to t = 0 on a fresh staged plan, one frame
-  draws the punch and part red. It was dropped from the encode; the cause is not found.
-- **UX-LEAD P3, handling framing.** During a handling step the eye can sit on the upper tooling,
-  or the long stacks can fill the view. UX-LEAD wants the part and the tool it passes framed at
-  60–75 %.
-- Not started: planning in the background with progress, using BENDSIM-TOOLS' resumable
-  `begin`/`step`/`finish`.
+- **UX-LEAD sign-off.** UX-LEAD OK'd a2079733. After it: the caption change (one line per tool
+  by title, key on hover), the red-frame fix, and the clips.
+- **Wind-down.** PRE-VERIFY with `/tmp/pv` at 13d78f06 or later, on main c135b274, line sent
+  to TRAIN-CONDUCTOR, who takes the band on the train.
+- **UX-LEAD P3: handling framing.** During a handling step the eye can sit on the upper tooling,
+  or the long stacks can fill the view. Frame the part and the tool it passes at 60–75 %.
+- **UX-LEAD P3: station labels.** On the Machine & Tools bed strip, the labels of stations
+  close together overlap ("s3s4").
+- Not started: planning in the background with progress (BENDSIM-TOOLS' resumable
+  `begin`/`step`/`finish`).
 
 ## Risks
 
