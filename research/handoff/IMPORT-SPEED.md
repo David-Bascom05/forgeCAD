@@ -163,8 +163,16 @@ again (`far_gap`: a 64 x 64 parameter grid, then a projection from the nearest g
 only that is believed (05c6e6d4). Corpus and fixtures: VS-3 #478011 (4.2 m; refused before, now
 saying why), VS-3 #738262 (3.9 m) and Cobot #226368 (face #1170897, 3.0 mm, the same on a
 600 x 600 grid: a thin strip with one edge's end 3 mm off it) newly refused; TRT100 #225539 (9.4 mm
-by the quick measure alone) was the false alarm that led to `far_gap`, and reads as before. Still
-to do: show a refused solid's other faces through the undrawn-face path (app model read only).
+by the quick measure alone) was the false alarm that led to `far_gap`, and reads as before.
+
+The coordinator's condition for landing D: a solid it refuses must not vanish from the app. So
+`forge_step::draw_far_refused` (f5171b10) re-reads, for a viewer only, the solids D refused: each
+healed without the far face, its edges' tolerances recorded, drawn under what healing left of the
+read's budget. `import` is untouched. `model_files::read` draws them, and `read_noting` gives
+attach() the note "<part> is drawn without face #N, which can't be read: ...". Shots in
+research/import-speed/far-face/. Two traps: drawing the far face itself (VS-3 #478011) takes
+minutes and fails, and so does drawing without the edges' tolerances (the mesher meets an edge off
+its faces only by them). VS-3 #478011 is still not drawn, as before D, in 7.4 s.
 
 ### Gap rule tier 2 (not written yet)
 
