@@ -31,7 +31,7 @@ fn c(name: &str) -> Candidate {
     Candidate {
         name: name.into(),
         what: String::new(),
-        tip: String::new(),
+        ..Default::default()
     }
 }
 
@@ -268,6 +268,7 @@ fn context_pictures() {
                     text: format!("Round {k}: fillet the top edges 2 mm and check the wall"),
                     refs: vec!["extrude1".into()],
                     markup: None,
+                    pictures: 0,
                 });
                 long.push(Entry::Tool {
                     id: format!("old{k}"),
@@ -339,4 +340,64 @@ fn a_chip_says_in_words_what_it_names() {
     assert_eq!(describe("cover.body.start"), "Start face of cover.body");
     assert_eq!(describe("extrude1"), "extrude1");
     assert_eq!(describe("rack/ear.weird"), "rack/ear.weird");
+}
+
+#[test]
+fn several_picked_go_as_one_chip_and_all_of_them_are_attached() {
+    let mut tab = forge_render::shell::agent::AgentTab::default();
+    tab.selection = Some("extrude1.side".into());
+    tab.selection_all = vec!["extrude1.end".into(), "extrude1.side".into()];
+    assert_eq!(tab.suggested_all(), ["extrude1.end", "extrude1.side"]);
+    tab.input = "fillet these".into();
+    tab.send();
+    assert!(
+        matches!(&tab.out[0], AgentAct::Send { refs, .. } if refs == &["extrude1.end".to_string(), "extrude1.side".to_string()])
+    );
+    // one picked: itself
+    tab.selection_all.clear();
+    tab.selection = Some("sk1".into());
+    assert_eq!(tab.suggested_all(), ["sk1"]);
+}
+
+#[test]
+fn shift_clicked_faces_are_offered_together() {
+    let dir = std::env::temp_dir().join(format!("forgecad-multi-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("plate.fg"), PART).unwrap();
+    let Ok(mut h) = forge_render::gui::Headless::new((1400.0, 860.0), 1.0) else {
+        return;
+    };
+    h.step();
+    h.gui.open(dir.join("plate.fg").to_str().unwrap());
+    h.settle();
+    assert!(h.click("side:tab:Agent"));
+    h.click_at(835.0, 450.0);
+    for _ in 0..4 {
+        h.step();
+    }
+    h.shift(true);
+    h.click_at(760.0, 560.0);
+    h.shift(false);
+    for _ in 0..4 {
+        h.step();
+    }
+    let all = h.gui.shell.agent.selection_all.clone();
+    assert_eq!(all.len(), 2, "{all:?}");
+    assert!(all.iter().all(|n| n.contains("extrude1")), "{all:?}");
+    assert!(h.gui.shell.place("agent:offered").is_some());
+    if let Ok(shots) = std::env::var("FORGE_UI_SHOTS") {
+        let chip = h.gui.shell.place("agent:offered").unwrap().center();
+        h.move_to(chip.x, chip.y);
+        for _ in 0..8 {
+            h.step();
+        }
+        std::fs::create_dir_all(&shots).unwrap();
+        std::fs::write(
+            std::path::Path::new(&shots).join("context-1400-dark-multi-offered.png"),
+            h.png().unwrap(),
+        )
+        .unwrap();
+    }
+    let _ = std::fs::remove_dir_all(dir);
 }
