@@ -32,6 +32,7 @@ function fake(dir) {
 echo '{"type":"system","subtype":"init","session_id":"s","model":"m","permissionMode":"default"}'
 while read line; do
   case "$line" in *'"type":"user"'*) ;; *) continue;; esac
+  case "$line" in *'"image/png"'*) echo "$line" > pictured.jsonl;; esac
   echo ${q(tool)}
   echo ${q(ask)}
   read reply
@@ -128,6 +129,26 @@ const agentState = (s) => s.agent ?? { entries: [] };
     assert.deepEqual(problems, [], "the save went through");
     assert.match(fs.readFileSync(path.join(dir, "plate.fg"), "utf8"), /extrude1\.d = 12/, "undone on the machine");
     console.log("ok - Undo takes the agent's change back, and saves to the machine");
+
+    // a picture pasted on the page goes with the next message, as an image block
+    const png = fs.readFileSync(path.join(__dirname, "..", "..", "..", "..", "research", "agent-tab", "shots", "agent-web-waiting.png"));
+    await p.evaluate((b64) => {
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const dt = new DataTransfer();
+      dt.items.add(new File([bytes], "shot.png", { type: "image/png" }));
+      document.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true }));
+    }, png.toString("base64"));
+    await t.until(p, (s) => s.places?.some((x) => x.name === "agent:picture:0"), "the pasted picture's chip");
+    await click(p, "agent:input");
+    await p.evaluate(() => window.forgecad.fc.app_type("what's this?", true));
+    await settle(p);
+    await t.until(p, (s) => agentState(s).entries.some((e) => e.kind === "permission" && e.state === "Waiting"), "the second question");
+    await click(p, "agent:perm:req-1:deny");
+    const pictured = JSON.parse(fs.readFileSync(path.join(dir, "pictured.jsonl"), "utf8"));
+    const blocks = pictured.message.content;
+    assert.deepEqual(blocks.map((b) => b.type), ["image", "text"], "the picture, then the text");
+    assert.equal(blocks[0].source.data, png.toString("base64"), "the picture as pasted");
+    console.log("ok - a picture pasted on the page goes to Claude Code with the message");
 
     assert.deepEqual(elsewhere, [], "no request left for another host");
     assert.deepEqual(csp, [], "nothing the page needs is refused by its CSP");
