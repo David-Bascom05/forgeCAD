@@ -2,7 +2,7 @@
 //! item order, so a result never depends on which thread made it.
 
 /// The scoped threads every parallel path of the kernel runs on: std's, or a host's (`forge_par`).
-pub use forge_par::{Scope, ScopedJoinHandle, scope, spawner};
+pub use forge_par::{Inherit, Scope, ScopedJoinHandle, scope, set_inherit, spawner};
 
 /// The threads to use: a host's spawner's count where one is installed (one on a thread that may
 /// not wait); else `FORGECAD_THREADS` if set, else the cores there are (one on wasm).

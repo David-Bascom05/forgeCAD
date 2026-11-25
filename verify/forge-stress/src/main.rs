@@ -9,7 +9,7 @@
 //! An `Ok` whose body fails `check`, whose mesh is open, or whose volume disagrees with the
 //! oracle is `wrong`: the worst kind of answer, so it is told apart from a refusal.
 //!
-//! `forge-stress FILE.step [--timeout S] [--max-rss-mb M] [--max-solids N] [--skip k1,k2] [--only k1,k2]`
+//! `forge-stress FILE.step [--timeout S] [--max-rss-mb M] [--max-solids N] [--skip k1,k2] [--only k1,k2] [--nary]`
 //! Past `--max-rss-mb` (4000) resident, the op is written as `memory` and the run ends as for a hang.
 
 use forge_bool::{Op, boolean};
@@ -163,6 +163,10 @@ struct Meshed {
     volume: f64,
 }
 
+/// `--nary`: every boolean through `forge_bool::nary` on par's threads, as the app's builds run
+/// them (forge-model), its helpers sharing the op's budget; else `forge_bool::boolean`.
+static NARY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// What the last `mesh` spent of its budget (written on the solid's line as `mesh_evals`); the op
 /// runs on the watchdog's thread, so not a thread-local.
 static MESH_EVALS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -308,7 +312,12 @@ impl Ops<'_> {
             // (the distribution of what succeeding ops spend sets OP near the real tail)
             let outer = forge_geom::budget::scoped(u64::MAX >> 1);
             let before = forge_geom::budget::left();
-            let r = boolean(a, b, how, 9000).map_err(|e| format!("{e:?}"));
+            let r = if NARY.load(std::sync::atomic::Ordering::Relaxed) {
+                forge_bool::nary(&[a, b], &[how], forge_math::par::threads())
+            } else {
+                boolean(a, b, how, 9000)
+            }
+            .map_err(|e| format!("{e:?}"));
             let spent = before - forge_geom::budget::left();
             drop(outer);
             let bms = t.elapsed().as_secs_f64() * 1e3;
@@ -395,6 +404,10 @@ fn main() {
         times: Vec::new(),
     };
     let max_solids: usize = opt("--max-solids").and_then(|t| t.parse().ok()).unwrap_or(24);
+    NARY.store(
+        args.iter().any(|a| a == "--nary"),
+        std::sync::atomic::Ordering::Relaxed,
+    );
     std::panic::set_hook(Box::new(|i| {
         let loc = i
             .location()

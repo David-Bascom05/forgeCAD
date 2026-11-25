@@ -42,6 +42,31 @@ pub fn spawner() -> Option<Spawner> {
     SPAWNER.get().copied()
 }
 
+/// What a spawned closure takes from the thread that spawned it (the kernel's work budget and
+/// its watch, `forge_geom::budget`): `capture` on the spawning thread, `enter` on the closure's
+/// before it runs, the guard it gives dropped after.
+#[derive(Clone, Copy)]
+pub struct Inherit {
+    pub capture: fn() -> Option<Box<dyn std::any::Any + Send>>,
+    pub enter: fn(Box<dyn std::any::Any + Send>) -> Box<dyn std::any::Any>,
+}
+
+static INHERIT: OnceLock<Inherit> = OnceLock::new();
+
+/// Installs what spawned closures inherit, once (false if it was already).
+pub fn set_inherit(i: Inherit) -> bool {
+    INHERIT.set(i).is_ok()
+}
+
+/// `f`, to run on another thread with what this one hands down (`Inherit`).
+fn inheriting<F: FnOnce() -> T, T>(f: F) -> impl FnOnce() -> T {
+    let got = INHERIT.get().and_then(|i| (i.capture)().map(|c| (i.enter, c)));
+    move || {
+        let _in = got.map(|(enter, c)| enter(c));
+        f()
+    }
+}
+
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
@@ -152,7 +177,7 @@ impl<'scope, 'env> Scope<'scope, 'env> {
         T: Send + 'scope,
     {
         let (sp, state) = match &self.how {
-            How::Std(s) => return ScopedJoinHandle(Handle::Std(s.spawn(f))),
+            How::Std(s) => return ScopedJoinHandle(Handle::Std(s.spawn(inheriting(f)))),
             How::Inline => return ScopedJoinHandle(Handle::Inline(catch_unwind(AssertUnwindSafe(f)))),
             How::Hooked(sp, state) => (*sp, state.clone()),
         };
@@ -162,6 +187,7 @@ impl<'scope, 'env> Scope<'scope, 'env> {
         });
         *lock(&state.live) += 1;
         let (theirs, st) = (packet.clone(), state.clone());
+        let f = inheriting(f);
         let job: Box<dyn FnOnce() + Send + 'scope> = Box::new(move || {
             let r = catch_unwind(AssertUnwindSafe(f));
             if r.is_err() {
