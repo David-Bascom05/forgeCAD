@@ -3,7 +3,7 @@
 //! driven by size_m6 (`with: {d: size_m6}`: in the example it drives only the fit rule), grown to
 //! 6.3 and then 6.35: each a new pin, so each check is a slow exact screw intersection on main's
 //! kernel. The Issues window after the checks, during the next edit's checks (the clash kept,
-//! "checking…"), and after them. Edits go through the session's typed ops, as the app's do.
+//! "checking", with the spinner), and after them. Edits go through the session's typed ops, as the app's do.
 use forge_lang::error::{Literal, Op, ParamKey};
 use forge_lang::values::Dim;
 use forge_render::gui::{Gui, Headless};

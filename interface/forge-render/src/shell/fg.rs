@@ -1506,11 +1506,7 @@ impl Shell {
         places: &mut Vec<(String, Rect)>,
     ) {
         let (errors, warnings) = issue_counts(&fg.issues);
-        let mut head = format!("{} · {}", plural(errors, "error"), plural(warnings, "warning"));
-        // an assembly's last checks still listed while the new ones run
-        if fg.issues.iter().any(|i| i.stale) {
-            head.push_str(" · checking…");
-        }
+        let head = format!("{} · {}", plural(errors, "error"), plural(warnings, "warning"));
         let ink = if errors > 0 {
             t.error
         } else if warnings > 0 {
@@ -1518,7 +1514,16 @@ impl Shell {
         } else {
             t.ink2
         };
-        let r = ui.label(egui::RichText::new(head).font(medium(12.0)).color(ink));
+        // an assembly's last checks still listed while the new ones run: the shared spinner
+        let checking = fg.issues.iter().any(|i| i.stale);
+        let r = ui
+            .horizontal(|ui| {
+                ui.label(egui::RichText::new(head).font(medium(12.0)).color(ink));
+                if checking {
+                    super::ux::loading(ui, t, "checking");
+                }
+            })
+            .response;
         places.push(("fg:issues".into(), r.rect));
         ui.add_space(super::theme::S1);
         let issues = std::mem::take(&mut fg.issues);
@@ -1567,7 +1572,7 @@ impl Shell {
                             is.kind,
                             is.line,
                             is.col,
-                            if is.stale { " · checking…" } else { "" }
+                            if is.stale { " · checking" } else { "" }
                         ))
                         .font(super::theme::caption())
                         .color(t.ink2),
@@ -1576,7 +1581,24 @@ impl Shell {
                 .response;
             places.push((format!("fg:issue:{i}"), r.rect));
             ui.add_space(2.0);
-            ui.label(egui::RichText::new(&is.text).font(sans(12.0)).color(if is.stale { t.ink2 } else { t.ink }));
+            // a failed exact intersection said in words; the kernel's reason only on hover
+            let (text, why) = match &is.asm {
+                Some(forge_lang::asm::Issue::Interference {
+                    a,
+                    b,
+                    volume: None,
+                    boolean_failed: Some(why),
+                    ..
+                }) => (
+                    format!("{a} and {b} overlap by their meshes; the exact intersection failed, so the volume is unconfirmed"),
+                    Some(why),
+                ),
+                _ => (is.text.clone(), None),
+            };
+            let row = ui.label(egui::RichText::new(text).font(sans(12.0)).color(if is.stale { t.ink2 } else { t.ink }));
+            if let Some(why) = why {
+                row.on_hover_text(why.as_str());
+            }
             if !is.fixes.is_empty() || is.asm.is_some() {
                 ui.add_space(2.0);
                 ui.horizontal_wrapped(|ui| {
