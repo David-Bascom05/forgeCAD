@@ -129,6 +129,12 @@ impl CamWs {
             Ok(files) => {
                 let first = files[0].path.rsplit_once('/').map(|(d, _)| self.dir.join(d));
                 let stem = self.stem();
+                // said at once, in every host: the click answers before the host's dialog shows
+                // (or where there is none to show, as headless), until what was done is said
+                self.said = Some(match files.as_slice() {
+                    [f] => format!("Export NC: choose where to save {}\u{2026}", base(&f.path)),
+                    many => format!("Export NC: choose a folder for {} programs\u{2026}", many.len()),
+                });
                 self.export = Some(ExportAsk {
                     files,
                     dir: first.filter(|d| d.is_dir()).unwrap_or_else(|| self.dir.clone()),
@@ -147,6 +153,7 @@ impl CamWs {
         };
         let stem = self.stem();
         let tools = export::tool_list(&self.text).join("\n") + "\n";
+        self.said = Some("Setup Sheet: choose where to save the sheet and the tool list\u{2026}".into());
         self.export = Some(ExportAsk {
             files: vec![
                 NcFile {

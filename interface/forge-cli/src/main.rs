@@ -1,3 +1,4 @@
+mod agent_bridge;
 mod fg;
 mod model;
 mod serve;

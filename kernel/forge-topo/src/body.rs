@@ -905,6 +905,9 @@ impl Body {
         });
         self.shells[shell.index()].faces.push(id);
         // the new face is the last: so are its chunk and block
+        // (closures, not `Cached::default`: Aeneas takes no fn item as a value, and the translation
+        // of add_face in verify/aeneas/forge-topo-body needs this form; the gate shows no cost)
+        #[allow(clippy::redundant_closure)]
         if let Some(h) = self.hulls.get_mut() {
             h.chunks.resize_with(id.index() / RUN + 1, || Cached::default());
             h.blocks

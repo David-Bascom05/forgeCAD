@@ -178,6 +178,17 @@ part's renderer and scene, restore on close).
   - Shown: the body is drawn as the model (a whole-machine model as one piece on the base, not
     moving with the axes); on the Bodies tab the chosen body's envelope is dashed over the view
     (the model would hide it) and the farthest point out is marked with its distance.
+  - The note is required (CAM-HAAS, coordinator-approved): "Source of file" (where it came from
+    and the user's right to use it, e.g. "Haas download, my licence") before either Attach is
+    enabled; `model_files::require_from` refuses an empty one everywhere.
+  - Split: a whole-machine file's parts (an STL's pieces that share no corner, a STEP's solids),
+    largest first with their sizes, each given a body or dropped; each body's parts become its
+    own model (`<stem>-<body>.stl` beside it) with the same placement and note, so they move with
+    their links. A body given a part loses the model it had.
+  - CLI (model_files, the same code): `forgecad machine model attach MACHINE FILE --from TEXT
+    [--body B] [--scale S] [--rotate X,Y,Z] [--offset X,Y,Z]`, `model list|check MACHINE
+    [--json]`, `model remove MACHINE FILE`, `model split MACHINE FILE [BODY|-]..` (no bodies:
+    lists the parts). User level only; tests/cli.rs `model_attach_split_check_list_remove`.
   - The Part file row takes a forgecad `.fg` only now: a STEP or STL typed there is pointed to
     the Model row, so a maker's file is not copied beside a project's machine.
 - Page: `fc.app_machine(cmd)` (open, pick, template, clone, jog, tab, check, save) drives the same

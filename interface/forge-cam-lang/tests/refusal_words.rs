@@ -156,3 +156,28 @@ fn an_argument_hint_names_the_op_and_the_unit() {
         cam.errors
     );
 }
+
+/// A cut to exactly the stock's bottom over a bare support (no workholding modelled): with a
+/// stock top off the posting grid (13.0000371, the mould mini-fuzz's kind of noise) the derived
+/// origin is snapped, so the floor posts exactly onto the support, and is refused, the same as
+/// with an exact top, with the way out in words: model the workholding or leave stock under it.
+#[test]
+fn a_cut_to_a_bare_supports_plane_is_refused_with_the_way_out() {
+    for top in ["13", "13.0000371"] {
+        let src = format!(
+            "machining\nf = part(\"well_island.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(min: (-3, -3, 0), max: (63, 43, {top})), origin: \"top-corner\", tol: 0.01, at: (0, 0, -250))\nprof = contour(op1, tool: t1, side: \"outside\", from: 13, to: 0, step: 5)\np = program(op1, post: \"fanuc\", number: 1)\n"
+        );
+        let cam = forge_cam_lang::run(&src, &dir());
+        let o = cam.ops.iter().find(|o| o.name == "prof").unwrap();
+        assert_eq!(o.status, "refused", "top {top}");
+        assert_eq!(o.code.as_deref(), Some("fixture_collision"), "top {top}");
+        let w = o.refusal.as_deref().unwrap();
+        assert!(
+            w.starts_with("The cutter reaches the bottom of the stock on move ")
+                && w.contains("where no workholding is modelled")
+                && w.ends_with("or leave stock under the part (for example `below: 0.5` on the stock box)."),
+            "top {top}: {w}"
+        );
+        assert!(o.fix.as_deref().unwrap().contains("below: 0.5"), "{:?}", o.fix);
+    }
+}

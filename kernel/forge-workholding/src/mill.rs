@@ -314,8 +314,22 @@ pub fn vise_with(
         }
         notes.push(format!("parallels {} at {need:.2} mm", p.name));
     }
-    for b in &mut bodies {
-        b.part = rec.parts.get(&b.name).cloned();
+    // real parts: each drawn in its own frame (its envelope's least corner at the origin, the
+    // clamp axis along +x), posed onto the body's box; only when the box is the exact body (a
+    // conservative envelope is not the part's shape)
+    if t.is_some() && !deep {
+        for b in &mut bodies {
+            b.part = rec.parts.get(&b.name).cloned();
+            if b.part.is_some() {
+                let (lo, hi) = b.bounds();
+                b.part_pose = Some(if a == 0 {
+                    Pose::shift(lo)
+                } else {
+                    // +x of the part along +y, its +y along −x
+                    Pose::quarter_z(1, [hi[0], lo[1], lo[2]])
+                });
+            }
+        }
     }
     Ok(Placed {
         name: name.to_string(),
@@ -869,6 +883,8 @@ pub fn custom(name: &str, rec: &Record, pose: &Pose, held: Vec<(V3, V3)>) -> Res
             prims: b.prims.iter().map(|p| p.posed(pose)).collect(),
             keepout: 0.0,
             part: b.part.clone(),
+            // the part is drawn in the fixture's own frame, as its bodies are
+            part_pose: b.part.as_ref().map(|_| *pose),
         })
         .collect();
     let mut p = Placed {
@@ -899,6 +915,7 @@ pub fn pattern(p: &Placed, poses: &[Pose]) -> Vec<Placed> {
                     .iter()
                     .map(|b| Body {
                         prims: b.prims.iter().map(|x| x.posed(q)).collect(),
+                        part_pose: b.part_pose.map(|pp| pp.then(q)),
                         ..b.clone()
                     })
                     .collect(),

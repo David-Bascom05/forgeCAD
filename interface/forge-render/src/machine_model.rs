@@ -31,45 +31,16 @@ pub fn file_tris(path: &Path) -> Result<Arc<Tris>, String> {
     r
 }
 
-/// A model's bytes to triangles (`name` picks the format).
+/// A model's bytes to triangles (`name` picks the format): forge_machine_builder::model_files
+/// reads it (the CLI's reader too), flat-shaded here, a patch per part.
 pub fn read(name: &str, bytes: &[u8]) -> Result<Tris, String> {
-    match Format::of(name)? {
-        Format::Stl => {
-            let (objs, _) =
-                forge_mesh::read_stl(bytes).map_err(|e| format!("{name}: not an STL this reads ({e:?})"))?;
-            let mut t = Tris::default();
-            for o in &objs {
-                push(&mut t, &o.positions, &o.triangles, &[]);
-            }
-            done(t, name)
-        }
-        f @ (Format::Step | Format::Iges | Format::Parasolid) => {
-            // the headline, then the reader's reason (shown on hover: `headline`)
-            let kind = match f {
-                Format::Step => "STEP",
-                Format::Iges => "IGES",
-                _ => "Parasolid",
-            };
-            let imp = forge_step::import(bytes, &forge_step::Limits::default())
-                .map_err(|e| format!("{name} couldn't be read as a {kind} model\n{e}"))?;
-            let mut t = Tris::default();
-            let mut failed = 0;
-            for s in &imp.solids {
-                let q = forge_mesh::Quality {
-                    chord: 5e-4 * s.body.faces_box().diagonal(),
-                    ..forge_mesh::Quality::default()
-                };
-                match forge_mesh::tessellate::tessellate_tolerant(&s.body, &q) {
-                    Ok(m) => push(&mut t, &m.positions, &m.triangles, &m.edges),
-                    Err(_) => failed += 1,
-                }
-            }
-            if t.tri.is_empty() && failed > 0 {
-                return Err(format!("{name}: none of its {failed} solids could be meshed"));
-            }
-            done(t, name)
-        }
+    let pieces = forge_machine_builder::model_files::read(name, bytes)?;
+    let _ = Format::of(name)?;
+    let mut t = Tris::default();
+    for p in &pieces {
+        push(&mut t, &p.pos, &p.tri);
     }
+    Ok(t)
 }
 
 /// A message's first line and the rest: what a panel shows, and what it shows on hover.
@@ -77,25 +48,14 @@ pub fn headline(msg: &str) -> (&str, &str) {
     msg.split_once('\n').unwrap_or((msg, ""))
 }
 
-fn done(t: Tris, name: &str) -> Result<Tris, String> {
-    if t.tri.is_empty() {
-        Err(format!("{name}: no solid or triangle in it"))
-    } else {
-        Ok(t)
-    }
-}
-
 /// Triangles flat-shaded, each with its own corners.
-fn push(t: &mut Tris, pos: &[forge_math::Point3], tris: &[[u32; 3]], edges: &[Vec<u32>]) {
+fn push(t: &mut Tris, pos: &[[f64; 3]], tris: &[[u32; 3]]) {
+    use forge_machine::kin::{cross, norm, sub};
     let (t0, v0) = (t.tri.len(), t.pos.len());
-    let p = |i: u32| {
-        let q = pos[i as usize];
-        [q.x, q.y, q.z]
-    };
     for tri in tris {
-        let [a, b, c] = tri.map(p);
-        let n = forge_machine::kin::cross(forge_machine::kin::sub(b, a), forge_machine::kin::sub(c, a));
-        let l = forge_machine::kin::norm(n);
+        let [a, b, c] = tri.map(|i| pos[i as usize]);
+        let n = cross(sub(b, a), sub(c, a));
+        let l = norm(n);
         let n = if l > 0.0 {
             n.map(|x| x / l)
         } else {
@@ -105,11 +65,6 @@ fn push(t: &mut Tris, pos: &[forge_math::Point3], tris: &[[u32; 3]], edges: &[Ve
         t.pos.extend([a, b, c]);
         t.nrm.extend([n; 3]);
         t.tri.push([k, k + 1, k + 2]);
-    }
-    for e in edges {
-        if e.len() >= 2 {
-            t.edges.push(e.iter().map(|&i| p(i)).collect());
-        }
     }
     t.patches.push((
         t0 as u32,

@@ -931,6 +931,8 @@ pub(crate) fn import(b: &[u8], lim: &Limits, place: bool) -> Result<Imported, Im
     Ok(Imported {
         solids,
         refusals,
+        // each instance is placed as its own solid already (`import`); none with `import_unplaced`
+        occurrences: Vec::new(),
         schema: s.header.schema.clone(),
         system,
         stats,
