@@ -304,8 +304,10 @@ const VENDOR_CONTACTS: &[(&str, &str, &str, &str)] = &[
     ("dn-solutions-nhp-6300", "pallet", "head", "Hit"),
     ("dn-solutions-nhp-6300-2nd", "pallet", "nose", "Hit"),
     ("dn-solutions-nhp-6300-2nd", "pallet", "head", "Hit"),
-    ("haas-umc-750", "platter", "head", "Near"),
-    ("haas-umc-750", "cradle", "head", "Near"),
+    // measured on Haas's model (tools/machines/haas.py MODEL): the head reaches the tilted cradle
+    // and the platter at the ends of its travel, as the UMC-500's and -1000's do
+    ("haas-umc-750", "platter", "head", "Hit"),
+    ("haas-umc-750", "cradle", "head", "Hit"),
     ("haas-st-10", "chuck", "turret", "Hit"),
     ("haas-st-20", "chuck", "turret", "Hit"),
     ("haas-st-30", "chuck", "turret", "Hit"),

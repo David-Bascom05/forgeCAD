@@ -1,0 +1,13 @@
+# haas-vf-2 column (envelope: unpublished casting)
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared x0 = 82
+shared y0 = 624
+shared z0 = -344.44
+shared lx = 598
+shared ly = 598
+shared lz = 1798.86
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (lx, ly))
+}
+block = extrude(plan, lz)

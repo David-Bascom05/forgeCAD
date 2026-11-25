@@ -244,6 +244,7 @@ jobs:
           node web/tests/wall.cjs "$GITHUB_WORKSPACE/target/web"
           node web/tests/deeplink.cjs "$GITHUB_WORKSPACE/target/web"
           node web/tests/import.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/clipboard.cjs "$GITHUB_WORKSPACE/target/web"
       # hosted collaboration: two tabs on one part served by forge-server (research/hosted)
       - name: served
         if: matrix.test == 'e2e'
