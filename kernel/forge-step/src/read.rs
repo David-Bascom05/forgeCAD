@@ -330,6 +330,14 @@ impl<'a> Reader<'a> {
             self.real(id, "DIRECTION", c.get(1))?,
             self.real(id, "DIRECTION", c.get(2))?,
         );
+        // a ratio below 2^-100 of the largest is noise where 0 was meant (05-0182, Haas Tooling: a
+        // plane's axes with parts of 8e-65, 8e-97 and 7e-161, which laid its face out over a span
+        // of 1e-160 in its parameters, past what the predicates take): 0, turning the direction by
+        // under 1e-30 radians; a direction with none is as it was, to the bit
+        let big = v.x.abs().max(v.y.abs()).max(v.z.abs());
+        let floor = big * f64::from_bits((1023 - 100) << 52);
+        let small = |c: f64| if c.abs() < floor { 0.0 } else { c };
+        let v = Vec3::new(small(v.x), small(v.y), small(v.z));
         match v.normalize() {
             Some(u) => Ok(u),
             None => refuse(id, "DIRECTION", "zero length"),
@@ -1583,6 +1591,109 @@ fn debug_head(x: &impl std::fmt::Debug, n: usize) -> String {
 }
 
 /// How far a file's geometry misses itself, before anything is changed.
+/// The holes of an open shell (its edges each one face uses, in closed chains) that lie in a
+/// plane within `tol`, every vertex and 16 points of every edge: each filled with the plane's
+/// face, which goes along each edge the other way from the face that has it. A hole not flat, or
+/// not one closed chain, stays: the shell is refused as a sheet, as before.
+fn fill_flat_holes(proto: &mut Proto, tol: f64) {
+    use forge_geom::CurveGeom;
+    // a lone face is a sheet, whatever its rim: no hole to fill
+    if proto.faces.len() < 2 {
+        return;
+    }
+    let mut uses: Vec<Vec<(usize, bool, usize)>> = vec![Vec::new(); proto.edges.len()];
+    for (fi, face) in proto.faces.iter().enumerate() {
+        for l in &face.loops {
+            for &(e, fw) in l {
+                uses[e].push((fi, fw, face.shell));
+            }
+        }
+    }
+    // each once-used edge as the hole's face would walk it: the other way
+    let mut open: Vec<(usize, bool)> = (0..proto.edges.len())
+        .filter(|&e| uses[e].len() == 1)
+        .map(|e| (e, !uses[e][0].1))
+        .collect();
+    let from = |p: &Proto, u: (usize, bool)| if u.1 { p.edges[u.0].start } else { p.edges[u.0].end };
+    let to = |p: &Proto, u: (usize, bool)| if u.1 { p.edges[u.0].end } else { p.edges[u.0].start };
+    while let Some(first) = open.first().copied() {
+        open.remove(0);
+        // the chain from `first`, each next edge the one that starts where the last ends
+        let mut chain = vec![first];
+        let mut ok = true;
+        while to(proto, *chain.last().expect("a chain")) != from(proto, first) {
+            let end = to(proto, *chain.last().expect("a chain"));
+            let next: Vec<usize> = (0..open.len()).filter(|&k| from(proto, open[k]) == end).collect();
+            if next.len() != 1 {
+                ok = false;
+                break;
+            }
+            chain.push(open.remove(next[0]));
+        }
+        if !ok {
+            continue;
+        }
+        // the hole's points: its vertices and 16 along each edge, in the chain's order
+        let mut pts: Vec<Point3> = Vec::new();
+        for &(e, fw) in &chain {
+            let x = &proto.edges[e];
+            for k in 0..16 {
+                let t = if fw {
+                    x.range.lo + x.range.width() * (k as f64 / 16.0)
+                } else {
+                    x.range.hi - x.range.width() * (k as f64 / 16.0)
+                };
+                pts.push(x.curve.eval(t));
+            }
+        }
+        // Newell's normal: the chain runs anticlockwise about it, the face on its left
+        let mut n = Vec3::ZERO;
+        let c = pts.iter().fold(Vec3::ZERO, |a, p| a + (*p - Point3::ORIGIN)) * (1.0 / pts.len() as f64);
+        let centre = Point3::ORIGIN + c;
+        for i in 0..pts.len() {
+            let (a, b) = (pts[i] - centre, pts[(i + 1) % pts.len()] - centre);
+            n += a.cross(b);
+        }
+        let Some(z) = n.normalize() else { continue };
+        if pts.iter().any(|p| (*p - centre).dot(z.get()).abs() > tol) {
+            continue;
+        }
+        // a face beside the hole in its plane and facing the other way: the cap would close on
+        // that face with nothing between (a sheet's own rim), not fill a missing face. (One
+        // facing the same way is a flat face split, as files write them.)
+        let flat_beside = chain.iter().any(|&(e, _)| {
+            uses[e].iter().any(|&(fi, _, _)| match &proto.faces[fi].surface {
+                Surface::Plane(pl) => {
+                    let out = pl.frame.z().get() * if proto.faces[fi].same_sense { 1.0 } else { -1.0 };
+                    out.cross(z.get()).length() < 1e-9
+                        && out.dot(z.get()) < 0.0
+                        && (pl.frame.origin - centre).dot(z.get()).abs() <= tol
+                }
+                _ => false,
+            })
+        });
+        if flat_beside {
+            continue;
+        }
+        let Some(frame) = Frame::from_zx(
+            centre,
+            z,
+            (pts[0] - centre).normalize().map_or(Vec3::X, |v| v.get()),
+        ) else {
+            continue;
+        };
+        let shell = uses[first.0][0].2;
+        let name = proto.salt.with_str("hole").with(chain[0].0 as u64);
+        proto.faces.push(PFace {
+            surface: Surface::Plane(Plane { frame }),
+            same_sense: true,
+            name,
+            shell,
+            loops: vec![chain],
+        });
+    }
+}
+
 fn measure_gaps(proto: &Proto, stats: &mut Stats) {
     for fa in &proto.faces {
         for u in fa.loops.iter().flatten() {
@@ -1812,7 +1923,12 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
                 }
                 Ok(())
             })();
-            let proto = b.p;
+            let mut proto = b.p;
+            // a surface model's shell missing flat faces (a hole's cap: 08-1865, 05-0807, Haas
+            // Tooling): each hole that lies in a plane, within the file's tolerance, filled
+            if built.is_ok() && f.name(&r) == "OPEN_SHELL" {
+                fill_flat_holes(&mut proto, (10.0 * forge_math::tol::LINEAR).max(u.uncertainty));
+            }
             // an open shell is a solid only if it closes: every edge between two faces' uses
             let built = built.and_then(|()| {
                 if f.name(&r) != "OPEN_SHELL" {
