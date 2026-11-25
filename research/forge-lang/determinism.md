@@ -89,16 +89,32 @@ base in source:
   `x*x` for these two bases with glibc; another host's `pow` may not.
 - `10f64.powi(k)` and `2f64.powi(k)` with a runtime `k`: safe as above.
 
-**Proposed replacement, not done here.** It touches the kernel and moves bits where a fold
-happened.
-- Add `forge_math::dmath::powi(x, n)`: the compiler-builtins loop above, written in Rust.
-  Folding a plain `fmul` is exact IEEE (APFloat), the same on any host. A folded `dmath::powi`
-  equals the runtime one on every target.
-- Write `powi(2)` as `x * x`.
-- Disallow `f64::powi` and `f32::powi` in both clippy configs.
-- The migration is mechanical. Its speed band should be flat, since it emits the same multiplies.
-  `bits.txt` can change only where a fold happened. HOSTED-BUILD's native/wasm parity run is the
-  check.
+**The replacement (approved as a correctness fix).**
+- `forge_math::ipow::powi(x, n)` and the `Powi` trait (`x.ipow(n)`, `f64` and `f32`):
+  compiler-builtins' loop, written out for `n` up to 8 and looping above. Folding a plain `fmul` is
+  exact IEEE (APFloat), the same on any host, so a folded `ipow` equals the run-time one on every
+  target, and both equal what an unfolded `f64::powi` gave.
+- It is not in `dmath`: Charon translates that module whole (verify/aeneas/forge-math), and no
+  Lean file names `powi`, so no translation or proof changes.
+- `.powi(` became `.ipow(` in the root and forge-render workspaces: 538 calls, plus one
+  `f32::powi(2.0, ..)` written as a call. The expressions are unchanged. forge-cam-geom gained
+  forge-math.
+- Both clippy configs disallow `f64::powi` and `f32::powi`. Separate workspaces that CI does not
+  lint still call `powi`: `research/*` prototypes and `verify/ieee754/check`.
+- `kernel/forge-math/tests/ipow.rs`:
+  - folded equals run time for 16 cases, 95.65^3 among them. With `f64::powi` in place of `ipow`,
+    the release run fails on 95.65^3.
+  - `ipow` gives exactly `f64::powi`'s and `f32::powi`'s run-time bits over 20,000 bases ×
+    `n` in -40..=40, and for 0, -0, inf, NaN, `i32::MIN` and `i32::MAX`.
+  - It passes in debug and release.
+- `bits.txt`: **unchanged.** The gate's bits are identical on main 6cd93533 and the branch. No
+  bench geometry went through a folded `powi`, so no line moved.
+- Speed band (callgrind, same VM): strict total +0.0003%, worst strict line +0.0043%.
+  - The first run was over on the `cli` lines (heatsink +0.085%). All of it was
+    `forge_topo::mass::face_integrals`: about 237 instructions on each of 438 calls.
+  - It builds 11 powers of `size` twice per face, once directly and once in the inlined
+    `whole_patch`. LLVM shared those as `llvm.powi` and does not share them as `ipow`.
+  - `mass::floors(size, rel)` now makes them once each, in `ipow`'s order (the same bits).
 
 ## 3. The SetParam check: three evaluations, now two
 

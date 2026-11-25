@@ -47,6 +47,7 @@ use crate::stock::InProcess;
 use forge_cam_geom::offset::offset;
 use forge_cam_geom::region::{Loop, Region, Seg, p2};
 use forge_math::dmath;
+use forge_math::ipow::Powi as _;
 
 /// What the user sets.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -390,7 +391,7 @@ impl Field {
         way.push([target[0], target[1]]);
         let mut top = cur[2].max(target[2]);
         for w in way.windows(2) {
-            let l = ((w[1][0] - w[0][0]).powi(2) + (w[1][1] - w[0][1]).powi(2)).sqrt();
+            let l = ((w[1][0] - w[0][0]).ipow(2) + (w[1][1] - w[0][1]).ipow(2)).sqrt();
             let n = (l / self.map0.h).ceil().max(1.0) as usize;
             for k in 0..=n {
                 let t = k as f64 / n as f64;
@@ -459,7 +460,7 @@ impl Field {
     /// The fixed link rule: the straight move a → b at z lies in the cleared area (no material
     /// within r + h of it, sampled at h) and in the allowed centres.
     fn link_clear(&self, a: [f64; 2], b: [f64; 2], z: f64) -> bool {
-        let l = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+        let l = ((b[0] - a[0]).ipow(2) + (b[1] - a[1]).ipow(2)).sqrt();
         let n = (l / self.map.h).ceil().max(1.0) as usize;
         (0..=n).all(|k| {
             let s = k as f64 / n as f64;
@@ -769,7 +770,7 @@ pub fn adaptive(
                     // across the sweep from one side to the other: the
                     // lowest band of r/2 across the sweep first, the nearest within it
                     let across = (sweep_dir[0] * p[1] - sweep_dir[1] * p[0]) / (0.5 * f.r);
-                    let d = across.floor() * 1e9 + (p[0] - here[0]).powi(2) + (p[1] - here[1]).powi(2);
+                    let d = across.floor() * 1e9 + (p[0] - here[0]).ipow(2) + (p[1] - here[1]).ipow(2);
                     if best.is_none_or(|(_, bd, _)| d < bd) {
                         best = Some((p, d, sign));
                     }
@@ -979,7 +980,7 @@ pub fn adaptive(
             // a start within half a radius of where the tool already is, at depth and parked
             // clear: the pass starts where the tool is (no jog of a millimetre between passes)
             let snap = cur[2] == z
-                && ((p[0] - cur[0]).powi(2) + (p[1] - cur[1]).powi(2)).sqrt() < f.r
+                && ((p[0] - cur[0]).ipow(2) + (p[1] - cur[1]).ipow(2)).sqrt() < f.r
                 && f.ok(cur[0], cur[1])
                 && !f.disk_has_material(cur[0], cur[1], z);
             let target = if snap { cur } else { [p[0], p[1], z] };
@@ -1048,7 +1049,7 @@ pub fn adaptive(
                     // what blocks the straight link: the highest material over the tool's disk
                     // along it, above the level; and whether any unused start was in reach
                     let (a, b) = ([cur[0], cur[1]], p);
-                    let l = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+                    let l = ((b[0] - a[0]).ipow(2) + (b[1] - a[1]).ipow(2)).sqrt();
                     let n = (l / f.map.h).ceil().max(1.0) as usize;
                     let rr = f.r + f.map.h;
                     let mut block = f64::NEG_INFINITY;
@@ -1070,8 +1071,8 @@ pub fn adaptive(
                         .filter(|c| **c != p && !f.disk_has_material(c[0], c[1], z))
                         .collect();
                     near.sort_by(|u, v| {
-                        let du = (u[0] - a[0]).powi(2) + (u[1] - a[1]).powi(2);
-                        let dv = (v[0] - a[0]).powi(2) + (v[1] - a[1]).powi(2);
+                        let du = (u[0] - a[0]).ipow(2) + (u[1] - a[1]).ipow(2);
+                        let dv = (v[0] - a[0]).ipow(2) + (v[1] - a[1]).ipow(2);
                         du.total_cmp(&dv)
                     });
                     let reach = near.iter().take(40).any(|c| f.link_clear(a, **c, z));
@@ -1183,7 +1184,7 @@ pub fn adaptive(
                 removed += got;
                 // a step that removes less than a 0.01 mm strip counts as air: a pass grazing
                 // slivers would otherwise orbit
-                let step_len = ((q[0] - pos[0]).powi(2) + (q[1] - pos[1]).powi(2)).sqrt();
+                let step_len = ((q[0] - pos[0]).ipow(2) + (q[1] - pos[1]).ipow(2)).sqrt();
                 if phi <= 0.0 || got < 0.01 * step_len * (above - z).max(f.map.h) {
                     air_run += 1;
                     // in air two radii after cutting, or four before meeting material: done
@@ -1245,7 +1246,7 @@ pub fn adaptive(
                     let (to, l) = match *m {
                         PMove::Arc { to, c, cw, .. } => (to, arc_len(a, to, c, cw)),
                         PMove::Line { to, .. } => {
-                            (to, ((to[0] - a[0]).powi(2) + (to[1] - a[1]).powi(2)).sqrt())
+                            (to, ((to[0] - a[0]).ipow(2) + (to[1] - a[1]).ipow(2)).sqrt())
                         }
                         _ => continue,
                     };
@@ -1621,7 +1622,7 @@ pub fn adaptive(
             };
             let l = match *m {
                 PMove::Arc { c, cw, .. } => arc_len(at, to, c, cw),
-                _ => ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2) + (to[2] - at[2]).powi(2)).sqrt(),
+                _ => ((to[0] - at[0]).ipow(2) + (to[1] - at[1]).ipow(2) + (to[2] - at[2]).ipow(2)).sqrt(),
             };
             let what = if matches!(m, PMove::Rapid { .. }) {
                 "rapid"
@@ -1760,7 +1761,7 @@ fn path_link(
             }
             let pq = grid.at(q.0, q.1);
             if clear(a, pq) {
-                let d = ((pq[0] - a[0]).powi(2) + (pq[1] - a[1]).powi(2)).sqrt();
+                let d = ((pq[0] - a[0]).ipow(2) + (pq[1] - a[1]).ipow(2)).sqrt();
                 seeds.push((q, (d / grid.g * 1000.0) as u64));
             }
         }
@@ -1849,7 +1850,7 @@ fn path_link(
         if !clear(chain[i], chain[j]) {
             return None;
         }
-        len += ((chain[j][0] - chain[i][0]).powi(2) + (chain[j][1] - chain[i][1]).powi(2)).sqrt();
+        len += ((chain[j][0] - chain[i][0]).ipow(2) + (chain[j][1] - chain[i][1]).ipow(2)).sqrt();
         out.push(chain[j]);
         i = j;
     }
@@ -1904,7 +1905,7 @@ fn retrace_path_link(
         let (from, to) = (pts[i + 1], pts[i]);
         let back = match moves[i] {
             PMove::Line { f, .. } => {
-                len += ((to[0] - from[0]).powi(2) + (to[1] - from[1]).powi(2)).sqrt();
+                len += ((to[0] - from[0]).ipow(2) + (to[1] - from[1]).ipow(2)).sqrt();
                 PMove::Line {
                     to,
                     f,
@@ -1971,7 +1972,7 @@ fn retrace_link(
     if end != cur || pts.iter().any(|p| p[2] != z) {
         return None;
     }
-    let dist = |p: [f64; 3], q: [f64; 2]| ((q[0] - p[0]).powi(2) + (q[1] - p[1]).powi(2)).sqrt();
+    let dist = |p: [f64; 3], q: [f64; 2]| ((q[0] - p[0]).ipow(2) + (q[1] - p[1]).ipow(2)).sqrt();
     let cap = k * dist(cur, b) + d;
     let mut out = Vec::new();
     let mut len = 0.0;
@@ -1980,7 +1981,7 @@ fn retrace_link(
         let (from, to) = (pts[i + 1], pts[i]);
         let back = match moves[i] {
             PMove::Line { f, .. } => {
-                len += ((to[0] - from[0]).powi(2) + (to[1] - from[1]).powi(2)).sqrt();
+                len += ((to[0] - from[0]).ipow(2) + (to[1] - from[1]).ipow(2)).sqrt();
                 PMove::Line {
                     to,
                     f,
@@ -2017,7 +2018,7 @@ fn at_feed(mut moves: Vec<PMove>, lf: f64) -> Vec<PMove> {
 
 /// The length of the arc from `a` to `b` about `c` (clockwise or not), in the plane.
 fn arc_len(a: [f64; 3], b: [f64; 3], c: [f64; 2], cw: bool) -> f64 {
-    let r = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2)).sqrt();
+    let r = ((a[0] - c[0]).ipow(2) + (a[1] - c[1]).ipow(2)).sqrt();
     let t0 = dmath::atan2(a[1] - c[1], a[0] - c[0]);
     let t1 = dmath::atan2(b[1] - c[1], b[0] - c[0]);
     let mut d = if cw { t0 - t1 } else { t1 - t0 };
@@ -2042,7 +2043,7 @@ fn simplify(p: &[[f64; 2]], tol: f64) -> Vec<[f64; 2]> {
         } else {
             0.0
         };
-        let d = ((q[0] - a[0] - t * dx).powi(2) + (q[1] - a[1] - t * dy).powi(2)).sqrt();
+        let d = ((q[0] - a[0] - t * dx).ipow(2) + (q[1] - a[1] - t * dy).ipow(2)).sqrt();
         if d > worst.0 {
             worst = (d, i);
         }
@@ -2084,7 +2085,7 @@ fn fit_pass(pts: &[[f64; 3]], r: f64, f: f64, mv: &mut Vec<PMove>) {
     let pieces = crate::fit::fit(pts, fit, &mut |from, p| match *p {
         crate::fit::Piece::Arc { to, c, cw } => {
             arc_len(from, to, c, cw)
-                < 170f64.to_radians() * ((from[0] - c[0]).powi(2) + (from[1] - c[1]).powi(2)).sqrt()
+                < 170f64.to_radians() * ((from[0] - c[0]).ipow(2) + (from[1] - c[1]).ipow(2)).sqrt()
         }
         _ => true,
     });
@@ -2255,7 +2256,7 @@ mod tests {
             let cut = cut && !is_link;
             match *mv {
                 PMove::Arc { c, cw, .. } => {
-                    let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
+                    let r = ((at[0] - c[0]).ipow(2) + (at[1] - c[1]).ipow(2)).sqrt();
                     let a0 = dmath::atan2(at[1] - c[1], at[0] - c[0]);
                     let a1 = dmath::atan2(to[1] - c[1], to[0] - c[0]);
                     let tau = std::f64::consts::TAU;
@@ -2278,7 +2279,7 @@ mod tests {
                 }
                 _ => {
                     let l =
-                        ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2) + (to[2] - at[2]).powi(2)).sqrt();
+                        ((to[0] - at[0]).ipow(2) + (to[1] - at[1]).ipow(2) + (to[2] - at[2]).ipow(2)).sqrt();
                     let n = ((l / 0.25).ceil() as usize).max(1);
                     for k in 1..=n {
                         let t = k as f64 / n as f64;
@@ -2384,7 +2385,7 @@ mod tests {
                     let k = pts
                         .iter()
                         .position(|(p, _)| {
-                            p[2] <= z + 1e-9 && (p[0] - x).powi(2) + (p[1] - y).powi(2) <= r * r
+                            p[2] <= z + 1e-9 && (p[0] - x).ipow(2) + (p[1] - y).ipow(2) <= r * r
                         })
                         .unwrap_or(usize::MAX);
                     probes.push(([x + 0.013, y + 0.017], k));
@@ -2689,7 +2690,7 @@ mod tests {
                 let level = to[2] == at[2] && to[2] == -8.0;
                 if link && level {
                     links += 1;
-                    let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
+                    let l = ((to[0] - at[0]).ipow(2) + (to[1] - at[1]).ipow(2)).sqrt();
                     assert!(
                         got <= 0.01 * l.max(1.0),
                         "two-way {two_way}: a link {at:?} -> {to:?} removes {got} mm³"
@@ -2857,7 +2858,7 @@ mod tests {
                     phase: Phase::Cut,
                     ..
                 } if to[2] == at[2] && to[2] < -1.0 => {
-                    let d = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
+                    let d = ((to[0] - at[0]).ipow(2) + (to[1] - at[1]).ipow(2)).sqrt();
                     if d > 0.0 {
                         let u = [(to[0] - at[0]) / d, (to[1] - at[1]) / d];
                         if let Some(e) = m.engage(to, u, 3.0, 1e-3) {

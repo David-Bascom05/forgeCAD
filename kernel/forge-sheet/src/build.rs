@@ -25,6 +25,7 @@ use forge_geom::ruled::{Rail, Ruled};
 use forge_geom::spline::{Extruded, PlaneSpline, Spline, SplineCurve};
 use forge_geom::wrap::{Flat, Wrap};
 use forge_geom::{Circle, Curve, CurveGeom, Cylinder, Line, Plane, Surface, SurfaceGeom};
+use forge_math::ipow::Powi as _;
 use forge_math::{Frame, Interval, Point2, Point3, Vec2, Vec3, dmath, tol};
 use forge_ops::{ProfileLoop, Segment};
 use forge_sheet_core::place;
@@ -2402,7 +2403,7 @@ impl<'a> Strips<'a> {
                     // middle within TOL is a touch; the box is dropped when the middle is farther
                     // than its size can close, the developed map stretching by `stretch`
                     let raw = box_of(u);
-                    let size = (raw.x.width().powi(2) + raw.y.width().powi(2) + raw.z.width().powi(2)).sqrt();
+                    let size = (raw.x.width().ipow(2) + raw.y.width().ipow(2) + raw.z.width().ipow(2)).sqrt();
                     let p = point(u.mid());
                     let (d, r) = self.developed_distance(b, p);
                     if d <= TOL {
@@ -2437,7 +2438,7 @@ impl<'a> Strips<'a> {
                 if d <= TOL {
                     return Ok(Some(p));
                 }
-                let size = (bx.x.width().powi(2) + bx.y.width().powi(2) + bx.z.width().powi(2)).sqrt();
+                let size = (bx.x.width().ipow(2) + bx.y.width().ipow(2) + bx.z.width().ipow(2)).sqrt();
                 if d > TOL + size {
                     continue;
                 }
@@ -2751,7 +2752,7 @@ impl<'a> Strips<'a> {
                 {
                     *best = (p, d);
                 }
-                let size = (bx.x.width().powi(2) + bx.y.width().powi(2) + bx.z.width().powi(2)).sqrt();
+                let size = (bx.x.width().ipow(2) + bx.y.width().ipow(2) + bx.z.width().ipow(2)).sqrt();
                 if size <= eps || level >= 60 {
                     continue;
                 }
@@ -2986,7 +2987,7 @@ fn hunt_by(
             if !reach(&bx) || !may(u) {
                 continue;
             }
-            let size = (bx.x.width().powi(2) + bx.y.width().powi(2) + bx.z.width().powi(2)).sqrt();
+            let size = (bx.x.width().ipow(2) + bx.y.width().ipow(2) + bx.z.width().ipow(2)).sqrt();
             // every point of the box within `size` of its middle: none in the material when the
             // middle is further from it than that
             if let Some(p) = point(u.mid())

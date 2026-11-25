@@ -10,6 +10,7 @@
 //!   least the tool's radius and at least the mean move of clear on the same part (adaptive was
 //!   once posted as its 0.75 mm simulation steps: 5,348 blocks where clear has 1,171).
 use forge_cam_quality::{Config, JobQ, measure};
+use forge_math::ipow::Powi as _;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -159,7 +160,7 @@ fn adaptive_cutting_moves_not_micro() {
                 for m in &p.moves {
                     let (to, len) = match *m {
                         PMove::Line { to, phase, .. } => {
-                            let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
+                            let l = ((to[0] - at[0]).ipow(2) + (to[1] - at[1]).ipow(2)).sqrt();
                             (
                                 to,
                                 if phase == Phase::Cut && (to[2] - at[2]).abs() < 1e-9 {
@@ -174,7 +175,7 @@ fn adaptive_cutting_moves_not_micro() {
                             let _ = c;
                             (
                                 to,
-                                Some(((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt()),
+                                Some(((to[0] - at[0]).ipow(2) + (to[1] - at[1]).ipow(2)).sqrt()),
                             )
                         }
                         PMove::Rapid { to } => (to, None),

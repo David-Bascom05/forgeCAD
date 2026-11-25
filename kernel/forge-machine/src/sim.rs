@@ -19,6 +19,7 @@
 use crate::def::{JointType, MachineDef, MountKind};
 use crate::gcode::{self, Block, Centre, Control, Ev, FeedMode, GError};
 use forge_math::dmath;
+use forge_math::ipow::Powi as _;
 
 /// A cutting tool as the simulation sees it.
 #[derive(Clone, Debug, PartialEq)]
@@ -550,7 +551,7 @@ pub struct SkipDep {
 }
 
 fn q_to_f(v: i64, k: u32) -> f64 {
-    v as f64 / 10f64.powi(k as i32)
+    v as f64 / 10f64.ipow(k as i32)
 }
 
 /// Trapezoidal time (s) for a unit path at speed limit v (1/s) and acceleration a (1/s²).
@@ -741,7 +742,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
     let len = |w: i64, i: usize| -> f64 {
         if inch && !s.control.rotary[i] {
             w.checked_mul(254)
-                .map_or(w as f64 * 25.4 / 10f64.powi(k as i32), |x| q_to_f(x, k + 1))
+                .map_or(w as f64 * 25.4 / 10f64.ipow(k as i32), |x| q_to_f(x, k + 1))
         } else {
             q_to_f(w, k)
         }
@@ -750,7 +751,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
     let feed_mm = |f: i64| -> f64 {
         if inch {
             f.checked_mul(254)
-                .map_or(f as f64 * 25.4 / 10f64.powi(fk as i32), |x| q_to_f(x, fk + 1))
+                .map_or(f as f64 * 25.4 / 10f64.ipow(fk as i32), |x| q_to_f(x, fk + 1))
         } else {
             q_to_f(f, fk)
         }
@@ -1025,7 +1026,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                         wv[ib] = Some(*wb);
                         let qc = to_q(&wv, &q, &wcs, &toff, traori.as_ref(), ln)?;
                         let (ca, cb) = (qc[ja], qc[jb]);
-                        let r = ((sa - ca).powi(2) + (sb - cb).powi(2)).sqrt();
+                        let r = ((sa - ca).ipow(2) + (sb - cb).ipow(2)).sqrt();
                         (ca, cb, r)
                     }
                     // the centre in program units, to joint values as a position's words are
@@ -1038,7 +1039,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                             v + wcs[i] + toff[i]
                         };
                         let (ca, cb) = (wj(ia, *wa), wj(ib, *wb));
-                        let r = ((sa - ca).powi(2) + (sb - cb).powi(2)).sqrt();
+                        let r = ((sa - ca).ipow(2) + (sb - cb).ipow(2)).sqrt();
                         (ca, cb, r)
                     }
                     Centre::R(rw) => {
@@ -1077,7 +1078,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                     }
                 }
                 // the end must be on the circle (a control alarms past its tolerance); report a gap
-                let r_end = ((ea - ca).powi(2) + (eb - cb).powi(2)).sqrt();
+                let r_end = ((ea - ca).ipow(2) + (eb - cb).ipow(2)).sqrt();
                 if (r_end - r).abs() > 0.01 {
                     return Err(SimError::At {
                         line: ln,
@@ -1514,7 +1515,7 @@ pub fn zone_entry(def: &MachineDef, z: &crate::def::Zone, sg: &Segment) -> Optio
         if inside(&sg.at(sm)) {
             return Some(sm);
         }
-        if s1 - s0 > (hi - lo) * 2f64.powi(-30) {
+        if s1 - s0 > (hi - lo) * 2f64.ipow(-30) {
             stack.push((sm, s1));
             stack.push((s0, sm));
         }

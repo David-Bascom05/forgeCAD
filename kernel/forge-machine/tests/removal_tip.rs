@@ -10,6 +10,7 @@ use forge_machine::library::builtin_named;
 use forge_machine::removal::{self, TipForm};
 use forge_machine::sim::{self, Cut, Path, Segment, Setup, SimTool};
 use forge_math::dmath;
+use forge_math::ipow::Powi as _;
 
 const U: f64 = f64::EPSILON / 2.0;
 
@@ -95,7 +96,7 @@ fn xy_len(s: &Setup, seg: &Segment, t: u32) -> f64 {
     let mut l = 0.0;
     for i in 1..=256 {
         let x = p(i as f64 / 256.0);
-        l += ((x[0] - prev[0]).powi(2) + (x[1] - prev[1]).powi(2)).sqrt();
+        l += ((x[0] - prev[0]).ipow(2) + (x[1] - prev[1]).ipow(2)).sqrt();
         prev = x;
     }
     // chords under-measure an arc by at most (1 - sin(x)/x) of it, x half a chord's angle

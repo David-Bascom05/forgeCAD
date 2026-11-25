@@ -13,6 +13,7 @@ use forge_cam_geom::check::{Face, Surf, TSeg, Trim, V3};
 use forge_cam_geom::ival::Ival;
 use forge_geom::curve::{Curve, CurveGeom};
 use forge_geom::surface::Surface;
+use forge_math::ipow::Powi as _;
 use forge_math::{Point3, Vec3, dmath, tol};
 use forge_topo::{Body, FaceId};
 
@@ -208,8 +209,8 @@ fn revolve(
                         Rev::Cyl(r) => (c.radius - r).abs() <= tol::LINEAR,
                         Rev::Cone(r0, kk) => (c.radius - (r0 + h * kk)).abs() <= tol::LINEAR,
                         Rev::Torus(big, r) => {
-                            ((c.radius - big).powi(2) + h * h).sqrt() - r <= tol::LINEAR
-                                && r - ((c.radius - big).powi(2) + h * h).sqrt() <= tol::LINEAR
+                            ((c.radius - big).ipow(2) + h * h).sqrt() - r <= tol::LINEAR
+                                && r - ((c.radius - big).ipow(2) + h * h).sqrt() <= tol::LINEAR
                         }
                     };
                     if !ok {

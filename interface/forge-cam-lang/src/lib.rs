@@ -24,6 +24,7 @@
 //! and the stock, rapids against both. An op whose checks are not all `pass` is refused, with the
 //! check, where, and a fix. The reply is `forgecad.cam/1`.
 use forge_lang::syntax::{self, Arg, Expr, ExprKind, StmtKind};
+use forge_math::ipow::Powi as _;
 pub mod cycle;
 pub mod export;
 pub mod holes;
@@ -1479,7 +1480,7 @@ fn feed_over(q: i64, k: u32, max_feed: f64) -> bool {
         return q > 0 && (q as u128) > (max_feed as u128) * 10u128.pow(k);
     }
     let fmax = forge_cam_geom::ival::Ival::pt(max_feed)
-        .mul(forge_cam_geom::ival::Ival::pt(10f64.powi(k as i32)))
+        .mul(forge_cam_geom::ival::Ival::pt(10f64.ipow(k as i32)))
         .lo;
     (q as f64) > fmax || fmax.is_nan()
 }
@@ -1498,7 +1499,7 @@ fn not_down(hn: &str, dir: [f64; 3]) -> String {
 }
 
 fn dist_pts(a: forge_cam_geom::region::P2, b: forge_cam_geom::region::P2) -> f64 {
-    ((a.x - b.x).powi(2) + (a.y - b.y).powi(2)).sqrt()
+    ((a.x - b.x).ipow(2) + (a.y - b.y).ipow(2)).sqrt()
 }
 
 fn num(v: &V) -> Option<f64> {
@@ -1609,7 +1610,7 @@ impl Cam {
                             for l in &sec.loops {
                                 for sg in &l.segs {
                                     let dist = |q: forge_cam_geom::region::P2| {
-                                        ((q.x - c.x).powi(2) + (q.y - c.y).powi(2)).sqrt()
+                                        ((q.x - c.x).ipow(2) + (q.y - c.y).ipow(2)).sqrt()
                                     };
                                     m = m.max(match *sg {
                                         Seg::Line { a, b } => dist(a).max(dist(b)),
@@ -2747,7 +2748,7 @@ impl Cam {
                                             }
                                             // an arc may bulge past its ends: its circle's box bounds it
                                             if let Seg::Arc { a, c, .. } = *sg {
-                                                let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+                                                let r = ((a.x - c.x).ipow(2) + (a.y - c.y).ipow(2)).sqrt();
                                                 b = [
                                                     b[0].min(c.x - r),
                                                     b[1].min(c.y - r),
@@ -3578,7 +3579,7 @@ impl Cam {
                     let ccw = ccw != flip;
                     if off != 0.0 {
                         // left of a ccw arc is toward its centre
-                        let r0 = ((p0[0] - c[0]).powi(2) + (p0[1] - c[1]).powi(2)).sqrt();
+                        let r0 = ((p0[0] - c[0]).ipow(2) + (p0[1] - c[1]).ipow(2)).sqrt();
                         let r1 = r0 + if ccw { -off } else { off };
                         if r1 <= 0.0 {
                             return Err(format!(
@@ -3590,7 +3591,7 @@ impl Cam {
                         p1 = [c[0] + (p1[0] - c[0]) * k, c[1] + (p1[1] - c[1]) * k];
                     }
                     // in pieces of at most a quarter turn, as posted
-                    let r = ((p0[0] - c[0]).powi(2) + (p0[1] - c[1]).powi(2)).sqrt();
+                    let r = ((p0[0] - c[0]).ipow(2) + (p0[1] - c[1]).ipow(2)).sqrt();
                     let a0 = forge_math::dmath::atan2(p0[1] - c[1], p0[0] - c[0]);
                     let mut a1 = forge_math::dmath::atan2(p1[1] - c[1], p1[0] - c[0]);
                     let tau = std::f64::consts::TAU;
@@ -4324,7 +4325,7 @@ impl Cam {
                     Seg::Line { a: pa, b: pb } => {
                         let u2 = dir(sg, false);
                         let nn = [u2[1], -u2[0]];
-                        let len = ((pb.x - pa.x).powi(2) + (pb.y - pa.y).powi(2)).sqrt();
+                        let len = ((pb.x - pa.x).ipow(2) + (pb.y - pa.y).ipow(2)).sqrt();
                         // the slope's length from the top's edge to the chamfer's bottom
                         let qb = if beta == 45.0 {
                             s * std::f64::consts::SQRT_2
@@ -4369,7 +4370,7 @@ impl Cam {
                     } => {
                         junction(prev, sg, *sg)?;
                         junction(sg, next, *next)?;
-                        let r1 = ((pa.x - cc.x).powi(2) + (pa.y - cc.y).powi(2)).sqrt();
+                        let r1 = ((pa.x - cc.x).ipow(2) + (pa.y - cc.y).ipow(2)).sqrt();
                         let full = pa == pb;
                         // pieces of at most a quarter turn
                         let t0 = forge_math::dmath::atan2(pa.y - cc.y, pa.x - cc.x);
@@ -6539,7 +6540,7 @@ impl Cam {
                     },
                     Some(_) => return Err("center: (x, y)".into()),
                 };
-                let reach = ((area[2] - area[0]).powi(2) + (area[3] - area[1]).powi(2)).sqrt();
+                let reach = ((area[2] - area[0]).ipow(2) + (area[3] - area[1]).ipow(2)).sqrt();
                 let r0 = get_num(a, "r0", Some(0.0))?;
                 let r1 = get_num(a, "r1", Some(reach))?;
                 let ps = if kind == "spiral" {
@@ -8820,7 +8821,7 @@ impl Cam {
                     // the arc's own box: its ends, and each axis extreme its sweep passes
                     // (c ± r on that axis), widened past rounding; the full circle's box when
                     // the sweep's ends are not resolved
-                    let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt() * (1.0 + 1e-12);
+                    let r = ((at[0] - c[0]).ipow(2) + (at[1] - c[1]).ipow(2)).sqrt() * (1.0 + 1e-12);
                     let (zl, zh) = (to[2].min(at[2]), to[2].max(at[2]));
                     add([at[0], at[1], zl]);
                     add([to[0], to[1], zh]);
@@ -8950,7 +8951,7 @@ impl Cam {
         };
         // 10^k exactly (k ≤ 22, so the power is an exact f64), then the limit times it
         let k = feed_decimals.min(22) as i32;
-        let fs = 10f64.powi(k);
+        let fs = 10f64.ipow(k);
         let over = |q: i64| feed_over(q, k as u32, m.max_feed);
         for (i, mo) in ms.iter().enumerate() {
             match *mo {
@@ -9673,8 +9674,8 @@ impl Cam {
         }
         // certify what the text means: each op's records, quantised, as motion, back in the
         // part's frame
-        let scale = 10f64.powi(d.decimals as i32);
-        let fscale = 10f64.powi(d.feed_decimals as i32);
+        let scale = 10f64.ipow(d.decimals as i32);
+        let fscale = 10f64.ipow(d.feed_decimals as i32);
         // each path read back and certified on its own (a function of the program's records
         // and the op, reading `self` only), on up to the threads there are; taken into the ops
         // after, in the paths' order, as before (the memos' state carried to the threads)
@@ -9756,9 +9757,9 @@ impl Cam {
                                 && from == to
                             {
                                 *b = true;
-                                let l = ((to[0] - at[0]).powi(2)
-                                    + (to[1] - at[1]).powi(2)
-                                    + (to[2] - at[2]).powi(2))
+                                let l = ((to[0] - at[0]).ipow(2)
+                                    + (to[1] - at[1]).ipow(2)
+                                    + (to[2] - at[2]).ipow(2))
                                 .sqrt();
                                 let fa = *f as f64 / fscale;
                                 lc += l;
@@ -9779,7 +9780,7 @@ impl Cam {
                                 start = Some(t);
                             }
                             let cc = [c[0] as f64 / scale + o[0], c[1] as f64 / scale + o[1]];
-                            let r = ((at[0] - cc[0]).powi(2) + (at[1] - cc[1]).powi(2)).sqrt();
+                            let r = ((at[0] - cc[0]).ipow(2) + (at[1] - cc[1]).ipow(2)).sqrt();
                             // its length: the turn it sweeps (as the control reads it: a whole turn
                             // when `full`), with the height it climbs; its time at its feed
                             let tau = std::f64::consts::TAU;
@@ -9795,7 +9796,7 @@ impl Cam {
                             if *full {
                                 sweep = tau;
                             }
-                            let l = ((r * sweep).powi(2) + (t[2] - at[2]).powi(2)).sqrt();
+                            let l = ((r * sweep).ipow(2) + (t[2] - at[2]).ipow(2)).sqrt();
                             lc += l;
                             let fa = *f as f64 / fscale;
                             time += if fa > 0.0 { l / fa * 60.0 } else { 0.0 };
@@ -9876,7 +9877,7 @@ impl Cam {
                         continue;
                     }
                     let l =
-                        ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2) + (to[2] - at[2]).powi(2)).sqrt();
+                        ((to[0] - at[0]).ipow(2) + (to[1] - at[1]).ipow(2) + (to[2] - at[2]).ipow(2)).sqrt();
                     if ph == Phase::Rapid {
                         lr += l;
                         time += l / 10_000.0 * 60.0;

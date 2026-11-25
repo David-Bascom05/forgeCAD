@@ -3,6 +3,7 @@
 //! +, -, *, / over f64 leaves, with exact zeros built in (a*b - b*a, (a/b)*b - a, cross products
 //! of collinear points): the two must agree on every sign.
 use forge_cam_geom::real::{Ctx, R};
+use forge_math::ipow::Powi as _;
 
 struct Rng(u64);
 impl Rng {
@@ -115,7 +116,7 @@ fn a_zero_broken_by_a_hair_is_not_a_zero() {
             cx.sub(m, a)
         };
         assert_eq!(cx.sign(zero), Ordering::Equal, "case {case}: the built zero");
-        let e = cx.lit(2f64.powi(-50));
+        let e = cx.lit(2f64.ipow(-50));
         let e2 = cx.mul(e, e);
         let e4 = cx.mul(e2, e2);
         let up = cx.add(zero, e4);

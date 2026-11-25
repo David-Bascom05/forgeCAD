@@ -5,6 +5,7 @@ use forge_machine::comp;
 use forge_machine::gcode::{self, Block, Centre, Control, Ev};
 use forge_machine::library::builtin_named;
 use forge_machine::sim::{self, Cut, Setup, SimTool};
+use forge_math::ipow::Powi as _;
 
 const U: f64 = 10000.0; // the control's 4 decimals
 
@@ -269,7 +270,7 @@ fn lcnc_path(contour: &str, exit: &str, r: f64) -> Result<Vec<Move>, (usize, Str
     );
     let (bs, _) = gcode::run(&text, &c).map_err(|e| (e.line, e.what))?;
     let ix = [c.idx('X').unwrap(), c.idx('Y').unwrap()];
-    let u = 10f64.powi(c.decimals as i32);
+    let u = 10f64.ipow(c.decimals as i32);
     let out = comp::apply(&bs, ix, c.decimals, None, cm, &|t| (t == 1).then_some(r))?;
     Ok(out
         .iter()

@@ -5,6 +5,7 @@ use super::Shell;
 use super::fgasm::{dialog_frame, dialog_head};
 use super::theme::{self, S1, S2};
 use egui::{Rect, pos2, vec2};
+use forge_math::ipow::Powi as _;
 
 /// One row of the cut list: identical members (section, lengths and end cuts, either way round).
 #[derive(Clone, Debug, PartialEq)]
@@ -42,7 +43,7 @@ pub struct CutList {
 }
 
 fn round(x: f64, places: i32) -> f64 {
-    let k = 10f64.powi(places);
+    let k = 10f64.ipow(places);
     (x * k).round() / k
 }
 

@@ -12,6 +12,7 @@ use forge_cam_geom::boolean::{Op, boolean, region_of};
 use forge_cam_geom::check::Face;
 use forge_cam_geom::offset::offset;
 use forge_cam_geom::region::{Loop, P2, Region, Seg};
+use forge_math::ipow::Powi as _;
 
 /// A placed fixture: its named boxes, in the part's frame.
 #[derive(Clone, Debug)]
@@ -219,7 +220,7 @@ pub fn area(r: &Region) -> f64 {
             match *s {
                 Seg::Line { a: p, b: q } => a += 0.5 * (p.x * q.y - q.x * p.y),
                 Seg::Arc { a: p, b: q, c, ccw } => {
-                    let rr = ((p.x - c.x).powi(2) + (p.y - c.y).powi(2)).sqrt();
+                    let rr = ((p.x - c.x).ipow(2) + (p.y - c.y).ipow(2)).sqrt();
                     let t0 = forge_math::dmath::atan2(p.y - c.y, p.x - c.x);
                     let t1 = forge_math::dmath::atan2(q.y - c.y, q.x - c.x);
                     let tau = std::f64::consts::TAU;
@@ -247,7 +248,7 @@ fn bbox_of(r: &Region) -> [f64; 4] {
                 b = [b[0].min(p.x), b[1].min(p.y), b[2].max(p.x), b[3].max(p.y)];
             }
             if let Seg::Arc { a, c, .. } = *s {
-                let rr = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+                let rr = ((a.x - c.x).ipow(2) + (a.y - c.y).ipow(2)).sqrt();
                 b = [
                     b[0].min(c.x - rr),
                     b[1].min(c.y - rr),

@@ -1,6 +1,7 @@
 //! Exact 2D curves and regions (lines and arcs), 2D and 3D rigid motions, and signed distances:
 //! the tools' sections and the walls' outlines, in closed form.
 use crate::num::Sc;
+use forge_math::ipow::Powi as _;
 use forge_math::{Point2, Vec2, dmath};
 
 /// A line or a circular arc. An arc runs counter-clockwise from `start` when `sweep` > 0.
@@ -780,7 +781,7 @@ pub fn sd_prism(sec: &Region, y0: f64, y1: f64, p: [f64; 3]) -> f64 {
     if s2 <= 0.0 && dy <= 0.0 {
         s2.max(dy)
     } else {
-        (s2.max(0.0).powi(2) + dy.max(0.0).powi(2)).sqrt()
+        (s2.max(0.0).ipow(2) + dy.max(0.0).ipow(2)).sqrt()
     }
 }
 

@@ -23,6 +23,7 @@
 use crate::kin::V3;
 use crate::sim::{Cut, Path, SegKind, Segment, Setup, Timeline};
 use forge_math::dmath;
+use forge_math::ipow::Powi as _;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum RemovalError {
@@ -326,7 +327,7 @@ impl Circle {
     /// the squared distance from that direction; a circle's is the direction itself), and the
     /// ends.
     fn dist(&self, p: [f64; 2], pa: [f64; 2], pb: [f64; 2]) -> f64 {
-        let e = |q: [f64; 2]| ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2)).sqrt();
+        let e = |q: [f64; 2]| ((p[0] - q[0]).ipow(2) + (p[1] - q[1]).ipow(2)).sqrt();
         let mut best = e(pa).min(e(pb));
         let w = [p[0] - self.c[0], p[1] - self.c[1]];
         let rho = (w[0] * w[0] + w[1] * w[1]).sqrt();
@@ -364,7 +365,7 @@ impl Circle {
             }
             let big_r = rad(th + d);
             let (sn, cs) = dmath::sin_cos(d);
-            let f = ((rho - big_r * cs).powi(2) + (big_r * sn).powi(2)).sqrt();
+            let f = ((rho - big_r * cs).ipow(2) + (big_r * sn).ipow(2)).sqrt();
             best = best.min(f);
             th += two_pi;
         }
@@ -496,7 +497,7 @@ pub fn mill_with(
                 hi = [hi[0].max(x[0]), hi[1].max(x[1])];
                 lowest = lowest.min(x[2]);
                 chord = chord.max(
-                    ((x[0] - prev[0]).powi(2) + (x[1] - prev[1]).powi(2) + (x[2] - prev[2]).powi(2)).sqrt(),
+                    ((x[0] - prev[0]).ipow(2) + (x[1] - prev[1]).ipow(2) + (x[2] - prev[2]).ipow(2)).sqrt(),
                 );
                 prev = x;
             }
@@ -561,7 +562,7 @@ pub fn mill_with(
                 }
                 let env = |u: f64| -> f64 {
                     let c = p(u);
-                    let d = ((x - c[0]).powi(2) + (y - c[1]).powi(2)).sqrt();
+                    let d = ((x - c[0]).ipow(2) + (y - c[1]).ipow(2)).sqrt();
                     match profile(r, corner, d) {
                         Some(g) => c[2] + g,
                         None => f64::INFINITY,
@@ -615,7 +616,7 @@ pub fn mill_with(
                 for (pi, (pr, from, _)) in tool.body.iter().enumerate().skip(1).filter(|_| reachable) {
                     let penv = |u: f64| -> f64 {
                         let c = p(u);
-                        let d = ((x - c[0]).powi(2) + (y - c[1]).powi(2)).sqrt();
+                        let d = ((x - c[0]).ipow(2) + (y - c[1]).ipow(2)).sqrt();
                         if d <= *pr { c[2] + from } else { f64::INFINITY }
                     };
                     let plow = match seg.path {

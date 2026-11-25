@@ -3,6 +3,7 @@
 
 use crate::mesh::{ALWAYS, EdgeRange, FaceRange, Lod, PartMesh, SEGMENT, VERTEX};
 use forge_geom::{CurveGeom, SurfaceGeom};
+use forge_math::ipow::Powi as _;
 use forge_math::{Point3, Vec3};
 use forge_mesh::tessellate::tessellate_tolerant;
 use forge_mesh::{Quality, TessError};
@@ -492,7 +493,7 @@ fn build_part_from(body: &Body, first: usize) -> Result<PartMesh, TessError> {
     let mut radius = 0f32;
     for at in (0..first.vertices.len()).step_by(VERTEX) {
         let p = vec3_at(&first.vertices, at);
-        radius = radius.max((0..3).map(|k| (p[k] - center[k]).powi(2)).sum::<f32>());
+        radius = radius.max((0..3).map(|k| (p[k] - center[k]).ipow(2)).sum::<f32>());
     }
     let radius = radius.sqrt();
     loop {
@@ -547,7 +548,7 @@ pub fn tube_part(m: &forge_harness::wires::TubeMesh) -> PartMesh {
             [p.x, p.y, p.z]
                 .iter()
                 .enumerate()
-                .map(|(k, v)| (*v as f32 - center[k]).powi(2))
+                .map(|(k, v)| (*v as f32 - center[k]).ipow(2))
                 .sum::<f32>()
         })
         .fold(0.0f32, f32::max)
@@ -595,7 +596,7 @@ mod tests {
                         vec3_at(&l.segments, k as usize * SEGMENT),
                         vec3_at(&l.segments, k as usize * SEGMENT + 16),
                     );
-                    ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)).sqrt()
+                    ((a[0] - b[0]).ipow(2) + (a[1] - b[1]).ipow(2) + (a[2] - b[2]).ipow(2)).sqrt()
                 })
                 .sum::<f32>()
         };

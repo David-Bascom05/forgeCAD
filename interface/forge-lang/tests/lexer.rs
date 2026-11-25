@@ -6,6 +6,7 @@ use forge_lang::edit::{apply, apply_ast};
 use forge_lang::error::{Error, Literal, Op, ParamKey, parse_path};
 use forge_lang::syntax::{self, Tok, TokKind, TriviaKind, Unit};
 use forge_lang::values::{self, Dim};
+use forge_math::ipow::Powi as _;
 
 struct Rng(u64);
 
@@ -184,7 +185,7 @@ fn values(rng: &mut Rng) -> Vec<f64> {
         let mant = (rng.next() >> 11) as f64 / (1u64 << 53) as f64;
         let exp = rng.below(40) as i32 - 20;
         let sign = if rng.below(2) == 0 { 1.0 } else { -1.0 };
-        v.push(sign * mant * 10f64.powi(exp));
+        v.push(sign * mant * 10f64.ipow(exp));
         v.push(sign * rng.below(100000) as f64);
         v.push(sign * rng.below(100000) as f64 / 8.0);
     }

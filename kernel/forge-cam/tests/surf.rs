@@ -6,6 +6,7 @@ use forge_cam::surf::{self, Surfacer, ZMap};
 use forge_cam_geom::check::{Face, Surf, TSeg, Trim};
 use forge_cam_geom::drop::Column;
 use forge_cam_geom::ival::Ival;
+use forge_math::ipow::Powi as _;
 use forge_tooling::Library;
 
 pub fn dome() -> Vec<Face> {
@@ -208,7 +209,7 @@ fn zlevel_roughing_certifies_and_the_map_holds_the_stock() {
                         (((x - a[0]) * dx + (y - a[1]) * dy) / dd).clamp(0.0, 1.0)
                     };
                     let q = [a[0] + s * dx, a[1] + s * dy, a[2] + s * (b[2] - a[2])];
-                    let rho = ((x - q[0]).powi(2) + (y - q[1]).powi(2)).sqrt();
+                    let rho = ((x - q[0]).ipow(2) + (y - q[1]).ipow(2)).sqrt();
                     if rho <= col.r {
                         reach = reach.min(q[2] + col.b_at(rho).hi);
                     }

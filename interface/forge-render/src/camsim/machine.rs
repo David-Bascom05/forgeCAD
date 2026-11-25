@@ -16,6 +16,7 @@ use forge_machine::def::Prim;
 use forge_machine::kin::{self, Rigid};
 use forge_machine::sim::{Happening, Path, SegKind, Violation};
 use forge_math::dmath;
+use forge_math::ipow::Powi as _;
 
 /// A setup's program on its machine, as the simulation plays it.
 pub struct MachineView {
@@ -41,7 +42,7 @@ fn circle3(p: [f64; 3], q: [f64; 3], r: [f64; 3]) -> Option<([f64; 2], f64)> {
     let (a2, b2, c2) = (ax * ax + ay * ay, bx * bx + by * by, cx * cx + cy * cy);
     let ux = (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d;
     let uy = (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d;
-    Some(([ux, uy], ((ax - ux).powi(2) + (ay - uy).powi(2)).sqrt()))
+    Some(([ux, uy], ((ax - ux).ipow(2) + (ay - uy).ipow(2)).sqrt()))
 }
 
 impl MachineView {
@@ -104,7 +105,7 @@ impl MachineView {
                     } else {
                         circle3(p[2], p[4], p[6])?.0
                     };
-                    let rad = |q: [f64; 3]| ((q[0] - c[0]).powi(2) + (q[1] - c[1]).powi(2)).sqrt();
+                    let rad = |q: [f64; 3]| ((q[0] - c[0]).ipow(2) + (q[1] - c[1]).ipow(2)).sqrt();
                     let r = rad(p[0]);
                     let dr = rad(p[8]) - r;
                     let ang = |q: [f64; 3]| dmath::atan2(q[1] - c[1], q[0] - c[0]);
@@ -134,7 +135,7 @@ impl MachineView {
                 SegKind::Feed | SegKind::Arc => Kind::Cut,
             };
             let len = match arc {
-                Some(ar) => ((ar.r * ar.sweep).powi(2) + d[2].powi(2)).sqrt(),
+                Some(ar) => ((ar.r * ar.sweep).ipow(2) + d[2].ipow(2)).sqrt(),
                 None => (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt(),
             };
             let dt = s.t_stop.max(s.t_min);

@@ -1438,7 +1438,10 @@ mod tests {
                 1 => ((r >> 8) % 7) as f64 - 3.0,
                 _ => {
                     let m = (r >> 11) as f64 / (1u64 << 53) as f64 * 2.0 - 1.0;
-                    m * 2f64.powi((r % 200) as i32 - 100)
+                    // a power of two: exact folded or not (forge-num is below forge-math's ipow)
+                    #[allow(clippy::disallowed_methods)]
+                    let p = 2f64.powi((r % 200) as i32 - 100);
+                    m * p
                 }
             };
             Dy::from_f64(x)

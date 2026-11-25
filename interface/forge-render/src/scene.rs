@@ -1,6 +1,7 @@
 //! A plain list of placed parts, and what of it a frame draws: frustum culling and level of detail.
 
 use crate::camera::View;
+use forge_math::ipow::Powi as _;
 
 /// Rows of a rigid transform: row major, translation in the last column.
 pub type Rows = [[f32; 4]; 3];
@@ -326,7 +327,7 @@ impl Scene {
     pub fn bounds(&self) -> ([f32; 3], f32) {
         if let Some((lo, hi)) = self.shown_box() {
             let c = [0, 1, 2].map(|k| (lo[k] + hi[k]) * 0.5);
-            let r = (0..3).map(|k| (hi[k] - lo[k]).powi(2)).sum::<f32>().sqrt() * 0.5;
+            let r = (0..3).map(|k| (hi[k] - lo[k]).ipow(2)).sum::<f32>().sqrt() * 0.5;
             return (c, r.max(1e-3));
         }
         let n = self.x.len().max(1) as f32;

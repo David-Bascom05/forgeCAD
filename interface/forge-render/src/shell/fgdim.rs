@@ -13,6 +13,7 @@ use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 use forge_lang::error::{Literal, Op, ParamKey, Scope};
 use forge_lang::syntax::Seg;
 use forge_lang::values::Dim;
+use forge_math::ipow::Powi as _;
 
 /// How long the arrow's drawn, in points.
 const ARROW_PT: f32 = 64.0;
@@ -105,7 +106,7 @@ pub fn along_axis(c: &Camera, size: (u32, u32), px: (f32, f32), at: [f64; 3], di
 /// Drags land on tidy values, as fine as a pixel can tell. The value is written into the part, so
 /// its step is the same on every platform: the decimal exponent, not libm's `log10`.
 pub fn tidy(v: f64, mm_per_px: f64) -> f64 {
-    let step = 10f64.powi(forge_lang::units::decimal_exponent_ceil(mm_per_px.max(1e-6)));
+    let step = 10f64.ipow(forge_lang::units::decimal_exponent_ceil(mm_per_px.max(1e-6)));
     (v / step).round() * step
 }
 

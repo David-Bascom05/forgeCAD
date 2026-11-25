@@ -5,6 +5,7 @@
 use super::Gui;
 use crate::render::{Entity, FaceColour};
 use crate::shell::fg::{FgPanel, Severity, Status};
+use forge_math::ipow::Powi as _;
 
 /// A warning's tint over a face (straight alpha), and an error's.
 const AMBER: [u8; 4] = [0xE0, 0xA0, 0x30, 120];
@@ -64,7 +65,7 @@ pub(super) fn straight(mesh: Option<&crate::mesh::PartMesh>, k: u32) -> bool {
             let p = [f(seg, o), f(seg, o + 4), f(seg, o + 8)];
             let w = [p[0] - a[0], p[1] - a[1], p[2] - a[2]];
             let t = (w[0] * d[0] + w[1] * d[1] + w[2] * d[2]) / len2;
-            let off: f32 = (0..3).map(|j| (w[j] - t * d[j]).powi(2)).sum();
+            let off: f32 = (0..3).map(|j| (w[j] - t * d[j]).ipow(2)).sum();
             off < 1e-6 * len2.max(1.0)
         })
     })
