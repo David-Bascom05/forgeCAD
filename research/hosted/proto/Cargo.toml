@@ -1,0 +1,21 @@
+# Throwaway measurement prototype for research/hosted/DESIGN.md. Not product code; its own
+# workspace so the product's workspace, lockfile and speed gate are untouched.
+[package]
+name = "hosted-proto"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+forge-lang = { path = "../../../interface/forge-lang" }
+forge-topo = { path = "../../../kernel/forge-topo" }
+forge-mesh = { path = "../../../kernel/forge-mesh" }
+forge-math = { path = "../../../kernel/forge-math" }
+forge-history = { path = "../../../interface/forge-history" }
+
+[profile.wasm]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
