@@ -82,14 +82,48 @@ jobs:
             ${{ runner.temp }}/forge-preverify-logs/
           if-no-files-found: ignore
 
+  geometry-reference:
+    name: geometry reference / ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+      FORGECAD_CACHE: "off"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Verify new reference hashes on this platform
+        shell: bash
+        run: |
+          if git diff --quiet "$BASE_SHA" HEAD -- tools/speed/bits.txt; then
+            echo 'The committed reference did not change.'
+            exit 0
+          fi
+          cargo build --release --locked -p forge-model --example bits
+          cargo build --release --locked -p forge-lang --example benchparts
+          {
+            target/release/examples/bits
+            FORGE_BENCH_PARTS="$PWD/interface/forge-lang/parts/bench" \
+              target/release/examples/benchparts bits
+          } > "$RUNNER_TEMP/geometry-bits.txt"
+          diff -u tools/speed/bits.txt "$RUNNER_TEMP/geometry-bits.txt"
+
   required:
     name: train gates / required
     runs-on: ubuntu-24.04
-    needs: preverify
+    needs: [preverify, geometry-reference]
     if: always()
     timeout-minutes: 5
     steps:
       - name: Require every pre-verify job to pass
         env:
-          RESULT: ${{ needs.preverify.result }}
-        run: test "$RESULT" = success
+          PREVERIFY_RESULT: ${{ needs.preverify.result }}
+          REFERENCE_RESULT: ${{ needs.geometry-reference.result }}
+        run: test "$PREVERIFY_RESULT" = success && test "$REFERENCE_RESULT" = success

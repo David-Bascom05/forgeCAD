@@ -18,7 +18,8 @@ $PREVERIFY_CACHE, else the conservative selection):
 Writes $PREVERIFY_CACHE/record-<branch sha>.json and prints the line to send the train conductor.
 PREVERIFY_CACHE defaults to ~/.cache/forge-preverify. JOBS (tests) defaults to 3.
 """
-import argparse, json, os, re, shutil, subprocess, sys, tempfile, time
+import argparse, difflib, json, os, re, shutil, subprocess, sys, tempfile, time
+from pathlib import Path
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--base", default="origin/main")
@@ -438,25 +439,30 @@ if wasm:
 
 
 def gate_counts(rev, out):
-    """gate.sh at REV in a scratch worktree; its count table to OUT; True if its bits hold."""
+    """Measure a revision, leaving the committed files untouched outside a scratch worktree."""
     wt = tempfile.mkdtemp(prefix="pv-gate.")
     subprocess.run(["git", "worktree", "add", "-q", "--detach", wt, rev], check=True)
     try:
-        r = subprocess.run(["sh", "tools/speed/gate.sh"], cwd=wt, capture_output=True, text=True,
+        speed = Path(wt) / "tools/speed"
+        reference = (speed / "bits.txt").read_text()
+        count_path = speed / "baseline-valgrind.txt"
+        # Clearing the scratch copies makes it impossible to mistake old output for a new run.
+        (speed / "bits.txt").write_text("")
+        count_path.write_text("")
+        r = subprocess.run(["sh", "tools/speed/gate.sh", "--save"], cwd=wt, capture_output=True, text=True,
                            env=dict(os.environ, GATE_COUNTER="callgrind", GATE_JOBS=gjobs,
                                     GATE_MEMO=memo, CARGO_TARGET_DIR=os.path.join(cache, "gate-target")))
-        rows = [l.split()[:3] for l in r.stdout.splitlines()
-                if len(l.split()) >= 4 and l.split()[3] == "base"]
-        with open(out, "w") as fh:
-            fh.writelines(f"{k} {m} {n}\n" for k, m, n in rows)
-        # Exit 1 alone is a comparison with the checked-in reference counts. The paired
-        # comparison below uses fresh counts from this runner for both revisions.
-        valid = r.returncode in (0, 1) and "bits: identical" in r.stdout.splitlines()
-        keys = {(k, m) for k, m, _ in rows}
-        valid &= bool(keys) and len(keys) == len(rows) and all(
-            n.isascii() and n.isdecimal() and int(n) > 0 for _, _, n in rows
+        counts = count_path.read_text() if count_path.is_file() else ""
+        bits_path = speed / "bits.txt"
+        bits = bits_path.read_text() if bits_path.is_file() else ""
+        Path(out).write_text(counts)
+        rows = [line.split() for line in counts.splitlines()]
+        keys = {tuple(row[:2]) for row in rows}
+        valid = r.returncode == 0 and bool(rows) and len(keys) == len(rows) and all(
+            len(row) == 3 and row[2].isascii() and row[2].isdecimal() and int(row[2]) > 0
+            for row in rows
         )
-        return valid, keys, r.stdout + r.stderr
+        return valid, keys, reference, bits, r.stdout + r.stderr
     finally:
         subprocess.run(["git", "worktree", "remove", "--force", wt])
 
@@ -464,17 +470,38 @@ def gate_counts(rev, out):
 if (sel["gate"] or a.always_gate) and (not only or "gate" in only):
     t = time.time()
     mo, bo = os.path.join(log_dir, "gate-main.txt"), os.path.join(log_dir, "gate-branch.txt")
-    base_ok, base_keys, main_out = gate_counts(base, mo)
-    candidate_ok, candidate_keys, br_out = gate_counts(head, bo)
-    band = subprocess.run([sys.executable, "tools/speed/band.py", mo, bo], capture_output=True,
-                          text=True)
+    base_ok, base_keys, base_reference, base_bits, main_out = gate_counts(base, mo)
+    candidate_ok, candidate_keys, candidate_reference, candidate_bits, br_out = gate_counts(head, bo)
+    Path(log_dir, "gate-main-bits.txt").write_text(base_bits)
+    Path(log_dir, "gate-branch-bits.txt").write_text(candidate_bits)
     log = os.path.join(log_dir, "gate.log")
+    # A reference-only repair can land if both builds produce exactly the candidate's new pin.
+    # Any actual geometry change still needs valid independent pins on both revisions.
+    candidate_pinned = bool(candidate_bits) and candidate_bits == candidate_reference
+    repairs_base_pin = candidate_pinned and base_bits == candidate_bits and base_bits != base_reference
+    base_pinned = bool(base_bits) and (base_bits == base_reference or repairs_base_pin)
+    comparable = base_ok and candidate_ok and base_keys == candidate_keys
     with open(log, "w") as fh:
-        fh.write(main_out + "\n----\n" + br_out + "\n----\n" + band.stdout + band.stderr)
-        if base_keys != candidate_keys:
-            fh.write(f"\nMissing counts: {sorted(base_keys - candidate_keys)}"
-                     f"\nUnpaired counts: {sorted(candidate_keys - base_keys)}\n")
-    ok = base_ok and candidate_ok and base_keys == candidate_keys and band.returncode == 0
+        fh.write(main_out + "\n----\n" + br_out + "\n----\n")
+        if comparable:
+            band = subprocess.run([sys.executable, "tools/speed/band.py", mo, bo], stdout=fh,
+                                  stderr=subprocess.STDOUT)
+            comparable = band.returncode == 0
+        else:
+            fh.write(f"Invalid or incompatible counts (base={base_ok}, candidate={candidate_ok})."
+                     f"\nMissing: {sorted(base_keys - candidate_keys)}"
+                     f"\nUnpaired: {sorted(candidate_keys - base_keys)}\n")
+        if repairs_base_pin:
+            fh.write("The candidate repairs the stale base reference. Both builds produced identical bits.\n")
+        for name, reference, bits in (("base", base_reference, base_bits),
+                                      ("candidate", candidate_reference, candidate_bits)):
+            if reference != bits:
+                fh.writelines(difflib.unified_diff(reference.splitlines(keepends=True),
+                                                   bits.splitlines(keepends=True),
+                                                   fromfile=f"{name} reference", tofile=f"{name} measured"))
+    ok = comparable and base_pinned and candidate_pinned
+    if not ok:
+        print(Path(log).read_text(), end="", flush=True)
     record["steps"]["gate"] = {"ok": ok, "seconds": round(time.time() - t), "log": log}
     print(f"pre-verify gate    {'ok  ' if ok else 'FAIL'} {round(time.time() - t):5d}s  {log}")
 ok = all(
