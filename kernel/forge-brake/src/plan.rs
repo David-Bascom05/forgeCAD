@@ -1337,7 +1337,17 @@ pub fn simulate(m: &Model, tl: &Tooling, seq: &[usize], opts: &Options) -> Plan 
         }
         // a setup the program states: simulated as stated
         if let Some(Some(setup)) = opts.setups.as_ref().and_then(|v| v.get(i)) {
-            let full = s.run(&done, j, *setup, false);
+            // an offset pair stated: the bend and its partner in one stroke
+            let offset = matches!(tl.punches[setup.punch].role, crate::tooling::Role::Offset { .. })
+                .then(|| s.partner(&done, j))
+                .flatten();
+            let full = match offset {
+                Some(k) => {
+                    s.explored += 1;
+                    s.sim_offset(&done, j, k, *setup, false)
+                }
+                None => s.run(&done, j, *setup, false),
+            };
             if !full.pass() {
                 feasible = false;
                 blocking.push(Blocking {
@@ -1370,9 +1380,9 @@ pub fn simulate(m: &Model, tl: &Tooling, seq: &[usize], opts: &Options) -> Plan 
                     attempt: Box::new(full.clone()),
                 });
             }
+            full.mark(&mut done);
             steps.push(full);
             steps.extend(flat);
-            done[j] = true;
             continue;
         }
         let prev = steps.last().map(|st: &Step| st.setup);

@@ -1157,3 +1157,41 @@ far = flange(web.tip, height: 30, side: \"down\")\n";
         .collect();
     assert!(strokes.iter().all(|s| s == "bend"), "{strokes:?}");
 }
+
+/// examples/sheetmetal/hem_joggle.fg, the special tooling its header names on three stations:
+/// the joggle in one offset stroke, the hem pre-bent then flattened, each at its own station
+/// (offset, acute, flattening), the layout passing.
+#[test]
+fn the_hem_and_joggle_example_runs_on_three_stations() {
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/sheetmetal/hem_joggle.fg"
+    ))
+    .unwrap();
+    let line = src
+        .lines()
+        .find_map(|l| l.trim_start_matches('#').trim().strip_prefix("bendsim "))
+        .expect("the header names the words");
+    let words: Vec<String> = line.split_whitespace().map(String::from).collect();
+    let ask = forge_lang::bendsim::parse(&words).unwrap();
+    let a = ask_src(&src, None, None, &ask);
+    assert!(a.ok, "{}", a.text);
+    assert_eq!(a.json.get("feasible"), Some(&Json::Bool(true)), "{}", a.text);
+    let steps = arr(&a.json, "steps");
+    let strokes: Vec<&str> = steps
+        .iter()
+        .filter_map(|s| s.get("stroke").and_then(Json::str))
+        .collect();
+    assert_eq!(strokes, ["offset", "pre-bend", "flatten"], "{}", a.text);
+    let st = a.json.get("stage").expect("stage");
+    assert_eq!(st.get("ok"), Some(&Json::Bool(true)), "{st}");
+    let stations = arr(st, "stations");
+    assert_eq!(stations.len(), 3, "{st}");
+    let punches: Vec<&str> = stations
+        .iter()
+        .filter_map(|s| s.get("punch").and_then(Json::str))
+        .collect();
+    for p in ["wila/HU-001+INZU-002-Z6", "trumpf/OW222-K", "wila/BIU-041"] {
+        assert!(punches.contains(&p), "{punches:?}");
+    }
+}

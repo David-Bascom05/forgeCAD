@@ -829,6 +829,38 @@ impl<'a> StepCtx<'a> {
         }
     }
 
+    /// A level stroke's (a flattening's, an offset's) side-frame point in the die's frame.
+    pub fn level<T: Sc>(&self, q: V3<T>, side: Side, phi: T) -> V3<T> {
+        let b = self.bj;
+        let p = match side {
+            Side::B => b.end_apply(phi, q),
+            Side::C => {
+                let o = self.offset.as_ref().expect("a far side only in an offset");
+                b.end_apply(phi, o.zk.apply(self.m.bends[o.k].end_apply(phi, q)))
+            }
+            _ => q,
+        };
+        self.level_of(p)
+    }
+
+    /// A level stroke's zone-j point in the die's frame.
+    fn level_of<T: Sc>(&self, p: V3<T>) -> V3<T> {
+        let b = self.bj;
+        if let Some(o) = &self.offset {
+            // level: wall a on the die's high face, its z flipped so the web goes down as the
+            // turn grows (y with it: a turn, not a mirror)
+            let x = (p.x + (-o.x_ref)) * self.rot;
+            let y = (p.y + (-0.5 * b.len)) * (-self.rot * b.sigma);
+            return V3::new(x, y, p.z * (-b.sigma) + self.off_lift());
+        }
+        let f = self.flatten.as_ref().expect("a level stroke");
+        // zone coordinates keep wall a flat at every turn: it lies on the die, its outside skin
+        // down (z flipped with sigma, and y with it, a turn, not a mirror)
+        let x = (p.x + (-f.x_ref)) * self.rot;
+        let y = (p.y + (-0.5 * b.len)) * (self.rot * b.sigma);
+        V3::new(x, y, p.z * b.sigma + self.flat_off())
+    }
+
     /// A side-frame point to the press, relative to the punch tip.
     pub fn rel<T: Sc>(&self, q: V3<T>, side: Side, phi: T) -> V3<T> {
         let b = self.bj;
@@ -840,21 +872,9 @@ impl<'a> StepCtx<'a> {
             }
             _ => q,
         };
-        if let Some(o) = &self.offset {
-            // level: wall a on the die's high face, its z flipped so the web goes down as the
-            // turn grows (y with it: a turn, not a mirror)
-            let x = (p.x + (-o.x_ref)) * self.rot;
-            let y = (p.y + (-0.5 * b.len)) * (-self.rot * b.sigma);
-            let z = p.z * (-b.sigma) + self.off_lift() - self.ztip(phi);
-            return V3::new(x, y, z);
-        }
-        if let Some(f) = &self.flatten {
-            // zone coordinates keep wall a flat at every turn: it lies on the die, its outside
-            // skin down (z flipped with sigma, and y with it, a turn, not a mirror)
-            let x = (p.x + (-f.x_ref)) * self.rot;
-            let y = (p.y + (-0.5 * b.len)) * (self.rot * b.sigma);
-            let z = p.z * b.sigma + self.flat_off() - self.ztip(phi);
-            return V3::new(x, y, z);
+        if self.offset.is_some() || self.flatten.is_some() {
+            let d = self.level_of(p);
+            return V3::new(d.x, d.y, d.z - self.ztip(phi));
         }
         let pm = b.fold(T::c(0.5 * b.ba), T::c(0.5 * b.len), T::c(b.w_inside(self.t)), phi);
         let h = phi * 0.5;
@@ -1112,6 +1132,16 @@ impl<'a> StepCtx<'a> {
             Phase::Approach => (T::c(self.phi0()), Some(q[3])),
             Phase::Return => (T::c(self.theta), Some(q[3])),
         };
+        if self.flatten.is_some() || self.offset.is_some() {
+            // a level stroke: the die's frame directly (taking the punch's height off and back
+            // on would widen an enclosure by the punch's whole travel over the cell's turns)
+            let d = self.level(self.side_point(pc, q[0], q[1], q[2], phi), pc.side, phi);
+            return match (attach, lift) {
+                (Attach::Punch, None) => V3::new(d.x, d.y, d.z - self.ztip(phi)),
+                (Attach::Punch, Some(h)) => V3::new(d.x, d.y, d.z - h),
+                (Attach::Die, _) => d,
+            };
+        }
         let r = self.rel(self.side_point(pc, q[0], q[1], q[2], phi), pc.side, phi);
         let to_die = |r: V3<T>| V3::new(r.x, r.y, r.z + self.ztip(phi));
         match (attach, lift) {
@@ -1145,11 +1175,22 @@ impl<'a> StepCtx<'a> {
             // the offset itself between the inserts' faces: its outer walls, the web and both
             // zones (the stroke's own contact; its rules are the offset's)
             let (b, bk) = (self.bj, &self.m.bends[o.k]);
-            return match pc.kind {
+            let own = match pc.kind {
                 Kind::ZoneJ { .. } | Kind::ZoneK { .. } => true,
                 Kind::Wall { w, .. } => w == b.a || w == b.b || w == bk.b,
                 _ => false,
             };
+            if own {
+                return true;
+            }
+            // the rest of the base's side resting on the die's high face (as a flattening's):
+            // a cell on or above its plane cannot enter the die there
+            if kind == Work::Die && pc.side == Side::A {
+                let q = self.side_point(pc, c.p[0], c.p[1], c.p[2], Interval::point(0.0));
+                let z = q.z * (-b.sigma) + self.off_lift();
+                return z.lo >= -FLAT_REST;
+            }
+            return false;
         }
         if self.flatten.is_some() {
             // the hem itself between the faces: the base on the die, the fold and the leg under

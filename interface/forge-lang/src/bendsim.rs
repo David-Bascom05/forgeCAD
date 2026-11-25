@@ -2165,7 +2165,11 @@ fn answer(sh: &SheetOut, m: &fb::Model, tl: &fb::Tooling, plan: &fb::Plan, names
             text.push_str(&format!(
                 "  {}. {} {:.1} deg (+{:.1}): {} on {}, {}{}{}\n",
                 i + 1,
-                names[st.bend],
+                match st.stroke {
+                    fb::Stroke::Air => names[st.bend].clone(),
+                    fb::Stroke::Offset { k } => format!("{} + {} offset", names[st.bend], names[k]),
+                    s => format!("{} {}", names[st.bend], s.word()),
+                },
                 st.angle.to_degrees(),
                 st.overbend.to_degrees(),
                 st.punch,
