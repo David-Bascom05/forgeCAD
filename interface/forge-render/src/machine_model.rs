@@ -49,7 +49,7 @@ pub fn read(name: &str, bytes: &[u8]) -> Result<Tris, String> {
             let (meshes, failed) = match cached::load(key) {
                 Some(m) => m,
                 None => {
-                    let imp = forge_step::import(bytes, &forge_step::Limits::default())
+                    let imp = forge_step::import_drawn(bytes, &forge_step::Limits::default())
                         .map_err(|_| format!("{name}: not a model this reads"))?;
                     let mut meshes = Vec::new();
                     let mut failed = 0;

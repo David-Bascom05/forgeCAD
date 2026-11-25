@@ -122,12 +122,14 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
     let (mut t, mut e) = ([0.0; NF], [0.0; NF]);
     let mut faces = Vec::new();
     let mut loosest = (FaceId(0), 0.0f64);
-    // each face's integrals on all cores, summed in face order: the same sums as one by one, under
-    // a budget too (`budget::map_until`: as face by face spends it, to the first face that fails,
-    // where the sum below stops); for a few faces (not worth the threads) one by one
+    // each face's integrals on all cores, summed in face order: the same sums as one by one; under
+    // a budget too, as face by face spends it to the first face that fails, where the sum below
+    // stops (`budget::map_until`); for a few faces (not worth the threads) one by one
     let ids: Vec<FaceId> = body.face_ids().collect();
     let one = |k: usize| face_integrals(body, ids[k], c, size, rel);
-    let each: Box<dyn Iterator<Item = _>> = if ids.len() >= 8 {
+    let each: Box<dyn Iterator<Item = _>> = if !forge_geom::budget::limited() && ids.len() >= 8 {
+        Box::new(forge_math::par::map(ids.len(), one).into_iter())
+    } else if ids.len() >= 8 {
         Box::new(forge_geom::budget::map_until(ids.len(), one, Result::is_err).into_iter())
     } else {
         Box::new((0..ids.len()).map(one))

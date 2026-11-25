@@ -22,7 +22,8 @@ pub struct Solid {
     /// The body's integrals as the read worked them out to check it (to 1e-6), where it could.
     pub mass: Option<forge_topo::mass::MassProps>,
     /// The body drawn as [`Solid::display_mesh`] draws it, where the read's own check drew
-    /// exactly that (the same bits): kept, so it is not drawn twice.
+    /// exactly that (the same bits), so it is not drawn twice; with [`import_drawn`], wherever
+    /// it can be drawn.
     pub mesh: Option<forge_mesh::TriMesh>,
 }
 
@@ -1740,16 +1741,42 @@ pub fn import(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
     if crate::iges::is_iges(text) {
         return crate::iges::import(text, lim);
     }
-    read_file(text, lim, false)
+    read_file(text, lim, false, false)
+}
+
+/// [`import`], and every solid drawn for display ([`Solid::display_mesh`], kept in
+/// [`Solid::mesh`] wherever it can be drawn): for a viewer, which draws every solid. The same
+/// read; each drawing is made as `display_mesh` makes it, on all cores beside the read.
+pub fn import_drawn(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
+    let mut imp = if crate::brep::is_brep(text) {
+        crate::brep::import(text, lim)?
+    } else if crate::iges::is_iges(text) {
+        crate::iges::import(text, lim)?
+    } else {
+        read_file(text, lim, false, true)?
+    };
+    // what the read did not draw (no other format draws beside its read)
+    let missing: Vec<usize> = (0..imp.solids.len())
+        .filter(|&k| imp.solids[k].mesh.is_none())
+        .collect();
+    let drawn = forge_math::par::map_eager(missing.len(), |i| {
+        let s = &imp.solids[missing[i]];
+        s.display_mesh().ok().map(std::borrow::Cow::into_owned)
+    });
+    for (k, m) in missing.into_iter().zip(drawn) {
+        imp.solids[k].mesh = m;
+    }
+    Ok(imp)
 }
 
 /// The most any edge of a file lies off a face it bounds, by the same measure a read reports.
 pub(crate) fn curve_off_surface(text: &[u8], lim: &Limits) -> Result<f64, ImportError> {
-    Ok(read_file(text, lim, true)?.stats.curve_off_surface)
+    Ok(read_file(text, lim, true, false)?.stats.curve_off_surface)
 }
 
 /// `only_measure`: as far as what the file's geometry misses by, and no bodies.
-fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, ImportError> {
+/// `draw`: each solid drawn for display beside its read where the read did not ([`import_drawn`]).
+fn read_file(text: &[u8], lim: &Limits, only_measure: bool, draw: bool) -> Result<Imported, ImportError> {
     let f = parse(text, lim).map_err(ImportError::Parse)?;
     let mut stats = Stats::default();
     let mut refusals = Vec::new();
@@ -1815,7 +1842,16 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
     let done = forge_math::par::map_eager(roots.len(), |i| {
         let k = order[i];
         let (id, r) = roots[k];
-        (k, finish_root(&f, id, r, take(k), lim, only_measure))
+        let mut out = finish_root(&f, id, r, take(k), lim, only_measure);
+        // drawn here, on this solid's thread (after its read: no budget lives, so the drawing
+        // takes its own, as `display_mesh` does anywhere)
+        if draw
+            && let Some(Ok(s)) = &mut out.got
+            && s.mesh.is_none()
+        {
+            s.mesh = s.display_mesh().ok().map(std::borrow::Cow::into_owned);
+        }
+        (k, out)
     });
     let mut outs: Vec<Option<RootOut>> = (0..roots.len()).map(|_| None).collect();
     for (k, out) in done {

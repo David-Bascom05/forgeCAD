@@ -11,7 +11,7 @@ fn main() {
         let t0 = Instant::now();
         let text = std::fs::read(&path).expect("read");
         let t1 = Instant::now();
-        let imp = forge_step::import(&text, &forge_step::Limits::default()).expect("a model");
+        let imp = forge_step::import_drawn(&text, &forge_step::Limits::default()).expect("a model");
         let t2 = Instant::now();
         let (mut tris, mut kept, mut failed) = (0, 0, 0);
         for s in &imp.solids {

@@ -53,7 +53,12 @@ fn main() {
         }
         let text = std::fs::read(&path).expect("read");
         let t = Instant::now();
-        let imp = forge_step::import(&text, &forge_step::Limits::default());
+        // `STEPDIGEST_DRAWN`: read as a viewer reads it (`import_drawn`), its drawings kept
+        let imp = if std::env::var_os("STEPDIGEST_DRAWN").is_some() {
+            forge_step::import_drawn(&text, &forge_step::Limits::default())
+        } else {
+            forge_step::import(&text, &forge_step::Limits::default())
+        };
         let read_s = t.elapsed().as_secs_f64();
         let imp = match imp {
             Ok(i) => i,

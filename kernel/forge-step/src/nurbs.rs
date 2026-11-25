@@ -615,7 +615,8 @@ impl Procedural for Nurbs {
         self.eval(uv, 0).p
     }
     fn normal(&self, uv: Point2) -> Option<UnitVec3> {
-        let d = self.eval_all(uv);
+        // (asked of every point a loop is drawn through, `Surface::singular`: no second derivatives)
+        let d = self.eval(uv, 1);
         if self.on_pole(d.p) {
             return None;
         }
@@ -654,7 +655,7 @@ impl Procedural for Nurbs {
             Some((at, d2)) if d2 <= 1e-8 => (at, d2),
             _ => self.nearest(p),
         };
-        let q = self.eval_all(at);
+        let q = self.eval(at, 1);
         let n = q.du.cross(q.dv);
         let side = n.dot(p - q.p);
         let d = d2.sqrt();
@@ -708,7 +709,7 @@ impl Procedural for Nurbs {
     }
     fn implicit(&self, p: Point3) -> f64 {
         let (uv, d2) = self.nearest(p);
-        let q = self.eval_all(uv);
+        let q = self.eval(uv, 1);
         let n = q.du.cross(q.dv);
         let side = n.dot(p - q.p);
         let d = d2.sqrt();
@@ -716,7 +717,7 @@ impl Procedural for Nurbs {
     }
     fn gradient(&self, p: Point3) -> Vec3 {
         let (uv, _) = self.nearest(p);
-        let q = self.eval_all(uv);
+        let q = self.eval(uv, 1);
         let n = q.du.cross(q.dv);
         n.normalize().map_or(Vec3::ZERO, Vec3::from)
     }
