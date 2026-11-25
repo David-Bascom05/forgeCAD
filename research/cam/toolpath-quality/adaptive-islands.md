@@ -14,11 +14,11 @@ hops on, by the speed each block runs at (cutting feed against the link feed of 
 | cutting | 9.4 m, 541 s planned | 8.4 m, 642 s |
 | links at the link feed | 843 blocks, 8.6 m: 52 s at full feed, 168 s planned | 38 blocks, 4 s |
 | rapids | 204, 57 s | 6, 4 s |
-| whole op | 857 s | 694 s |
+| whole op | 857 s | 693 s |
 
 Adaptive cuts in about 100 s less than clear and loses about 225 s on links and rapids. The
 links are short (10 mm mean) and never reach the link feed at this acceleration. At first-set
-feed (t_min) the two ops are equal (666 s against 679 s).
+feed (t_min) the two ops are equal (666 s against 678 s).
 
 The short blocks counted in the earlier micro-move work (11-27 s lost, the "crescent fans" at
 the pass ends) are a small part of this.
