@@ -86,11 +86,22 @@ fn asm_groups(s: &Shell) -> Option<Vec<Group>> {
                         s.content.open,
                     ),
                 ],
-                vec![
-                    fg("Pattern", "rect", FgCmd::Pattern, up("pattern")),
-                    fg("Mirror", "mirror", FgCmd::Mirror, up("mirror")),
-                    fg("Copy", "subasm", FgCmd::Copy, up("copy")),
-                ],
+                {
+                    // these act on a chosen top-level part: off until there is one, saying so
+                    // (one already open stays on, to close it)
+                    let top = a.is_some_and(super::asmtools::top_chosen);
+                    let chosen = |name, icon, c: FgCmd, on: bool| Tool {
+                        name,
+                        icon,
+                        action: a.filter(|_| top || on).map(|_| Action::Fg(c)),
+                        on,
+                    };
+                    vec![
+                        chosen("Pattern", "rect", FgCmd::Pattern, up("pattern")),
+                        chosen("Mirror", "mirror", FgCmd::Mirror, up("mirror")),
+                        chosen("Copy", "subasm", FgCmd::Copy, up("copy")),
+                    ]
+                },
             ),
             g(
                 "Position",
@@ -632,6 +643,21 @@ impl Shell {
             .collect()
     }
 
+    /// The same with whether each is live (drawn on: an action, and a document where it needs
+    /// one): the UI audit's registry of what there is to click (tests/ui_audit).
+    pub fn ribbon_live(&self) -> Vec<(&'static str, &'static str, bool)> {
+        groups(self)
+            .iter()
+            .flat_map(|g| {
+                g.big
+                    .iter()
+                    .chain(&g.small)
+                    .chain(&g.icons)
+                    .map(move |x| (g.name, x.name, x.action.is_some() && !self.needs_document(x)))
+            })
+            .collect()
+    }
+
     pub(super) fn ribbon(&mut self, ui: &mut Ui, w: f32) {
         let t = self.theme;
         let y = TITLE_H + TABS_H;
@@ -886,6 +912,7 @@ impl Shell {
         let mw = tools.iter().map(|x| small_width(ui, std::slice::from_ref(x))).fold(160.0, f32::max);
         let at = pos2(r.left(), r.bottom() + 4.0);
         let before = self.out.len();
+        let (placed, mut sizing) = (self.places.len(), false);
         let menu = egui::Area::new(id.with("menu"))
             .fixed_pos(at)
             .order(egui::Order::Foreground)
@@ -897,12 +924,17 @@ impl Shell {
                     .corner_radius(6.0)
                     .inner_margin(4.0)
                     .show(ui, |ui| {
+                        sizing = ui.is_sizing_pass();
                         let (area, _) = ui.allocate_exact_size(vec2(mw, rows * SMALL_H), Sense::hover());
                         for (k, tool) in tools.iter().enumerate() {
                             self.small_button(ui, tool, area.left(), area.top() + k as f32 * SMALL_H, mw);
                         }
                     });
             });
+        // egui's first, invisible frame of a new menu lays it out elsewhere: no places from it
+        if sizing {
+            self.places.truncate(placed);
+        }
         // a tool chosen, or a press elsewhere: the menu closes
         let pressed = ui.input(|i| i.pointer.any_pressed());
         let inside = ui.input(|i| i.pointer.interact_pos()).is_some_and(|q| menu.response.rect.contains(q) || r.contains(q));

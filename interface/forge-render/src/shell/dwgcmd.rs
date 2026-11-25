@@ -990,7 +990,9 @@ impl DwgDoc {
 pub fn grid_step(scale: f64) -> f64 {
     let px = 1.0 / scale.max(1e-300);
     let want = px * 12.0;
-    let mut s = forge_math::dmath::powf(10.0, want.log10().ceil());
+    // SNAP's step when no SNAPUNIT is set: points land on it and are saved, so the same on every
+    // platform (the decimal exponent, not libm's `log10`)
+    let mut s = forge_math::dmath::powf(10.0, forge_lang::units::decimal_exponent_ceil(want) as f64);
     if s / 2.0 >= want {
         s /= 2.0;
     }

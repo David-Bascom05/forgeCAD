@@ -2,6 +2,7 @@
 //! (cited, the user's, or a stand-in), its stretch law as an Ogden table, and Fit from test data:
 //! a law fitted to a CSV of stress against stretch, plotted against the points and the law it
 //! replaces, checked for stability, and taken as the user's.
+use super::placed::Placed as _;
 use super::theme::{Theme, mono, sans, semi};
 use egui::{Align2, Color32, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
 use forge_material::{Kind, Material, Value};
@@ -347,7 +348,7 @@ fn fit_window(ctx: &egui::Context, t: &Theme, m: &Material, st: &mut FitState) {
         .frame(frame)
         .default_size(vec2(1000.0, 560.0))
         .constrain_to(super::dialog_area(ctx))
-        .show(ctx, |ui| {
+        .show_fit(ctx, |ui| {
             ui.horizontal_top(|ui| {
                 ui.vertical(|ui| {
                     ui.set_width(320.0);

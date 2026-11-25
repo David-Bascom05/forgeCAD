@@ -21,6 +21,7 @@
 //!
 //! The data is per group, in our own numbers restated from public handbook ranges; it is a
 //! starting point. Every value is marked "verify with the tool maker".
+use forge_math::ipow::Powi as _;
 use crate::toml::{Table, num, nums, text, texts};
 use crate::{Cite, LibError, cite};
 
@@ -556,9 +557,9 @@ pub struct Beam {
 pub fn tip_deflection(f: f64, beam: &Beam) -> f64 {
     let l = beam.stickout.max(0.0);
     let b = beam.lcf.clamp(0.0, l);
-    let i = |d: f64| std::f64::consts::PI * d.powi(4) / 64.0;
+    let i = |d: f64| std::f64::consts::PI * d.ipow(4) / 64.0;
     let (is, i_f) = (i(beam.dcon.max(1e-9)), i(beam.de.max(1e-9)));
-    f / (3.0 * beam.e_mpa.max(1e-9)) * ((l.powi(3) - b.powi(3)) / is + b.powi(3) / i_f)
+    f / (3.0 * beam.e_mpa.max(1e-9)) * ((l.ipow(3) - b.ipow(3)) / is + b.ipow(3) / i_f)
 }
 
 /// An op class's chip relative to the slot chip (cutting.toml `[[op_class]]`, cited): what the
@@ -1517,11 +1518,11 @@ mod tests {
             dcon: 12.0,
             e_mpa: e,
         };
-        let i10 = std::f64::consts::PI * 10f64.powi(4) / 64.0;
-        assert!((tip_deflection(500.0, &u) - 500.0 * 40f64.powi(3) / (3.0 * e * i10)).abs() < 1e-15);
+        let i10 = std::f64::consts::PI * 10f64.ipow(4) / 64.0;
+        assert!((tip_deflection(500.0, &u) - 500.0 * 40f64.ipow(3) / (3.0 * e * i10)).abs() < 1e-15);
         let stepped = Beam { lcf: 20.0, ..u };
-        let i12 = std::f64::consts::PI * 12f64.powi(4) / 64.0;
+        let i12 = std::f64::consts::PI * 12f64.ipow(4) / 64.0;
         let d = tip_deflection(500.0, &stepped);
-        assert!(d < tip_deflection(500.0, &u) && d > 500.0 * 40f64.powi(3) / (3.0 * e * i12));
+        assert!(d < tip_deflection(500.0, &u) && d > 500.0 * 40f64.ipow(3) / (3.0 * e * i12));
     }
 }

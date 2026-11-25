@@ -154,11 +154,28 @@ pub mod threads {
     }
 }
 
+/// How many times the system's file or folder picker was asked for (the UI audit counts it as a
+/// command's visible answer).
+pub static PICKERS_ASKED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Set by the headless UI audit: a picker asked for is counted, not shown, and answers nothing
+/// chosen.
+pub static NO_PICKER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(not(target_arch = "wasm32"))]
+fn no_picker() -> bool {
+    PICKERS_ASKED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    NO_PICKER.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// A file to open, by the platform's picker: natively the system's dialog; in the browser, one
 /// of the project's files (see `storage`), none while the page's own picker is still to answer.
 pub fn pick_file(title: Option<&str>, kind: &str, exts: &[&str]) -> Option<String> {
     #[cfg(not(target_arch = "wasm32"))]
     {
+        if no_picker() {
+            return None;
+        }
         let mut d = rfd::FileDialog::new().add_filter(kind, exts);
         if let Some(t) = title {
             d = d.set_title(t);
@@ -176,6 +193,9 @@ pub fn pick_file(title: Option<&str>, kind: &str, exts: &[&str]) -> Option<Strin
 pub fn pick_folder(title: &str) -> Option<String> {
     #[cfg(not(target_arch = "wasm32"))]
     {
+        if no_picker() {
+            return None;
+        }
         rfd::FileDialog::new()
             .set_title(title)
             .pick_folder()

@@ -8,6 +8,7 @@
 use forge_cam::ops::{OpPath, PMove, Phase};
 use forge_cam_lang::Cam;
 use forge_math::dmath;
+use forge_math::ipow::Powi as _;
 
 /// mm/min a rapid is timed at (forge-cam-lang's `time_s` takes the same).
 pub const RAPID: f64 = 10_000.0;
@@ -169,7 +170,7 @@ pub struct ToolChange {
 }
 
 fn dist(a: [f64; 3], b: [f64; 3]) -> f64 {
-    ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2) + (b[2] - a[2]).powi(2)).sqrt()
+    ((b[0] - a[0]).ipow(2) + (b[1] - a[1]).ipow(2) + (b[2] - a[2]).ipow(2)).sqrt()
 }
 
 /// Pushes the pieces of one path, from time `t`; returns the time after it.
@@ -200,7 +201,7 @@ pub fn push_path_at(
                t: &mut f64| {
         let len = match arc {
             None => dist(a, b),
-            Some(ar) => ((ar.r * ar.sweep).powi(2) + (b[2] - a[2]).powi(2)).sqrt(),
+            Some(ar) => ((ar.r * ar.sweep).ipow(2) + (b[2] - a[2]).ipow(2)).sqrt(),
         };
         // a rapid, or a canned cycle's retract (timed here as G0: `RAPID` exactly); a G1 at any feed,
         // however fast (a hop at the feed limit), is timed at its feed
@@ -250,7 +251,7 @@ pub fn push_path_at(
                 }
             }
             PMove::Arc { to, c, cw, f } => {
-                let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
+                let r = ((at[0] - c[0]).ipow(2) + (at[1] - c[1]).ipow(2)).sqrt();
                 let a0 = dmath::atan2(at[1] - c[1], at[0] - c[0]);
                 let mut a1 = dmath::atan2(to[1] - c[1], to[0] - c[0]);
                 let tau = std::f64::consts::TAU;
@@ -267,7 +268,7 @@ pub fn push_path_at(
                 let arc = ArcOf {
                     c,
                     r,
-                    dr: ((to[0] - c[0]).powi(2) + (to[1] - c[1]).powi(2)).sqrt() - r,
+                    dr: ((to[0] - c[0]).ipow(2) + (to[1] - c[1]).ipow(2)).sqrt() - r,
                     a0,
                     sweep: a1 - a0,
                 };

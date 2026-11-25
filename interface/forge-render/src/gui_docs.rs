@@ -47,6 +47,7 @@ per_doc!(
         pixels_per_point, warm_textures, target_px, mark_held, gpu_failed, settings_was, docs,
         active, watch, doc_later, agent, apps, markup_job, format, markup_wait, markup_occ, markup_occ_rx,
         speech, env_asked, studio, mach, window_out, photo, recording, sync_note_at,
+        audit_shapes,
     ]
 );
 

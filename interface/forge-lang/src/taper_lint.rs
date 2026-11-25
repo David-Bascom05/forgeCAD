@@ -5,6 +5,7 @@ use crate::error::{Error, Literal, Warning};
 use crate::eval::Dimension;
 use crate::syntax::Span;
 use crate::values;
+use forge_math::ipow::Powi as _;
 
 /// The lint for a tapered extrude of `profile` by `distance` at `angle` (its arguments' `dims`), if
 /// its outline closes before its depth: with the depth's param set to where it closes, or the
@@ -32,7 +33,7 @@ pub(crate) fn closes(
     // three figures, rounded towards 0 so the walls meet at the depth or past it (a lesser
     // depth, or a shallower taper): the fixed part has no lint
     let down = |x: f64| {
-        let p = 10f64.powi(2 - x.abs().log10().floor() as i32);
+        let p = 10f64.ipow(2 - crate::units::decimal_exponent(x));
         (x.abs() * p).floor() / p * x.signum()
     };
     let depth_fix = driven("depth").map(|(key, v)| {

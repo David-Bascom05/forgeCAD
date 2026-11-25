@@ -3,6 +3,7 @@
 //! Compare and Copy ID; Create Version and Release at the top; and, while comparing, what
 //! changed in features and parameters. The host fills it and does what `VersionsAct`s ask.
 
+use super::placed::Placed as _;
 use super::theme::{Theme, mono, sans, semi};
 use super::{Shell, icons};
 use egui::{Align2, Color32, Rect, Sense, Stroke, Ui, pos2, vec2};
@@ -287,13 +288,23 @@ impl Shell {
     /// The header bar: Create Version and Release, the filter, Show saves, the document picked.
     fn versions_top(&mut self, ui: &mut Ui) {
         let t = self.theme;
+        let none = self.no_document();
         ui.horizontal(|ui| {
-            let b = ui.add(primary(&t, "Create Version"));
+            // a version is of a part: none open, nothing to keep
+            let why = "No part open, so there is nothing to keep a version of";
+            let b = ui
+                .add_enabled(!none, primary(&t, "Create Version"))
+                .on_disabled_hover_text(why);
             self.places.push(("versions:create".into(), b.rect));
             if b.clicked() {
                 self.versions.dialog = Some((String::new(), String::new()));
             }
-            let b = ui.button(egui::RichText::new("Release").font(sans(12.0)));
+            let b = ui
+                .add_enabled(
+                    !none,
+                    egui::Button::new(egui::RichText::new("Release").font(sans(12.0))),
+                )
+                .on_disabled_hover_text(why);
             self.places.push(("versions:release".into(), b.rect));
             if b.clicked() {
                 self.versions.release = Some((String::new(), String::new(), false));
@@ -302,8 +313,12 @@ impl Shell {
                 let mut on = self.versions.show_saves;
                 // (UX-LEAD: what it shows, said; a bare "Saves" read as a setting)
                 let b = ui
-                    .checkbox(&mut on, egui::RichText::new("Show saves").font(sans(12.0)))
-                    .on_hover_text("List the saves between versions too");
+                    .add_enabled(
+                        !none,
+                        egui::Checkbox::new(&mut on, egui::RichText::new("Show saves").font(sans(12.0))),
+                    )
+                    .on_hover_text("List the saves between versions too")
+                    .on_disabled_hover_text("No part open, so there are no saves to list");
                 self.places.push(("versions:show-saves".into(), b.rect));
                 self.versions.show_saves = on;
             });
@@ -316,7 +331,14 @@ impl Shell {
                 (Filter::Releases, "Releases"),
             ] {
                 let on = self.versions.filter == f;
-                let b = ui.selectable_label(on, egui::RichText::new(word).font(sans(12.0)));
+                // "This part" with no part open has nothing to be about
+                let off = f == Filter::Part && self.no_document();
+                let b = ui
+                    .add_enabled(
+                        !off,
+                        egui::Button::selectable(on, egui::RichText::new(word).font(sans(12.0))),
+                    )
+                    .on_disabled_hover_text("No part open. Project lists the folder's versions");
                 self.places.push((format!("versions:filter:{word}"), b.rect));
                 if b.clicked() && !on {
                     self.versions.filter = f;
@@ -528,7 +550,10 @@ impl Shell {
         }
         if rows == 0 {
             ui.add_space(6.0);
-            let word = if nodes.is_empty() {
+            // no part open, "This part" has nothing to be about: say so, and where else to look
+            let word = if self.no_document() && self.versions.filter == Filter::Part {
+                "No part open. Open one to see its versions, or choose Project."
+            } else if nodes.is_empty() {
                 "No saves yet."
             } else {
                 "No named versions yet."
@@ -777,11 +802,24 @@ impl Shell {
                 .order(egui::Order::Foreground)
                 .default_pos(area.center() - vec2(180.0, 90.0))
                 .constrain_to(area)
-                .show(ctx, |ui| {
+                .show_fit(ctx, |ui| {
                     ui.label(egui::RichText::new("Name").font(sans(12.0)));
+                    let next = format!(
+                        "v{}",
+                        self.versions
+                            .nodes
+                            .iter()
+                            .filter_map(|n| n.n)
+                            .max()
+                            .map_or(1, |m| m + 1)
+                    );
+                    let id = egui::Id::unique("versions-create-name");
+                    super::dialog::focus_on_open(ui.ctx(), "versions-create", id, &name);
                     let r = ui.add(
                         egui::TextEdit::singleline(&mut name)
-                            .hint_text("v1")
+                            .id(id)
+                            // left empty, it's named as the next version (forge-history)
+                            .hint_text(next)
                             .desired_width(320.0),
                     );
                     self.places.push(("versions:dialog:name".into(), r.rect));
@@ -828,12 +866,15 @@ impl Shell {
                 .order(egui::Order::Foreground)
                 .default_pos(area.center() - vec2(180.0, 100.0))
                 .constrain_to(area)
-                .show(ctx, |ui| {
+                .show_fit(ctx, |ui| {
                     let what = self.versions.doc.as_ref().map_or(String::new(), |d| d.0.clone());
                     ui.label(egui::RichText::new(what).font(mono(12.0)));
                     ui.label(egui::RichText::new("Reason").font(sans(12.0)));
+                    let id = egui::Id::unique("versions-release-reason");
+                    super::dialog::focus_on_open(ui.ctx(), "versions-release", id, &reason);
                     let r = ui.add(
                         egui::TextEdit::multiline(&mut reason)
+                            .id(id)
                             .desired_rows(2)
                             .desired_width(320.0),
                     );

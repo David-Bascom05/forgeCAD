@@ -113,6 +113,23 @@ pub fn region(
     g: f64,
     tol: f64,
 ) -> Mask {
+    region_in(cur, p_cur, refc, p_ref, g, tol, None)
+}
+
+/// `region`, kept also to where the stock as the earlier ops left it (`stock(x, y)`: its top at
+/// the grid node (x, y), as a model swept by their paths makes it) stands more than `tol` above
+/// what the current tool leaves: material the earlier tools left in fact, not only in
+/// principle. A choice of where to cut, like the envelopes: never for safety.
+#[allow(clippy::too_many_arguments)]
+pub fn region_in(
+    cur: &dyn DropCutter,
+    p_cur: &dyn Profile,
+    refc: &dyn DropCutter,
+    p_ref: &dyn Profile,
+    g: f64,
+    tol: f64,
+    stock: Option<&dyn Fn(f64, f64) -> f64>,
+) -> Mask {
     let r_cur = p_cur.radius();
     let [lo, hi] = cur.extent();
     let nx = (((hi[0] - lo[0]) / g).ceil() as usize) + 1;
@@ -127,7 +144,11 @@ pub fn region(
         let x = lo[0] + g * (k % nx) as f64;
         let y = lo[1] + g * (k / nx) as f64;
         let foot = x >= lo[0] + r_cur && x <= hi[0] - r_cur && y >= lo[1] + r_cur && y <= hi[1] - r_cur;
-        on[k] = foot && s_cur[k].is_finite() && s_ref[k].is_finite() && s_ref[k] - s_cur[k] > tol;
+        on[k] = foot
+            && s_cur[k].is_finite()
+            && s_ref[k].is_finite()
+            && s_ref[k] - s_cur[k] > tol
+            && stock.is_none_or(|st| st(x, y) - s_cur[k] > tol);
         k += 1;
     }
     Mask {
@@ -162,6 +183,21 @@ pub fn rest(
         }
     }
     Ok(c.clip(ps, None))
+}
+
+/// Each pass in order cut down to its run from the first to the last of its segments that
+/// `meets` (does the tool, from a to b, meet material?), a pass that meets none dropped: the
+/// draped points themselves, so each kept segment is one the pass had. `meets` is asked of
+/// every segment of every pass in turn (a model of the stock may take each as cut).
+pub fn trim(ps: Vec<Pass>, meets: &mut dyn FnMut([f64; 3], [f64; 3]) -> bool) -> Vec<Pass> {
+    let mut out = Vec::with_capacity(ps.len());
+    for p in ps {
+        let hit: Vec<bool> = p.windows(2).map(|w| meets(w[0], w[1])).collect();
+        if let (Some(i), Some(j)) = (hit.iter().position(|h| *h), hit.iter().rposition(|h| *h)) {
+            out.push(p[i..=j + 1].to_vec());
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -209,5 +245,53 @@ mod tests {
         };
         let ps = rest(&cur, &m, 1.0, 0.0, 0.5, d, &Containment::default()).unwrap();
         assert!(!ps.is_empty());
+    }
+
+    #[test]
+    fn rest_is_only_where_the_stock_still_stands() {
+        // the same corner, but the earlier ops left stock only on the half x > 0 (finished,
+        // 0.01 over, elsewhere): the region is the foot's half on that side
+        let (cur, refc) = (part(2.0), part(6.0));
+        let all = region(&cur, &Ball(2.0), &refc, &Ball(6.0), 0.25, 0.05);
+        let stock = |x: f64, _y: f64| if x > 0.0 { 100.0 } else { f64::NEG_INFINITY };
+        let m = region_in(&cur, &Ball(2.0), &refc, &Ball(6.0), 0.25, 0.05, Some(&stock));
+        let (mut n, mut n_all) = (0, 0);
+        for k in 0..m.on.len() {
+            let x = m.x0 + m.g * (k % m.nx) as f64;
+            n_all += all.on[k] as usize;
+            if m.on[k] {
+                assert!(all.on[k] && x > 0.0, "rest at x={x}");
+                n += 1;
+            }
+            if all.on[k] && x > 0.0 {
+                assert!(m.on[k]);
+            }
+        }
+        assert!(n > 20 && n < n_all, "{n} of {n_all}");
+        // no stock above the finish anywhere: no region
+        let none = region_in(
+            &cur,
+            &Ball(2.0),
+            &refc,
+            &Ball(6.0),
+            0.25,
+            0.05,
+            Some(&|_, _| -1.0),
+        );
+        assert!(!none.on.iter().any(|x| *x));
+    }
+
+    #[test]
+    fn a_pass_is_trimmed_to_where_it_meets_material() {
+        let p: Pass = (0..10).map(|i| [i as f64, 0.0, 0.0]).collect();
+        let q: Pass = (0..4).map(|i| [i as f64, 5.0, 0.0]).collect();
+        // material from x 3 to 6 on the first pass only
+        let mut asked = 0;
+        let out = trim(vec![p.clone(), q], &mut |a, b| {
+            asked += 1;
+            a[1] == 0.0 && b[0] > 3.0 && a[0] < 6.0
+        });
+        assert_eq!(asked, 9 + 3);
+        assert_eq!(out, vec![p[3..=6].to_vec()]);
     }
 }

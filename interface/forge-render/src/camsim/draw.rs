@@ -280,16 +280,143 @@ fn column_colour(g: &ZMap, part: Option<&PartMap>, k: usize, mode: StockColour, 
     }
 }
 
-/// The stock's surface: each row's columns merged into runs of one height and colour (tops and
-/// bottoms), and walls where neighbours differ.
+/// The stock's surface. Its top is a lit heightfield through the columns' corners, so the cut's
+/// own shape (a ball's cusps, a stepover's marks, a contour's facets) shows in the light: each
+/// corner is the mean of the columns around it that meet it smoothly (no more than `steep` apart,
+/// chained), and its normal is the surface's slope there. Where the top is flat, columns of one
+/// height and colour are merged into runs. Bottoms are runs; walls stand where neighbours do not
+/// meet smoothly (a step, a wall of the part, the stock's sides).
 pub fn stock(g: &ZMap, part: Option<&PartMap>, mode: StockColour, tol: f32, out: &mut Vec<WorldVert>) {
+    stock_but(g, part, mode, tol, None, out);
+}
+
+/// `stock` with a hole: the columns [i0, j0, i1, j1) left out (where the detail window's finer
+/// grid is drawn instead; its own sides close the hole).
+pub fn stock_but(
+    g: &ZMap,
+    part: Option<&PartMap>,
+    mode: StockColour,
+    tol: f32,
+    hole: Option<[usize; 4]>,
+    out: &mut Vec<WorldVert>,
+) {
     let (nx, ny, c) = (g.nx, g.ny, g.cell as f32);
     let x = |i: usize| g.x0 as f32 + i as f32 * c;
     let y = |j: usize| g.y0 as f32 + j as f32 * c;
-    let full = |k: usize| g.hi[k] > g.lo[k];
+    let out_of = |k: usize| {
+        hole.is_some_and(|[i0, j0, i1, j1]| {
+            let (i, j) = (k % nx, k / nx);
+            i >= i0 && i < i1 && j >= j0 && j < j1
+        })
+    };
+    // each column holds material (and is not in the hole), worked out once: asked ~20 times a
+    // column below
+    let holds: Vec<bool> = (0..nx * ny).map(|k| g.hi[k] > g.lo[k] && !out_of(k)).collect();
+    let full = |k: usize| holds[k];
+    // two columns more than this apart in height meet at a wall, not a slope: two cells (a 63°
+    // slope and steeper) on the whole grid, at least 0.25 mm on a fine one (whose steep fillets
+    // would otherwise be many tiny walls)
+    let steep = (2.0 * c).max(0.25);
     let cols: Vec<[f32; 3]> = (0..nx * ny)
         .map(|k| column_colour(g, part, k, mode, tol))
         .collect();
+    // the columns about corner (ci, cj) that meet column height h smoothly: their heights by
+    // place (−x−y, +x−y, −x+y, +x+y), None where absent or not met
+    // on a fine grid (the detail window's), the light reads a lightly smoothed surface (each
+    // column the mean of the 3×3 about it that meet it smoothly): at a cell a pixel, the
+    // stamps' sub-micron ripple would otherwise alias to speckle, while the cusps worth seeing
+    // are ten cells and more apart. The surface itself stays where it is.
+    let lit: Option<Vec<f32>> = (c < 0.06).then(|| {
+        (0..nx * ny)
+            .map(|k| {
+                if !full(k) {
+                    return g.hi[k];
+                }
+                let (i, j) = ((k % nx) as isize, (k / nx) as isize);
+                let (mut sum, mut n) = (0.0, 0.0);
+                for dj in -1..=1 {
+                    for di in -1..=1 {
+                        let (a, b) = (i + di, j + dj);
+                        if a < 0 || b < 0 || a >= nx as isize || b >= ny as isize {
+                            continue;
+                        }
+                        let q = b as usize * nx + a as usize;
+                        if full(q) && (g.hi[q] - g.hi[k]).abs() <= steep {
+                            sum += g.hi[q];
+                            n += 1.0;
+                        }
+                    }
+                }
+                sum / n
+            })
+            .collect()
+    });
+    // the columns about corner (ci, cj) that meet column height h smoothly: their heights by
+    // place (−x−y, +x−y, −x+y, +x+y), None where absent or not met
+    let about = |ci: usize, cj: usize, h: f32| -> [Option<f32>; 4] {
+        let mut v = [None; 4];
+        for (q, (di, dj)) in [(0, 0), (1, 0), (0, 1), (1, 1)].into_iter().enumerate() {
+            let (i, j) = (ci + di, cj + dj);
+            if i >= 1 && j >= 1 && i <= nx && j <= ny {
+                let k = (j - 1) * nx + (i - 1);
+                if full(k) {
+                    v[q] = Some(g.hi[k]);
+                }
+            }
+        }
+        // chained from h: each joins if within `steep` of one already in
+        let mut inn = [false; 4];
+        let mut grew = true;
+        while grew {
+            grew = false;
+            for q in 0..4 {
+                if inn[q] {
+                    continue;
+                }
+                if let Some(z) = v[q]
+                    && ((z - h).abs() <= steep
+                        || (0..4).any(|p| inn[p] && v[p].is_some_and(|w| (w - z).abs() <= steep)))
+                {
+                    inn[q] = true;
+                    grew = true;
+                }
+            }
+        }
+        std::array::from_fn(|q| v[q].filter(|_| inn[q]))
+    };
+    // a corner's height and normal for a column of height h; on a fine grid the slope is the lit
+    // (smoothed) surface's, from the same columns
+    let corner = |ci: usize, cj: usize, h: f32| -> (f32, [f32; 3]) {
+        let v = about(ci, cj, h);
+        let (sum, n) = v.iter().flatten().fold((0.0, 0), |a, z| (a.0 + z, a.1 + 1));
+        let m = if n > 0 { sum / n as f32 } else { h };
+        let (dx, dy) = match &lit {
+            None => {
+                let z = |q: usize| v[q].unwrap_or(m);
+                (
+                    (z(1) + z(3) - z(0) - z(2)) / (2.0 * c),
+                    (z(2) + z(3) - z(0) - z(1)) / (2.0 * c),
+                )
+            }
+            Some(l) => {
+                let k = |q: usize| {
+                    let (di, dj) = [(0, 0), (1, 0), (0, 1), (1, 1)][q];
+                    (ci + di - 1) + (cj + dj - 1) * nx
+                };
+                let (ls, ln) = (0..4)
+                    .filter(|&q| v[q].is_some())
+                    .fold((0.0, 0.0), |a, q| (a.0 + l[k(q)], a.1 + 1.0));
+                let ml = if ln > 0.0 { ls / ln } else { h };
+                let z = |q: usize| if v[q].is_some() { l[k(q)] } else { ml };
+                (
+                    (z(1) + z(3) - z(0) - z(2)) / (2.0 * c),
+                    (z(2) + z(3) - z(0) - z(1)) / (2.0 * c),
+                )
+            }
+        };
+        let l = (dx * dx + dy * dy + 1.0).sqrt();
+        (m, [-dx / l, -dy / l, 1.0 / l])
+    };
     for j in 0..ny {
         let mut i = 0;
         while i < nx {
@@ -298,14 +425,32 @@ pub fn stock(g: &ZMap, part: Option<&PartMap>, mode: StockColour, tol: f32, out:
                 i += 1;
                 continue;
             }
-            let (h, l, col) = (g.hi[k], g.lo[k], cols[k]);
+            let (h, col) = (g.hi[k], cols[k]);
+            let cs = [(i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1)].map(|(a, b)| corner(a, b, h));
+            let flat = cs.iter().all(|(z, n)| *z == h && n[2] == 1.0);
+            if !flat {
+                let p = |q: usize, a: usize, b: usize| [x(a), y(b), cs[q].0];
+                let v = [p(0, i, j), p(1, i + 1, j), p(2, i + 1, j + 1), p(3, i, j + 1)];
+                for q in [0, 1, 2, 0, 2, 3] {
+                    out.push(WorldVert {
+                        at: v[q],
+                        colour: shade(col, cs[q].1),
+                    });
+                }
+                i += 1;
+                continue;
+            }
+            // a flat run: columns of this height and colour whose corners are flat too
             let mut e = i + 1;
-            while e < nx
-                && full(j * nx + e)
-                && g.hi[j * nx + e] == h
-                && g.lo[j * nx + e] == l
-                && cols[j * nx + e] == col
-            {
+            while e < nx {
+                let o = j * nx + e;
+                if !(full(o) && g.hi[o] == h && cols[o] == col) {
+                    break;
+                }
+                let cs = [(e + 1, j), (e + 1, j + 1)].map(|(a, b)| corner(a, b, h));
+                if !cs.iter().all(|(z, n)| *z == h && n[2] == 1.0) {
+                    break;
+                }
                 e += 1;
             }
             let (x0, x1, y0, y1) = (x(i), x(e), y(j), y(j + 1));
@@ -314,6 +459,24 @@ pub fn stock(g: &ZMap, part: Option<&PartMap>, mode: StockColour, tol: f32, out:
                 shade(col, [0.0, 0.0, 1.0]),
                 out,
             );
+            i = e;
+        }
+    }
+    // bottoms: runs of one bottom height
+    for j in 0..ny {
+        let mut i = 0;
+        while i < nx {
+            let k = j * nx + i;
+            if !full(k) {
+                i += 1;
+                continue;
+            }
+            let l = g.lo[k];
+            let mut e = i + 1;
+            while e < nx && full(j * nx + e) && g.lo[j * nx + e] == l {
+                e += 1;
+            }
+            let (x0, x1, y0, y1) = (x(i), x(e), y(j), y(j + 1));
             quad(
                 [[x0, y0, l], [x0, y1, l], [x1, y1, l], [x1, y0, l]],
                 shade(look::STOCK, [0.0, 0.0, -1.0]),
@@ -331,7 +494,7 @@ pub fn stock(g: &ZMap, part: Option<&PartMap>, mode: StockColour, tol: f32, out:
                 p1: [f32; 2],
                 n: [f32; 3]| {
         let (l, h) = (g.lo[k], g.hi[k]);
-        if h <= l {
+        if !full(k) {
             return;
         }
         let (ol, oh) = match other {
@@ -365,7 +528,11 @@ pub fn stock(g: &ZMap, part: Option<&PartMap>, mode: StockColour, tol: f32, out:
             let k = j * nx + i;
             // +x side: this column's part not in the neighbour's, facing +x; and the neighbour's
             // part not in this one, facing −x
-            let same = |o: usize| g.lo[o] == g.lo[k] && g.hi[o] == g.hi[k];
+            // neighbours that meet smoothly, top and bottom (a fine grid's columns, interpolated
+            // from the whole grid's, differ a little at the bottom too), have no wall between
+            let same = |o: usize| {
+                full(o) == full(k) && (g.lo[o] - g.lo[k]).abs() <= steep && (g.hi[o] - g.hi[k]).abs() <= steep
+            };
             let right = (i + 1 < nx).then_some(k + 1).filter(|&r| !same(r));
             let edge_x = i + 1 == nx;
             if right.is_some() || edge_x {

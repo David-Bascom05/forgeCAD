@@ -9,6 +9,7 @@ use super::theme::{Theme, medium, mono, sans, semi};
 use crate::shell::placed::Placed;
 use egui::{Align2, Color32, Painter, Rect, Sense, Stroke, StrokeKind, Ui, UiBuilder, pos2, vec2};
 use forge_lang::harness::{HarnessOut, LibRow, SpecVal, TypeOut};
+use forge_math::ipow::Powi as _;
 use std::collections::BTreeMap;
 
 /// A colour code's colours as egui's.
@@ -178,8 +179,8 @@ pub fn cross_section(p: &Painter, t: &Theme, r: Rect, s: &Section, callouts: boo
     );
     let wall = (s.od - s.core()) / 2.0;
     let wy = c.y - ro * 0.55;
-    let wx_in = c.x + (rc * rc - (wy - c.y).powi(2)).max(0.0).sqrt();
-    let wx_out = c.x + (ro * ro - (wy - c.y).powi(2)).max(0.0).sqrt();
+    let wx_in = c.x + (rc * rc - (wy - c.y).ipow(2)).max(0.0).sqrt();
+    let wx_out = c.x + (ro * ro - (wy - c.y).ipow(2)).max(0.0).sqrt();
     p.line_segment([pos2(wx_in, wy), pos2(wx_out + 14.0, wy)], Stroke::new(0.8, ink));
     p.text(
         pos2(wx_out + 17.0, wy),

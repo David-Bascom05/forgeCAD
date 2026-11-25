@@ -78,7 +78,13 @@ fn pinned_subset() {
         assert_eq!(worst, q.hex_max, "{}", q.name);
     }
     let got = summary(&jobs);
-    let pin = root.join("tests/pinned.txt");
+    // per interval rule: the exact-zero rule (default), and the strict rule (forge-cam-geom
+    // feature ival-strict)
+    let pin = root.join(if forge_cam_geom::ival::STRICT {
+        "tests/pinned_strict.txt"
+    } else {
+        "tests/pinned.txt"
+    });
     if std::env::var_os("FORGE_BLESS").is_some() {
         std::fs::write(&pin, &got).unwrap();
         return;
