@@ -334,7 +334,7 @@ fn suppress_unsuppress_and_the_end_of_part_in_the_browser() {
     let p = h.gui.shell.fg.as_ref().unwrap();
     let boss = p.feats.iter().find(|f| f.id == "boss").unwrap();
     assert_eq!(boss.status, forge_render::shell::fg::Status::NotBuilt);
-    assert!(p.summary.contains("volume 72000 mm³"), "{}", p.summary);
+    assert!(p.summary.contains("· 72 cm³ ·"), "{}", p.summary);
     let eop = h.gui.shell.place("fg:row:endofpart").unwrap();
     let base_row = h.gui.shell.place("fg:row:base").unwrap();
     let boss_row = h.gui.shell.place("fg:row:boss").unwrap();
@@ -348,8 +348,11 @@ fn suppress_unsuppress_and_the_end_of_part_in_the_browser() {
     settle(&mut h);
     let p = h.gui.shell.fg.as_ref().unwrap();
     assert!(
-        p.summary
-            .contains(&format!("volume {} mm³", (whole * 10.0).round() / 10.0)),
+        p.summary.contains(&forge_render::shell::ux::show(
+            whole,
+            forge_render::shell::ux::Qty::Volume,
+            forge_render::shell::ux::System::Metric
+        )),
         "{}",
         p.summary
     );
@@ -750,7 +753,7 @@ fn a_part_the_check_faults_says_so_and_fixing_the_part_clears_it() {
     assert!(h.menu_item("fg:row:corners", "fg:menu:delete:corners"));
     settle(&mut h);
     assert!(
-        h.until(|g| g.shell.fg.as_ref().is_some_and(|p| p.summary.contains(" valid"))),
+        h.until(|g| g.shell.fg.as_ref().is_some_and(|p| p.summary.starts_with("valid · "))),
         "{}\n{}",
         summary(&h),
         std::fs::read_to_string(&file).unwrap()

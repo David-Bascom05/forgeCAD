@@ -1,5 +1,5 @@
 /-
-The exact field route of kernel/forge-cam-geom/src/real.rs (`Ctx::exact_sign`): an expression
+The exact field route of kernel/forge-num/src/real.rs (`Ctx::exact_sign`): an expression
 whose closure has at most one distinct square root is evaluated exactly in Q(√c), each value a
 pair (a, b) for a + b√c, and its sign read from the pair. What the code rests on:
 - the product and the quotient stay pairs (`quad_mul`, `quad_div`), with √c² = c;
