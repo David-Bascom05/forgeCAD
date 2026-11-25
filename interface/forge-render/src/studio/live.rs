@@ -4,37 +4,116 @@
 
 use super::bsdf::{Bsdf, Lut};
 use super::env::Env;
-use super::gpu::Tracer;
+use super::gpu::{DENOISE_PASSES, Tracer};
 use super::scene::{Built, Instance};
 use super::{Settings, View};
 use crate::mesh::PartMesh;
 
-/// How many samples a frame may take: grown while frames come quickly, shrunk when they don't.
+/// How much the view's trace may do a frame: rows of a sample (a sample is traced a band at a
+/// time, so a slow GPU keeps the window answering), fitted to what the GPU took for the last
+/// measured band.
 #[derive(Clone, Copy, Debug)]
 pub struct Pace {
-    pub per_frame: u32,
-    /// A frame's time the tracer may fill, ms.
+    /// Rows a frame (a multiple of 8; more than the picture's height: whole samples).
+    pub rows: u32,
+    /// The GPU time a frame's trace may take, ms.
     pub budget_ms: f64,
+    /// The least a measured band took: what the measure takes whatever the rows (in the browser
+    /// the queue says it's done a frame or so late), not counted against them.
+    pub floor_ms: f64,
 }
 
 impl Default for Pace {
     fn default() -> Pace {
         Pace {
-            per_frame: 1,
-            budget_ms: 16.0,
+            rows: 64,
+            budget_ms: 8.0,
+            floor_ms: f64::INFINITY,
         }
     }
 }
 
+/// The most rows a frame: 64 samples of the tallest picture.
+const MOST_ROWS: u32 = 64 * 4096;
+
 impl Pace {
-    /// A frame took `ms` with `per_frame` samples in it: the next frame's count.
-    pub fn after(&mut self, ms: f64) {
-        if ms < self.budget_ms * 0.6 && self.per_frame < 64 {
-            self.per_frame += 1.max(self.per_frame / 4);
-        } else if ms > self.budget_ms * 1.5 && self.per_frame > 1 {
-            self.per_frame = (self.per_frame * 2 / 3).max(1);
+    /// The GPU took `ms` for `rows` rows: the rows that fill the budget.
+    pub fn fit(&mut self, ms: f64, rows: u32) {
+        self.floor_ms = self.floor_ms.min(ms);
+        self.fit_cost(ms - self.floor_ms, rows);
+    }
+
+    /// `rows` rows cost the frame `ms`: the rows that fill the budget.
+    pub fn fit_cost(&mut self, ms: f64, rows: u32) {
+        let per_row = (ms / rows.max(1) as f64).max(1e-6);
+        let fit = (self.budget_ms / per_row) as u32;
+        // no more than doubling at once: a measure taken while the GPU was idle overstates it
+        self.rows = (fit.min(self.rows.saturating_mul(2)) / 8 * 8).clamp(8, MOST_ROWS);
+    }
+}
+
+/// The page's frames, the pace's measure in the browser (whose queue says its work is done only
+/// a frame or so late, too coarse to time a band): each 16 frames, two trace nothing, the second's
+/// time a bare frame's; the others' times, past a bare frame's, are what their rows cost. Fitted
+/// once a 16, growing no more than a quarter, between an eighth of a sample and a sample a frame
+/// (a page's frames go out without waiting, so their times answer late: a fit to each overshoots).
+#[derive(Default)]
+struct Frames {
+    /// When the last frame began, and the rows it sent.
+    at: Option<(f64, u32)>,
+    /// The frame's place in the 16 (0 and 1: no rows).
+    k: u32,
+    /// A bare frame's time, ms.
+    bare: Option<f64>,
+    /// This 16's traced frames: their times, rows, how many.
+    sum: (f64, f64, u32),
+}
+
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+impl Frames {
+    /// A frame begins in a picture `h` rows high: the last one's time taken, the pace fitted.
+    /// True: send no rows this frame.
+    fn tick(&mut self, pace: &mut Pace, h: u32) -> bool {
+        let now = crate::viewer::now_ms();
+        if let Some((at, sent)) = self.at
+            && now - at < 5000.0
+        {
+            let ms = now - at;
+            if self.k == 2 {
+                self.bare = Some(self.bare.map_or(ms, |b| b + 0.3 * (ms - b)));
+            } else if self.k >= 3 || self.k == 0 {
+                self.sum = (self.sum.0 + ms, self.sum.1 + sent as f64, self.sum.2 + 1);
+            }
+        }
+        if self.k == 0 {
+            if let (Some(bare), (t, r, n @ 1..)) = (self.bare, self.sum) {
+                let (t, r) = (t / n as f64, r / n as f64);
+                // a slow page's frames may grow by a quarter for the trace
+                pace.budget_ms = 8f64.max(0.25 * bare);
+                let per_row = ((t - bare).max(0.0) / r.max(1.0)).max(1e-6);
+                let fit = (pace.budget_ms / per_row).min(pace.rows as f64 * 1.25) as u32;
+                let lo = (h / 8).max(8);
+                pace.rows = (fit / 8 * 8).clamp(lo, h.max(lo));
+            }
+            self.sum = (0.0, 0.0, 0);
+        }
+        let probe = self.k < 2;
+        self.k = (self.k + 1) % 16;
+        self.at = Some((now, 0));
+        probe
+    }
+
+    fn sent(&mut self, rows: u32) {
+        if let Some((_, s)) = &mut self.at {
+            *s = rows;
         }
     }
+}
+
+/// The sample counts the view's picture is denoised and shown at: from 8 (`READABLE`), each
+/// doubling, then every 64, and the last.
+fn shown_at(samples: u32, target: u32) -> bool {
+    samples == target || (samples >= 8 && (samples.is_power_of_two() || samples.is_multiple_of(64)))
 }
 
 /// The view's tracer and what its sum was made of.
@@ -47,6 +126,20 @@ pub struct Live {
     last: Option<(View, Settings)>,
     has_scene: bool,
     has_env: bool,
+    /// The next row of the sample under way.
+    row: u32,
+    /// The samples in the picture shown.
+    shown: u32,
+    /// The denoiser's next pass and row, while a denoise is spread over frames (the trace
+    /// waits for it).
+    stage: Option<(u32, u32)>,
+    /// A band measured: when it was sent, its rows; `done` says when the GPU had finished it.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    measuring: Option<(f64, u32)>,
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    done: std::sync::Arc<std::sync::Mutex<Option<f64>>>,
+    /// The browser's measure (`Frames`).
+    frames: Frames,
 }
 
 impl Live {
@@ -59,6 +152,12 @@ impl Live {
             last: None,
             has_scene: false,
             has_env: false,
+            row: 0,
+            shown: 0,
+            stage: None,
+            measuring: None,
+            done: Default::default(),
+            frames: Frames::default(),
         }
     }
 
@@ -95,14 +194,21 @@ impl Live {
         self.has_scene && self.has_env
     }
 
+    /// The samples in the picture shown (it's shown at `shown_at`'s counts).
     pub fn samples(&self) -> u32 {
+        self.shown
+    }
+
+    /// The samples traced so far (the picture shown may have fewer).
+    pub fn traced(&self) -> u32 {
         self.tracer.samples
     }
 
     /// One frame's worth: started again if the camera, the settings or the size changed, then
-    /// `pace.per_frame` more samples (none past `target`), shown denoised. True: the picture
-    /// changed.
-    pub fn frame(&mut self, view: View, settings: Settings, size: (u32, u32)) -> bool {
+    /// `pace.rows` more rows of work: samples (none past `target`) and, at `shown_at`'s counts,
+    /// the denoise (when asked) that shows them, a band of rows at a time like the samples. True:
+    /// work was done.
+    pub fn frame(&mut self, view: View, settings: Settings, size: (u32, u32), denoise: bool) -> bool {
         if !self.ready() || size.0 == 0 || size.1 == 0 {
             return false;
         }
@@ -111,21 +217,89 @@ impl Live {
             self.last = None;
         }
         if self.last != Some((view, settings)) {
-            self.tracer.reset();
+            self.restart();
             self.last = Some((view, settings));
         }
-        if self.tracer.samples >= self.target {
-            return false;
+        // natively, what the GPU took for the band measured (its callback comes with a poll); in
+        // the browser, the page's frames
+        #[cfg(not(target_arch = "wasm32"))]
+        let probe = {
+            let _ = self.tracer.device.poll(wgpu::PollType::Poll);
+            if let Some((sent, rows)) = self.measuring
+                && let Some(at) = self.done.lock().ok().and_then(|mut d| d.take())
+            {
+                self.pace.fit(at - sent, rows);
+                self.measuring = None;
+            }
+            false
+        };
+        #[cfg(target_arch = "wasm32")]
+        let probe = self.frames.tick(&mut self.pace, size.1);
+        if probe {
+            return true;
         }
-        let n = self.pace.per_frame.min(self.target - self.tracer.samples);
-        self.tracer.step(&view, &settings, n);
-        self.tracer.show(settings.exposure, true);
-        true
+        let h = size.1;
+        // this frame's rows: a denoise's passes under way first (the trace waits for it), then
+        // the samples, each a band at a time
+        let mut left = self.pace.rows;
+        let mut sent = 0;
+        while left > 0 {
+            if let Some((k, y)) = self.stage {
+                let rows = left.min(h - y);
+                self.tracer.denoise_rows(k, y, rows);
+                sent += rows;
+                left -= rows;
+                let next = if y + rows >= h { (k + 1, 0) } else { (k, y + rows) };
+                if next.0 == DENOISE_PASSES {
+                    self.tracer.show_denoised(settings.exposure);
+                    self.shown = self.tracer.samples;
+                    self.stage = None;
+                } else {
+                    self.stage = Some(next);
+                }
+                continue;
+            }
+            if self.tracer.samples >= self.target {
+                break;
+            }
+            let rows = left.min(h - self.row);
+            self.tracer.trace_rows(&view, &settings, self.row, rows);
+            sent += rows;
+            left -= rows;
+            self.row += rows;
+            if self.row < h {
+                continue;
+            }
+            self.row = 0;
+            self.tracer.sample_done();
+            let s = self.tracer.samples;
+            if !denoise {
+                self.tracer.show(settings.exposure, false);
+                self.shown = s;
+            } else if shown_at(s, self.target) {
+                self.stage = Some((0, 0));
+            }
+        }
+        self.frames.sent(sent);
+        #[cfg(not(target_arch = "wasm32"))]
+        if self.measuring.is_none() && sent > 0 {
+            let done = self.done.clone();
+            self.measuring = Some((crate::viewer::now_ms(), sent));
+            self.tracer.queue.on_submitted_work_done(move || {
+                if let Ok(mut d) = done.lock() {
+                    *d = Some(crate::viewer::now_ms());
+                }
+            });
+        }
+        sent > 0
     }
 
     /// Something not in the view or the settings changed (a light's map, appearances): again.
     pub fn restart(&mut self) {
         self.tracer.reset();
+        self.row = 0;
+        self.shown = 0;
+        self.stage = None;
     }
 }
 
@@ -323,18 +497,31 @@ mod tests {
 
     #[test]
     fn the_pace_fills_the_budget_and_backs_off() {
+        // a GPU at 0.01 ms a row, measured 20 ms late whatever the rows (as a page's queue says)
+        let took = |rows: u32| 20.0 + 0.01 * rows as f64;
         let mut p = Pace::default();
-        for _ in 0..40 {
-            p.after(4.0);
+        // it grows no more than doubling at once, to about the budget's 800 rows past the floor
+        p.fit(took(64), 64);
+        assert_eq!(p.rows, 128);
+        for _ in 0..12 {
+            let r = p.rows;
+            p.fit(took(r), r);
         }
-        assert!(p.per_frame > 10, "{}", p.per_frame);
-        let was = p.per_frame;
-        p.after(40.0);
-        assert!(p.per_frame < was);
-        for _ in 0..40 {
-            p.after(100.0);
-        }
-        assert_eq!(p.per_frame, 1);
+        assert!((780..=880).contains(&p.rows) && p.rows % 8 == 0, "{}", p.rows);
+        // slower: it backs off at once, to the rows the budget holds
+        let r = p.rows;
+        p.fit(20.0 + 0.1 * r as f64, r);
+        assert!((72..=96).contains(&p.rows), "{}", p.rows);
+        // however slow, a band of 8 rows a frame still goes
+        p.fit(1e4, p.rows);
+        assert_eq!(p.rows, 8);
+    }
+
+    #[test]
+    fn the_picture_is_shown_at_doublings_then_every_64() {
+        let at: Vec<u32> = (1..=300).filter(|&s| shown_at(s, 1024)).collect();
+        assert_eq!(at, [8, 16, 32, 64, 128, 192, 256]);
+        assert!(shown_at(5, 5), "the last sample is shown");
     }
 
     #[test]
