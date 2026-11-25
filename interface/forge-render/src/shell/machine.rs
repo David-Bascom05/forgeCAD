@@ -120,6 +120,9 @@ pub struct MachineUi {
     /// Models the user attached to this machine (their own files, kept in their library:
     /// forge_machine_builder::models), and each one's check against its body's envelope.
     pub models: Vec<Model>,
+    /// Where `models` were read from when they are forgecad's own (models::shipped_dir: none
+    /// attached in the user's library); the first change copies them there.
+    pub models_shipped: Option<PathBuf>,
     pub model_checks: Vec<Result<Outside, String>>,
     /// The note the next attach carries: where the file came from and the user's right to use it
     /// (required: forge_machine_builder::model_files::require_from).
@@ -190,6 +193,7 @@ impl MachineUi {
             brake: None,
             tooling_seen: String::new(),
             models: Vec::new(),
+            models_shipped: None,
             model_checks: Vec::new(),
             // the last source the user gave, to start from
             model_from: crate::plat::kv_get(MODEL_SOURCE).unwrap_or_default(),
@@ -220,8 +224,21 @@ impl MachineUi {
         self.report = None;
         self.pick = 0;
         self.fit += 1;
-        self.models = self
-            .models_dir()
+        // the user's own models, else forgecad's for a built-in machine
+        let user = self.models_dir();
+        let drawn = self
+            .def
+            .as_ref()
+            .and_then(|d| models::drawn_dir(self.user.as_deref(), &d.name));
+        self.models_shipped = drawn.clone().filter(|d| Some(d) != user.as_ref());
+        // forgecad's own models of it, left out of this clone (Git LFS): drawn from the
+        // envelopes until fetched
+        if drawn.is_none()
+            && let Some((_, how)) = self.def.as_ref().and_then(|d| models::not_downloaded(&d.name))
+        {
+            self.message = format!("Model not downloaded: drawn from its envelopes. To get it, run {how}");
+        }
+        self.models = drawn
             .map(|d| models::load_in(&d))
             .transpose()
             .unwrap_or_else(|e| {
@@ -238,10 +255,15 @@ impl MachineUi {
         Some(models::dir_in(self.user.as_ref()?, &self.def.as_ref()?.name))
     }
 
+    /// The folder the models' files are read from: forgecad's own, or the user's library.
+    pub fn models_read_dir(&self) -> Option<PathBuf> {
+        self.models_shipped.clone().or_else(|| self.models_dir())
+    }
+
     /// A model's triangles in its file's coordinates.
     pub fn model_tris(&self, m: &Model) -> Result<std::sync::Arc<crate::machine_mesh::Tris>, String> {
         let d = self
-            .models_dir()
+            .models_read_dir()
             .ok_or("no folder for your library on this system")?;
         crate::machine_model::file_tris(&d.join(&m.file))
     }
@@ -273,8 +295,24 @@ impl MachineUi {
             .collect();
     }
 
+    /// forgecad's own models, about to be changed: the user's from now on, files and all.
+    fn own_models(&mut self) {
+        let (Some(from), Some(dir)) = (self.models_shipped.clone(), self.models_dir()) else {
+            return;
+        };
+        let _ = forge_dirs::fs::create_dir_all(&dir);
+        for m in &self.models {
+            if let Err(e) = forge_dirs::fs::copy(from.join(&m.file), dir.join(&m.file)) {
+                self.message = format!("{}: {e}", m.file);
+                return;
+            }
+        }
+        self.models_shipped = None;
+    }
+
     /// After the models changed: written to the user's library, checked, redrawn.
     pub fn models_changed(&mut self) {
+        self.own_models();
         match self.models_dir() {
             Some(dir) => {
                 if let Err(e) = models::save_in(&dir, &self.models) {
@@ -292,6 +330,7 @@ impl MachineUi {
     /// Attaches the file at `path` to `body` (None: the whole machine), placed on its envelope
     /// (or on the machine's bounds), with inch or metre units when its size says so.
     pub fn attach_model(&mut self, body: Option<String>, path: &str) -> Result<String, String> {
+        self.own_models();
         let def = self.def.as_ref().ok_or("no machine")?;
         let dir = self
             .models_dir()
@@ -315,8 +354,9 @@ impl MachineUi {
     pub fn open_split(&mut self, i: usize) -> Result<(), String> {
         let m = self.models.get(i).ok_or("no such model")?.clone();
         let def = self.def.as_ref().ok_or("no machine")?;
+        // read where the models are (forgecad's own are copied to the user's only on apply)
         let dir = self
-            .models_dir()
+            .models_read_dir()
             .ok_or("no folder for your library on this system")?;
         let ps = forge_machine_builder::model_files::read_file(&dir.join(&m.file))?;
         let parts = ps
@@ -357,6 +397,7 @@ impl MachineUi {
             ));
         }
         let to: Vec<Option<String>> = sp.parts.iter().map(|p| p.dest.clone().flatten()).collect();
+        self.own_models();
         let dir = self
             .models_dir()
             .ok_or("no folder for your library on this system")?;
@@ -1035,10 +1076,38 @@ pub(in crate::shell) fn groups(s: &Shell) -> Vec<super::ribbon::Group> {
     if m.lib == "machine" {
         v.push(group(
             "Motion",
-            vec![tool("Home Axes", "home", MachineCmd::Home, valid)],
+            vec![tool("Home Axes", "home", MachineCmd::Home, valid && !m.at_home())],
         ));
     }
     v
+}
+
+/// Why one of the Machine Builder's tools is off (its tooltip's "Off: ..."), in words.
+pub fn why_off(m: &MachineUi, name: &str) -> Option<String> {
+    let (has, valid) = m.record_state();
+    let what = if m.lib == "machine" { "machine" } else { "record" };
+    let pick = if m.lib == "machine" {
+        "Open or make a machine first: pick one in the library, or New from Template".to_string()
+    } else {
+        format!(
+            "Pick a {} in the library first",
+            lib_title(m.lib).to_lowercase().trim_end_matches('s')
+        )
+    };
+    Some(match name {
+        "New from Template" => {
+            "Templates are for machines and press-brake tooling; derive a copy of a record instead".into()
+        }
+        "Derive Copy" | "Home Axes" | "Check" | "Save" if !has => pick,
+        "Home Axes" | "Check" | "Save" if !valid => {
+            format!("The {what} is refused as it stands: fix what the sheet says first")
+        }
+        "Save" => "Nothing to save: no change since it was read or saved".into(),
+        "Home Axes" if m.at_home() => {
+            "The axes are at home already: jog one in Motion, then Home brings it back".into()
+        }
+        _ => return None,
+    })
 }
 
 /// The status bar's line: where the user is and what is chosen.
@@ -1080,6 +1149,17 @@ impl MachineUi {
                 (t.cur.is_some(), t.cur.is_some() && t.problem.is_none())
             }),
         }
+    }
+
+    /// Every joint at its home value (Home Axes would change nothing).
+    pub fn at_home(&self) -> bool {
+        self.def.as_ref().is_none_or(|d| {
+            d.joints.len() == self.q.len()
+                && d.joints
+                    .iter()
+                    .zip(&self.q)
+                    .all(|(j, q)| (j.home - q).abs() < 1e-9)
+        })
     }
 
     /// Edited since it was read or saved.
@@ -3634,5 +3714,56 @@ fn overlay(ctx: &egui::Context, t: &Theme, st: &MachineUi, v: egui::Rect) {
                 if val == "unknown" { t.error } else { t.ink2 },
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod off_tests {
+    use super::*;
+
+    fn home_on(m: MachineUi) -> bool {
+        let sh = Shell {
+            machine: Some(m),
+            ..Shell::default()
+        };
+        groups(&sh)
+            .iter()
+            .flat_map(|g| g.big.iter())
+            .any(|t| t.name == "Home Axes" && t.action.is_some())
+    }
+
+    /// With no machine loaded, Home Axes and the record's tools say why they are off (the button
+    /// audit found Home Axes silent); a loaded valid machine's Home Axes is on.
+    #[test]
+    fn the_builders_tools_say_why_they_are_off() {
+        let mut m = MachineUi::new(None);
+        m.def = None;
+        m.problem = None;
+        let w = why_off(&m, "Home Axes").unwrap();
+        assert!(w.starts_with("Open or make a machine first"), "{w}");
+        assert!(!home_on(m));
+        let mut m = MachineUi::new(None);
+        m.load(
+            forge_machine::library::builtin_named("generic-vmc3").unwrap(),
+            None,
+            Vec::new(),
+        );
+        assert!(m.problem.is_none(), "{:?}", m.problem);
+        assert!(why_off(&m, "Save").unwrap().starts_with("Nothing to save"));
+        // at home already: off, saying so (a click would change nothing)
+        assert!(
+            why_off(&m, "Home Axes")
+                .unwrap()
+                .starts_with("The axes are at home already")
+        );
+        let mut jogged = MachineUi::new(None);
+        jogged.load(
+            forge_machine::library::builtin_named("generic-vmc3").unwrap(),
+            None,
+            Vec::new(),
+        );
+        assert!(!home_on(m));
+        jogged.q[0] += 10.0;
+        assert!(home_on(jogged));
     }
 }
