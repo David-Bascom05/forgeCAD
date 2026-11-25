@@ -127,6 +127,20 @@ z up from the die's top.
 | `segments` | the shortest tooling length the segments make vs the bend less its allowed ends |
 | `tonnage` | air-bending force (1.42 UTS t² / V per metre) vs the press, or kN/m vs a tool |
 | `withdraw` | (warning) the punch coming back up past the sprung part |
+| `handling` | (warning) least distance, the part carried through the operator's move into the step, to every body of the press, vs `clearance` |
+
+`handling`: every step after the first. The move is the planned one: lift off the die, pull out
+towards the operator until the part's sphere is in front of every body, turn there, push in, set
+down. The ram is at top dead centre; the backgauge is at the last step's stop while the part is
+lifted and pulled out, at this step's while it is pushed in and set down, and both during the
+turn. The part itself (every piece, exactly as the step places it) is carried through the move by
+the same certified search as the bends' checks, against every body of the press as it stands (the
+station's tools, the other stations', the ram, the bed, the frame, the fingers): a pass is proven
+clear, a fail names a real point of the part, at a real instant of the move, proven to meet a body.
+Lifting off (setting down onto) the bed or a die without a profile is not checked against them: a
+point above such a body moving straight up only moves away from it, and the part resting on it is
+the step's own check. A fail says the planned move meets that body; the operator may still find
+another way in (a tilt), so it is a warning.
 
 ### Contacts: where it collides, on both bodies
 

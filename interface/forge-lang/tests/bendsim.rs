@@ -925,3 +925,41 @@ left = flange(base.edge(plan.outline[3]), height: 25)\n";
         t.starts_with("right.") && t.contains("front.")
     }));
 }
+
+/// The operator's move is certified (rank 3b): on the staged load tray on a TruBend 5130, with
+/// four stations on the bed, every step after the first has its handling check settled (a proven
+/// pass, Near, or a proven fail), never an undecided envelope; the method says so.
+#[test]
+fn handling_is_certified_on_a_staged_press() {
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/sheetmetal/load_tray.fg"
+    ))
+    .unwrap();
+    let ask =
+        forge_lang::bendsim::parse(&["press", "trumpf-trubend-5130", "stations", "auto"].map(String::from))
+            .unwrap();
+    let a = ask_src(&src, None, None, &ask);
+    assert!(a.ok, "{}", a.text);
+    let steps = arr(&a.json, "steps");
+    let mut n = 0;
+    for (k, st) in steps.iter().enumerate() {
+        for c in arr(st, "checks") {
+            if c.get("rule").and_then(Json::str) != Some("handling") {
+                continue;
+            }
+            n += 1;
+            assert!(k > 0, "the first step has no handling");
+            let v = c.get("verdict").and_then(Json::str).unwrap();
+            assert!(matches!(v, "pass" | "near" | "fail"), "step {k}: {v} {c}");
+            if v != "near" {
+                assert_eq!(c.get("certified"), Some(&Json::Bool(true)), "{c}");
+            }
+            assert!(
+                c.get("method").and_then(Json::str).unwrap().contains("certified search"),
+                "{c}"
+            );
+        }
+    }
+    assert_eq!(n, steps.len() - 1);
+}

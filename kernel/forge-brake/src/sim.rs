@@ -2181,30 +2181,282 @@ impl Problem for ToolPb<'_, '_> {
     fn sd(&self, p: [f64; 3]) -> f64 {
         sd_prism(&self.el.sec, self.el.y.0, self.el.y.1, p)
     }
-    /// The tool is a prism along y: the bound in (x, z) and the exact least distance in y.
     fn lower(&self, e: &[Interval; 3]) -> (f64, f64) {
-        let (y0, y1) = self.el.y;
-        let hd2 = (0.25 * (e[0].width().powi(2) + e[2].width().powi(2))).sqrt() + bb::SLACK;
-        let s2 = self.el.sec.sd(Point2::new(e[0].mid(), e[2].mid())) - hd2;
-        // dy(y) = max(y0 - y, y - y1) is least at the range's middle
-        let ym = 0.5 * (y0 + y1);
-        let yc = ym.clamp(e[1].lo, e[1].hi);
-        let dy = (y0 - yc).max(yc - y1);
-        let lb = if s2 <= 0.0 && dy <= 0.0 {
-            s2.max(dy)
-        } else {
-            (s2.max(0.0).powi(2) + dy.max(0.0).powi(2)).sqrt()
-        };
-        // past the tool's ends the cell's length along y counts too
-        let size = if e[1].lo >= y0 && e[1].hi <= y1 {
-            hd2
-        } else {
-            (hd2 * hd2 + 0.25 * e[1].width().powi(2)).sqrt()
-        };
-        (lb, size)
+        prism_lower(self.el, e)
     }
     fn weights(&self) -> [f64; 3] {
         [1.0, 0.05, 1.0]
+    }
+}
+
+/// The tool is a prism along y: the bound in (x, z) and the exact least distance in y.
+fn prism_lower(el: &Element, e: &[Interval; 3]) -> (f64, f64) {
+    let (y0, y1) = el.y;
+    let hd2 = (0.25 * (e[0].width().powi(2) + e[2].width().powi(2))).sqrt() + bb::SLACK;
+    let s2 = el.sec.sd(Point2::new(e[0].mid(), e[2].mid())) - hd2;
+    // dy(y) = max(y0 - y, y - y1) is least at the range's middle
+    let ym = 0.5 * (y0 + y1);
+    let yc = ym.clamp(e[1].lo, e[1].hi);
+    let dy = (y0 - yc).max(yc - y1);
+    let lb = if s2 <= 0.0 && dy <= 0.0 {
+        s2.max(dy)
+    } else {
+        (s2.max(0.0).powi(2) + dy.max(0.0).powi(2)).sqrt()
+    };
+    // past the tool's ends the cell's length along y counts too
+    let size = if e[1].lo >= y0 && e[1].hi <= y1 {
+        hd2
+    } else {
+        (hd2 * hd2 + 0.25 * e[1].width().powi(2)).sqrt()
+    };
+    (lb, size)
+}
+
+/// A rigid move of the whole part (the operator's handling between two steps) over its parameter
+/// f in [0, 1]: one formula between consecutive knots.
+pub trait Moving {
+    /// 0 = k0 < k1 < .. < kn = 1: the move is smooth between consecutive knots.
+    fn knots(&self) -> &[f64];
+    /// A point of the part (press frame, as the step places it) at f.
+    fn place(&self, p: [f64; 3], f: f64) -> [f64; 3];
+    /// Encloses `place` over every point of `p` at every f of `f` (f within one knot span).
+    fn enclose(&self, p: [Interval; 3], f: Interval) -> [Interval; 3];
+}
+
+/// A body the handled part is held clear of: a tool prism in its own step's frame (a station's
+/// `oy`, what rides the ram lifted to `top`), over the knot spans it stands through.
+pub struct HandleTarget {
+    el: Element,
+    oy: f64,
+    top: f64,
+    spans: Vec<usize>,
+}
+
+impl HandleTarget {
+    pub fn name(&self) -> &str {
+        &self.el.name
+    }
+    /// The move's spans it is checked through.
+    pub fn spans(&self) -> &[usize] {
+        &self.spans
+    }
+    /// The signed distance from a press-frame point to the body.
+    pub fn sd(&self, p: [f64; 3]) -> f64 {
+        let z = if self.el.attach == Attach::Punch {
+            p[2] - self.top
+        } else {
+            p[2]
+        };
+        sd_prism(&self.el.sec, self.el.y.0, self.el.y.1, [p[0], p[1] - self.oy, z])
+    }
+}
+
+/// A piece of the part, carried by the move from where the step places it, against a target.
+struct HandlePb<'a, 'b> {
+    ctx: &'b StepCtx<'a>,
+    pc: &'b Piece,
+    tg: &'b HandleTarget,
+    mv: &'b dyn Moving,
+}
+
+impl HandlePb<'_, '_> {
+    /// From the press frame to the target's.
+    fn local<T: Sc>(&self, p: [T; 3]) -> [T; 3] {
+        let z = if self.tg.el.attach == Attach::Punch {
+            p[2] + (-self.tg.top)
+        } else {
+            p[2]
+        };
+        [p[0], p[1] + (-self.tg.oy), z]
+    }
+    fn rest<T: Sc>(&self, q: [T; 4]) -> [T; 3] {
+        let r = self
+            .ctx
+            .image(self.pc, [q[0], q[1], q[2], T::c(0.0)], Phase::Static, Attach::Die);
+        [r.x, r.y + self.ctx.oy, r.z]
+    }
+}
+
+impl Problem for HandlePb<'_, '_> {
+    fn may_hold(&self, c: &Cell) -> bool {
+        StepCtx::may_hold(self.pc, c)
+    }
+    fn enclose(&self, c: &Cell) -> [Interval; 3] {
+        self.local(self.mv.enclose(self.rest(c.p), c.p[3]))
+    }
+    fn witness(&self, c: &Cell) -> Option<[f64; 4]> {
+        StepCtx::witness(self.pc, c)
+    }
+    fn image(&self, q: [f64; 4]) -> [f64; 3] {
+        self.local(self.mv.place(self.rest(q), q[3]))
+    }
+    fn sd(&self, p: [f64; 3]) -> f64 {
+        sd_prism(&self.tg.el.sec, self.tg.el.y.0, self.tg.el.y.1, p)
+    }
+    fn lower(&self, e: &[Interval; 3]) -> (f64, f64) {
+        prism_lower(&self.tg.el, e)
+    }
+    fn weights(&self) -> [f64; 3] {
+        [1.0, 0.05, 1.0]
+    }
+}
+
+impl StepCtx<'_> {
+    /// The punch tip's height while the part is handled: top dead centre, never below the flat
+    /// sheet (as the scene stands it).
+    fn handle_top(&self) -> f64 {
+        self.z_tdc.max(self.ztip(0.0))
+    }
+
+    /// The step's bodies during handling, the ram at top dead centre: with `gauge`, its
+    /// backgauge alone (placed as at `phase`), else every other body. Each stands through
+    /// `spans` of the move; a terrain (the bed, a die without a profile: a vertical line meets
+    /// each in one interval down to its foot) is left out of the `vertical` spans, where the part
+    /// moves straight up off it (or down onto it): a point above a terrain moving up only moves
+    /// away from it, and resting on it is the step's own check.
+    pub fn handle_targets(
+        &self,
+        gauge: Option<(&Gauged, Phase)>,
+        spans: &[usize],
+        vertical: &[usize],
+    ) -> Vec<HandleTarget> {
+        let els = match gauge {
+            Some((g, phase)) => self
+                .elements(phase, Some(g))
+                .into_iter()
+                .filter(|e| e.name.starts_with("backgauge"))
+                .collect::<Vec<_>>(),
+            None => self.elements(Phase::Bend, None),
+        };
+        let top = self.handle_top();
+        els.into_iter()
+            .map(|el| {
+                let terrain = el.name == "bed"
+                    || el
+                        .name
+                        .split_once("die:")
+                        .and_then(|(_, id)| self.tl.die(id))
+                        .is_some_and(|d| d.profile.is_none());
+                let spans = spans
+                    .iter()
+                    .copied()
+                    .filter(|s| !(terrain && vertical.contains(s)))
+                    .collect();
+                HandleTarget {
+                    el,
+                    oy: self.oy,
+                    top,
+                    spans,
+                }
+            })
+            .collect()
+    }
+
+    /// The part carried by `mv` (this step's pieces as it places them) against `targets`: a
+    /// handling check, every verdict certified as every other distance is. A proven collision
+    /// fails, an unsettled one is undecided, a margin within the resolution is Near.
+    pub fn handling(&self, mv: &dyn Moving, targets: &[HandleTarget]) -> Check {
+        let limit = self.tl.clearance;
+        let res = (limit / 4.0).max(0.01);
+        let knots = mv.knots();
+        let mut lowest = (f64::INFINITY, f64::INFINITY, String::new());
+        let mut least = (f64::INFINITY, String::new());
+        let mut hit: Option<Check> = None;
+        let mut undecided: Option<Check> = None;
+        for tg in targets {
+            if tg.spans.is_empty() {
+                continue;
+            }
+            for pc in &self.pieces {
+                let [u, v, w] = pc.dom;
+                let roots: Vec<Cell> = tg
+                    .spans
+                    .iter()
+                    .map(|&s| Cell {
+                        p: [u, v, w, Interval::new(knots[s], knots[s + 1])],
+                        tag: 0,
+                    })
+                    .collect();
+                let pb = HandlePb {
+                    ctx: self,
+                    pc,
+                    tg,
+                    mv,
+                };
+                // decided, not measured: a pass is proven at the limit (its value the nearest
+                // real point found), and measuring every near pair past it costs the most
+                match bb::certify(&pb, &roots, limit, res, BUDGET, false) {
+                    Verdict::Clear { lower, upper } | Verdict::Near { lower, upper } => {
+                        if upper < lowest.1 {
+                            lowest = (lower, upper, tg.el.name.clone());
+                        }
+                        lowest.0 = lowest.0.min(lower);
+                        if lower < least.0 {
+                            least = (lower, tg.el.name.clone());
+                        }
+                    }
+                    Verdict::Hit { d, q, at } => {
+                        if hit.as_ref().is_none_or(|c| d < c.value) {
+                            let mut c = Check::rule(Rule::Handling, d, limit, false);
+                            c.pass = false;
+                            c.certified = true;
+                            c.tool = Some(tg.el.name.clone());
+                            if self
+                                .tl
+                                .press
+                                .estimated
+                                .iter()
+                                .any(|e| tg.el.name.starts_with(e.as_str()))
+                            {
+                                c.estimate = true;
+                                c.certified = false;
+                            }
+                            c.part = Some(self.part_ref(pc, q));
+                            // back in the press frame
+                            let z = if tg.el.attach == Attach::Punch {
+                                at[2] + tg.top
+                            } else {
+                                at[2]
+                            };
+                            c.at = Some([at[0], at[1] + tg.oy, z]);
+                            hit = Some(c);
+                        }
+                    }
+                    Verdict::Undecided { lower } => {
+                        if undecided.is_none() {
+                            let mut c = Check::rule(Rule::Handling, lower, limit, false);
+                            c.pass = false;
+                            c.certified = false;
+                            c.undecided = true;
+                            c.tool = Some(tg.el.name.clone());
+                            c.part = Some(self.part_ref(pc, [0.0; 4]));
+                            undecided = Some(c);
+                        }
+                    }
+                }
+            }
+        }
+        let mut c = if let Some(c) = hit.or(undecided) {
+            c
+        } else if least.0 < limit {
+            let mut c = Check::near(Rule::Handling, least.0, limit, res);
+            c.tool = Some(least.1);
+            c
+        } else {
+            // the nearest real point found, else the proven bound
+            let value = if lowest.1.is_finite() { lowest.1 } else { lowest.0 };
+            let mut c = Check::rule(Rule::Handling, value.min(1e9), limit, false);
+            c.bound = Some(lowest.0.min(1e9));
+            c.pass = true;
+            c.certified = true;
+            if !lowest.2.is_empty() {
+                c.tool = Some(lowest.2);
+            }
+            c
+        };
+        // the operator's move: theirs to choose, never a block
+        c.severity = Severity::Warning;
+        c
     }
 }
 
