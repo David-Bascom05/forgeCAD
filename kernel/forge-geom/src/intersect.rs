@@ -816,6 +816,10 @@ pub(crate) fn subdivide_stretches(
     subdivide_pieces(c, range, s, near, stack)
 }
 
+/// A piece of the range being searched, `(lo, hi, speed bound, g at lo, g at hi)`, its ends' g
+/// where the search already has them.
+type Piece = (f64, f64, f64, Option<f64>, Option<f64>);
+
 fn subdivide_pieces(
     c: &Curve,
     range: Interval,
@@ -838,7 +842,7 @@ fn subdivide_pieces(
     // shared end, so the leaves' ends below are mostly values the search worked out on its way
     // down (the same g, at the same t: the same value), not to be worked out again
     let known = |t: f64, v: Option<f64>| v.unwrap_or_else(|| g(t));
-    let mut stack: Vec<(f64, f64, f64, Option<f64>, Option<f64>)> = stack
+    let mut stack: Vec<Piece> = stack
         .into_iter()
         .map(|(a, b, lip)| (a, b, lip, None, None))
         .collect();
