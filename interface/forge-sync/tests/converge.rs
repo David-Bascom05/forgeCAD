@@ -564,36 +564,23 @@ fn retries_are_answered_by_marks_and_refused_ids() {
     );
 }
 
-/// The clients review, M2: a Resync's snapshot Welcome resends every pending op (from the
-/// snapshot's seq, so it cannot fall behind a compaction), and the server's answer for one it
-/// had committed (its Ack again, at a seq the snapshot holds) clears it: never pending forever.
+/// The clients review, M2, as the re-review settled it: an Ack the client cannot place (a gap)
+/// settles its op (committed: the snapshot holds it) and asks for a Resync; the Resync's Welcome
+/// on the live connection sends nothing again (an op sent before it was answered before it), so
+/// nothing is held pending for ever and nothing refused is resent.
 #[test]
-fn a_snapshot_welcome_resends_pending_and_a_committed_one_clears() {
+fn a_gapped_ack_settles_its_op_and_the_resync_resends_nothing() {
     let mut c = Client::new("part.fg", "c0", "t");
-    let welcome = |seq| Down::Welcome {
+    let welcome = |seq, text: &str| Down::Welcome {
         seq,
-        text: DOC.into(),
+        text: text.into(),
         you: "ada".into(),
         snap: true,
     };
-    c.receive(welcome(0));
+    c.receive(welcome(0, DOC));
     c.edit(set_w(41.0)).unwrap();
     c.outbox.clear();
-    // diverged: a Resync; the snapshot (seq 7) already holds the op, committed at seq 5
-    let mut holds = DOC.replace("shared w = 40", "shared w = 41");
-    holds.push('\n');
-    c.receive(Down::Welcome {
-        seq: 7,
-        text: holds,
-        you: "ada".into(),
-        snap: true,
-    });
-    assert!(
-        matches!(c.outbox.as_slice(), [Up::Op { id: 1, base: 7, .. }]),
-        "{:?}",
-        c.outbox
-    );
-    assert_eq!(c.pending().len(), 1);
+    // its Ack comes at seq 5 (a gap: this client is at 0)
     c.receive(Down::Ack {
         id: 1,
         seq: 5,
@@ -601,8 +588,17 @@ fn a_snapshot_welcome_resends_pending_and_a_committed_one_clears() {
         inv: None,
         th: 0,
     });
-    assert!(c.pending().is_empty(), "the committed op is no longer pending");
-    assert_eq!(c.text(), c.confirmed());
+    assert!(c.pending().is_empty(), "settled: committed");
+    assert!(matches!(c.outbox.as_slice(), [Up::Resync]), "{:?}", c.outbox);
+    c.outbox.clear();
+    let holds = DOC.replace("shared w = 40", "shared w = 41");
+    c.receive(welcome(7, &holds));
+    assert!(
+        c.outbox.is_empty(),
+        "a Resync's Welcome resends nothing: {:?}",
+        c.outbox
+    );
+    assert_eq!(c.text(), holds);
 }
 
 /// The clients review, H2(a): a client saved when the app closes and restored when it opens
@@ -633,10 +629,11 @@ fn a_saved_client_restores_its_pending_ops_and_ids() {
         you: "ada".into(),
         snap: true,
     });
+    // their real bases: the server rebases them from there (never as if made on the snapshot)
     assert!(
         matches!(
             back.outbox.as_slice(),
-            [Up::Op { id: 1, base: 5, .. }, Up::Op { id: 2, base: 5, .. }]
+            [Up::Op { id: 1, base: 3, .. }, Up::Op { id: 2, base: 3, .. }]
         ),
         "{:?}",
         back.outbox
@@ -644,4 +641,43 @@ fn a_saved_client_restores_its_pending_ops_and_ids() {
     back.outbox.clear();
     assert_eq!(back.edit(set_w(43.0)).unwrap(), 3, "op ids continue");
     assert!(Client::restore("part.fg", "t", "not json").is_none());
+}
+
+/// The clients review, M4: undo while the latest edit is unacked would take back the op before
+/// it; it is refused until the edit lands, then undoes that edit.
+#[test]
+fn undo_waits_for_the_latest_edit_to_land() {
+    let mut st = MemStore::default();
+    let mut room = Room::new(Sequencer::open(&mut st, "part.fg", DOC, None).unwrap());
+    let mut c = Client::new("part.fg", "ada/c", "t");
+    let pump = |c: &mut Client, room: &mut Room, st: &mut MemStore| {
+        for up in std::mem::take(&mut c.outbox) {
+            let (out, _) = if matches!(up, Up::Hello { .. }) {
+                (room.join(0, "ada/c", "ada", None), vec![])
+            } else {
+                room.receive(st, 0, up)
+            };
+            for (_, d) in out {
+                c.receive(d);
+            }
+        }
+    };
+    pump(&mut c, &mut room, &mut st);
+    c.edit(set_w(41.0)).unwrap();
+    pump(&mut c, &mut room, &mut st);
+    assert!(c.pending().is_empty());
+    c.edit(set_w(42.0)).unwrap(); // not yet sent
+    assert!(
+        matches!(c.undo(), Some(Err(_))),
+        "refused while the latest is on its way"
+    );
+    pump(&mut c, &mut room, &mut st);
+    assert!(c.pending().is_empty());
+    assert!(matches!(c.undo(), Some(Ok(_))));
+    pump(&mut c, &mut room, &mut st);
+    assert!(
+        c.text().contains("shared w = 41"),
+        "the latest edit was undone: {}",
+        c.text()
+    );
 }

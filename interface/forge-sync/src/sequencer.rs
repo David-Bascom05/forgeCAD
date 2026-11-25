@@ -176,8 +176,12 @@ impl Sequencer {
             mark_order: HashMap::new(),
             compactions: 0,
         };
-        // (a log from before marks wrote one triple per op: the highest per client is its mark)
-        for (client, id, seq) in snap.seen {
+        // (a log from before marks wrote one triple per op: the highest per client is its mark);
+        // in seq order, so each account's least recently used client is evicted first, as before
+        // the reopen (a client offline with pending ops is the one to keep)
+        let mut seen = snap.seen;
+        seen.sort_by_key(|x| x.2);
+        for (client, id, seq) in seen {
             s.mark_committed(&client, id, seq);
         }
         for (client, id) in snap.refused {
@@ -347,11 +351,29 @@ impl Sequencer {
         if base > head {
             return Err(Refusal::BadBase { base, head });
         }
-        let Some(since) = self.since(base) else {
-            // before the latest snapshot: the ops since are gone, so it cannot be rebased
-            return Err(Refusal::BadBase { base, head });
+        let since: Vec<Entry> = match self.since(base) {
+            Some(s) => s.cloned().collect(),
+            // made before the in-memory log's start: the ops in between are read from the store's
+            // history (kept: a snapshot deletes nothing), and the op is rebased through them like
+            // any other. Never sent as if made on a newer text: that would skip a Rename's rebase
+            // and land the edit on another name.
+            None => {
+                let older = store
+                    .read_range(&self.doc, base, self.floor)
+                    .map_err(|e| Refusal::Store { why: e.to_string() })?;
+                let whole = older.as_ref().is_some_and(|o| {
+                    o.len() as u64 == self.floor - base && o.iter().zip(base + 1..).all(|(e, k)| e.seq == k)
+                });
+                if !whole {
+                    return Err(Refusal::RebaseGone { base });
+                }
+                older
+                    .expect("whole")
+                    .into_iter()
+                    .chain(self.log.iter().cloned())
+                    .collect()
+            }
         };
-        let since: Vec<Entry> = since.cloned().collect();
         let op = rebase(op, client, since.iter())?;
         // a span op is valid only on its base: rebase refused it if another author's op landed;
         // the author's own ops since base moved its bytes too unless there are none

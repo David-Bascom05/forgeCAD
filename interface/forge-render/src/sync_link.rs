@@ -94,7 +94,11 @@ pub fn served_root(file: &std::path::Path) -> Option<(std::path::PathBuf, String
 /// that is there but wrong (said, never silently LOCAL). The client the app kept when it last
 /// closed (`.forgecad/sync/<doc>.pending`) is taken up: its unacked ops are sent again.
 #[cfg(not(target_arch = "wasm32"))]
-pub fn open(path: &str, waker: Arc<dyn Fn() + Send + Sync>) -> Option<Result<Box<dyn Link>, String>> {
+pub fn open(
+    path: &str,
+    waker: Arc<dyn Fn() + Send + Sync>,
+    kept: Option<String>,
+) -> Option<Result<Box<dyn Link>, String>> {
     let (root, doc) = served_root(std::path::Path::new(path))?;
     // the folder a forge-server serves is its own: the app editing it too would write the
     // server's files behind it (and the server's behind the app). Open a clone of the project.
@@ -108,9 +112,6 @@ pub fn open(path: &str, waker: Arc<dyn Fn() + Send + Sync>) -> Option<Result<Box
         Ok(r) => r,
         Err(e) => return Some(Err(e)),
     };
-    let kept =
-        std::fs::read_to_string(sync_dir(&root).join(format!("{}.pending", forge_history::names::enc(&doc))))
-            .ok();
     Some(
         forge_remote::Session::resume(&remote, &doc, kept.as_deref(), Some(waker))
             .map(|s| Box::new(s) as Box<dyn Link>),
@@ -136,7 +137,12 @@ fn put(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
 
 /// The browser build's link: the page's WebSocket, if the page said this tab is served.
 #[cfg(target_arch = "wasm32")]
-pub fn open(path: &str, waker: Arc<dyn Fn() + Send + Sync>) -> Option<Result<Box<dyn Link>, String>> {
+pub fn open(
+    path: &str,
+    waker: Arc<dyn Fn() + Send + Sync>,
+    _kept: Option<String>,
+) -> Option<Result<Box<dyn Link>, String>> {
+    // (the browser keeps no client across a closed tab yet)
     crate::websync::open(path, waker)
 }
 
@@ -160,6 +166,10 @@ pub struct SyncFile {
     verified: bool,
     /// Set when opening found a hand edit.
     pub paused: Option<String>,
+    /// This app's hold on the document's kept client (`<doc>.pending.lock`): a second instance
+    /// (a second window, a copied folder) neither takes it up nor writes it, or the two would
+    /// share one client id and op ids (and one's edits be answered as the other's retries).
+    owner: Option<std::fs::File>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -174,7 +184,17 @@ impl SyncFile {
         let kept = std::fs::read_to_string(&mark)
             .ok()
             .and_then(|t| u64::from_str_radix(t.trim(), 16).ok());
+        let owner = std::fs::create_dir_all(sync_dir(&root)).ok().and_then(|_| {
+            let f = std::fs::OpenOptions::new()
+                .create(true)
+                .truncate(false)
+                .write(true)
+                .open(sync_dir(&root).join(format!("{name}.pending.lock")))
+                .ok()?;
+            f.try_lock().ok().map(|_| f)
+        });
         let mut f = SyncFile {
+            owner,
             path: file.to_path_buf(),
             mark,
             pending,
@@ -229,9 +249,20 @@ impl SyncFile {
         }
     }
 
-    /// The client as it must outlive the app (`Link::saved`), written when it changed.
+    /// The client kept when the app last closed, to take up: only by the instance that holds
+    /// it, and only when the file is the one it was kept with (its mark matches: a file with
+    /// no mark, or another text, is not where those ops were made, and they would be sent
+    /// before the texts are compared).
+    pub fn kept_client(&self) -> Option<String> {
+        (self.owner.is_some() && self.verified && self.paused.is_none())
+            .then(|| std::fs::read_to_string(&self.pending).ok())
+            .flatten()
+    }
+
+    /// The client as it must outlive the app (`Link::saved`), written when it changed (by the
+    /// instance that holds it only).
     pub fn keep_pending(&mut self, saved: String) {
-        if saved.is_empty() || saved == self.kept {
+        if self.owner.is_none() || saved.is_empty() || saved == self.kept {
             return;
         }
         if put(&self.pending, saved.as_bytes()).is_ok() {
@@ -281,5 +312,42 @@ impl SyncFile {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::SyncFile;
+
+    /// The clients re-review, #3 and #5: a second app instance on the same document neither
+    /// takes up nor writes the kept client (one client id, one op-id counter, shared by two
+    /// instances, made one's edits the other's retries); and a file with no mark (a fresh clone,
+    /// a deleted mark) takes up nothing (those ops were not made on it).
+    #[test]
+    fn the_kept_client_is_one_instances_and_only_for_its_own_file() {
+        let d = std::env::temp_dir().join(format!("forge-synclink-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join(".forgecad")).unwrap();
+        std::fs::write(d.join(".forgecad/remote.toml"), "remote = \"lab\"\n").unwrap();
+        let file = d.join("part.fg");
+        let text = "shared w = 40\n";
+        std::fs::write(&file, text).unwrap();
+        // no mark yet: nothing taken up, though a kept client is there
+        let mut first = SyncFile::open(&file, text).unwrap();
+        first.keep_pending("{\"client\":\"one\"}".into());
+        assert!(first.kept_client().is_none(), "no mark: not where the ops were made");
+        first.verify(text, text).unwrap();
+        assert_eq!(first.kept_client().as_deref(), Some("{\"client\":\"one\"}"));
+        // a second instance, while the first holds the document
+        let mut second = SyncFile::open(&file, text).unwrap();
+        assert!(second.kept_client().is_none(), "the first instance's");
+        second.keep_pending("{\"client\":\"two\"}".into());
+        assert_eq!(first.kept_client().as_deref(), Some("{\"client\":\"one\"}"), "not written over");
+        drop((first, second));
+        // the first gone: the next open takes it up
+        let again = SyncFile::open(&file, text).unwrap();
+        assert_eq!(again.kept_client().as_deref(), Some("{\"client\":\"one\"}"));
+        drop(again);
+        let _ = std::fs::remove_dir_all(&d);
     }
 }

@@ -1526,6 +1526,7 @@ name = "forge-sync"
 version = "0.1.0"
 dependencies = [
  "forge-agent",
+ "forge-keep",
  "forge-lang",
  "forge-math",
  "forge-topo",

@@ -71,6 +71,9 @@ pub enum Refusal {
     /// The client's protocol or kernel differs from the server's (bit-identical geometry holds
     /// only for one kernel build).
     Mismatch { why: String },
+    /// The op was made on a version whose ops after it are no longer kept (a retention policy):
+    /// it cannot be rebased, so it is refused, never applied as if made on a newer text.
+    RebaseGone { base: u64 },
 }
 
 impl Refusal {
@@ -84,6 +87,7 @@ impl Refusal {
             Refusal::Store { .. } => "Store".into(),
             Refusal::AlreadyCommitted { .. } => "AlreadyCommitted".into(),
             Refusal::Mismatch { .. } => "Mismatch".into(),
+            Refusal::RebaseGone { .. } => "RebaseGone".into(),
         }
     }
     pub fn text(&self) -> String {
@@ -98,6 +102,9 @@ impl Refusal {
             Refusal::Store { why } => format!("not saved: {why}"),
             Refusal::AlreadyCommitted { seq } => format!("already committed at seq {seq}"),
             Refusal::Mismatch { why } => why.clone(),
+            Refusal::RebaseGone { base } => {
+                format!("made on version {base}, whose later edits are no longer kept: make it again")
+            }
         }
     }
     /// The refusal a client reads back from the wire.
@@ -113,6 +120,13 @@ impl Refusal {
                 seq: text.rsplit(' ').next().and_then(|x| x.parse().ok()).unwrap_or(0),
             },
             "Mismatch" => Refusal::Mismatch { why: text.into() },
+            "RebaseGone" => Refusal::RebaseGone {
+                base: text
+                    .split_whitespace()
+                    .nth(3)
+                    .and_then(|x| x.trim_end_matches(',').parse().ok())
+                    .unwrap_or(0),
+            },
             _ => Refusal::Lang {
                 kind: kind.into(),
                 text: text.into(),
@@ -150,6 +164,11 @@ pub trait Store {
     /// The document at `snap.seq` (the last entry's) becomes the snapshot, and the entries up to
     /// it may go. Atomic: after a crash, either the old log or the new snapshot.
     fn compact(&mut self, doc: &str, snap: &Snapshot) -> std::io::Result<()>;
+    /// The entries with seq in `after+1 ..= upto`, from the history the store keeps beyond its
+    /// latest snapshot (an op made on an old version is rebased through them). None: not kept.
+    fn read_range(&mut self, _doc: &str, _after: u64, _upto: u64) -> std::io::Result<Option<Vec<Entry>>> {
+        Ok(None)
+    }
 }
 
 /// Where a client's or server's messages go (a WebSocket, a channel in a test).
@@ -212,6 +231,30 @@ impl Store for MemStore {
         // the entries stay (the op log is the history); an open reads those after the snapshot
         d.0 = snap.clone();
         Ok(())
+    }
+    fn read_range(&mut self, doc: &str, after: u64, upto: u64) -> std::io::Result<Option<Vec<Entry>>> {
+        Ok(self.docs.get(doc).map(|d| {
+            d.1.iter()
+                .filter(|e| e.seq > after && e.seq <= upto)
+                .cloned()
+                .collect()
+        }))
+    }
+}
+
+/// Frees the sketches forge-lang's runs on this thread kept (`forge_keep`: a sketch with a
+/// named entity is an `Rc` cycle, which a run never frees; the app lets them go between builds,
+/// forge-render's `plat::release_sketches`). A host that runs forge-lang on a thread of its own
+/// (the server's actors and validations, forge-remote's connection, which applies every op it
+/// receives) must call it there between runs, or every op keeps its sketches for good (the
+/// server's load soak: 38 KB per op, linear; the kept list is a thread-local with no destructor,
+/// so a thread's end frees nothing).
+pub fn release_sketches() {
+    for x in forge_keep::take_all() {
+        if let Ok(sk) = x.downcast::<std::cell::RefCell<forge_lang::sketch::Sk>>() {
+            let named = std::mem::take(&mut sk.borrow_mut().named);
+            drop(named);
+        }
     }
 }
 

@@ -13,7 +13,8 @@ use forge_server::{Config, StoreKind, random_token, start};
 use std::process::ExitCode;
 
 const USAGE: &str = "PHASE 1: LOOPBACK / DEV ONLY (no TLS, dev tokens, no accounts): never expose it.\nforge-server DIR [--port P] [--bind ADDR] [--token T] [--user NAME:TOKEN]... \
-                     [--store file|mem] [--origin URL]... [--checkpoint SECONDS] [--insecure-lan]";
+                     [--store file|mem] [--origin URL]... [--checkpoint SECONDS] [--insecure-lan] [--per-ip N] [--cap-loopback] \
+                     [--max-conns N] [--max-per-doc N]";
 
 fn parse(args: &[String]) -> Result<Config, String> {
     let mut it = args.iter();
@@ -45,6 +46,8 @@ fn parse(args: &[String]) -> Result<Config, String> {
             "--insecure-lan" => c.insecure_lan = true,
             "--per-ip" => c.per_ip = val()?.parse().map_err(|_| "--per-ip: a number")?,
             "--cap-loopback" => c.cap_loopback = true,
+            "--max-conns" => c.max_conns = val()?.parse().map_err(|_| "--max-conns: a number")?,
+            "--max-per-doc" => c.max_per_doc = val()?.parse().map_err(|_| "--max-per-doc: a number")?,
             "--checkpoint" => {
                 c.checkpoint_idle =
                     std::time::Duration::from_secs(val()?.parse().map_err(|_| "--checkpoint: seconds")?)

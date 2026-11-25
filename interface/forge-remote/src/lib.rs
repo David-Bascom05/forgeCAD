@@ -248,6 +248,8 @@ pub struct Session {
     shared: Arc<Mutex<Shared>>,
     stop: Arc<AtomicBool>,
     pub doc: String,
+    /// The server's address: what a saved client is kept for.
+    url: String,
 }
 
 pub type Waker = Arc<dyn Fn() + Send + Sync>;
@@ -270,17 +272,30 @@ impl Session {
         saved: Option<&str>,
         waker: Option<Waker>,
     ) -> Result<Session, String> {
-        let client = saved.and_then(|t| Client::restore(doc, &remote.token, t));
+        // kept for this server only: another server's history is not this client's (its op ids
+        // and bases mean nothing there)
+        let client = saved
+            .and_then(|t| forge_sync::wire::read(t).ok())
+            .filter(|j| j.get("server").and_then(|v| v.str()) == Some(remote.url.as_str()))
+            .and_then(|j| j.get("client").and_then(|v| v.str()).map(str::to_string))
+            .and_then(|t| Client::restore(doc, &remote.token, &t));
         Session::start_client(remote, doc, client, waker, PING)
     }
 
     /// This client as the app keeps it across a close: its id, op ids and pending ops.
+    /// Kept with the server's address: taken up again only against the same server.
     pub fn saved(&self) -> String {
-        self.shared
+        use forge_sync::wire::{Json, write};
+        let client = self
+            .shared
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .client
-            .saved()
+            .saved();
+        write(&Json::obj(vec![
+            ("server", self.url.as_str().into()),
+            ("client", client.as_str().into()),
+        ]))
     }
 
     /// [`start`](Self::start), pinging every `ping` when quiet (tests).
@@ -345,6 +360,7 @@ impl Session {
             shared,
             stop,
             doc: doc.into(),
+            url: remote.url.clone(),
         })
     }
 
@@ -445,7 +461,8 @@ fn run(addr: &str, path: &str, shared: &Mutex<Shared>, stop: &AtomicBool, waker:
             backoff = (backoff * 2).min(Duration::from_secs(5));
             continue;
         };
-        backoff = Duration::from_millis(50);
+        // (the backoff resets only once a Welcome came: a server that closes at once, or refuses,
+        // is not retried 40 times a second)
         // no read timeout: a timeout in the middle of a frame would leave the framing out of
         // step (the security review's finding); quiet links are kept alive by the pinger thread,
         // and a dead one ends in a reset or in the server's idle close
@@ -466,7 +483,21 @@ fn run(addr: &str, path: &str, shared: &Mutex<Shared>, stop: &AtomicBool, waker:
             }
             match r.read() {
                 Ok(forge_ws::Msg::Text(t)) => {
-                    let Ok(d) = Down::parse(&t) else { break };
+                    let Ok(d) = Down::parse(&t) else {
+                        // a message this client cannot read: another protocol; retrying would
+                        // fail the same way for ever
+                        let mut s = lock();
+                        s.events.push(Event::Stopped(
+                            "the server speaks another protocol: update the app (or the server)".into(),
+                        ));
+                        drop(s);
+                        stop.store(true, Ordering::SeqCst);
+                        wake();
+                        break;
+                    };
+                    if matches!(d, Down::Welcome { .. }) {
+                        backoff = Duration::from_millis(50);
+                    }
                     let mut s = lock();
                     s.last_heard = Instant::now();
                     let acked = match &d {
@@ -488,6 +519,8 @@ fn run(addr: &str, path: &str, shared: &Mutex<Shared>, stop: &AtomicBool, waker:
                     s.events.extend(ev);
                     s.flush();
                     drop(s);
+                    // the client applied the op here (forge-lang): its sketches let go
+                    forge_sync::release_sketches();
                     if stopped {
                         stop.store(true, Ordering::SeqCst);
                     }
@@ -510,6 +543,7 @@ fn run(addr: &str, path: &str, shared: &Mutex<Shared>, stop: &AtomicBool, waker:
         drop(s);
         if !stop.load(Ordering::SeqCst) {
             std::thread::sleep(backoff);
+            backoff = (backoff * 2).min(Duration::from_secs(5));
         }
     }
 }

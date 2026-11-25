@@ -1,0 +1,75 @@
+# HOSTED-BUILD handoff
+
+The state of the hosted build (research/hosted/DESIGN.md, on design/hosted), kept current by
+HOSTED-BUILD. Updated 2026-11-25 (evening).
+
+## Branches
+
+| Branch | What | State |
+|---|---|---|
+| `hosted/server` | forge-sync (sans-I/O protocol), forge-ws (RFC 6455, no new crates), forge-server (actors, hub, file log, git versions), forge-remote (native client, remotes.toml trust) | security OK for loopback/dev only. `main` merged in. Pre-verify (pv 13d78f06) rerun pending after the e2e latency fix (06e1f281) |
+| `hosted/server-hardening` | N1–N9, HOSTED-DESIGN's N1–N9 review (H1–H3, M1–M3, L1–L5), the clients review's protocol parts (M2, H2a, H2b) | awaiting HOSTED-DESIGN's re-review, then pre-verify |
+| `hosted/client-native` | the desktop app as a client (forge-render: `sync_link`, `fg::Session`) | the clients review's H1–H3 and M1 fixed locally, being tested |
+| `hosted/client-web` | the browser app as a client (web-sys WebSocket, `?sync=`) | contains client-native. `hosted/server` merged in locally. Needs the client fixes merged in, plus the web lows |
+| `hosted/lean-rebase` | the Lean model of rebase | pre-verify pending (needs `main` merged in) |
+| `ci/determinism` | cross-platform bit identity: forge-det + compare.py | CAM documents report-only (e14ece17, David's ruling); `main` merged in (9204a3c2); pre-verify running |
+
+## Protocol (PROTOCOL = 2)
+
+- Every Welcome makes the client resend every pending op, in order. After a snapshot Welcome
+  they are sent from the snapshot's seq. The server dedups by (client, op id): per client, a
+  high-water mark of committed ids plus the refused ids. A retry gets its Ack again (from the
+  log) or AlreadyCommitted (from before it). DESIGN §4.2.
+- `Down::Error` is a message only; the connection stays open. `Down::Closing { text, retry }`
+  precedes every close. With `retry: false` (a bad token, another kernel or protocol, a
+  quarantined or unopenable document, a malformed message), the client stops reconnecting and
+  the app pauses syncing.
+- A client can be saved and restored (`Client::saved`/`restore`; forge-remote
+  `Session::resume`/`saved`). The app keeps it in `.forgecad/sync/<doc>.pending`, so unacked
+  ops survive a close.
+
+## Server
+
+- Store: an append-only file log per document. A snapshot is a record appended to it, and
+  nothing is deleted (op history is kept; retention is a separate policy, not built).
+- A document's actor closes with a flag plus a Close message, and drains its inbox first. Ops
+  sent while it closes wait with their joins and go to the new actor in order.
+- Limits: validation budget (abandoned runs per document and server-wide), hash-build budget
+  (`Config.build_budget`), outbox bytes, per-IP and pre-auth caps, a handshake deadline,
+  rate tokens.
+- Capacity (HOSTED-DESIGN's bench, 4 vCPU): about 3.2 MB per open document plus connection,
+  about 300 documents per GB; about 1.1 ms of server CPU per committed op.
+
+## Load, soak, faults (hosted/server-hardening)
+
+- `tests/faults.rs`: the real binary under SIGKILL mid-op and restart, and sessions closed and
+  resumed from their saved client. A smoke run by default (~1.3 s); `--ignored` soak with
+  FORGE_SOAK_SECS. 60 s: 59,888 edits, 19 kills, 85 resumes; converged, nothing lost, nothing
+  committed twice.
+- `tests/load.rs` (`--ignored`, release): steady edits plus connection churn, with /proc memory
+  and CPU. 100 documents × 3 sessions, 120 s: 72,000 edits; RSS 35 MB joined, 110 MB at the end
+  (680 B per op: the in-memory op log); 0.57 ms server CPU per op; ack p50 3.6 ms, p99 23.5 ms.
+  `FORGE_LOAD_WRAP="valgrind --tool=massif ..."` profiles the server's heap.
+- Fixed from it: forge-lang's kept sketches (`forge_keep`) are released on every server thread
+  and on forge-remote's (`forge_sync::release_sketches`); they were 38 KB per op for good. The
+  per-connection outbox no longer pre-allocates 3 MB. Validation runs on one worker per document.
+
+## App
+
+- LOCAL is unchanged: one `Option` test on the edit path. The gate binaries were
+  byte-identical to `main` (re-check with the callgrind B5 gate on the client branches).
+- SERVED: a first open (no `.forgecad/sync/<doc>.hash` mark) attaches only once the server's
+  text equals the file's and the editor's. Otherwise it pauses and the file is never written
+  over. A hand edit pauses, and the editor then shows the kept file. Save updates the mark.
+  "Syncing paused" is a banner over the view for as long as it holds.
+
+## Next
+
+1. HOSTED-DESIGN re-review of server-hardening. Pre-verify (pv ≥ 13d78f06) for each branch,
+   sent to TRAIN-CONDUCTOR (session_01WJtawwrcJMe9MW7GeYQtHw).
+2. Clients review mediums: M3 (report hashes only for builds of exactly the seq's text), M4
+   (hosted undo before an Ack), M5 (apply_all as one atomic group), M6 (done: a re-check right
+   before the rename). Web lows (a stopped link stops; the token is scoped to its address).
+3. Load, soak and fault injection: done (above). Still to do: a multi-hour soak, a disk-full
+   fault, and the cross-platform bit-identity CI over hosted's own hashes.
+4. Not in scope: users, orgs and auth (HOSTED-DESIGN is writing that plan).

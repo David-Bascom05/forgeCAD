@@ -228,6 +228,13 @@ impl Client {
     /// None: nothing to undo. The inverse is applied locally at once (Err if it no longer applies
     /// here; it is then not sent).
     pub fn undo(&mut self) -> Option<Result<u64, Refusal>> {
+        // the user's latest edit is still on its way: undoing now would take back the op before
+        // it (the undo list holds only committed ops), so it waits for the Ack
+        if !self.pending.is_empty() && !self.undo.is_empty() {
+            return Some(Err(Refusal::Invalid {
+                why: "an edit is still on its way to the server: undo once it has landed".into(),
+            }));
+        }
         let (seq, inv) = self.undo.pop()?;
         // the inverse as it reads now: through others' renames since that seq
         let op = match rebase(&inv, &self.id, self.recent.iter().filter(|e| e.seq > seq)) {
@@ -271,19 +278,19 @@ impl Client {
                     self.confirmed = text;
                     self.seq = seq;
                     self.recent.clear();
-                    // the pending ops now stand on this text (they replay on it here): sent from
-                    // it, they cannot fall behind the server's latest snapshot
-                    for p in &mut self.pending {
-                        p.base = seq;
-                    }
+                    // (each pending op keeps its own base: the server rebases it from there,
+                    // reading older ops from its history; sent as if made on this text, a Rename
+                    // in between would be skipped and the edit land on another name)
                     self.replay();
                     ev.push(Event::Changed);
                 }
-                // every Welcome (a join, a reconnect, a Resync's snapshot) sends every pending op
-                // again, in order: the server answers one it committed with its Ack again or
-                // AlreadyCommitted (by client and op id), so none is lost and none is held
-                // forever (DESIGN.md §4.2)
-                {
+                // a connection's first Welcome sends every pending op again, in order (DESIGN.md
+                // §4.2): the server answers one it committed with its Ack again or
+                // AlreadyCommitted, by (client, op id). A Resync's Welcome on a live connection
+                // sends nothing: each op sent before the Resync was answered before it (one
+                // connection is in order), and a resend of one refused could commit after the
+                // user was told it was refused.
+                if !self.welcomed {
                     self.welcomed = true;
                     for p in &self.pending {
                         self.outbox.push(Up::Op {
@@ -306,6 +313,9 @@ impl Client {
                     return ev;
                 }
                 if seq != self.seq + 1 {
+                    // committed, at a seq this client cannot place: it is no longer pending (the
+                    // snapshot the Resync brings holds it)
+                    self.pending.remove(k);
                     return self.diverged(seq);
                 }
                 let p = self.pending.remove(k);

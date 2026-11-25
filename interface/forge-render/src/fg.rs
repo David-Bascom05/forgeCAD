@@ -1961,10 +1961,16 @@ impl Session {
         let paused = file.as_ref().and_then(|f| f.paused.clone());
         #[cfg(target_arch = "wasm32")]
         let paused: Option<String> = None;
+        // the client kept when the app last closed (its unacked ops), when the file is the one
+        // it was kept with
+        #[cfg(not(target_arch = "wasm32"))]
+        let kept = file.as_ref().and_then(|f| f.kept_client());
+        #[cfg(target_arch = "wasm32")]
+        let kept: Option<String> = None;
         // LOCAL or SERVED: looked at once, here (a broken remote.toml is said, never ignored)
         let link = match paused {
             Some(_) => None,
-            None => crate::sync_link::open(path, waker.clone()).transpose()?,
+            None => crate::sync_link::open(path, waker.clone(), kept).transpose()?,
         };
         let mut s = Session::new(Some(path.to_string()), src, gpu, waker);
         if let Some(why) = paused {
@@ -2180,8 +2186,13 @@ impl Session {
         if let Some(l) = &self.sync
             && l.pending() == 0
             && l.ready()
+            && !self.previewing
+            && self.until().is_none()
+            && l.text() == self.src
         {
-            // a build of exactly the server's text at its seq: its hash is reported
+            // a build of exactly the server's text at its seq, whole (not rolled back by an end
+            // of part, not a preview): its hash is reported (clients review M3; an assembly's
+            // sibling parts are read from this disk and can still lag the server's)
             self.sync_builds.push((self.seq, l.seq()));
             if self.sync_builds.len() > 64 {
                 self.sync_builds.remove(0);
