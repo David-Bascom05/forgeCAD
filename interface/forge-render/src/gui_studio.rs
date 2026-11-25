@@ -123,6 +123,11 @@ impl Gui {
         self.studio.as_mut().map(|h| &mut h.live)
     }
 
+    /// The GPU drawing the window (tests: a software rasteriser's frames are its own measure).
+    pub fn adapter(&self) -> &wgpu::AdapterInfo {
+        &self.adapter
+    }
+
     /// One frame of the Studio; true while it has more to do (the window should draw again).
     pub(super) fn studio_frame(&mut self) -> bool {
         let active = self.shell.env == Some(EnvId::RenderStudio);
