@@ -86,12 +86,25 @@ fn two_app_sessions_edit_one_served_part() {
     let root = folder("two");
     let rb = folder("two-b");
     let srv = folder("two-srv");
-    let serve = || {
+    // (a restart comes back at the same address, as a real server does: a kept client is for
+    // the server at its address)
+    let serve = |at: &str| {
         let mut c = forge_server::Config::new(srv.clone(), vec![("dev".into(), TOKEN.into())]);
         c.port = 0;
-        forge_server::start_on(std::net::TcpListener::bind("127.0.0.1:0").unwrap(), c).unwrap()
+        let t0 = Instant::now();
+        let l = loop {
+            match std::net::TcpListener::bind(at) {
+                Ok(l) => break l,
+                Err(e) => {
+                    assert!(t0.elapsed() < Duration::from_secs(10), "{at}: {e}");
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+            }
+        };
+        forge_server::start_on(l, c).unwrap()
     };
-    let h = serve();
+    let h = serve("127.0.0.1:0");
+    let at = h.addr.to_string();
     let both = |name: &str, from: &std::path::Path| {
         for d in [&root, &rb, &srv] {
             std::fs::copy(from, d.join("parts").join(name)).unwrap();
@@ -305,7 +318,7 @@ fn two_app_sessions_edit_one_served_part() {
     let inner = j.get("client").and_then(|v| v.str()).expect("the client");
     let back = forge_sync::Client::restore("parts/part.fg", TOKEN, inner).expect("a saved client");
     assert_eq!(back.pending().len(), 1, "kept: the op");
-    let h = serve();
+    let h = serve(&at);
     remotes(&h.addr, TOKEN);
     let mut b = open(&file_b);
     until(&mut [&mut b], "the kept op, committed", |ss| {
