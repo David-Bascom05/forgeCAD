@@ -28,6 +28,7 @@ pub mod shell;
 pub mod thumb;
 pub mod viewcube;
 pub mod viewer;
+pub mod wire;
 
 pub mod agent;
 #[cfg(not(target_arch = "wasm32"))]

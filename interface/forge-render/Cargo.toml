@@ -58,6 +58,9 @@ forge-material = { path = "../../kernel/forge-material" }
 forge-thermo = { path = "../../kernel/forge-thermo" }
 # in the browser's tree already, through forge-lang: its plain math (a mass's principal axes)
 forge-topo = { path = "../../kernel/forge-topo" }
+# the assembly solver's plain report types (already in the tree through forge-lang): the build
+# worker's messages carry them (`wire`)
+forge-asm = { path = "../../kernel/forge-asm" }
 
 # the kernel, meshing and image files: the same on both targets (the browser builds parts itself)
 forge-mesh = { path = "../../kernel/forge-mesh" }

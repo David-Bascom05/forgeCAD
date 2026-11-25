@@ -1395,6 +1395,7 @@ dependencies = [
  "egui-wgpu",
  "egui-winit",
  "forge-agent",
+ "forge-asm",
  "forge-bend-lang",
  "forge-brake",
  "forge-brake-builder",
