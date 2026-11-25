@@ -432,8 +432,10 @@ impl Shell {
                                 ui.horizontal_wrapped(|ui| {
                                     ui.spacing_mut().item_spacing = vec2(8.0, 8.0);
                                     for f in &fams {
-                                        let (r, resp) =
-                                            ui.allocate_exact_size(vec2(TILE, TILE + CARD_TEXT), Sense::click());
+                                        let (r, resp) = ui.allocate_exact_size(
+                                            vec2(TILE, TILE + CARD_TEXT),
+                                            Sense::click(),
+                                        );
                                         let on = cc.fam == Some(f.id);
                                         ui.painter().rect(
                                             r,

@@ -875,8 +875,15 @@ impl Shell {
                     if users.is_empty() {
                         users.push(reader);
                     }
-                    let them = if users.len() == 1 { users[0].clone() } else { "them".into() };
-                    Some(format!("Used by {}: delete or change {them} first", listed(&users)))
+                    let them = if users.len() == 1 {
+                        users[0].clone()
+                    } else {
+                        "them".into()
+                    };
+                    Some(format!(
+                        "Used by {}: delete or change {them} first",
+                        listed(&users)
+                    ))
                 }
                 Err(e) => Some(e.text()),
             }
@@ -1113,7 +1120,10 @@ impl Shell {
                     resp.context_menu(|ui| {
                         ui.set_min_width(150.0);
                         let mut off_item = |ui: &mut Ui, label: &str, name: &str, why: Option<String>| {
-                            let b = ui.add_enabled(why.is_none(), egui::Button::new(egui::RichText::new(label).font(sans(12.0))));
+                            let b = ui.add_enabled(
+                                why.is_none(),
+                                egui::Button::new(egui::RichText::new(label).font(sans(12.0))),
+                            );
                             // an item that's off says why under itself, muted, in the menu: no
                             // tooltip over the items below it (UX-LEAD)
                             if let Some(w) = why {

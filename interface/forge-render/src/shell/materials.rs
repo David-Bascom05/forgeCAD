@@ -498,12 +498,21 @@ impl Shell {
                     if b.narrow_detail {
                         (none, none, body)
                     } else {
-                        (none, body, Rect::from_min_size(body.right_top(), vec2(0.0, body.height())))
+                        (
+                            none,
+                            body,
+                            Rect::from_min_size(body.right_top(), vec2(0.0, body.height())),
+                        )
                     }
                 } else {
                     let libs = Rect::from_min_size(body.min, vec2(LIBS_W, body.height()));
-                    let list = Rect::from_min_size(pos2(libs.right(), body.top()), vec2(LIST_W, body.height()));
-                    (libs, list, Rect::from_min_max(pos2(list.right(), body.top()), body.max))
+                    let list =
+                        Rect::from_min_size(pos2(libs.right(), body.top()), vec2(LIST_W, body.height()));
+                    (
+                        libs,
+                        list,
+                        Rect::from_min_max(pos2(list.right(), body.top()), body.max),
+                    )
                 };
                 let p = ui.painter().clone();
                 p.rect_filled(
@@ -530,9 +539,11 @@ impl Shell {
                     ui.scope_builder(region(list, vec2(0.0, 0.0)), |ui| {
                         if narrow {
                             // the libraries, folded above the list
-                            egui::CollapsingHeader::new(egui::RichText::new("Libraries").font(sans(12.0)).color(t.ink2))
-                                .id_salt("mat-libs-narrow")
-                                .show(ui, |ui| Self::browser_libraries(ui, &t, &mut b, places));
+                            egui::CollapsingHeader::new(
+                                egui::RichText::new("Libraries").font(sans(12.0)).color(t.ink2),
+                            )
+                            .id_salt("mat-libs-narrow")
+                            .show(ui, |ui| Self::browser_libraries(ui, &t, &mut b, places));
                         }
                         let was = b.chosen.clone();
                         Self::browser_list(ui, &t, &mut b, places);
@@ -548,7 +559,9 @@ impl Shell {
                                 ui.add_space(12.0);
                                 let back = ui.add(
                                     egui::Button::new(
-                                        egui::RichText::new("\u{2039} Materials").font(sans(13.0)).color(t.accent),
+                                        egui::RichText::new("\u{2039} Materials")
+                                            .font(sans(13.0))
+                                            .color(t.accent),
                                     )
                                     .frame(false),
                                 );

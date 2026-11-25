@@ -3018,10 +3018,24 @@ impl Shell {
                 };
                 egui::Grid::new("sizes").show(ui, |ui| {
                     for (k, (n, w, h)) in forge_draw::sheet::SIZES.iter().enumerate() {
-                        if ui
-                            .selectable_label(nd.size == k, format!("{n}  {w} x {h}"))
-                            .clicked()
-                        {
+                        // ANSI's letters are inch sheets, ISO's A sizes millimetre ones: each
+                        // in its own unit, the size muted beside the name (UX-LEAD)
+                        let sys = if n.starts_with('A') && n.len() > 1 {
+                            super::ux::System::Metric
+                        } else {
+                            super::ux::System::Inch
+                        };
+                        let (q, _) = super::ux::convert(*w, super::ux::Qty::Length, sys);
+                        let size = format!(
+                            "{} \u{d7} {}",
+                            forge_units::trim(q),
+                            super::ux::show(*h, super::ux::Qty::Length, sys)
+                        );
+                        let mut job = egui::text::LayoutJob::default();
+                        let style = |c| egui::TextFormat::simple(sans(13.0), c);
+                        job.append(n, 0.0, style(self.theme.ink));
+                        job.append(&size, 8.0, style(self.theme.ink2));
+                        if ui.selectable_label(nd.size == k, job).clicked() {
                             nd.size = k;
                         }
                         if k % per == per - 1 {

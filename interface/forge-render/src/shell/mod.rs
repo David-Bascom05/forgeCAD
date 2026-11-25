@@ -14,6 +14,7 @@ pub mod bendsim;
 mod bendsim_cards;
 mod bendsim_env;
 pub mod cam;
+pub mod capture;
 pub mod content;
 pub mod dialog;
 pub mod docs;
@@ -27,7 +28,6 @@ mod dwgdoc_edit_ui;
 mod dwgdoc_ui;
 pub mod dwgprops;
 mod empty;
-pub mod capture;
 pub mod env;
 pub mod fg;
 pub mod fgasm;
@@ -594,9 +594,9 @@ impl Shell {
         // short of the view cube: a narrow view (a small window, the properties column open)
         // shows the switches that fit left of it (all of them stay in Settings)
         let ppp = ctx.pixels_per_point();
-        let limit = self
-            .cube_place
-            .map_or(self.view_rect.right(), |c| self.view_rect.min.x + c.at.0 / ppp - 8.0);
+        let limit = self.cube_place.map_or(self.view_rect.right(), |c| {
+            self.view_rect.min.x + c.at.0 / ppp - 8.0
+        });
         let r = egui::Area::new(egui::Id::unique("view-toolbar"))
             .fixed_pos(at)
             .order(egui::Order::Middle)
@@ -647,7 +647,12 @@ impl Shell {
     /// whose words are kept a while first (UX-LEAD: a reply is never swallowed by a state).
     pub fn state_status(&mut self, ctx: &egui::Context, state: String) {
         let now = ctx.input(|i| i.time);
-        let pressed = ctx.input(|i| i.pointer.any_pressed() || i.events.iter().any(|e| matches!(e, egui::Event::Key { pressed: true, .. })));
+        let pressed = ctx.input(|i| {
+            i.pointer.any_pressed()
+                || i.events
+                    .iter()
+                    .any(|e| matches!(e, egui::Event::Key { pressed: true, .. }))
+        });
         if self.status != self.status_state && !self.status.trim().is_empty() {
             self.status_event = Some((self.status.clone(), now));
         } else if pressed || self.status_event.as_ref().is_some_and(|(_, at)| now - at > 4.0) {
@@ -1178,7 +1183,13 @@ impl Shell {
         if open || resp.hovered() {
             p.rect_filled(more, up, t.hover);
         }
-        p.text(more.center(), Align2::CENTER_CENTER, "\u{00bb}", sans(15.0), t.ink);
+        p.text(
+            more.center(),
+            Align2::CENTER_CENTER,
+            "\u{00bb}",
+            sans(15.0),
+            t.ink,
+        );
         self.note("tabs:more", more);
         if resp.clicked() {
             ui.data_mut(|d| d.insert_temp(open_id, !open));
@@ -1341,18 +1352,38 @@ impl Shell {
         };
         // a refusal's fix a click away (Manufacture: the unplaced setup's dialog): always seen,
         // the words before it cut to fit (the whole on hover), never under the markup toggle
-        let fix = if self.tab == CAM_TAB { self.cam.as_ref().and_then(cam::status_fix) } else { None };
-        let fix_g = fix.as_ref().map(|(label, _)| ui.fonts_mut(|f| f.layout_no_wrap(label.to_string(), sans(12.0), Color32::WHITE)));
-        let room = (s.width() - 330.0 - 12.0 - fix_g.as_ref().map_or(0.0, |g| g.size().x + 28.0) - (x + 4.0)).max(40.0);
+        let fix = if self.tab == CAM_TAB {
+            self.cam.as_ref().and_then(cam::status_fix)
+        } else {
+            None
+        };
+        let fix_g = fix.as_ref().map(|(label, _)| {
+            ui.fonts_mut(|f| f.layout_no_wrap(label.to_string(), sans(12.0), Color32::WHITE))
+        });
+        let room = (s.width() - 330.0 - 12.0 - fix_g.as_ref().map_or(0.0, |g| g.size().x + 28.0) - (x + 4.0))
+            .max(40.0);
         let mut job = egui::text::LayoutJob::simple_singleline(line.to_string(), sans(12.0), Color32::WHITE);
-        job.wrap = egui::text::TextWrapping { max_width: room, max_rows: 1, break_anywhere: true, overflow_character: Some('\u{2026}') };
+        job.wrap = egui::text::TextWrapping {
+            max_width: room,
+            max_rows: 1,
+            break_anywhere: true,
+            overflow_character: Some('\u{2026}'),
+        };
         let g = ui.fonts_mut(|f| f.layout_job(job));
         let elided = g.size().x >= room - 1.0;
         let said = Rect::from_min_size(pos2(x + 4.0, st.center().y - g.size().y * 0.5), g.size());
         p.galley(said.min, g, Color32::WHITE);
         // the whole line on hover when cut; a release refusal's detail (its rule, the syntax) too
-        let detail = if self.tab == CAM_TAB { self.cam.as_ref().and_then(cam::release_words).map(|b| b.detail) } else { None };
-        let whole = if pathed && env_line.is_none() { full.to_string() } else { line.to_string() };
+        let detail = if self.tab == CAM_TAB {
+            self.cam.as_ref().and_then(cam::release_words).map(|b| b.detail)
+        } else {
+            None
+        };
+        let whole = if pathed && env_line.is_none() {
+            full.to_string()
+        } else {
+            line.to_string()
+        };
         if elided || detail.is_some() || pathed {
             let r = ui.interact(said, ui.scope_id().with("status-line"), Sense::hover());
             r.on_hover_text(match (elided || pathed, detail) {
@@ -1362,11 +1393,22 @@ impl Shell {
             });
         }
         if let (Some((label, action)), Some(g)) = (fix, fix_g) {
-            let fr = Rect::from_min_size(pos2(said.right() + 12.0, st.top() + 2.0), vec2(g.size().x + 16.0, STATUS_H - 4.0));
+            let fr = Rect::from_min_size(
+                pos2(said.right() + 12.0, st.top() + 2.0),
+                vec2(g.size().x + 16.0, STATUS_H - 4.0),
+            );
             let r = ui.interact(fr, ui.scope_id().with("status-fix"), Sense::click());
             r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
-            p.rect_filled(fr, 3.0, Color32::from_white_alpha(if r.hovered() { 56 } else { 36 }));
-            p.galley(pos2(fr.left() + 8.0, fr.center().y - g.size().y * 0.5), g, Color32::WHITE);
+            p.rect_filled(
+                fr,
+                3.0,
+                Color32::from_white_alpha(if r.hovered() { 56 } else { 36 }),
+            );
+            p.galley(
+                pos2(fr.left() + 8.0, fr.center().y - g.size().y * 0.5),
+                g,
+                Color32::WHITE,
+            );
             self.note("status:fix", fr);
             if r.clicked() {
                 self.out.push(action);
@@ -1527,6 +1569,8 @@ impl Shell {
             self.capture.settings_open = false;
         } else if self.inspect.props.is_some() {
             self.inspect.props = None;
+        } else if self.new_drawing.is_some() {
+            self.new_drawing = None;
         } else if self.sheet.vendor.dfm_open {
             // the DFM report opens over the Vendor window: it goes first
             self.sheet.vendor.dfm_open = false;
@@ -1536,7 +1580,12 @@ impl Shell {
             p.params_open = false;
         } else if let Some(p) = self.fg.as_mut().filter(|p| p.cutlist_open) {
             p.cutlist_open = false;
-        } else if let Some(a) = self.fg.as_mut().and_then(|p| p.asm.as_mut()).filter(|a| a.bom_open) {
+        } else if let Some(a) = self
+            .fg
+            .as_mut()
+            .and_then(|p| p.asm.as_mut())
+            .filter(|a| a.bom_open)
+        {
             a.bom_open = false;
         } else if let Some(p) = self.fg.as_mut().filter(|p| p.occ_edit.is_some()) {
             p.occ_edit = None;
@@ -2039,7 +2088,10 @@ pub fn brief(s: &str) -> String {
             let path = (core.starts_with('/') || core.starts_with("~/") || core.get(1..3) == Some(":\\"))
                 && core.len() > 1
                 || (core.matches('/').count() >= 1
-                    && core.rsplit('/').next().is_some_and(|f| f.contains('.') && !f.ends_with('.'))
+                    && core
+                        .rsplit('/')
+                        .next()
+                        .is_some_and(|f| f.contains('.') && !f.ends_with('.'))
                     && !core.contains("://"));
             match core.rsplit(['/', '\\']).next() {
                 // a file's name has letters (not a ratio like 1/2.5)
@@ -2155,11 +2207,20 @@ mod brief_tests {
 
     #[test]
     fn a_path_is_said_by_its_file_name() {
-        assert_eq!(brief("Saved /tmp/fg-ui-audit-5005/sketch/run/plate.fg"), "Saved plate.fg");
+        assert_eq!(
+            brief("Saved /tmp/fg-ui-audit-5005/sketch/run/plate.fg"),
+            "Saved plate.fg"
+        );
         assert_eq!(brief("Wrote out/a.nc, out/b.nc"), "Wrote a.nc, b.nc");
-        assert_eq!(brief("Saved weldments/gate_frame-cutlist.csv"), "Saved gate_frame-cutlist.csv");
+        assert_eq!(
+            brief("Saved weldments/gate_frame-cutlist.csv"),
+            "Saved gate_frame-cutlist.csv"
+        );
         // not paths: units, ratios, links
         assert_eq!(brief("F 3726 mm/min · 1/2.5 turn"), "F 3726 mm/min · 1/2.5 turn");
-        assert_eq!(brief("see https://example.com/a.html"), "see https://example.com/a.html");
+        assert_eq!(
+            brief("see https://example.com/a.html"),
+            "see https://example.com/a.html"
+        );
     }
 }
