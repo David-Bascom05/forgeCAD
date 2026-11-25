@@ -1399,6 +1399,9 @@ pub struct SetupView<'a> {
     pub at: Option<[f64; 3]>,
     pub clear: f64,
     pub retract: f64,
+    /// What holds the stock (its bodies as the checker sees them; for a workholding library
+    /// device, the table plane and the placement too), if the setup names a fixture.
+    pub fixture: Option<&'a forge_cam::fixture::Fixture>,
 }
 
 pub struct Cam {
@@ -10768,6 +10771,7 @@ impl Cam {
             at: s.at,
             clear: s.heights.clear,
             retract: s.heights.retract,
+            fixture: s.fixture.as_ref(),
         })
     }
 

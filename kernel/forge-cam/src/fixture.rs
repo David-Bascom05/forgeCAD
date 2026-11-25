@@ -589,6 +589,32 @@ impl Fixture {
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_library_vise_as_the_checkers_fixture() {
+        let l = forge_workholding::Library::builtin();
+        let st = forge_workholding::Box3 {
+            min: [0.0, 0.0, -60.0],
+            max: [80.0, 60.0, 0.0],
+        };
+        let v = l.get("standin-vise-150").unwrap();
+        let p = forge_workholding::mill::vise("v", v, &st, 0, 50.0, None, None).unwrap();
+        let f = Fixture::from_workholding(&p, 0, 1.0);
+        let names: Vec<_> = f.boxes().into_iter().map(|b| b.0).collect();
+        for n in ["base", "fixed jaw", "moving jaw"] {
+            assert!(names.iter().any(|m| m == n), "{n} in {names:?}");
+        }
+        // the jaws grip 50 of the stock (it sits on the bed); the vise stands its height (100) on the table
+        assert!((f.jaw_top - (-10.0)).abs() < 1e-9, "{}", f.jaw_top);
+        let t = f.table_z.unwrap();
+        assert!((f.jaw_top - t - v.get("height").unwrap()).abs() < 1e-9);
+        // nothing below the table; every face names its piece
+        assert!(f.boxes().iter().all(|b| b.1[2] >= t - 1e-9));
+        let fs = f.faces();
+        assert!(!fs.is_empty() && fs.iter().all(|x| f.piece_of(x.id).is_some()));
+        assert_eq!(f.placed.as_ref().map(|q| q.bodies.len()), Some(p.bodies.len()));
+        assert_eq!((f.axis, f.clearance), (0, 1.0));
+    }
+
     const V: ViseSize = ViseSize {
         jaw_width: 150.0,
         jaw_height: 50.0,
