@@ -11,7 +11,7 @@ its builder (`interface/forge-workholding-builder`), and how CAM holds a part.
 | `cam/workholding` | 9edad4f6 | merged in train 7 (the library, kinds, lathe, generators, vendor data) |
 | `cam/workholding-vise` | d9040ec4 | PRE-VERIFY GREEN-EXCEPT-RENDER, sent to TRAIN-CONDUCTOR (render: VERIFY-RENDER) |
 | `cam/workholding-haas` | 783e2d57 | contains `-vise`; real Haas models (05-0404, 05-0405) in the certified path |
-| `cam/workholding-any2` | f2321a5b | contains `-haas`; any geometry, user imports, the speed fix |
+| `cam/workholding-any2` | 11c7a3b2 | contains `-haas`; any geometry, user imports, the speed fix |
 | `cam/workholding-default2` | (this) | contains `-any2`; `generic-vise-150`/`-100` mean the real Haas vises |
 
 They land in that order; each line goes to TRAIN-CONDUCTOR as its pre-verify comes in.
@@ -82,7 +82,17 @@ sha256 the record cites, so a model swapped under a citation is caught either wa
 
 ## Unfinished, in the order I would do it
 
-0. **Parasolid**: PARASOLID's .x_t/.x_b importer is heading for a train; once it lands,
+0. **Open shells (sheets)**: KERNEL-STRESS's `import-sheets` (@05d50e2d, on kernel-stress, not
+   yet landed) adds `forge_step::Imported::sheets` (`Sheet { entity, name, body, open_edges }`) for
+   the 51 open shells of 05-0223, 05-0224, 05-0994, 05-0995, 08-1717, 08-1865 and 08-1866. Once it
+   lands, `compile::compile` should take `im.sheets` too (as further indices after the solids, or a
+   group of their own), so those models check against their real faces. A sheet has no inside:
+   the checker must use its faces plus mu only, never an inside test, and anything that needs a
+   volume must keep refusing it. Two sliver faces (05-0994 #109088, 05-0995 #43971) mesh to nothing
+   and will hit compile's "not settled by the mesh" refusal: decide them there (a face that small
+   can be enclosed by its own box, reported). Add a test with one of those models, and put the
+   branch after import-sheets in the train order.
+   **Parasolid**: PARASOLID's .x_t/.x_b importer is heading for a train; once it lands,
    `model_file` should accept it with a one-line dispatch in `Cam::import_model` (beside the
    `.fg` branch: read it to bodies, then `compile_bodies`).
    **Soft jaws on a model vise's own bodies.** `forge_cam::fixture::soft_jaws` builds the vise
