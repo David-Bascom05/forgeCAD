@@ -389,8 +389,18 @@ impl Punch {
         rp + (x - rp / dmath::cos(h)) / tan(h)
     }
 
-    /// The working part: the tip arc and both flanks up to `tip_height` (one loop).
+    /// The working part: the tip arc and both flanks up to `tip_height` (one loop); a
+    /// flattening punch's, its flat face and the block above it.
     pub fn tip_section(&self) -> Region {
+        if self.role == Role::Flatten && self.profile.is_none() {
+            let w = self.width / 2.0;
+            return Region::of(vec![poly(&[
+                (-w, 0.0),
+                (w, 0.0),
+                (w, self.tip_height),
+                (-w, self.tip_height),
+            ])]);
+        }
         let h = self.tip_angle / 2.0;
         let rp = self.tip_radius;
         let ht = self.tip_height;
@@ -429,6 +439,15 @@ impl Punch {
             // an explicit section: what lies above the tip height is body, checked by distance;
             // the working part below it is decided by the rules (as a generated section's is)
             return Region::of(vec![clip_above(p, self.tip_height)]);
+        }
+        if self.role == Role::Flatten {
+            let w = self.width / 2.0;
+            return Region::of(vec![poly(&[
+                (-w, self.tip_height),
+                (w, self.tip_height),
+                (w, self.height),
+                (-w, self.height),
+            ])]);
         }
         let ht = self.tip_height;
         let xf = self.flank_x(ht);
@@ -512,6 +531,16 @@ impl Die {
     pub fn section(&self) -> Region {
         if let Some(p) = &self.profile {
             return Region::of(vec![p.clone()]);
+        }
+        if self.role == Role::Flatten {
+            // a flattening die: a block, its top flat
+            let w = self.width / 2.0;
+            return Region::of(vec![poly(&[
+                (-w, -self.height),
+                (w, -self.height),
+                (w, 0.0),
+                (-w, 0.0),
+            ])]);
         }
         let a = self.angle / 2.0;
         let rs = self.shoulder_radius;

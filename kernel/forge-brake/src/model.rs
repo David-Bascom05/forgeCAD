@@ -76,6 +76,8 @@ pub struct BendM {
     pub c0: f64,
     /// Zone coordinates to developed.
     pub zdev: Rigid2,
+    /// A hem's joint: made in two strokes, a pre-bend and a flattening.
+    pub hem: Option<forge_sheet::HemName>,
 }
 
 impl BendM {
@@ -308,6 +310,10 @@ impl Model {
                 zdev: Rigid2 {
                     o: bp.developed.origin,
                     x: bp.developed.x,
+                },
+                hem: match &j.kind {
+                    JointKind::Hem(h) => Some(h.kind),
+                    _ => None,
                 },
             });
         }

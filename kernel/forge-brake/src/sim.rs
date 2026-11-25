@@ -59,6 +59,11 @@ pub enum Rule {
     /// The operator's move into the step (lift, pull out, turn, push in, set down) is not
     /// proven clear of the press (warning).
     Handling,
+    /// The sheet is thicker than the tool's maker rates it for (its published max thickness).
+    ToolRating,
+    /// A hem's pre-bend passes, but no tool on the press flattens it (`Role::flattens`), or none
+    /// that does passes the flattening's checks.
+    NoFlattening,
 }
 
 impl Rule {
@@ -81,10 +86,12 @@ impl Rule {
             Rule::Tonnage => "tonnage",
             Rule::Withdraw => "withdraw",
             Rule::Handling => "handling",
+            Rule::ToolRating => "tool_rating",
+            Rule::NoFlattening => "no_flattening",
         }
     }
 
-    pub const ALL: [Rule; 17] = [
+    pub const ALL: [Rule; 19] = [
         Rule::ToolCollision,
         Rule::ClosesOnPunch,
         Rule::SelfCollision,
@@ -102,6 +109,8 @@ impl Rule {
         Rule::Tonnage,
         Rule::Withdraw,
         Rule::Handling,
+        Rule::ToolRating,
+        Rule::NoFlattening,
     ];
 }
 
@@ -351,6 +360,20 @@ pub struct Step {
     /// The setups tried before this one, in the planner's order, each with the first rule it
     /// failed (punch id, die id, rotated, rule): why these tools were chosen.
     pub rejected: Vec<(String, String, bool, Rule)>,
+}
+
+/// A hem's pre-bend, as included angle: WILA, "The first step when creating a hem is to make a
+/// 30° bend" (https://www.wilatooling.com/en-us/applications/hemming/, read 2026-11-25).
+pub const HEM_PRE_BEND: f64 = 30.0 * dmath::PI / 180.0;
+
+/// The turn a bend's first stroke makes: the whole of it, or a hem's pre-bend.
+pub fn first_turn(b: &BendM) -> f64 {
+    if b.hem.is_some() {
+        // a nanoradian short: a 30 degree tool is not refused by the subtraction's rounding
+        (dmath::PI - HEM_PRE_BEND - 1e-9).min(b.theta)
+    } else {
+        b.theta
+    }
 }
 
 /// What a step's stroke does to its bend.
@@ -1610,6 +1633,11 @@ impl<'a> StepCtx<'a> {
                 if mv.side == Side::J && (wall_of(st) == Some(a) || wall_of(st) == Some(b)) {
                     continue;
                 }
+                // flattening: the hem's leg closing on its base is the hem (its gap is the
+                // sheet's own, built and checked there)
+                if self.flatten.is_some() && wall_of(mv) == Some(b) && wall_of(st) == Some(a) {
+                    continue;
+                }
                 let pb = SelfPb {
                     ctx: self,
                     mv,
@@ -1694,6 +1722,7 @@ impl<'a> StepCtx<'a> {
             for st in self.pieces.iter().filter(|p| p.side != Side::J) {
                 if st.side == mv.side
                     || (mv.side == Side::J && (wall_of(st) == Some(a) || wall_of(st) == Some(b)))
+                    || (self.flatten.is_some() && wall_of(mv) == Some(b) && wall_of(st) == Some(a))
                 {
                     continue;
                 }
@@ -1876,6 +1905,9 @@ impl<'a> StepCtx<'a> {
 
     /// The closed-form rules of the step: angles, radius, V, legs, stroke, lengths, force.
     pub fn rules(&self, uts: Option<f64>) -> (Vec<Check>, f64, Option<f64>) {
+        if self.flatten.is_some() {
+            return self.flat_rules();
+        }
         let mut out = Vec::new();
         let included = dmath::PI - self.phimax;
         out.push(Check::rule(Rule::DieAngle, included, self.die.angle, false));
@@ -1885,13 +1917,17 @@ impl<'a> StepCtx<'a> {
             self.punch.tip_angle,
             false,
         ));
-        let r_in = self.bj.inside_radius(self.phimax);
-        out.push(Check::rule(
-            Rule::PunchRadius,
-            self.punch.tip_radius,
-            r_in + 1e-9,
-            true,
-        ));
+        // a hem's pre-bend: its radius is the tool's, closed to the hem's by the flattening
+        if self.bj.hem.is_none() {
+            let r_in = self.bj.inside_radius(self.phimax);
+            out.push(Check::rule(
+                Rule::PunchRadius,
+                self.punch.tip_radius,
+                r_in + 1e-9,
+                true,
+            ));
+        }
+        self.tool_rating(&mut out);
         // the shoulder's contact on the leg through the motion, certified by bisection
         // certified: the contact's least place along the leg, and its farthest
         let (cmin, cmax, at, proven) = self.contact_range();
@@ -2021,6 +2057,64 @@ impl<'a> StepCtx<'a> {
             }
         }
         (out, travel, force)
+    }
+
+    /// The sheet against each tool's published rating (only where the maker gives one).
+    fn tool_rating(&self, out: &mut Vec<Check>) {
+        for (max, name) in [
+            (self.punch.max_thickness, format!("punch:{}", self.punch.id)),
+            (self.die.max_thickness, format!("die:{}", self.die.id)),
+        ] {
+            if let Some(max) = max {
+                let mut c = Check::rule(Rule::ToolRating, self.t, max, true);
+                c.tool = Some(name);
+                out.push(c);
+            }
+        }
+    }
+
+    /// A hem's flattening: the stroke the press must make, the part under the punch at top dead
+    /// centre (the pre-bent leg standing up), the tools' segments and the bed, the tools'
+    /// ratings. Not the air bend's (the V's, the shoulder's, the punch tip's): the faces are flat.
+    /// The flattening force is not checked: the makers' tables (WILA catalogue p.111, Mate p.47)
+    /// are read but their columns not yet confirmed against the pages.
+    fn flat_rules(&self) -> (Vec<Check>, f64, Option<f64>) {
+        let mut out = Vec::new();
+        let top0 = self.ztip(self.phi0());
+        let travel = self.z_tdc - self.ztip(self.phimax);
+        out.push(if self.tl.press.unchecked.iter().any(|u| u == "open_height") {
+            Check::not_checked(
+                Rule::Stroke,
+                "the tool clamps' heights under the press's open height",
+            )
+        } else {
+            Check::rule(Rule::Stroke, travel, self.tl.press.stroke, true)
+        });
+        let mut oh = Check::rule(Rule::OpenHeight, self.z_tdc, top0 + self.tl.clearance, false);
+        oh.phase = Some(Phase::Approach);
+        out.push(oh);
+        let (pl, dl) = self.tool_lengths();
+        let mut seg = Check::rule(
+            Rule::Segments,
+            pl.unwrap_or(0.0).min(dl.unwrap_or(0.0)),
+            self.need(),
+            false,
+        );
+        if pl.is_none() || dl.is_none() {
+            seg.pass = false;
+            seg.tool = Some(if pl.is_none() {
+                format!("punch:{}", self.punch.id)
+            } else {
+                format!("die:{}", self.die.id)
+            });
+        }
+        out.push(seg);
+        self.tool_rating(&mut out);
+        out.push(Check::not_checked(
+            Rule::Tonnage,
+            "the flattening force: the makers' tables are not yet confirmed",
+        ));
+        (out, travel, None)
     }
 
     /// The legs' straight runs (far, near) and the part's length along the bed.
