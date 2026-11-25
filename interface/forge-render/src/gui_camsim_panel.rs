@@ -85,6 +85,11 @@ pub struct CamSimUi {
     pub detail: bool,
     /// (the target in the machine's base frame, the target last set in the part's frame).
     pub eye_anchor: Option<([f64; 3], [f32; 3])>,
+    /// Cutting soft jaws: the part they will hold drawn faint where it will sit (off: it is not
+    /// there while they are cut).
+    pub jaw_part: bool,
+    /// The tool's label shown while paused without the pointer on the tool (review shots).
+    pub label_always: bool,
     pub path_width: f32,
     pub tab: Tab,
     /// The move list's selection (a piece), drawn wider.
@@ -150,6 +155,8 @@ impl CamSimUi {
             shop_eye: true,
             detail: true,
             eye_anchor: None,
+            jaw_part: false,
+            label_always: false,
             path_width: 2.0,
             tab: Tab::Program,
             picked: None,
@@ -562,12 +569,25 @@ impl Shell {
             }
             // the tool and its holder in words, a leader label beside the tool's top (where the
             // holder meets it), out to the side with more room; the records it was drawn from
-            // (keys, sources, what is left out) are its hover
+            // (keys, sources, what is left out) are its hover. Only while the pointer is on the
+            // tool and the playback is still: never a label travelling with the tool (David);
+            // the status line names the tool at all times
+            let on_tool = |p: [f64; 3], reach: f64, top: f64| {
+                let hover = ctx.pointer_hover_pos()?;
+                let a = to_px([p[0] - reach, p[1], p[2]])?;
+                let b = to_px([p[0] + reach, p[1], p[2] + top])?;
+                let c = to_px([p[0], p[1], p[2] + top])?;
+                let d = to_px([p[0], p[1], p[2]])?;
+                let r = Rect::from_points(&[a, b, c, d]).expand(6.0);
+                Some(r.contains(hover))
+            };
             if st.tool
+                && !st.playing
                 && let Some((tool, p, _)) = st.tool_now()
                 && let Some(lk) = st.sim.looks.get(tool)
                 && let Some((at, note)) = lk.note.as_ref()
                 && let Some(tu) = st.sim.cam.sim_tools().get(tool)
+                && (st.label_always || on_tool(p, lk.reach, at[1] + 40.0) == Some(true))
             {
                 let (z, r) = (p[2] + at[1], at[0].max(0.5 * tu.tool.dc));
                 // the leader runs out past the widest of the drawing (the nut, the flange)
@@ -641,6 +661,7 @@ impl Shell {
                                     r.on_hover_text(note.as_str());
                                 });
                             self.view_blocks.push(hit);
+                            self.places.push(("camsim:toolnote".into(), hit));
                         }
                     }
                 }
@@ -711,7 +732,7 @@ fn timeline(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme, w: f
             None => "The cycle time on the machine is in the Program tab, per op.".to_string(),
         };
         let tip = format!(
-            "{} of {} at feed time: feeds at their programmed rates, rapids at the machine's rapid rates. Feed time leaves out tool changes, dwells and acceleration, so it is shorter than the cycle time. {cycle}",
+            "{} of {} at feed time: feeds at their programmed rates, rapids at the machine's rapid rates, each tool change at the machine's change time (up, swap, across and down). It leaves out dwells and acceleration, so it is shorter than the cycle time. {cycle}",
             clock(st.t),
             clock(total)
         );
@@ -744,17 +765,34 @@ fn timeline(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme, w: f
             let op = &st.sim.tl.ops[g.op as usize];
             let tu = st.sim.cam.sim_tools().get(tool);
             ui.separator();
-            let s = format!(
-                "{} · T{} {} · {} · F {:.0} mm/min · X {:.3}  Y {:.3}  Z {:.3} mm",
-                op.name,
-                tu.map_or(0, |u| u.t),
-                tu.map_or("", |u| u.tool.id.as_str()),
-                g.kind.name(),
-                g.f,
-                p[0],
-                p[1],
-                p[2]
-            );
+            // the tool in people's words (the label never travels with the tool: it is here)
+            let named = tu.map_or(String::new(), |u| {
+                format!("T{} · {}", u.t, crate::camsim::tools::tool_words(u))
+            });
+            let s = match st.sim.tl.changes.iter().find(|c| st.t >= c.t0 && st.t < c.t1) {
+                Some(c) => {
+                    let to = st.sim.cam.sim_tools().get(c.to as usize).map_or(String::new(), |u| {
+                        format!("T{} · {}", u.t, crate::camsim::tools::tool_words(u))
+                    });
+                    format!(
+                        "Tool change to {to} · {}",
+                        if c.cited {
+                            format!("{:.1} s, the machine's", c.t1 - c.t0)
+                        } else {
+                            "the machine record gives no change time: a pause shown".into()
+                        }
+                    )
+                }
+                None => format!(
+                    "{} · {named} · {} · F {:.0} mm/min · X {:.3}  Y {:.3}  Z {:.3} mm",
+                    op.name,
+                    g.kind.name(),
+                    g.f,
+                    p[0],
+                    p[1],
+                    p[2]
+                ),
+            };
             ui.add(egui::Label::new(egui::RichText::new(&s).color(t.ink2)).truncate())
                 .on_hover_text(&s);
         }
@@ -827,6 +865,29 @@ fn timeline(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme, w: f
                 t.ink2,
             );
             last = op.setup;
+        }
+    }
+    // tool changes: a tick each, the new tool's number beside it where there is room (not over
+    // the one before: the status line names the tool during each change)
+    let mut room = f32::NEG_INFINITY;
+    for c in &st.sim.tl.changes {
+        let x = x_of(c.t0);
+        painter.line_segment(
+            [pos2(x, band.top()), pos2(x, band.bottom())],
+            Stroke::new(1.5, Color32::WHITE),
+        );
+        if x < room {
+            continue;
+        }
+        room = x + 26.0;
+        if let Some(u) = st.sim.cam.sim_tools().get(c.to as usize) {
+            painter.text(
+                pos2(x + 2.0, band.bottom() - 1.0),
+                Align2::LEFT_BOTTOM,
+                format!("T{}", u.t),
+                FontId::proportional(11.0),
+                Color32::WHITE,
+            );
         }
     }
     // markers
@@ -1294,6 +1355,10 @@ fn display(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
         ui.checkbox(&mut st.shop_eye, "Operator's view")
             .on_hover_text("The camera stays put in the machine: the table and the part move under the head, as in the shop. Off: the part stays still and the machine moves about it.");
     }
+    if st.sim.setups.iter().any(|s| s.jaws_for.is_some()) {
+        ui.checkbox(&mut st.jaw_part, "Finished part in jaws")
+            .on_hover_text("Shows the part faint where it will sit, and seated once the jaws are cut");
+    }
     ui.checkbox(&mut st.stop_at_markers, "Stop at issues");
     // the toolpath coloured by a measured value: its legend
     if let Some(v) = &st.values {
@@ -1334,7 +1399,7 @@ fn display(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
                 (Kind::Cut, _) => look::CUT,
                 (Kind::Plunge, _) => look::PLUNGE,
                 (Kind::Link, _) => look::LINK,
-                (Kind::Rapid, _) => look::RAPID,
+                (Kind::Rapid | Kind::Change, _) => look::RAPID,
             };
             let (r, _) = ui.allocate_exact_size(vec2(14.0, 4.0), Sense::hover());
             ui.painter().rect_filled(r, 1.0, srgb(c));

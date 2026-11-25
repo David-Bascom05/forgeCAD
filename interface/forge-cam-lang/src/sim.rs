@@ -29,10 +29,31 @@ pub struct SimSetup {
     pub fixture_name: Option<String>,
     /// The setup this one continues, turned over.
     pub from: Option<usize>,
+    /// A setup that cuts soft jaws (its part is the jaws, held in their vise): the setup that
+    /// then grips the part in them. The two share one frame (forge_cam::fixture::soft_jaws: the
+    /// gripping setup's), so the part as that setup holds it is where it will sit in the jaws:
+    /// a reference while they are cut, never material.
+    pub jaws_for: Option<usize>,
 }
 
 impl Cam {
     /// Every setup, in order.
+    /// For a setup that cuts soft jaws (its part is a `soft_jaw`'s jaws: no source of its own,
+    /// held in their vise), the later setup held in the same named jaws whose part is a real one.
+    fn jaws_for(&self, s: &crate::SetupIn) -> Option<usize> {
+        let jaws = &self.parts[s.part];
+        if !(jaws.src.is_empty() && jaws.hold.is_some()) {
+            return None;
+        }
+        let name = &s.fixture.as_ref()?.name;
+        self.setups.iter().position(|t| {
+            t.from.is_some()
+                && !std::ptr::eq(t, s)
+                && t.fixture.as_ref().is_some_and(|f| &f.name == name)
+                && !self.parts[t.part].src.is_empty()
+        })
+    }
+
     pub fn sim_setups(&self) -> Vec<SimSetup> {
         self.setups
             .iter()
@@ -55,6 +76,7 @@ impl Cam {
                     fixture: s.fixture.as_ref().map(|f| f.boxes()).unwrap_or_default(),
                     fixture_name: s.fixture.as_ref().map(|f| f.name.clone()),
                     from: s.from,
+                    jaws_for: self.jaws_for(s),
                 }
             })
             .collect()
@@ -342,5 +364,13 @@ impl Cam {
             out[k] = j.rapid.filter(|r| *r > 0.0)?;
         }
         Some(out)
+    }
+
+    /// Setup `si`'s machine's tool change, chip to chip, seconds, from its forge-machine record
+    /// (`changer.change_s`); None where the machine is not one forge-machine defines or the
+    /// time is not cited.
+    pub fn sim_tool_change(&self, si: usize) -> Option<f64> {
+        let s = self.setups.get(si)?;
+        crate::machines::record(&s.machine)?.changer.as_ref()?.change_s
     }
 }

@@ -52,6 +52,7 @@ impl Gui {
                 ui.follow = old.follow;
                 ui.shop_eye = old.shop_eye;
                 ui.detail = old.detail;
+                ui.jaw_part = old.jaw_part;
                 ui.path_width = old.path_width;
                 ui.tab = old.tab;
                 ui.folded = old.folded;
@@ -374,6 +375,26 @@ pub fn geometry(
             PartShow::Solid => draw::part(tris, 1.0, &mut solid),
         }
     }
+    // cutting soft jaws: the part they will hold is not there. It is where it will sit in them
+    // (the gripping setup's part, in the same frame): faint, only if asked, while they are cut;
+    // seated, solid, once the setup's last op is done
+    if let Some(grip) = st.sim.setups.get(setup).and_then(|s| s.jaws_for)
+        && let Some(tris) = st.sim.part_tris.get(grip)
+    {
+        let done = st
+            .sim
+            .tl
+            .ops
+            .iter()
+            .filter(|o| o.setup == setup)
+            .map(|o| o.t1)
+            .fold(f64::NEG_INFINITY, f64::max);
+        if st.t >= done - 1e-9 {
+            draw::part(tris, 1.0, &mut solid);
+        } else if st.jaw_part {
+            draw::part(tris, 0.15, world);
+        }
+    }
     // the workholding
     if st.fixture
         && let Some(s) = st.sim.setups.get(setup)
@@ -425,6 +446,7 @@ pub fn geometry(
     }
     // the toolpath
     let show = PathShow {
+        setup: Some(setup),
         ops: &st.show_ops,
         rapids: st.rapids,
         upto: Some(st.t),
@@ -519,6 +541,10 @@ impl Gui {
                     "part" => st.shop_eye = false,
                     _ => return Err(format!("`{cmd}`: shop or part")),
                 },
+                // the part where it will sit in soft jaws, faint, while they are cut
+                "jawpart" => st.jaw_part = on()?,
+                // the tool's label while paused, pointer or not (for review shots)
+                "label" => st.label_always = on()?,
                 "source" => {
                     let want = match v {
                         "toolpath" => None,
@@ -594,6 +620,7 @@ impl Gui {
                     st.show_ops.iter_mut().for_each(|s| *s = v);
                 }
                 "stock" => st.stock = on()?,
+                "fixture" => st.fixture = on()?,
                 "tool" => st.tool = on()?,
                 "fold" => st.folded = on()?,
                 "cells" => {
