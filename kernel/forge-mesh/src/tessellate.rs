@@ -1148,7 +1148,10 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
         on,
         edges,
     };
-    if mend && preps.len() >= PAR_FACES {
+    // only a file's body: a model's parts are drawn on all cores already (a drawing's views,
+    // an assembly's parts), and helpers started inside those only crowd them (the rack drawing's
+    // 68 parts: 4.7 s became 7.2 s, 63 s in a debug build)
+    if mend && body.from_file && preps.len() >= PAR_FACES {
         let preps: Vec<Box<Prep>> = preps.into_iter().map(|p| p.expect("every face drawn")).collect();
         // a file's faces on all cores, each into its own part of the mesh (new vertices numbered
         // after the mesh's), as face after face under the drawing's budget would draw them
