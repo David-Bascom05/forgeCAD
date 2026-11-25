@@ -1088,6 +1088,34 @@ impl Samples {
 }
 
 fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, TessError> {
+    // an intersection curve with fewer chords (`chain_samples`) can lay a thin face's boundary
+    // across itself where its chain did not: a face drawn so parts from the next (tangled). Each
+    // such face's coarsened edges take their old samples again, and the body is drawn again, once
+    let mut keep = vec![false; body.edges.len()];
+    let (mesh, tangled, coarse) = tessellate_once(body, q, mend, &keep)?;
+    let mut again = false;
+    for f in tangled {
+        for &l in &body.face(FaceId(f)).loops {
+            for c in body.lp(l).coedges() {
+                let e = body.coedge(c).edge.index();
+                if coarse[e] && !keep[e] {
+                    keep[e] = true;
+                    again = true;
+                }
+            }
+        }
+    }
+    if !again {
+        return Ok(mesh);
+    }
+    tessellate_once(body, q, mend, &keep).map(|(m, _, _)| m)
+}
+
+/// `tessellate_with` once: the mesh, the faces drawn tangled, and the edges sampled with fewer
+/// chords than one per chain link; `keep`: edges to sample as before.
+fn tessellate_once(body: &Body, q: &Quality, mend: bool, keep: &[bool]) -> Result<(TriMesh, Vec<u32>, Vec<bool>), TessError> {
+    let mut tangled: Vec<u32> = Vec::new();
+    let mut coarse = vec![false; body.edges.len()];
     let mut mesh = TriMesh::default();
     let vertex_index: Vec<u32> = body.vertices.iter().map(|v| mesh.add_vertex(v.point)).collect();
 
@@ -1114,7 +1142,7 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
         // an intersection curve whose chain is far finer than the chord: as few chords as hold
         // (`chain_samples`), each worked out once
         let floored = match &edge.curve {
-            Curve::Intersection(c) => chain_samples(
+            Curve::Intersection(c) if !keep[e.index()] => chain_samples(
                 c,
                 edge.range,
                 n,
@@ -1125,6 +1153,7 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
             ),
             _ => None,
         };
+        coarse[e.index()] = floored.is_some();
         let n = floored.as_ref().map_or(n, |x| x.len() + 1);
         let mut s = Vec::with_capacity(n + 1);
         s.push((edge.range.lo, vertex_index[edge.start.index()]));
@@ -1277,15 +1306,18 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
                     mend,
                     &mut out,
                 )
-                .map(|()| out.part)
+                .map(|t| (out.part, t))
             },
             Result::is_err,
         );
         for (k, out) in outs.into_iter().enumerate() {
-            let part = out.map_err(|error| TessError::Face {
+            let (part, t) = out.map_err(|error| TessError::Face {
                 face: FaceId(k as u32),
                 error,
             })?;
+            if t {
+                tangled.push(k as u32);
+            }
             let shift = mesh.positions.len() as u32 - nb;
             mesh.positions.extend(part.positions);
             mesh.triangles.extend(
@@ -1300,15 +1332,18 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
         for (i, prep) in preps.into_iter().enumerate() {
             let f = FaceId(i as u32);
             let prep = prep.expect("every face drawn");
-            mesh_face(body, f, prep, &segments, q, mend, &mut mesh)
-                .map_err(|error| TessError::Face { face: f, error })?;
+            if mesh_face(body, f, prep, &segments, q, mend, &mut mesh)
+                .map_err(|error| TessError::Face { face: f, error })?
+            {
+                tangled.push(f.0);
+            }
         }
     }
     mesh.edges = edge_samples
         .iter()
         .map(|s| s.iter().map(|&(_, v)| v).collect())
         .collect();
-    Ok(mesh)
+    Ok((mesh, tangled, coarse))
 }
 
 /// A file's body of at least this many faces has its faces drawn on all cores.
@@ -1845,8 +1880,10 @@ fn mesh_face(
     q: &Quality,
     mend: bool,
     mesh: &mut impl Out,
-) -> Result<(), CdtError> {
+) -> Result<bool, CdtError> {
     let face = body.face(f);
+    // drawn as its boundary lies, crossing itself where laid flat: parted from the next face
+    let mut tangled = false;
     let surface = &face.surface;
     let Prep {
         su,
@@ -1874,7 +1911,7 @@ fn mesh_face(
             }
             mesh.tri(if face.same_sense { [a, b, c] } else { [a, c, b] }, f.0);
         }
-        return Ok(());
+        return Ok(false);
     }
 
     // a swept face square in its parameters (a blend cut square at its ends): a grid of columns
@@ -1888,7 +1925,7 @@ fn mesh_face(
             for [a, b, c] in tris {
                 mesh.tri(if face.same_sense { [a, b, c] } else { [a, c, b] }, f.0);
             }
-            return Ok(());
+            return Ok(false);
         }
     }
 
@@ -2252,7 +2289,10 @@ fn mesh_face(
         Ok(t) => t,
         // a file's edges that meet only within their tolerance can cross in the plane of the
         // triangulation: drawn as they are, the mesh parts from the next face by that little
-        Err(_) if mend => far(true)?,
+        Err(_) if mend => {
+            tangled = true;
+            far(true)?
+        }
         Err(e) => {
             if let Some(path) = std::env::var_os("FORGE_CDT_DUMP") {
                 let pts: Vec<String> = scaled.iter().map(|p| format!("{:e},{:e}", p.x, p.y)).collect();
@@ -2303,7 +2343,7 @@ fn mesh_face(
         let t = if face.same_sense { [a, b, c] } else { [a, c, b] };
         mesh.tri(t, f.0);
     }
-    Ok(())
+    Ok(tangled)
 }
 
 /// A loop without its runs there and back (`x y x` is `x`), round its end too.
