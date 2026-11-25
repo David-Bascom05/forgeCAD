@@ -203,3 +203,73 @@ fn the_scene_draws_a_hem_through_both_strokes() {
         "{a:?} vs {b:?}"
     );
 }
+
+/// A flange standing beside the hem, under the flattening punch's block: the flattening's tool
+/// check proves the flange closes on the punch, and names it (the base's side resting on the
+/// flat die is not a hit); the plan refuses the hem. The same part without the flange flattens clear.
+#[test]
+fn a_flange_under_the_flattening_punch_is_a_proven_hit() {
+    use forge_brake::sim::{Phase, Rule, Setup, StepCtx};
+    use forge_brake::{Options, plan};
+    let tl = with_flattening();
+    let fp = tl
+        .punches
+        .iter()
+        .position(|p| p.id == "test/flatten-top")
+        .unwrap();
+    let fd = tl
+        .dies
+        .iter()
+        .position(|d| d.id == "test/flatten-bottom")
+        .unwrap();
+    let su = Setup {
+        punch: fp,
+        die: fd,
+        rotate: false,
+    };
+    let from = dmath::PI - 30f64.to_radians();
+    // the strip, a 40 high flange on its far edge (20 from the hem's fold), bent first
+    let mut s = strip();
+    s.flange(forge_sheet::WallId(0), 2, dmath::PI / 2.0, 40.0)
+        .unwrap();
+    let m = Model::new(&s).unwrap();
+    let hem = m.bends.iter().position(|b| b.hem.is_some()).unwrap();
+    let flange = 1 - hem;
+    let mut done = vec![false; 2];
+    done[flange] = true;
+    let ctx = StepCtx::new(&m, &tl, &done, hem, su, 0.0)
+        .flattening(from)
+        .unwrap();
+    let mut checks = Vec::new();
+    ctx.collisions(Phase::Bend, None, &mut checks, false);
+    let hit = checks
+        .iter()
+        .find(|c| c.rule == Rule::ClosesOnPunch && !c.pass)
+        .unwrap_or_else(|| panic!("{checks:?}"));
+    assert!(hit.certified && hit.value < 0.0, "{hit:?}");
+    assert!(
+        hit.tool
+            .as_deref()
+            .is_some_and(|t| t.contains("test/flatten-top")),
+        "{hit:?}"
+    );
+    let p = plan(
+        &m,
+        &tl,
+        &Options {
+            sequence: Some(vec![flange, hem]),
+            ..Options::default()
+        },
+    );
+    // the flange stands by the acute punch in the pre-bend too: the hem is blocked, not passed
+    assert!(!p.feasible);
+    assert!(p.blocking.iter().any(|b| b.bend == hem && !b.checks.is_empty()));
+    // without the flange: clear
+    let m0 = Model::new(&strip()).unwrap();
+    let ctx0 = StepCtx::new(&m0, &tl, &[false], 0, su, 0.0)
+        .flattening(from)
+        .unwrap();
+    let mut c0 = Vec::new();
+    ctx0.collisions(Phase::Bend, None, &mut c0, false);
+    assert!(c0.iter().all(|c| c.pass), "{c0:?}");
+}

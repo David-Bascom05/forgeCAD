@@ -540,6 +540,10 @@ pub struct StepCtx<'a> {
     pub flatten: Option<Flat>,
 }
 
+/// Flattening: how far below the flat die's top a cell of the base's side may be enclosed and
+/// still rest on it (mm): an enclosure's width where a zone leaves the plane tangentially.
+const FLAT_REST: f64 = 1e-3;
+
 /// A hem's flattening stroke: the part's base (zone j's wall a side) flat on a flat die, the leg
 /// closed from the pre-bend's turn to the hem's by a flat punch face coming down on the part's
 /// highest point.
@@ -985,11 +989,24 @@ impl<'a> StepCtx<'a> {
             // the hem itself between the faces: the base on the die, the fold and the leg under
             // the punch face (the stroke's own contact; its rules are the flattening's)
             let b = self.bj;
-            return match pc.kind {
+            let own = match pc.kind {
                 Kind::ZoneJ { .. } => true,
                 Kind::Wall { w, .. } => w == b.a || w == b.b,
                 _ => false,
             };
+            if own {
+                return true;
+            }
+            // the rest of the base's side resting on the die's flat top: a cell wholly on or above
+            // its plane cannot enter the die (the base's side does not move in a flattening)
+            if kind == Work::Die && pc.side == Side::A {
+                let q = self.side_point(pc, c.p[0], c.p[1], c.p[2], Interval::point(self.phi0()));
+                let z = q.z * b.sigma + self.flat_off();
+                // a zone rounding up off the base touches the plane at its tangent line: a micron
+                // below it, from the enclosure's width there, is resting, not entering
+                return z.lo >= -FLAT_REST;
+            }
+            return false;
         }
         if matches!(pc.kind, Kind::ZoneJ { .. }) {
             return true;
