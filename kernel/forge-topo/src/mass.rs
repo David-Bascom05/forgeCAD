@@ -1794,6 +1794,7 @@ impl Cheb {
         let n = if all_tiles { tiles.tiles.len() } else { slab.len() };
         // T_j at each tile's b argument, made once for the tiles that share it (most of a slab's)
         let mut tbs: Vec<(u64, usize, Vec<f64>)> = Vec::new();
+        #[allow(clippy::needless_range_loop)] // one loop over either list: an iterator of the two was boxed
         for j in 0..n {
             let t = &tiles.tiles[if all_tiles { j } else { slab[j] as usize }];
             // a tile on the box's side also takes what lies beyond it
