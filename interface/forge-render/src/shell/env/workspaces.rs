@@ -72,6 +72,10 @@ impl Environment for Manufacture {
     /// The properties column: the op or setup being edited (its sheet, CAM-UI's dialogs docked)
     /// over the column's tabs: the simulation (CAM-SIM's panel), NC Programs, Quality. None
     /// while there is none of them: the view keeps the width.
+    fn properties_label(&self, s: &Shell) -> Option<String> {
+        s.cam.as_ref().map(|w| w.col_label.clone()).filter(|l| !l.is_empty())
+    }
+
     fn properties_width(&self, s: &Shell) -> Option<f32> {
         let w = s.cam.as_ref()?;
         let sheet = w.op_dlg.is_some() || w.setup_dlg.is_some();
@@ -120,6 +124,10 @@ impl Environment for Manufacture {
         let sheet_tab = sheet && narrow;
         let now = if sheet_tab && !w.sim_tab { Col::Sheet } else { lower };
         let mut tabs: Vec<(Col, String, &str)> = vec![];
+        // a narrow window's turns: the view in the column's place, first (always in reach)
+        if s.props_alternate {
+            tabs.push((Col::View, "View".into(), "cam:dock:view"));
+        }
         if sheet_tab {
             let title = w
                 .op_dlg
@@ -137,6 +145,7 @@ impl Environment for Manufacture {
         if !w.turning() {
             tabs.push((Col::Quality, "Quality".into(), "cam:dock:quality"));
         }
+
         // wide with a sheet: the sheet on top, the tabs in what is left
         let (dock, area) = if sheet && !narrow {
             let split = r.top() + r.height() * 0.8;
@@ -151,19 +160,32 @@ impl Environment for Manufacture {
         let bar = Rect::from_min_max(area.min, egui::pos2(area.right(), area.top() + 32.0));
         let mut pick = None;
         ui.scope_builder(egui::UiBuilder::new().max_rect(bar.shrink2(egui::vec2(8.0, 4.0))), |ui| {
-            ui.horizontal(|ui| {
-                for (tab, words, key) in &tabs {
-                    let r = ui.selectable_label(*tab == now, words.as_str());
-                    s.places.push(((*key).into(), r.rect));
-                    if r.clicked() {
-                        pick = Some(*tab);
+            // sideways where the tabs are wider than the column (a narrow window)
+            egui::ScrollArea::horizontal().id_salt("cam-col-tabs").show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    for (tab, words, key) in &tabs {
+                        let r = ui.selectable_label(*tab == now, words.as_str());
+                        // what is seen of it: a click by name lands on it
+                        s.places.push(((*key).into(), r.rect.intersect(ui.clip_rect())));
+                        if r.clicked() {
+                            pick = Some(*tab);
+                        }
                     }
-                }
+                });
             });
         });
         ui.painter().hline(area.x_range(), bar.bottom(), egui::Stroke::new(1.0, t.line));
         let rest = Rect::from_min_max(egui::pos2(area.left(), bar.bottom() + 1.0), area.max);
+        if pick == Some(Col::View) {
+            // the view shown in the column's place; this tab stays the column's when it comes back
+            s.column_shown = false;
+            pick = None;
+        }
         let now = pick.unwrap_or(now);
+        // the tab shown, in words: the view's way back names it
+        if let Some(w) = &mut s.cam {
+            w.col_label = tabs.iter().find(|x| x.0 == now).map_or_else(String::new, |x| x.1.clone());
+        }
         if let Some(w) = &mut s.cam {
             // the tab chosen is what is open (the sheet's tab leaves the lower one as it was)
             if now != Col::Sheet {
@@ -195,6 +217,8 @@ enum Col {
     Sim,
     Programs,
     Quality,
+    /// A narrow window's turns: the view, in the column's place.
+    View,
 }
 
 pub(super) struct MachineBuilder;

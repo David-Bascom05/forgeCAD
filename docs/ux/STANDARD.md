@@ -220,6 +220,11 @@ spellings per row: `UNKNOWN`, `set`, `not given`, `published ?`).
   Enter in a field = commit; Tab / Shift-Tab move through the property sheet; F = fit subject;
   Space = play/pause for anything with a transport; ←/→ = previous/next step; Delete = delete the
   selected user record (with undo, not a confirm dialog).
+- A dialog opens with focus where the user acts first. If its first input is typed (a name, a
+  distance, a search), that field has the keyboard with its text selected. If it opens on a pick
+  slot, the pick slot is the focus: drawn active, keys go to the view. In a pick-first dialog a
+  typed digit moves focus to its first numeric field and starts the entry there (pick the edges,
+  type 2, Enter: no mouse needed).
 - Ctrl-Z / Ctrl-Shift-Z undo every edit an environment makes (record edits, program order,
   tooling choice), through the document/library history, not a private stack.
 - Every command is reachable by a ribbon button, its keyboard shortcut (shown in the tooltip) and
