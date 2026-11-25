@@ -91,6 +91,123 @@ def step(name, cmds, cwd=root, env=None):
           flush=True)
 
 
+def free_gb():
+    return shutil.disk_usage(root).free / 2**30
+
+
+def make_room(need=12):
+    """Free space before a heavy step: this run's own build folders, largest-and-least-reused first
+    (never anything outside this checkout's targets)."""
+    for d in ("interface/forge-render/target", "target/wasm32-wasip1", "target/debug/incremental",
+              "target/debug"):
+        if free_gb() >= need:
+            return
+        p = os.path.join(root, d)
+        if os.path.isdir(p):
+            print(f"pre-verify: {free_gb():.0f} GB free; removing {d}", flush=True)
+            shutil.rmtree(p, ignore_errors=True)
+    if free_gb() < need:
+        print(f"pre-verify: only {free_gb():.0f} GB free (want {need}); builds may fail", flush=True)
+
+
+TARGETS = {}  # test target name -> package names (root workspace)
+
+
+def target_pkgs(t):
+    if not TARGETS:
+        md = json.loads(subprocess.run(["cargo", "metadata", "--format-version", "1", "--no-deps"],
+                                       cwd=root, capture_output=True, text=True).stdout)
+        for p in md["packages"]:
+            for tg in p["targets"]:
+                TARGETS.setdefault(tg["name"].replace("-", "_"), set()).add(p["name"])
+    return TARGETS.get(t.replace("-", "_"), set())
+
+
+ALONE = {}  # ("slow", binary, test) -> seconds alone, from native-tests.py's budget lines
+SLOW_RED = 2 * float(os.environ.get("BUDGET", "2"))
+
+
+def items(name, text):
+    """What failed in a step's log, as comparable items (no times, no line numbers)."""
+    out, pending, binary = set(), [], ""
+    for l in text.splitlines():
+        m = re.match(r"^\s*Running (\S+)", l)
+        if m:
+            binary = m.group(1)
+        m = re.match(r"^test (\S+) \.\.\. FAILED", l)
+        if m:
+            pending.append(m.group(1))
+            if name == "render":
+                out.add(("fail", binary, m.group(1)))
+            continue
+        m = re.match(r"^test result: .*\((\S+)\)$", l)
+        if m:
+            out |= {("fail", m.group(1), x) for x in pending}
+            pending = []
+        m = re.match(r"^error: (\S+?)(-[0-9a-f]{16})? reported no result", l)
+        if m:
+            out.add(("noresult", m.group(1), ""))
+        m = re.match(r"^error: over the \S+ s budget: (\S+) (\S+) took .*?(?:([0-9.]+) s|no time) alone", l)
+        if m:
+            k = ("slow", m.group(1), m.group(2))
+            out.add(k)
+            ALONE.setdefault(k, float(m.group(3)) if m.group(3) else 1e9)
+        m = re.match(r"^(FAILED|NO RESULT): (\S+) (\S+) \(", l)
+        if m:
+            out.add(("wasm", m.group(2), m.group(3)))
+    if name != "render":
+        out |= {("fail", "?", x) for x in pending}
+    return out
+
+
+def relative(name, cmd_for, pkgs_of):
+    """A failed step judged against BASE: the same step on BASE, in a scratch worktree, for the
+    packages whose tests failed; RED only for what BASE does not fail too (a test main fails, or a
+    test of main's over the time budget on this machine, is not the branch's)."""
+    e = record["steps"].get(name)
+    if not e or e["ok"]:
+        return
+    mine = items(name, open(e["log"], errors="replace").read())
+    # a test over the time budget on this machine is judged by the budget only well past it: under
+    # SLOW_RED seconds alone it is a warning (machine load moves it, and main has ~70 such tests on
+    # a 4-core VM); the train's run applies the budget as ever
+    mild = {x for x in mine if x[0] == "slow" and ALONE.get(x, 1e9) <= SLOW_RED}
+    e["slow_warnings"] = sorted(" ".join(x) for x in mild)
+    mine -= mild
+    if not mine:
+        e["ok"] = True
+        print(f"pre-verify {name:7s} ok   (only {len(mild)} tests over the time budget, each under "
+              f"{SLOW_RED:g} s alone: warnings)", flush=True)
+        return
+    pk_fail = set()
+    for it in mine:
+        pk_fail |= pkgs_of(it)
+    if not mine or (name != "render" and not pk_fail):
+        return  # nothing comparable (a build error, say): stays RED
+    wt = tempfile.mkdtemp(prefix="pv-base.")
+    subprocess.run(["git", "worktree", "add", "-q", "--detach", wt, base], check=True)
+    log = e["log"] + ".base"
+    try:
+        env = dict(os.environ, **test_env)
+        env.setdefault("CARGO_TARGET_DIR", os.path.join(root, "target"))
+        with open(log, "w") as fh:
+            for c, d in cmd_for(sorted(pk_fail)):
+                subprocess.run(c, cwd=os.path.join(wt, d), env=env, stdout=fh, stderr=subprocess.STDOUT)
+    finally:
+        subprocess.run(["git", "worktree", "remove", "--force", wt])
+    theirs = items(name, open(log, errors="replace").read())
+    new = sorted(mine - theirs)
+    e["main_identical"] = sorted(" ".join(x) for x in mine & theirs)
+    e["new"] = [" ".join(x) for x in new]
+    e["base_log"] = log
+    if not new:
+        e["ok"] = True
+        print(f"pre-verify {name:7s} ok   (main-identical: {len(mine & theirs)} on main too: "
+              f"{e['main_identical'][:3]})", flush=True)
+    else:
+        print(f"pre-verify {name:7s} FAIL ({len(new)} new, not on main: {e['new'][:3]})", flush=True)
+
+
 def ps(names):
     return [x for n in names for x in ("-p", n)]
 
@@ -163,14 +280,24 @@ if clippy:
             print(f"pre-verify clippy ok   (only diagnostics main has too: {len(mine & theirs)})", flush=True)
         else:
             print(f"pre-verify clippy FAIL ({len(new)} the branch adds; first: {e['new'][:1]})", flush=True)
+if free_gb() < 12:
+    make_room()
 if pk:
     step("native", [[sys.executable, "tools/ci/native-tests.py", *ps(pk)]], env=test_env)
+    relative("native", lambda p: [([sys.executable, "tools/ci/native-tests.py", *ps(p)], ".")],
+             lambda it: target_pkgs(it[1]) & set(pk))
 if render:
+    make_room()
     step("render", [["cargo", "test", "--release", "--locked", "--no-fail-fast"]],
          cwd=os.path.join(root, "interface/forge-render"))
+    relative("render", lambda p: [(["cargo", "test", "--release", "--locked", "--no-fail-fast"],
+                                   "interface/forge-render")], lambda it: set())
 wasm = [n for n in pk if n != "forge-certify"]
 if wasm:
+    make_room()
     step("wasm", [["sh", "tools/test-wasm.sh", *ps(wasm)]], env=test_env)
+    relative("wasm", lambda p: [(["sh", "tools/test-wasm.sh", *ps(p)], ".")],
+             lambda it: {it[1]} if it[0] == "wasm" else target_pkgs(it[1]) & set(wasm))
 
 
 def gate_counts(rev, out):
