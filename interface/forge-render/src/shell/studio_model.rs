@@ -753,14 +753,18 @@ mod tests {
             });
             out.textures_delta.clear();
         };
-        for _ in 0..3 {
+        // warmed, then the fastest of many: a loaded machine's stalls are noise, a cost that grows
+        // with the parts is in every frame
+        for _ in 0..5 {
             run();
         }
-        let t0 = std::time::Instant::now();
-        for _ in 0..20 {
-            run();
-        }
-        t0.elapsed().as_secs_f64() * 1000.0 / 20.0
+        (0..30)
+            .map(|_| {
+                let t0 = std::time::Instant::now();
+                run();
+                t0.elapsed().as_secs_f64() * 1000.0
+            })
+            .fold(f64::INFINITY, f64::min)
     }
 
     /// The parts are drawn only as far as they show: ten times the parts costs far less than ten

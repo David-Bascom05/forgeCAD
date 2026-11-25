@@ -40,6 +40,7 @@ fn chats_round_trip_locally_and_stay_scoped_to_their_project() {
             text: "Use a fork mount".into(),
             refs: vec!["base".into()],
             markup: None,
+            pictures: 0,
         },
         Entry::Agent {
             text: "The fork mount is ready.".into(),
@@ -472,7 +473,7 @@ fn restored_endpoint_context_is_sent_to_the_model_on_the_next_turn() {
             ("content", "A fork mount will work".into()),
         ]),
     ]);
-    backend.send("Continue the design".into(), None);
+    backend.send("Continue the design".into(), vec![]);
     loop {
         let event = rx.recv_timeout(std::time::Duration::from_secs(15)).unwrap();
         if let Event::Done { error, .. } = event {
