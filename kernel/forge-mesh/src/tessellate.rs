@@ -295,6 +295,72 @@ fn uv_scale(s: &Surface) -> (f64, f64) {
 }
 
 /// Grid steps for points inside a face, where the surface curves in both directions.
+/// An intersection curve's interior samples at fewer equal steps than one per chain link (`old`,
+/// what `edge_segments` asks), where that is enough: each step's chord, between the edge's ends or
+/// the curve's own points (`IntCurve::eval`, as `sample_interior` makes them), holds every chain
+/// point from the link before the step to the link after it within `chord - sag` (the true curve
+/// lies within `sag` of its chain's links, and a link whose ends lie within d of the chord lies
+/// within d of it: so the true curve lies within `chord` of the chord), and turns no more than
+/// `max_angle` from it at any of them. Fewest steps first (as many links to a step as the sag
+/// allows, `sqrt(chord / sag)`), more by half again until they hold; None where only `old` holds,
+/// for a closed chain, or with `old-sampling`. VF-5_40_SS_TR #252821's slots: chains of 2,000
+/// links over 6 mm put 4,845 points micrometres apart on a plane whose chord is 1 mm, and its
+/// boundary could not be recovered within its budget.
+fn chain_samples(
+    c: &forge_geom::intcurve::IntCurve,
+    range: forge_math::Interval,
+    old: usize,
+    start: forge_math::Point3,
+    end: forge_math::Point3,
+    chord: f64,
+    max_angle: f64,
+) -> Option<Vec<forge_math::Point3>> {
+    if cfg!(feature = "old-sampling") || c.closed || c.sag >= chord || old < 3 {
+        return None;
+    }
+    let links = c.pts.len().checked_sub(1)?;
+    let (lo, hi) = (range.lo, range.hi);
+    if !(lo >= 0.0 && hi <= links as f64 && lo < hi) {
+        return None;
+    }
+    let room = chord - c.sag;
+    let cos_turn = forge_math::dmath::cos(max_angle);
+    let per = (chord / c.sag.max(forge_math::tol::LINEAR)).sqrt();
+    let mut n = ((range.width() / per).ceil() as usize).max(2);
+    while n < old {
+        let dt = range.width() / n as f64;
+        let inner: Vec<forge_math::Point3> = (1..n).map(|k| c.eval(lo + dt * k as f64)).collect();
+        let at = |k: usize| match k {
+            0 => start,
+            k if k == n => end,
+            k => inner[k - 1],
+        };
+        let holds = (0..n).all(|k| {
+            let (a, b) = (at(k), at(k + 1));
+            let ab = b - a;
+            let len2 = ab.dot(ab);
+            if len2 <= 0.0 {
+                return false;
+            }
+            let dir = ab * (1.0 / len2.sqrt());
+            let (t0, t1) = (lo + dt * k as f64, lo + dt * (k + 1) as f64);
+            let (i0, i1) = ((t0.floor() as usize).min(links), (t1.ceil() as usize).min(links));
+            (i0..=i1).all(|i| {
+                let p = c.pts[i];
+                // the distance from the segment ab
+                let s = ((p - a).dot(ab) / len2).clamp(0.0, 1.0);
+                let off = (p - (a + ab * s)).length();
+                off <= room && c.tans[i].dot(dir).abs() >= cos_turn
+            })
+        });
+        if holds {
+            return Some(inner);
+        }
+        n += n.div_ceil(2);
+    }
+    None
+}
+
 /// A cylinder's row spacing (`dv`, along its axis), no closer than the chord tolerance needs. Rows
 /// 2 r du apart keep its triangles shapely, but under a radius smaller than the chord the whole
 /// cylinder lies within the tolerance of a flat strip and rows buy nothing: a 0.025 mm fillet
@@ -1041,9 +1107,27 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
                 error: CdtError::Internal(Fault::EdgeTooFine),
             });
         }
+        // an intersection curve whose chain is far finer than the chord: as few chords as hold
+        // (`chain_samples`), each worked out once
+        let floored = match &edge.curve {
+            Curve::Intersection(c) => chain_samples(
+                c,
+                edge.range,
+                n,
+                body.vertex(edge.start).point,
+                body.vertex(edge.end).point,
+                if fine { 0.5 * q.chord } else { q.chord },
+                q.max_angle,
+            ),
+            _ => None,
+        };
+        let n = floored.as_ref().map_or(n, |x| x.len() + 1);
         let mut s = Vec::with_capacity(n + 1);
         s.push((edge.range.lo, vertex_index[edge.start.index()]));
-        edge.curve.sample_interior(edge.range, n, &mut trig, &mut pts);
+        match floored {
+            Some(x) => pts = x,
+            None => edge.curve.sample_interior(edge.range, n, &mut trig, &mut pts),
+        }
         if let Curve::Hyperbola(_) = edge.curve {
             edge.curve.sample_params(edge.range, n, &mut params);
         }
