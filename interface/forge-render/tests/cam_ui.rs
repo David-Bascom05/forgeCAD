@@ -817,7 +817,10 @@ fn manufacture_opens_in_a_phone_wide_window() {
     for _ in 0..10 {
         h.step();
     }
-    assert!(h.gui.shell.view_rect.width() < 300.0, "a narrow view: {:?}", h.gui.shell.view_rect);
+    // a view too narrow to have the column beside it (not a pixel count: the browser's own
+    // width at 480 px is UX-LEAD's to choose)
+    assert!(h.gui.shell.props_alternate, "a narrow view: {:?}", h.gui.shell.view_rect);
+    assert!(h.gui.shell.view_rect.width() < forge_render::nav::NARROW_VIEW_PX);
     // folded, and the framing agrees: no timeline drawn, and nothing kept for it at the view's
     // bottom (UX-LEAD: the fold and the free rect must not disagree)
     let timeline = egui::LayerId::new(egui::Order::Middle, egui::Id::unique("camsim:timeline"));
@@ -851,6 +854,38 @@ fn manufacture_opens_in_a_phone_wide_window() {
     assert!(sh.place("view:column").is_some());
     assert_eq!(h.gui.shell.cam.as_ref().unwrap().col_label, "Simulation");
     assert_eq!(h.gui.shell.camsim.as_ref().map(|s| s.playing), playing, "the simulation as it was");
+    // the cube at half size, and the part framed clear of it and of the tool strip (UX-LEAD)
+    let cube = h.gui.shell.cube_place.expect("the cube");
+    assert_eq!(cube.side, 0.5 * forge_render::viewcube::WIDGET_PX * cube.scale, "half size");
+    {
+        let sh = &h.gui.shell;
+        let vr = sh.view_rect;
+        let cam = sh.cam.as_ref().unwrap().framed.expect("framed");
+        let scene = &h.gui.view.as_ref().unwrap().scene;
+        let (lo, hi) = scene.shown_box().unwrap_or_else(|| {
+            let (c, r) = scene.bounds();
+            ([c[0] - r, c[1] - r, c[2] - r], [c[0] + r, c[1] + r, c[2] + r])
+        });
+        let b = forge_render::frame::Bounds::new(lo, hi);
+        let px: Vec<egui::Pos2> = b
+            .corners()
+            .iter()
+            .filter_map(|c| cam.pixel_of(*c, vr.width() as u32, vr.height() as u32))
+            .map(|(x, y)| egui::pos2(vr.left() + x, vr.top() + y))
+            .collect();
+        let part = egui::Rect::from_points(&px);
+        let strip = ["nav:select", "nav:orbit", "nav:pan", "nav:zoom", "nav:fit"]
+            .iter()
+            .filter_map(|n| sh.place(n))
+            .reduce(|a, b| a.union(b))
+            .expect("the tool strip");
+        let cube_r = egui::Rect::from_min_size(
+            egui::pos2(vr.left() + cube.at.0 / cube.scale, vr.top() + cube.at.1 / cube.scale),
+            egui::vec2(cube.side / cube.scale, cube.side / cube.scale),
+        );
+        assert!(!part.intersects(strip), "the part {part:?} under the tool strip {strip:?}");
+        assert!(!part.intersects(cube_r), "the part {part:?} under the cube {cube_r:?}");
+    }
     shot(&mut h, "cam-480-view");
     // back to the column by its name
     tap(&mut h, "view:column");
