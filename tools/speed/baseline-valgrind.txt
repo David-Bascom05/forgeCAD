@@ -1,5 +1,8 @@
 noop regen1 1741
 noop benchparts 1744
+noop stepop1 1359
+k018-box op 5105772066
+ring-box op 58040089
 torture seq 136829980
 torture nary1 124234124
 plate seq 136829989
