@@ -751,7 +751,7 @@ impl<'a> Scene<'a> {
     pub fn done_before(&self, k: usize) -> Vec<bool> {
         let mut d = vec![false; self.m.bends.len()];
         for st in self.plan.steps.iter().take(k) {
-            d[st.bend] = true;
+            st.mark(&mut d);
         }
         d
     }
@@ -772,20 +772,9 @@ impl<'a> Scene<'a> {
     }
 
     fn build_ctx(&self, k: usize) -> StepCtx<'a> {
-        let st = &self.plan.steps[k];
-        let ctx = StepCtx::new(
-            self.m,
-            self.tl,
-            &self.done_before(k),
-            st.bend,
-            st.setup,
-            st.overbend,
-        );
-        // the station the plan worked it at (a lock may set one its tools would not pick)
-        match st.station {
-            Some(i) if ctx.station != Some(i) && i < self.tl.stations.len() => ctx.at_station(i),
-            _ => ctx,
-        }
+        // its stroke, and the station the plan worked it at (a lock may set one its tools would
+        // not pick)
+        StepCtx::of_step(self.m, self.tl, &self.done_before(k), &self.plan.steps[k])
     }
 
     /// The instant at `t` in [0, 1] of step `k`.
@@ -812,12 +801,14 @@ impl<'a> Scene<'a> {
         // the punch's top: top dead centre, but never below the flat sheet it meets (tools taller
         // than the open height leave it there: the open height check fails, and the punch is drawn
         // standing on the sheet, not through it, as the checks' own approach and return do)
-        let top = ctx.z_tdc.max(ctx.ztip(0.0));
+        // the stroke starts at phi0: flat for an air bend, a hem's pre-bend for its flattening
+        let phi0 = ctx.phi0();
+        let top = ctx.z_tdc.max(ctx.ztip(phi0));
         let (phi, tip) = match stage {
-            Stage::Handle | Stage::Gauge => (0.0, top),
-            Stage::Approach => (0.0, lerp(top, ctx.ztip(0.0), f)),
+            Stage::Handle | Stage::Gauge => (phi0, top),
+            Stage::Approach => (phi0, lerp(top, ctx.ztip(phi0), f)),
             Stage::Bend => {
-                let phi = ctx.phimax * f;
+                let phi = phi0 + (ctx.phimax - phi0) * f;
                 (phi, ctx.ztip(phi))
             }
             Stage::Springback => {
@@ -897,7 +888,7 @@ impl<'a> Scene<'a> {
             let own = |p: Point2| tb.inverse().apply(p);
             let ps = [lo, Point2::new(hi.x, lo.y), Point2::new(lo.x, hi.y)].map(own);
             let qa = ps.map(|p| part_point(&a, pa, tpa.apply(p), 0.0, ta));
-            let qb = ps.map(|p| part_point(&b, pb, tb.apply(p), 0.0, 0.0));
+            let qb = ps.map(|p| part_point(&b, pb, tb.apply(p), 0.0, b.phi0()));
             let fa = Rigid3::on(qa[0], qa[1], qa[2]);
             let fb = Rigid3::on(qb[0], qb[1], qb[2]);
             // from where step k places the part back to where step k - 1 left it
@@ -922,7 +913,7 @@ impl<'a> Scene<'a> {
             let mut v = Vec::with_capacity(2 * pts.len());
             for w in [0.0, -ctx.t] {
                 for p in &pts {
-                    v.push(part_point(&ctx, pc, *p, w, 0.0));
+                    v.push(part_point(&ctx, pc, *p, w, ctx.phi0()));
                 }
             }
             out.push(v);
@@ -1532,7 +1523,7 @@ impl<'a> Scene<'a> {
             mesh: bedm,
             strip: None,
         });
-        let ram_top_open = ctx.z_tdc.max(ctx.ztip(0.0)) + ph + beam_h;
+        let ram_top_open = ctx.z_tdc.max(ctx.ztip(ctx.phi0())) + ph + beam_h;
         if let Some(f) = pr.frame {
             let g = 0.5 * pr.housing_gap;
             let front = -pr.bed.front.max(pr.ram.front) - 150.0;

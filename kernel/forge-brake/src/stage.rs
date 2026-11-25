@@ -12,7 +12,7 @@
 use crate::catalog::Speeds;
 use crate::model::Model;
 use crate::plan::{Options, Plan, Program, programs, simulate};
-use crate::sim::{Check, Rule, Setup, StepCtx};
+use crate::sim::{Check, Rule, Setup, Step, StepCtx};
 use crate::tooling::{PunchKind, Station, Tooling};
 
 /// Stations are set on this grid along the bed (mm): what a setter measures to.
@@ -97,12 +97,12 @@ pub enum StageFail {
 }
 
 /// The bends done before each step of a program.
-fn done_before(m: &Model, seq: &[usize]) -> Vec<Vec<bool>> {
+fn done_before(m: &Model, steps: &[Step]) -> Vec<Vec<bool>> {
     let mut done = vec![false; m.bends.len()];
     let mut out = Vec::new();
-    for &j in seq {
+    for st in steps {
         out.push(done.clone());
-        done[j] = true;
+        st.mark(&mut done);
     }
     out
 }
@@ -153,7 +153,7 @@ type Layout = (Vec<Station>, Vec<(f64, f64)>);
 fn layout(m: &Model, tl: &Tooling, prog: &Program, tight: bool) -> Option<Layout> {
     let (ps, of) = pairs(m, tl, prog)?;
     let steps = &prog.plan.steps;
-    let dones = done_before(m, &prog.plan.sequence);
+    let dones = done_before(m, &prog.plan.steps);
     let bare = Tooling {
         stations: Vec::new(),
         ..tl.clone()
@@ -162,7 +162,7 @@ fn layout(m: &Model, tl: &Tooling, prog: &Program, tight: bool) -> Option<Layout
     let mut reach = vec![(f64::INFINITY, f64::NEG_INFINITY); ps.len()];
     for (i, st) in steps.iter().enumerate() {
         let k = of[i];
-        let ctx = StepCtx::new(m, &bare, &dones[i], st.bend, st.setup, st.overbend);
+        let ctx = StepCtx::of_stroke(m, &bare, &dones[i], st);
         let (lo, hi) = ctx.part_span_y();
         reach[k] = (reach[k].0.min(lo), reach[k].1.max(hi));
     }
@@ -205,8 +205,8 @@ fn layout(m: &Model, tl: &Tooling, prog: &Program, tight: bool) -> Option<Layout
 
 /// The ram's travel through a step: approach to the sheet, the bend, the return.
 fn travel(m: &Model, tl: &Tooling, done: &[bool], st: &crate::sim::Step) -> Travel {
-    let ctx = StepCtx::new(m, tl, done, st.bend, st.setup, st.overbend);
-    let pinch = ctx.ztip(0.0);
+    let ctx = StepCtx::of_stroke(m, tl, done, st);
+    let pinch = ctx.ztip(ctx.phi0());
     let bottom = ctx.ztip(ctx.phimax);
     Travel {
         approach: (ctx.z_tdc - pinch).max(0.0),
@@ -283,7 +283,7 @@ pub fn stage(m: &Model, tl: &Tooling, opts: &Options, max: usize) -> Result<Stag
             let Some((_, of)) = pairs(m, &bare, prog) else {
                 continue;
             };
-            let dones = done_before(m, &seq);
+            let dones = done_before(m, &plan.steps);
             let travel: Vec<Travel> = plan
                 .steps
                 .iter()

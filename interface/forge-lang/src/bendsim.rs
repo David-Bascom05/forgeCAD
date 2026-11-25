@@ -1285,7 +1285,7 @@ fn contacts_json(
     let mut items: Vec<(Option<usize>, Vec<bool>, &fb::Step)> = Vec::new();
     for (i, st) in plan.steps.iter().enumerate() {
         items.push((Some(i + 1), done.clone(), st));
-        done[st.bend] = true;
+        st.mark(&mut done);
     }
     for b in &plan.blocking {
         // a blocked bend not among the steps: its best attempt, after the bends it followed
@@ -1687,6 +1687,25 @@ fn profile(j: &Json) -> Result<Option<Vec<fb::geo::Seg>>, Answer> {
     ))
 }
 
+/// A tool's role (`bend` when not said): `flatten`, `hem` (a combination hem die), or `offset`
+/// with its `z`.
+fn role_of(j: &Json) -> Result<fb::tooling::Role, Answer> {
+    use fb::tooling::Role;
+    Ok(match j.get("role").and_then(Json::str).unwrap_or("bend") {
+        "bend" => Role::Bend,
+        "flatten" => Role::Flatten,
+        "hem" => Role::Hem,
+        "offset" => Role::Offset {
+            z: num(j, "z").ok_or_else(|| bad("an offset tool needs its `z`"))?,
+        },
+        r => {
+            return Err(bad(format!(
+                "a tool's role is bend, flatten, hem or offset, not {r}"
+            )));
+        }
+    })
+}
+
 fn punch_of(j: &Json) -> Result<fb::Punch, Answer> {
     let id = j
         .get("id")
@@ -1724,6 +1743,8 @@ fn punch_of(j: &Json) -> Result<fb::Punch, Answer> {
         segments: segments(j),
         max_load: num(j, "max_load"),
         drawn_width: None,
+        role: role_of(j)?,
+        max_thickness: num(j, "max_thickness"),
         id,
     })
 }
@@ -1746,6 +1767,8 @@ fn die_of(j: &Json) -> Result<fb::Die, Answer> {
         profile: profile(j)?,
         segments: segments(j),
         max_load: num(j, "max_load"),
+        role: role_of(j)?,
+        max_thickness: num(j, "max_thickness"),
         id,
     })
 }
@@ -2142,7 +2165,11 @@ fn answer(sh: &SheetOut, m: &fb::Model, tl: &fb::Tooling, plan: &fb::Plan, names
             text.push_str(&format!(
                 "  {}. {} {:.1} deg (+{:.1}): {} on {}, {}{}{}\n",
                 i + 1,
-                names[st.bend],
+                match st.stroke {
+                    fb::Stroke::Air => names[st.bend].clone(),
+                    fb::Stroke::Offset { k } => format!("{} + {} offset", names[st.bend], names[k]),
+                    s => format!("{} {}", names[st.bend], s.word()),
+                },
                 st.angle.to_degrees(),
                 st.overbend.to_degrees(),
                 st.punch,
@@ -2173,6 +2200,7 @@ fn answer(sh: &SheetOut, m: &fb::Model, tl: &fb::Tooling, plan: &fb::Plan, names
             Json::obj(vec![
                 ("n", ((i + 1) as f64).into()),
                 ("bend", name(st.bend)),
+                ("stroke", st.stroke.word().into()),
                 ("angle", rdeg(st.angle)),
                 ("overbend", rdeg(st.overbend)),
                 ("punch", st.punch.as_str().into()),

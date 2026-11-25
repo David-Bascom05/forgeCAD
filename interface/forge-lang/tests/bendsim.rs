@@ -1037,3 +1037,161 @@ fn the_narrow_channel_example_collides_as_its_header_says() {
         );
     }
 }
+
+/// A hem in a reply: a vendor tooling with an acute pair and a flattening pair (roles from the
+/// file); the hem's bend is two steps, its pre-bend then its flattening, each saying its stroke,
+/// the flattening on the flattening tools.
+#[test]
+fn a_hem_is_answered_as_a_pre_bend_and_a_flattening() {
+    let d = forge_dirs::temp_dir().join(format!("fg-bendsim-hem-{}", forge_dirs::process_id()));
+    std::fs::create_dir_all(&d).unwrap();
+    std::fs::write(
+        d.join("hemming.json"),
+        r#"{"base": "std-eu", "id": "hemming",
+  "punches": [
+    {"id": "acute-30", "kind": "acute", "height": 100, "tip_radius": 0.4, "tip_angle": 30, "tip_height": 25, "width": 20, "max_load": 400, "segments": [{"length": 200}]},
+    {"id": "flat-top", "role": "flatten", "height": 100, "tip_radius": 0, "tip_angle": 90, "tip_height": 10, "width": 40, "segments": [{"length": 200}]}
+  ],
+  "dies": [
+    {"id": "v8-30", "v": 8, "angle": 30, "shoulder_radius": 0.6, "height": 60, "width": 30, "max_load": 300, "segments": [{"length": 200}]},
+    {"id": "flat-bottom", "role": "flatten", "v": 6, "angle": 88, "shoulder_radius": 0.6, "height": 60, "width": 60, "segments": [{"length": 200}]}
+  ]}"#,
+    )
+    .unwrap();
+    let src = "shared t = 1\nshared r = 1\nshared k = ratio(0.4)\n\
+sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (120, 20))\n}\n\
+base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
+lip = hem(base.edge(plan.outline[0]), kind: \"open\", gap: t, length: 10)\n";
+    let ask = forge_lang::bendsim::parse(&["tooling", "hemming.json"].map(String::from)).unwrap();
+    let a = ask_src(src, Some(d.clone()), None, &ask);
+    assert!(a.ok, "{}", a.text);
+    assert_eq!(a.json.get("feasible"), Some(&Json::Bool(true)), "{}", a.text);
+    let steps = arr(&a.json, "steps");
+    let strokes: Vec<&str> = steps
+        .iter()
+        .filter_map(|s| s.get("stroke").and_then(Json::str))
+        .collect();
+    assert_eq!(strokes, ["pre-bend", "flatten"], "{}", a.text);
+    assert_eq!(steps[0].get("punch").and_then(Json::str), Some("acute-30"));
+    assert_eq!(steps[1].get("punch").and_then(Json::str), Some("flat-top"));
+    assert_eq!(steps[1].get("die").and_then(Json::str), Some("flat-bottom"));
+    assert_eq!(steps[0].get("bend"), steps[1].get("bend"));
+}
+
+/// A hem on WILA's catalogue tools: pre-bent on a 28 degree punch in a 30 degree V, flattened
+/// on WILA's flattening pair (BIU-041 over OZU-384, cited from WILA's catalogue p.87).
+#[test]
+fn a_hem_on_wila_tools_is_flattened_on_its_flattening_pair() {
+    let src = "shared t = 1\nshared r = 1\nshared k = ratio(0.4)\n\
+sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (300, 10))\n}\n\
+base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
+lip = hem(base.edge(plan.outline[0]), kind: \"open\", gap: t, length: 10)\n";
+    let ask = forge_lang::bendsim::parse(
+        &[
+            "press",
+            "trumpf-trubend-5130",
+            "punches",
+            "wila/BIU-001,wila/BIU-041",
+            "dies",
+            "wila/OZU-061,wila/OZU-384",
+        ]
+        .map(String::from),
+    )
+    .unwrap();
+    let a = ask_src(src, None, None, &ask);
+    assert!(a.ok, "{}", a.text);
+    assert_eq!(a.json.get("feasible"), Some(&Json::Bool(true)), "{}", a.text);
+    let steps = arr(&a.json, "steps");
+    let strokes: Vec<&str> = steps
+        .iter()
+        .filter_map(|s| s.get("stroke").and_then(Json::str))
+        .collect();
+    assert_eq!(strokes, ["pre-bend", "flatten"], "{}", a.text);
+    assert_eq!(steps[1].get("punch").and_then(Json::str), Some("wila/BIU-041"));
+    assert_eq!(steps[1].get("die").and_then(Json::str), Some("wila/OZU-384"));
+}
+
+/// A Z on WILA's offset tools: a 6 mm offset made in one stroke on the HU-001 / HU-006 holders
+/// with INZU-002 Z6 inserts (cited from WILA's catalogue pp.94-95), the reply saying the stroke
+/// and the offset rule at the part's offset; on Z5 inserts the offset rule refuses them and the
+/// Z is two air bends.
+#[test]
+fn a_z_on_wila_offset_tools_is_one_stroke() {
+    let src = "shared t = 1\nshared r = 1\nshared k = ratio(0.4)\n\
+sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (40, 300))\n}\n\
+base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
+web = flange(base.edge(plan.outline[1]), height: 7)\n\
+far = flange(web.tip, height: 30, side: \"down\")\n";
+    let ask_on = |z: &str| {
+        forge_lang::bendsim::parse(
+            &[
+                "press",
+                "trumpf-trubend-5130",
+                "punches",
+                &format!("wila/BIU-001,wila/HU-001+INZU-002-{z}"),
+                "dies",
+                &format!("wila/OZU-061,wila/HU-006+INZU-002-{z}"),
+            ]
+            .map(String::from),
+        )
+        .unwrap()
+    };
+    let a = ask_src(src, None, None, &ask_on("Z6"));
+    assert!(a.ok, "{}", a.text);
+    let steps = arr(&a.json, "steps");
+    let strokes: Vec<&str> = steps
+        .iter()
+        .filter_map(|s| s.get("stroke").and_then(Json::str))
+        .collect();
+    assert_eq!(strokes, ["offset"], "{}", a.text);
+    let off = arr(&steps[0], "checks")
+        .into_iter()
+        .find(|c| c.get("rule").and_then(Json::str) == Some("offset"))
+        .unwrap_or_else(|| panic!("{}", a.text));
+    assert_eq!(off.get("verdict").and_then(Json::str), Some("pass"), "{off}");
+    let b = ask_src(src, None, None, &ask_on("Z5"));
+    assert!(b.ok, "{}", b.text);
+    let strokes: Vec<String> = arr(&b.json, "steps")
+        .iter()
+        .filter_map(|s| s.get("stroke").and_then(Json::str).map(String::from))
+        .collect();
+    assert!(strokes.iter().all(|s| s == "bend"), "{strokes:?}");
+}
+
+/// examples/sheetmetal/hem_joggle.fg, the special tooling its header names on three stations:
+/// the joggle in one offset stroke, the hem pre-bent then flattened, each at its own station
+/// (offset, acute, flattening), the layout passing.
+#[test]
+fn the_hem_and_joggle_example_runs_on_three_stations() {
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/sheetmetal/hem_joggle.fg"
+    ))
+    .unwrap();
+    let line = src
+        .lines()
+        .find_map(|l| l.trim_start_matches('#').trim().strip_prefix("bendsim "))
+        .expect("the header names the words");
+    let words: Vec<String> = line.split_whitespace().map(String::from).collect();
+    let ask = forge_lang::bendsim::parse(&words).unwrap();
+    let a = ask_src(&src, None, None, &ask);
+    assert!(a.ok, "{}", a.text);
+    assert_eq!(a.json.get("feasible"), Some(&Json::Bool(true)), "{}", a.text);
+    let steps = arr(&a.json, "steps");
+    let strokes: Vec<&str> = steps
+        .iter()
+        .filter_map(|s| s.get("stroke").and_then(Json::str))
+        .collect();
+    assert_eq!(strokes, ["offset", "pre-bend", "flatten"], "{}", a.text);
+    let st = a.json.get("stage").expect("stage");
+    assert_eq!(st.get("ok"), Some(&Json::Bool(true)), "{st}");
+    let stations = arr(st, "stations");
+    assert_eq!(stations.len(), 3, "{st}");
+    let punches: Vec<&str> = stations
+        .iter()
+        .filter_map(|s| s.get("punch").and_then(Json::str))
+        .collect();
+    for p in ["wila/HU-001+INZU-002-Z6", "trumpf/OW222-K", "wila/BIU-041"] {
+        assert!(punches.contains(&p), "{punches:?}");
+    }
+}

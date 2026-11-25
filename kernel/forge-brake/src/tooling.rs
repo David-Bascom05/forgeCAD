@@ -82,6 +82,47 @@ pub struct Punch {
     /// The body's published width, for drawing only, where `width` is an envelope wider than it
     /// (the checks read `width`: it errs large).
     pub drawn_width: Option<f64>,
+    pub role: Role,
+    /// The thickest sheet the maker rates it for, where published.
+    pub max_thickness: Option<f64>,
+}
+
+/// What a tool is for. Air bending is every tool's but these: a hem's flattening (a flat punch
+/// face, a flat die), a combination hem die (an acute V for the pre-bend beside a spring pad that
+/// flattens), an offset (Z) pair forming two bends in one stroke, `z` apart.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum Role {
+    #[default]
+    Bend,
+    Flatten,
+    Hem,
+    Offset {
+        z: f64,
+    },
+}
+
+impl Role {
+    pub fn word(self) -> &'static str {
+        match self {
+            Role::Bend => "bend",
+            Role::Flatten => "flatten",
+            Role::Hem => "hem",
+            Role::Offset { .. } => "offset",
+        }
+    }
+
+    /// An air bend's tool: a plain one, or a combination hem die's V.
+    pub fn bends(self) -> bool {
+        matches!(self, Role::Bend | Role::Hem)
+    }
+
+    /// A tool that flattens a hem: a flattening one. A combination die's spring part flattens on
+    /// the press, but how its height divides between the spring part and the holder under it is
+    /// not published (WILA DDU-00x/1, Mate 20.2xx-20.4xx: open, closed and gap only), so it is not
+    /// simulated: it pre-bends, and a flattening pair must follow.
+    pub fn flattens(self) -> bool {
+        matches!(self, Role::Flatten)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -101,6 +142,9 @@ pub struct Die {
     pub profile: Option<Vec<Seg>>,
     pub segments: Vec<Segment>,
     pub max_load: Option<f64>,
+    pub role: Role,
+    /// The thickest sheet the maker rates it for, where published.
+    pub max_thickness: Option<f64>,
 }
 
 /// A beam's envelope across the bed: from `front` before the tool line (-x) to `back` behind it.
@@ -348,8 +392,33 @@ impl Punch {
         rp + (x - rp / dmath::cos(h)) / tan(h)
     }
 
-    /// The working part: the tip arc and both flanks up to `tip_height` (one loop).
+    /// The working part: the tip arc and both flanks up to `tip_height` (one loop); a
+    /// flattening punch's, its flat face and the block above it.
     pub fn tip_section(&self) -> Region {
+        if self.role == Role::Flatten && self.profile.is_none() {
+            let w = self.width / 2.0;
+            return Region::of(vec![poly(&[
+                (-w, 0.0),
+                (w, 0.0),
+                (w, self.tip_height),
+                (-w, self.tip_height),
+            ])]);
+        }
+        if let (Role::Offset { z }, None) = (self.role, &self.profile) {
+            // an offset insert: its lower face over the far wall (+x) at 0, its upper face over
+            // the base (-x) at z, the step between at the tool's angle (its included angle the
+            // bends'), across the middle (where across the width is not published)
+            let (w, d) = (self.width / 2.0, offset_run(z, self.tip_angle));
+            let h = self.tip_height.max(z + 1.0);
+            return Region::of(vec![poly(&[
+                (-w, z),
+                (-d, z),
+                (d, 0.0),
+                (w, 0.0),
+                (w, h),
+                (-w, h),
+            ])]);
+        }
         let h = self.tip_angle / 2.0;
         let rp = self.tip_radius;
         let ht = self.tip_height;
@@ -388,6 +457,24 @@ impl Punch {
             // an explicit section: what lies above the tip height is body, checked by distance;
             // the working part below it is decided by the rules (as a generated section's is)
             return Region::of(vec![clip_above(p, self.tip_height)]);
+        }
+        if let Role::Offset { z } = self.role {
+            let (w, h) = (self.width / 2.0, self.tip_height.max(z + 1.0));
+            return Region::of(vec![poly(&[
+                (-w, h),
+                (w, h),
+                (w, self.height),
+                (-w, self.height),
+            ])]);
+        }
+        if self.role == Role::Flatten {
+            let w = self.width / 2.0;
+            return Region::of(vec![poly(&[
+                (-w, self.tip_height),
+                (w, self.tip_height),
+                (w, self.height),
+                (-w, self.height),
+            ])]);
         }
         let ht = self.tip_height;
         let xf = self.flank_x(ht);
@@ -430,6 +517,15 @@ impl Punch {
 impl Die {
     pub fn validate(&self) -> Result<(), ToolingError> {
         let id = &self.id;
+        if matches!(self.role, Role::Flatten | Role::Offset { .. }) {
+            // a block, its top flat or stepped: no V to hold to anything
+            check(id, "height", self.height, 1.0, 2000.0)?;
+            check(id, "width", self.width, 1.0, 1000.0)?;
+            for s in &self.segments {
+                check(id, "segments.length", s.length, 1.0, 10000.0)?;
+            }
+            return Ok(());
+        }
         check(id, "v", self.v, 1.0, 1000.0)?;
         check(id, "angle", self.angle, 0.1, dmath::PI - 0.01)?;
         check(id, "shoulder_radius", self.shoulder_radius, 0.0, self.v)?;
@@ -471,6 +567,30 @@ impl Die {
     pub fn section(&self) -> Region {
         if let Some(p) = &self.profile {
             return Region::of(vec![p.clone()]);
+        }
+        if let Role::Offset { z } = self.role {
+            // an offset insert in its holder: the high face under the base (-x) at 0, the low
+            // face under the far wall (+x) at -z, the step at the tool's angle across the middle
+            let (w, d) = (self.width / 2.0, offset_run(z, self.angle));
+            let h = self.height;
+            return Region::of(vec![poly(&[
+                (-w, -h),
+                (w, -h),
+                (w, -z),
+                (d, -z),
+                (-d, 0.0),
+                (-w, 0.0),
+            ])]);
+        }
+        if self.role == Role::Flatten {
+            // a flattening die: a block, its top flat
+            let w = self.width / 2.0;
+            return Region::of(vec![poly(&[
+                (-w, -self.height),
+                (w, -self.height),
+                (w, 0.0),
+                (-w, 0.0),
+            ])]);
         }
         let a = self.angle / 2.0;
         let rs = self.shoulder_radius;
@@ -740,6 +860,17 @@ pub fn cover_within(segments: &[Segment], need: f64, room: f64) -> Option<(f64, 
         s -= items[k].0;
     }
     Some((best as f64 * unit, used))
+}
+
+/// Half the run across the bed of an offset tool's step: `z` high at an included angle `alpha`
+/// (the bends' turn pi - alpha); none for a square step.
+fn offset_run(z: f64, alpha: f64) -> f64 {
+    let turn = dmath::PI - alpha;
+    if turn >= 0.5 * dmath::PI - 1e-9 {
+        0.0
+    } else {
+        0.5 * z / tan(turn)
+    }
 }
 
 #[cfg(test)]
