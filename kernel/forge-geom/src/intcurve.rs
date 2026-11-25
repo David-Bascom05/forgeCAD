@@ -1159,7 +1159,8 @@ fn rim_point(s: &Surface, other: &Surface, p: Point3, step: f64) -> Option<Point
             break;
         }
         let slope = (other.implicit(on(t + dt)) - other.implicit(on(t - dt))) / (2.0 * dt);
-        if !(slope.abs() > 0.0) {
+        // (flat, or not a number)
+        if slope == 0.0 || slope.is_nan() {
             return None;
         }
         t = (t - g / slope).clamp(free.lo, free.hi);

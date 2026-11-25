@@ -251,6 +251,10 @@ pub struct Budget {
     start: u64,
     /// Begun on a shared bank: the op's, nothing of its own.
     within: bool,
+    /// The outer budget's `TOTAL` and `CAPPED` when this began, back when it ends (the outer's
+    /// spend is its total less what it has left, and its cap is its own).
+    total: u64,
+    capped: bool,
 }
 
 #[must_use = "the budget ends when this is dropped"]
@@ -261,16 +265,21 @@ pub fn scoped(most: u64) -> Budget {
             outer: None,
             start: 0,
             within: true,
+            total: 0,
+            capped: false,
         };
     }
     let outer = LIMITED.get().then(left);
     let start = outer.map_or(most, |o| o.min(most));
+    let (total, capped) = (TOTAL.get(), CAPPED.get());
     set_total(start);
     LIMITED.set(true);
     Budget {
         outer,
         start,
         within: false,
+        total,
+        capped,
     }
 }
 
@@ -286,6 +295,10 @@ impl Drop for Budget {
                 // was allowed, not spent)
                 let _ = self.start;
                 set_total(o.saturating_sub(spent_of_total()));
+                // the outer's total and cap, not what it has left: what it spent before this
+                // began is still its spend
+                TOTAL.set(self.total);
+                CAPPED.set(self.capped);
             }
             None => end(),
         }
@@ -950,6 +963,66 @@ mod tests {
         }
         super::slice_for_tests(super::SLICE);
         drop(outer);
+    }
+
+    /// A budget nested in another charges the outer what it spent, and leaves the outer's total
+    /// and cap the outer's: what the outer spent before it is still the outer's spend.
+    #[test]
+    fn a_nested_budget_leaves_the_outers_spend_and_cap_its_own() {
+        for slice in [7, super::SLICE] {
+            super::slice_for_tests(slice);
+            {
+                let _all = super::scoped(1000);
+                {
+                    let _mid = super::scoped(100);
+                    super::spend_many(30);
+                    {
+                        let _inner = super::scoped(1000);
+                        super::spend_many(20);
+                    }
+                    super::spend_many(10);
+                }
+                assert_eq!(super::left(), 940, "slice {slice}");
+            }
+            let (spent, ()) = super::isolated(1000, || {
+                super::spend_many(30);
+                {
+                    let _inner = super::scoped(1000);
+                    super::spend_many(20);
+                }
+                super::spend_many(10);
+            });
+            assert_eq!(spent, 60, "slice {slice}");
+            // a cap after a nested budget ended is against the op's total, not what it has left
+            {
+                let _op = super::scoped(10_000);
+                super::spend_many(3000);
+                {
+                    let _inner = super::scoped(10_000);
+                    super::spend_many(500);
+                }
+                super::cap_total(5000);
+                super::spend_many(1499);
+                assert!(!super::exhausted(), "slice {slice}");
+                super::spend_many(1);
+                assert!(super::exhausted(), "slice {slice}");
+            }
+            // a cap the outer asked before a nested budget is still asked after it
+            {
+                let _op = super::scoped(10_000);
+                super::cap_total(5000);
+                {
+                    let _inner = super::scoped(10_000);
+                    super::spend_many(100);
+                }
+                super::cap_total(9000);
+                super::spend_many(4899);
+                assert!(!super::exhausted(), "slice {slice}");
+                super::spend_many(1);
+                assert!(super::exhausted(), "slice {slice}");
+            }
+        }
+        super::slice_for_tests(super::SLICE);
     }
 
     /// Cut on any of an op's threads, while the others hold slices: the op is as if it had started
