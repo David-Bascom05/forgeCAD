@@ -1028,6 +1028,8 @@ impl Shell {
         if dialog_head(ui, t, "part", "Place Component", "asm:place", places) {
             return false;
         }
+        let id = egui::Id::unique("asm-place-filter");
+        super::dialog::focus_on_open(ui.ctx(), "asm-place", id, &p.filter);
         let r = ui.add(
             egui::TextEdit::singleline(&mut p.filter)
                 .id(egui::Id::unique("asm-place-filter"))

@@ -282,11 +282,6 @@ fn focus_first(ctx: &egui::Context, tool: &FgTool) {
         return;
     };
     let id = field_id(&format!("fg:tool:param:{}", p.name));
-    // shown last frame too, or just opened
-    let key = egui::Id::unique("fg-dialog-shown");
-    let frame = ctx.cumulative_frame_nr();
-    let fresh = ctx.data(|d| d.get_temp::<u64>(key)).is_none_or(|f| f + 1 < frame);
-    ctx.data_mut(|d| d.insert_temp(key, frame));
     let free = ctx.memory(|m| m.focused().is_none());
     // a digit alone: not mid-drag, no other key or modifier held
     let digit = || {
@@ -334,7 +329,9 @@ fn focus_first(ctx: &egui::Context, tool: &FgTool) {
         };
         ctx.data_mut(|d| d.insert_temp(undo_key(), u));
     }
-    if (fresh && tool.slots.is_empty()) || handed {
+    if tool.slots.is_empty() {
+        super::dialog::focus_on_open(ctx, "fg-dialog", id, &p.text);
+    } else if handed {
         ctx.memory_mut(|m| m.request_focus(id));
         // the text selected: what's typed replaces it
         let mut s = egui::text_edit::TextEditState::load(ctx, id).unwrap_or_default();

@@ -1530,6 +1530,14 @@ impl Shell {
             self.capture.settings_open = false;
         } else if self.inspect.props.is_some() {
             self.inspect.props = None;
+        } else if self.inspect.section_open {
+            self.inspect.section_open = false;
+        } else if let Some(a) = self.fg.as_mut().and_then(|p| p.asm.as_mut()).filter(|a| a.explode_open) {
+            a.explode_open = false;
+        } else if self.versions.dialog.is_some() {
+            self.versions.dialog = None;
+        } else if self.versions.release.is_some() {
+            self.versions.release = None;
         } else if self.new_drawing.is_some() {
             self.new_drawing = None;
         } else if self.sheet.vendor.dfm_open {
