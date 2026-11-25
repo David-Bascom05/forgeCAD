@@ -1,3 +1,7 @@
 # text files are LF on every platform (Windows checkouts too): sources read with include_str!,
 # fixtures and tools/speed/bits.txt are compared byte for byte
 * text=auto eol=lf
+
+# Shipped machine models (meshes, STEP/Parasolid) live in Git LFS. .lfsconfig keeps them out of
+# normal clones; fetch one with: git lfs pull --include="kernel/forge-machine/data/models/<maker>/<machine>/**"
+kernel/forge-machine/data/models/** filter=lfs diff=lfs merge=lfs -text
