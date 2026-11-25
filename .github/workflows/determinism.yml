@@ -122,6 +122,11 @@ jobs:
           key: det-${{ matrix.name }}
           save-if: ${{ github.ref == 'refs/heads/main' && matrix.threads == '1' && matrix.shard == 0 }}
       - run: cargo build --release --locked -p forge-det
+      # forge_math::ipow (powi without the build host's libm, claude/powi): folded == run time ==
+      # the multiply chain on this target, 95.65^3 included; once that test is on the branch
+      - name: ipow, folded and at run time (forge-math tests/ipow.rs)
+        if: ${{ matrix.threads == '1' && matrix.shard == 0 && hashFiles('kernel/forge-math/tests/ipow.rs') != '' }}
+        run: cargo test --release --locked -p forge-math --test ipow
       - name: shard ${{ matrix.shard }}/4 of the corpus and op streams, separate processes
         if: ${{ needs.plan.outputs.check == 'true' }}
         shell: bash

@@ -18,6 +18,12 @@
 //!   DOC OP WARM_DIFFERS BODY MESH  the warm rebuild (the Cache of the previous run, as an editing
 //!                                  app keeps it) gave other bits than a cold build: a divergence
 //!                                  by itself (BODY/MESH are the warm ones)
+//!   consts/EXPR 0 FOLDED RUNTIME SAME  (`--consts`, and with shard 0 of `--corpus`) the bits of
+//!                                  a constant expression folded at compile time (the build
+//!                                  host's libm: LLVM folds powi and libm calls with it) and the
+//!                                  same at run time (black_box); SAME is '-' or FOLD when they
+//!                                  differ. Diffed across targets and build hosts like every line:
+//!                                  a fold that depends on the build host shows here first
 //! Timing goes to stderr only. Run with FORGECAD_CACHE=off (the disk cache would make a result
 //! depend on what ran before); it refuses to run without it.
 use forge_agent::json::Json;
@@ -28,7 +34,7 @@ use std::path::{Path, PathBuf};
 
 fn main() {
     let mut root: Option<PathBuf> = None;
-    let (mut corpus, mut streams, mut record) = (false, false, false);
+    let (mut corpus, mut streams, mut record, mut consts) = (false, false, false, false);
     let mut shard = (0usize, 1usize);
     let mut files: Vec<String> = vec![];
     let mut args = std::env::args().skip(1);
@@ -38,6 +44,7 @@ fn main() {
             "--corpus" => corpus = true,
             "--streams" => streams = true,
             "--record" => record = true,
+            "--consts" => consts = true,
             "--shard" => {
                 let s = args.next().unwrap_or_default();
                 let (k, n) = s.split_once('/').unwrap_or(("0", "1"));
@@ -60,6 +67,9 @@ fn main() {
     if record {
         record_streams(&root, &files);
         return;
+    }
+    if consts || (corpus && shard.0 == 0) {
+        print_consts();
     }
     let t0 = forge_math::clock::system_now();
     let mut n = 0usize;
@@ -112,6 +122,63 @@ fn main() {
         "forge-det: {n} runs in {secs:.1} s, {} threads",
         forge_math::par::threads()
     );
+}
+
+/// The constant-expression lines (see the header): each written once as a literal expression
+/// (folded by the compiler in release) and once through `black_box` (computed at run time).
+// the very calls the kernel must not make (std's libm and powi): what they fold to is the check
+#[allow(clippy::disallowed_methods)]
+fn print_consts() {
+    use std::hint::black_box as b;
+    fn line(name: &str, folded: f64, runtime: f64) {
+        let (f, r) = (folded.to_bits(), runtime.to_bits());
+        let same = if f == r { "-" } else { "FOLD" };
+        println!("consts/{name} 0 {f:016x} {r:016x} {same}");
+    }
+    macro_rules! c {
+        ($name:expr, |$x:ident| $e:expr, $v:expr) => {{
+            let folded = {
+                let $x: f64 = $v;
+                $e
+            };
+            let runtime = {
+                let $x: f64 = b($v);
+                $e
+            };
+            line($name, folded, runtime);
+        }};
+    }
+    // powi: folded with the host's pow (one rounding), at run time a chain of multiplies
+    c!("powi(95.65,3)", |x| x.powi(b(3)), 95.65);
+    c!("powi(95.65,3)lit", |x| x.powi(3), 95.65);
+    c!("powi(1.1,7)", |x| x.powi(7), 1.1);
+    c!("powi(0.3,5)", |x| x.powi(5), 0.3);
+    c!("powi(2.5,-3)", |x| x.powi(-3), 2.5);
+    c!("powi(10,-2)", |x| x.powi(-2), 10.0);
+    c!("powi(1.0000001,17)", |x| x.powi(17), 1.0000001);
+    c!("powi(3.25,4)", |x| x.powi(4), 3.25);
+    c!("powi(-0.7,9)", |x| x.powi(9), -0.7);
+    // libm-shaped calls the compiler may fold with the host's libm
+    c!("sin(1)", |x| x.sin(), 1.0);
+    c!("cos(0.7)", |x| x.cos(), 0.7);
+    c!("tan(0.3)", |x| x.tan(), 0.3);
+    c!("asin(0.4)", |x| x.asin(), 0.4);
+    c!("acos(0.6)", |x| x.acos(), 0.6);
+    c!("atan(0.9)", |x| x.atan(), 0.9);
+    c!("atan2(1,3)", |x| x.atan2(3.0), 1.0);
+    c!("exp(1.3)", |x| x.exp(), 1.3);
+    c!("exp_m1(0.01)", |x| x.exp_m1(), 0.01);
+    c!("ln(7.7)", |x| x.ln(), 7.7);
+    c!("ln_1p(0.02)", |x| x.ln_1p(), 0.02);
+    c!("log10(42)", |x| x.log10(), 42.0);
+    c!("sqrt(2)", |x| x.sqrt(), 2.0);
+    c!("cbrt(3)", |x| x.cbrt(), 3.0);
+    c!("powf(2.1,3.3)", |x| x.powf(3.3), 2.1);
+    c!("hypot(3.1,4.2)", |x| x.hypot(4.2), 3.1);
+    c!("sinh(0.5)", |x| x.sinh(), 0.5);
+    c!("cosh(0.5)", |x| x.cosh(), 0.5);
+    c!("tanh(0.5)", |x| x.tanh(), 0.5);
+    c!("mul_add(1.1,2.2,3.3)", |x| x.mul_add(2.2, 3.3), 1.1);
 }
 
 /// Every .fg under `dir`.
