@@ -708,8 +708,17 @@ fn mcp_import_brings_a_parasolid_model_in_as_a_part_under_the_root() {
         vec![("file", out.join("sphere.fg").to_str().unwrap().into())],
     );
     assert!(!err, "{j}");
-    // a model outside the root is refused
+    // a model outside the root is refused, and so is a part written into .git
     let (err, j, _) = m.tool("import", vec![("file", src.to_str().unwrap().into())]);
     assert!(err, "{j}");
+    let (err, j, _) = m.tool(
+        "import",
+        vec![
+            ("file", model.to_str().unwrap().into()),
+            ("out", ".GIT/hooks".into()),
+        ],
+    );
+    assert!(err && j.to_string().contains(".git"), "{j}");
+    assert!(!dir.join(".GIT").exists());
     let _ = std::fs::remove_dir_all(&dir);
 }

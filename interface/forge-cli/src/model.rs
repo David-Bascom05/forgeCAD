@@ -84,14 +84,16 @@ pub fn import(src: &Path, dir: &Path) -> Result<(Json, String), String> {
         (Ok(a), Ok(b)) => a == b,
         _ => false,
     };
+    // a link there (even one leading nowhere) is never written through
+    let there = |p: &Path| std::fs::symlink_metadata(p).is_ok();
     if !same {
-        if beside.exists() {
+        if there(&beside) {
             return Err(format!("{}: there already; not overwritten", beside.display()));
         }
         std::fs::copy(src, &beside).map_err(|e| format!("{}: {e}", beside.display()))?;
     }
     let part = dir.join(format!("{stem}.fg"));
-    if part.exists() {
+    if there(&part) {
         return Err(format!("{}: there already; not overwritten", part.display()));
     }
     let text = format!(
