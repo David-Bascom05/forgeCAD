@@ -222,7 +222,7 @@ pub struct Gui {
     /// later task: `picks` finishes it).
     window_out: Option<WindowAsk>,
     /// A message with marks, sent once the frame showing them is drawn.
-    markup_job: Option<(String, Vec<String>)>,
+    markup_job: Option<(String, Vec<String>, Vec<crate::agent::Picture>)>,
     /// A message with marks taken, waiting on its names; an assembly's occurrences' own names,
     /// by the text they were found for, and the thread finding them.
     markup_wait: Option<Box<gui_markup::Waiting>>,
@@ -2074,6 +2074,16 @@ impl Headless {
         });
     }
 
+    /// Shift held down (true) or let go, for the view: a click with it adds to the selection.
+    pub fn shift(&mut self, on: bool) {
+        let m = if on {
+            winit::keyboard::ModifiersState::SHIFT
+        } else {
+            winit::keyboard::ModifiersState::empty()
+        };
+        self.gui.view_event(&WindowEvent::ModifiersChanged(m.into()));
+    }
+
     /// A left click here.
     pub fn click_at(&mut self, x: f32, y: f32) {
         self.move_to(x, y);
@@ -3320,6 +3330,7 @@ impl Gui {
             Item::ZAxis => Some(("origin axis", "Z")),
             Item::Center => None,
         });
+        let was_posed = posed.is_some();
         let (what, text, edge): (&'static str, Result<String, ToolError>, Option<u32>) = match (ent, posed) {
             // the posed view's pick, named through the model (its edges' indices are the model's
             // no more: no sheet edge by index)
@@ -3404,7 +3415,27 @@ impl Gui {
             v.dirty = true;
             return;
         }
+        // more than one picked (posed views aside): each named, for the Agent tab
+        let all: Vec<String> = if !was_posed && v.nav.selected.len() > 1 {
+            let mut names: Vec<String> = Vec::new();
+            for &(_, e) in &v.nav.selected {
+                let n = match e {
+                    Entity::Face(f) => named(a.as_ref().map(|a| &a.faces), f, "face").ok(),
+                    Entity::Edge(k) => named(a.as_ref().map(|a| &a.edges), k, "edge").ok(),
+                    _ => None,
+                };
+                if let Some(n) = n
+                    && !names.contains(&n)
+                {
+                    names.push(n);
+                }
+            }
+            names
+        } else {
+            Vec::new()
+        };
         let Some(p) = &mut self.shell.fg else { return };
+        p.picked_all = all;
         let Some(tool) = &mut p.tool else {
             self.shell.status = match &text {
                 // in words, as the Agent tab's chip says it: "end face of extrude1"

@@ -381,6 +381,16 @@ window.forge_agent_events = (from, onLine) => {
 /// A file the agent wrote, already in the app's filesystem: its version, so the next save is
 /// made against it and isn't refused as stale.
 window.forge_agent_adopt = (rel, etag) => mirror?.versions.set(rel, etag);
+// a picture pasted or dropped on the page: the agent's, for its next message (the app says
+// where it went, or why not)
+const pictures = (files) => {
+  const all = [...(files ?? [])].filter((f) => f.type.startsWith("image/"));
+  for (const f of all) f.arrayBuffer().then((b) => fc.app_agent_picture(new Uint8Array(b)));
+  return all.length > 0;
+};
+addEventListener("paste", (e) => pictures(e.clipboardData?.files) && e.preventDefault());
+addEventListener("dragover", (e) => [...(e.dataTransfer?.items ?? [])].some((i) => i.type.startsWith("image/")) && e.preventDefault());
+addEventListener("drop", (e) => pictures(e.dataTransfer?.files) && e.preventDefault());
 window.forgecad = {
   fc,
   threaded,

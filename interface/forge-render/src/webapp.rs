@@ -88,6 +88,8 @@ enum Ask {
     Machine(String),
     /// `Gui::capture_command`'s words: a photo or a recording, as Capture's settings say.
     Capture(String),
+    /// A picture pasted or dropped on the page, for the agent (`app_agent_picture`).
+    AgentPicture(Vec<u8>),
 }
 
 thread_local! {
@@ -552,6 +554,14 @@ impl Host {
                 Ask::Pixels(f) => self.pixels(f),
                 Ask::StoreFailed(path, why) => self.gui.store_failed(&path, &why),
                 Ask::Say(text) => self.gui.shell.status = text,
+                Ask::AgentPicture(bytes) => {
+                    if !self.gui.agent_picture(bytes)
+                        && self.gui.shell.agent.tab != crate::shell::agent::SideTab::Agent
+                    {
+                        self.gui.shell.status =
+                            "A picture goes to the agent: open the Agent tab, then paste it".into();
+                    }
+                }
                 Ask::CamSim(c) => {
                     if let Err(e) = self.gui.camsim_command(&c) {
                         self.gui.shell.status = e;
@@ -1374,6 +1384,12 @@ pub fn app_cam(words: String) {
 #[wasm_bindgen]
 pub fn app_type(text: String, enter: bool) {
     ask(Ask::Type(text, enter));
+}
+
+/// A picture pasted or dropped on the page (its bytes): the Agent tab's, for its next message.
+#[wasm_bindgen]
+pub fn app_agent_picture(bytes: Vec<u8>) {
+    ask(Ask::AgentPicture(bytes));
 }
 
 /// The page's storage could not keep a file the app wrote (`forgecad web` refused it, the
