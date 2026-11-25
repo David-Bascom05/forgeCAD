@@ -812,6 +812,9 @@ mod tests {
             jaw_top: 30.0,
             axis: 0,
             clearance: 1.0,
+            table_z: None,
+            enveloped: vec![],
+            placed: None,
         };
         let b = f.boxes();
         assert_eq!(b.len(), 1);
