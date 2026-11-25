@@ -324,6 +324,9 @@ impl IntCurve {
     }
 
     /// `eval`, kept: the same point, worked out once for each t this curve is asked for here.
+    /// It must stay off budget-charged paths (a kept point skips the work a budget counts), and a
+    /// shared IntCurve's fields must not be mutated after its first eval (the kept points would
+    /// then answer for the old curve). At most `Kept::MAX` points, about 1.08 MB per curve.
     pub fn eval_kept(&self, t: f64) -> Point3 {
         let key = t.to_bits();
         if let Some(p) = self.kept.0.lock().ok().and_then(|m| m.get(&key).copied()) {
