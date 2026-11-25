@@ -2,7 +2,7 @@
 //! of the part of C's edge that is the wall's offset (lang's `rest_region`, `edge_only`) is cut
 //! by running that edge, the wall runs as cuts and the rest of C's edge (centres that only touch
 //! the material, or less) as links at the cutting feed, level by level, straight down between
-//! levels. Plain contour following; no patented method.
+//! levels. Method: plain contour following along an offset (textbook).
 use crate::leads::{nearest_param, point_at, seg_len};
 use crate::ops::{Cut, OpPath, PMove, Phase, Span, levels};
 use forge_cam_geom::region::{Region, Seg};

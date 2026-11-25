@@ -8559,8 +8559,8 @@ enum Rest {
 /// The tool centres that matter are C = (rg ⊖ r) ∩ (M ⊕ r): allowed (the disk inside rg) and
 /// touching M. Passes covering C (its edge, then offsets in by the stepover) put the tool on
 /// or within a stepover of every such centre, so they clear all the material pocketing rg
-/// would, and they stay next to that material (rest machining by morphology: plain offsetting,
-/// no patented method). Where C cannot be formed, rg ∩ (M ⊕ 2r) pocketed as a hole (a
+/// would, and they stay next to that material (rest machining by morphology: plain offsetting).
+/// Where C cannot be formed, rg ∩ (M ⊕ 2r) pocketed as a hole (a
 /// superset, also correct); any other failure: the whole hole.
 fn rest_region(rg: &Region, ip: &forge_cam::stock::InProcess, floor: f64, r: f64) -> Rest {
     use forge_cam_geom::boolean::{Op, boolean, region_of};
