@@ -295,11 +295,14 @@ fn a_part_with_tori_with_copies_near_over_answers_right_or_refuses() {
             "offset {k}: union + intersection - 2V = {miss}"
         );
     };
+    let offsets = [0.40, 0.405, 0.41, 0.412, 0.4137, 0.415, 0.417, 0.42, 0.43];
+    // (wasm has no threads: one after another there)
+    if cfg!(target_family = "wasm") {
+        offsets.into_iter().for_each(check);
+        return;
+    }
     std::thread::scope(|s| {
-        let all: Vec<_> = [0.40, 0.405, 0.41, 0.412, 0.4137, 0.415, 0.417, 0.42, 0.43]
-            .into_iter()
-            .map(|k| s.spawn(move || check(k)))
-            .collect();
+        let all: Vec<_> = offsets.into_iter().map(|k| s.spawn(move || check(k))).collect();
         for t in all {
             t.join().unwrap();
         }
