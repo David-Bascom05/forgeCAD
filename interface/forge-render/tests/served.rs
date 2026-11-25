@@ -139,6 +139,19 @@ fn two_app_sessions_edit_one_served_part() {
     let file_b = rb.join("parts/part.fg");
     let (mut a, mut b) = (open(&file), open(&file_b));
     assert!(a.served() && b.served(), "a SERVED project gets a link");
+    // M5 review (High): before the server's text has come, no edit is made (none could name a
+    // version of it): refused, the part as it was
+    let w41 = Op::SetParam {
+        param: ParamKey::parse("w").unwrap(),
+        value: Literal {
+            value: 41.0,
+            dim: forge_lang::values::Dim::Length,
+        },
+    };
+    let e = a.apply(w41.clone()).unwrap_err();
+    assert_eq!(e.kind(), "NotShared", "{}", e.text());
+    assert!(a.apply_all(vec![w41]).is_err());
+    assert_eq!(a.src, DOC);
     until(&mut [&mut a, &mut b], "the snapshots", synced);
 
     // both edit at once through the app's own edit path
@@ -205,6 +218,41 @@ fn two_app_sessions_edit_one_served_part() {
     until(&mut [&mut a, &mut b], "the undo", synced);
     assert_eq!(a.src, before_undo, "undo took back only a's op");
     assert!(b.src.contains(&format!("param {renamed}.d = 9.5")));
+
+    // M5: an apply-all is one group: through w = 0 (refused alone) to 44, one seq for both,
+    // and the collaborator sees the whole of it
+    let seq0 = a.sync.as_ref().unwrap().seq();
+    a.apply_all(vec![
+        Op::SetParam {
+            param: ParamKey::parse("w").unwrap(),
+            value: lit(0.0),
+        },
+        Op::SetParam {
+            param: ParamKey::parse("h").unwrap(),
+            value: lit(8.0),
+        },
+        Op::SetParam {
+            param: ParamKey::parse("w").unwrap(),
+            value: lit(44.0),
+        },
+    ])
+    .unwrap();
+    until(&mut [&mut a, &mut b], "the group", synced);
+    assert!(b.src.contains("shared w = 44") && b.src.contains("shared h = 8"), "{}", b.src);
+    assert_eq!(a.sync.as_ref().unwrap().seq(), seq0 + 1, "one group, one seq");
+    // over the protocol's limits: refused by the app, nothing made or sent
+    let before = a.src.clone();
+    let many = vec![
+        Op::SetParam {
+            param: ParamKey::parse("w").unwrap(),
+            value: lit(45.0),
+        };
+        forge_sync::MAX_GROUP_OPS + 1
+    ];
+    let e = a.apply_all(many).unwrap_err();
+    assert_eq!(e.kind(), "NotShared", "{}", e.text());
+    assert_eq!(a.src, before);
+    assert_eq!(a.sync.as_ref().unwrap().pending(), 0);
 
     // a raw text change is not shared in phase 1: refused and said
     assert!(!a.set_units("in") || a.src == b.src);

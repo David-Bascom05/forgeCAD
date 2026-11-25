@@ -187,15 +187,17 @@ impl Link for WebLink {
     fn pending(&self) -> usize {
         self.0.borrow().client.pending().len()
     }
-    fn local(&self, op: Op, after: String) {
+    fn local(&self, op: Op, after: String) -> Result<(), String> {
         let mut s = self.0.borrow_mut();
-        s.client.local(op, after);
+        let r = s.client.local(op, after).map(|_| ()).map_err(|r| r.text());
         s.flush();
+        r
     }
-    fn local_group(&self, ops: Vec<Op>, after: String) {
+    fn local_group(&self, ops: Vec<Op>, after: String) -> Result<(), String> {
         let mut s = self.0.borrow_mut();
-        s.client.local_group(ops, after);
+        let r = s.client.local_group(ops, after).map(|_| ()).map_err(|r| r.text());
         s.flush();
+        r
     }
     fn undo(&self) -> Option<Result<(), String>> {
         let mut s = self.0.borrow_mut();

@@ -2114,14 +2114,26 @@ impl Session {
             {
                 s.sync_file = file;
             }
-            if verified {
-                s.attach(link);
-            } else {
-                // the first open since the project was served: attached once the texts match
-                s.sync_wait = link;
-            }
+            // attached once the server's text has come (the first open since the project was
+            // served: once it is seen to match; a part synced before, its mark matched: then,
+            // taking up what collaborators did since). Until then no edit is made: none could
+            // name a version of the server's text, and none is sent with a guessed one
+            // (DESIGN.md §4.2: an op's base is the seq of the text it was made on)
+            let _ = verified;
+            s.sync_wait = link;
         }
         Ok(s)
+    }
+
+    /// A SERVED part waiting for the server's text takes no edit yet (made, it would be on a text
+    /// no version of the server's names).
+    fn served_ready(&self) -> Result<(), EditError> {
+        match self.sync_wait {
+            Some(_) => Err(EditError::Sync(
+                "the server hasn't answered yet: this part takes edits once it has".into(),
+            )),
+            None => Ok(()),
+        }
     }
 
     /// A SERVED part: linked, or waiting to attach (its first open, until the texts are seen
@@ -2187,8 +2199,8 @@ impl Session {
         }
         #[cfg(not(target_arch = "wasm32"))]
         let checked = match &mut self.sync_file {
-            Some(f) => f.verify(&l.text(), &self.src),
-            None => Ok(()),
+            Some(f) if !f.verified() => f.verify(&l.text(), &self.src),
+            _ => Ok(()),
         };
         #[cfg(target_arch = "wasm32")]
         let checked: Result<(), String> = Ok(());
@@ -2412,28 +2424,35 @@ impl Session {
     }
 
     /// Applies a typed op through forge-lang: refused, with its typed error, if the result
-    /// wouldn't check; else the new text builds.
-    pub fn apply(&mut self, op: Op) -> Result<Option<Reach>, Error> {
+    /// wouldn't check (or, SERVED, if it can't be shared: then it isn't made here either); else
+    /// the new text builds.
+    pub fn apply(&mut self, op: Op) -> Result<Option<Reach>, EditError> {
         let dir = self
             .path
             .as_deref()
             .and_then(|f| forge_dirs::fs::canonicalize(f).ok())
             .and_then(|f| f.parent().map(|d| d.to_path_buf()));
+        self.served_ready()?;
         let (text, reach) = edit::apply_checked_in(&self.src, &op, dir)?;
         if let Some(l) = &self.sync {
-            l.local(op.clone(), text.clone());
+            l.local(op.clone(), text.clone()).map_err(EditError::Sync)?;
         }
         self.take_text(text);
         self.ops.push(op);
         Ok(reach)
     }
 
-    /// Several ops as one edit, one undo step: refused whole if the result wouldn't check.
-    pub fn apply_all(&mut self, ops: Vec<Op>) -> Result<(), Error> {
+    /// Several ops as one edit, one undo step: refused whole if the result wouldn't check (or,
+    /// SERVED, if it can't be shared as one: then none of it is made here either).
+    pub fn apply_all(&mut self, ops: Vec<Op>) -> Result<(), EditError> {
+        if ops.is_empty() {
+            return Ok(());
+        }
+        self.served_ready()?;
         let text = edit::apply_all_checked(&self.src, &ops)?;
         // one group: the server commits all of it or none (M5), as the edit is one here
         if let Some(l) = &self.sync {
-            l.local_group(ops.clone(), text.clone());
+            l.local_group(ops.clone(), text.clone()).map_err(EditError::Sync)?;
         }
         self.take_text(text);
         self.ops.extend(ops);
@@ -2635,5 +2654,40 @@ mod undrawn_tests {
         let b = body.face_box(bad);
         assert!(b.x.lo <= f.center[0] && f.center[0] <= b.x.hi, "{:?}", f.center);
         assert!(f.radius > 0.0 && (f.radius as f32) < mesh.radius * 2.0, "{}", f.radius);
+    }
+}
+
+/// Why an edit of a part was not made: forge-lang's typed error, or (SERVED) the link's refusal
+/// to share it (not joined yet, outside the protocol's limits), in words.
+#[derive(Debug)]
+pub enum EditError {
+    Lang(Error),
+    Sync(String),
+}
+
+impl std::convert::From<Error> for EditError {
+    fn from(e: Error) -> EditError {
+        EditError::Lang(e)
+    }
+}
+
+impl EditError {
+    pub fn kind(&self) -> &'static str {
+        match self {
+            EditError::Lang(e) => e.kind(),
+            EditError::Sync(_) => "NotShared",
+        }
+    }
+    pub fn text(&self) -> String {
+        match self {
+            EditError::Lang(e) => e.text(),
+            EditError::Sync(why) => format!("not shared with the server: {why}"),
+        }
+    }
+    pub fn fixes(&self) -> Vec<Op> {
+        match self {
+            EditError::Lang(e) => e.fixes(),
+            EditError::Sync(_) => vec![],
+        }
     }
 }
