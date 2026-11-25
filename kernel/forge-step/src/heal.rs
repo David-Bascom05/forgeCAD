@@ -301,6 +301,7 @@ impl Proto {
             if d.u.period.is_none() && d.v.period.is_none() {
                 continue;
             }
+            let s = self.pole_clear_sphere(f, s);
             let s = self.reframe_sphere(f, s);
             let windings: Vec<(i64, i64)> = self.faces[f].loops.iter().map(|l| self.winding(l, &s)).collect();
             let winding: Vec<usize> = (0..windings.len()).filter(|&i| windings[i] != (0, 0)).collect();
@@ -316,6 +317,62 @@ impl Proto {
             }
         }
         Ok(())
+    }
+
+    /// A sphere's face whose edge runs through a pole of the sphere's frame between its ends
+    /// (05-0178 #2673: a ball end's corner patch, the pole 0.055 mm along an edge from its
+    /// corner). The longitude turns half round there, mid-edge, and the loop looked to wind round
+    /// the pole. The same sphere in a frame whose poles are a quarter turn from the face's middle:
+    /// the surface's points and normals as they were, exactly.
+    fn pole_clear_sphere(&mut self, f: usize, s: Surface) -> Surface {
+        let Surface::Sphere(k) = &s else {
+            return s;
+        };
+        let face = &self.faces[f];
+        let near = 2.0 * tol::LINEAR.max(1e-4);
+        let poles: Vec<Point3> = [false, true]
+            .iter()
+            .filter_map(|&up| pole_of(&s, 0, up))
+            .collect();
+        let through = face.loops.iter().flatten().any(|&(e, _)| {
+            let e = &self.edges[e];
+            let (a, b) = (self.verts[e.start].0, self.verts[e.end].0);
+            poles.iter().any(|&p| {
+                let t = e.curve.closest(p, e.range);
+                e.curve.eval(t).distance(p) <= near && a.distance(p) > near && b.distance(p) > near
+            })
+        });
+        if !through {
+            return s;
+        }
+        let mut centre = Vec3::ZERO;
+        for &(e, _) in face.loops.iter().flatten() {
+            let e = &self.edges[e];
+            for j in 0..8 {
+                let t = e.range.lo + e.range.width() * (j as f64 + 0.5) / 8.0;
+                centre += e.curve.eval(t) - k.frame.origin;
+            }
+        }
+        let Some(c) = centre.normalize() else {
+            return s;
+        };
+        let c: Vec3 = c.into();
+        let Some(z) = c
+            .cross(k.frame.z().into())
+            .normalize()
+            .or_else(|| c.cross(k.frame.x().into()).normalize())
+        else {
+            return s;
+        };
+        let Some(frame) = Frame::from_zx(k.frame.origin, z, -c) else {
+            return s;
+        };
+        let n = Surface::Sphere(forge_geom::Sphere {
+            frame,
+            radius: k.radius,
+        });
+        self.faces[f].surface = n.clone();
+        n
     }
 
     /// A sphere's face holding a pole with no loop round it (a cap about another axis, seen from
@@ -380,7 +437,15 @@ impl Proto {
         // the seam runs across the direction the rims wind in
         let dir = usize::from(w.0 == 0);
         let s = self.faces[f].surface.clone();
-        let va = self.seam_start(f, a, b, dir, &s);
+        let mut va = self.seam_start(f, a, b, dir, &s);
+        // on rim b where it crosses the seam's line, once
+        let on_b = |p: &Proto, at: f64| match p.crossings(&p.faces[f].loops[b], &s, dir, at)[..] {
+            [x] => Some(x),
+            _ => None,
+        };
+        if let Some(v) = self.clear_seam_start(f, a, dir, &s, va, &on_b) {
+            va = v;
+        }
         let uva = s.project(self.verts[va].0);
         let at = if dir == 0 { uva.x } else { uva.y };
         let Some(vb) = self.pick_vertex_on(f, b, dir, at) else {
@@ -412,6 +477,110 @@ impl Proto {
         self.faces[f].loops.remove(hi);
         self.faces[f].loops[lo] = joined;
         Ok(())
+    }
+
+    /// Where a loop crosses the line where the `dir` parameter is `at` (modulo its period): the
+    /// other parameter at each crossing.
+    fn crossings(&self, l: &[(usize, bool)], s: &Surface, dir: usize, at: f64) -> Vec<f64> {
+        let d = s.domain();
+        let Some(period) = (if dir == 0 { d.u.period } else { d.v.period }) else {
+            return Vec::new();
+        };
+        let phase = |q: Point2| {
+            let x = if dir == 0 { q.x } else { q.y };
+            let r = (x - at) / period;
+            (r - r.round()) * period
+        };
+        let mut out = Vec::new();
+        for &(e, _) in l {
+            let e = &self.edges[e];
+            let at_t = |t: f64| s.project(e.curve.eval(t));
+            const N: usize = 32;
+            for k in 0..N {
+                let (t0, t1) = (
+                    e.range.lo + e.range.width() * k as f64 / N as f64,
+                    e.range.lo + e.range.width() * (k + 1) as f64 / N as f64,
+                );
+                let (a, b) = (phase(at_t(t0)), phase(at_t(t1)));
+                if (a <= 0.0) != (b <= 0.0) && (a - b).abs() < 0.5 * period {
+                    let (mut lo, mut hi, mut fa) = (t0, t1, a);
+                    for _ in 0..60 {
+                        let m = 0.5 * (lo + hi);
+                        let fm = phase(at_t(m));
+                        if (fm <= 0.0) == (fa <= 0.0) {
+                            lo = m;
+                            fa = fm;
+                        } else {
+                            hi = m;
+                        }
+                    }
+                    let q = at_t(0.5 * (lo + hi));
+                    out.push(if dir == 0 { q.y } else { q.x });
+                }
+            }
+        }
+        out
+    }
+
+    /// Where on rim `a` a seam from `va` would cross a loop of the face between its ends (a
+    /// thread's land: the rim a helix of many turns, and every line along the axis from it to the
+    /// other rim crosses it, 05-0407 #45516; a drill point's cone, its rim crossing the line from
+    /// its first vertex to the apex, 05-0407 #2603), the point of rim `a` whose seam crosses
+    /// none, the shortest such, as a vertex. `to`: where the seam at a parameter ends, across (on
+    /// rim `b`, crossing it once; or at the pole). Only across a direction that is not periodic (a
+    /// cylinder's or a cone's axis), and only where the seam from `va` crosses: else nothing.
+    fn clear_seam_start(
+        &mut self,
+        f: usize,
+        a: usize,
+        dir: usize,
+        s: &Surface,
+        va: usize,
+        to: &dyn Fn(&Proto, f64) -> Option<f64>,
+    ) -> Option<usize> {
+        let d = s.domain();
+        if (if dir == 0 { d.v.period } else { d.u.period }).is_some() {
+            return None;
+        }
+        let size = self.faces[f]
+            .loops
+            .iter()
+            .flatten()
+            .map(|&(e, _)| self.edges[e].range.width())
+            .fold(0.0_f64, f64::max)
+            .max(1.0);
+        let eps = 1e-9 * size;
+        let other = |q: Point2| if dir == 0 { q.y } else { q.x };
+        let along = |q: Point2| if dir == 0 { q.x } else { q.y };
+        // the seam from a point at (at, from): its length across, and whether a loop crosses it
+        let seam = |p: &Proto, at: f64, from: f64| -> Option<(f64, bool)> {
+            let to = to(p, at)?;
+            let (lo, hi) = (from.min(to) + eps, from.max(to) - eps);
+            let crossed = p.faces[f]
+                .loops
+                .iter()
+                .any(|l| p.crossings(l, s, dir, at).iter().any(|&x| x > lo && x < hi));
+            Some(((to - from).abs(), crossed))
+        };
+        let q = s.project(self.verts[va].0);
+        if seam(self, along(q), other(q)).is_none_or(|(_, crossed)| !crossed) {
+            return None;
+        }
+        let mut best: Option<(f64, usize, f64)> = None;
+        for &(e, _) in &self.faces[f].loops[a] {
+            let x = &self.edges[e];
+            for k in 1..32 {
+                let t = x.range.lo + x.range.width() * f64::from(k) / 32.0;
+                let q = s.project(x.curve.eval(t));
+                if let Some((len, false)) = seam(self, along(q), other(q))
+                    && best.is_none_or(|b| len < b.0)
+                {
+                    best = Some((len, e, t));
+                }
+            }
+        }
+        let (_, e, t) = best?;
+        Some(self.split_edge(e, t))
     }
 
     /// Where on rim `a` a seam can start: at a vertex whose parameter no edge of either rim runs
@@ -567,7 +736,7 @@ impl Proto {
         // walking +u with the natural normal, the face lies on +v
         let forward = if dir == 0 { w.0 > 0 } else { w.1 < 0 };
         let upward = forward == self.faces[f].same_sense;
-        let Some(pole) = pole_of(&s, dir, upward) else {
+        let Some(pole) = pole_of(&s, dir, upward).or_else(|| spindle_pole(&s, dir, upward)) else {
             return Err(format!("a closed {} face with one rim and no pole", kind(&s)));
         };
         let name = self.fresh();
@@ -576,11 +745,21 @@ impl Proto {
         if matches!(s, Surface::Sphere(_)) {
             return self.two_lunes(f, a, vp);
         }
-        let va = self.start_of(self.faces[f].loops[a][0]);
+        let mut va = self.start_of(self.faces[f].loops[a][0]);
+        let at_pole = {
+            let q = s.project(pole);
+            if dir == 0 { q.y } else { q.x }
+        };
+        if let Some(v) = self.clear_seam_start(f, a, dir, &s, va, &|_, _| Some(at_pole)) {
+            va = v;
+        }
         let seam = self
             .seam_edge(&s, dir, va, vp, None)
             .ok_or("the surface has no seam curve")?;
         let mut l = self.faces[f].loops[a].clone();
+        if !self.start_at(&mut l, va) {
+            return Err("a rim does not pass its seam's vertex".into());
+        }
         l.push((seam, true));
         l.push((seam, false));
         self.faces[f].loops[a] = l;
@@ -1284,6 +1463,19 @@ fn pole_of(s: &Surface, dir: usize, up: bool) -> Option<Point3> {
     }
 }
 
+/// A spindle torus's apex beyond a rim round its axis (`dir` 0), on the used part's side `up`
+/// (+v) or not (05-0407 #90615: a face from a rim down to the apex, the rim's halves at two
+/// heights). Only for a cap, where the read had no pole to go to.
+fn spindle_pole(s: &Surface, dir: usize, up: bool) -> Option<Point3> {
+    match s {
+        Surface::Torus(t) if dir == 0 && t.is_spindle() && t.minor > 0.0 => {
+            let v = if up { t.pole_v() } else { -t.pole_v() };
+            Some(s.eval(Point2::new(0.0, v)))
+        }
+        _ => None,
+    }
+}
+
 /// The curve from `a` to `b` along the surface where its `dir` parameter stays fixed.
 fn iso_curve(s: &Surface, dir: usize, a: Point3, b: Point3) -> Option<(Curve, Interval)> {
     match s {
@@ -1529,6 +1721,106 @@ mod tests {
     use super::*;
     use forge_geom::Plane;
     use forge_math::Frame;
+
+    #[test]
+    fn a_seam_to_the_apex_crosses_no_edge_of_its_rim() {
+        // a cone's face from a rim down to the apex (05-0407 #2603, a drill point), its rim going
+        // round once but back on itself at a notch: the line from its first vertex to the apex
+        // crosses the rim twice; the seam starts where the line crosses nothing
+        let cone = forge_geom::Cone::new(Frame::WORLD, 1.0, 0.25 * dmath::PI).unwrap();
+        let s = Surface::Cone(cone);
+        let mut p = Proto::default();
+        let vert = |p: &mut Proto, u: f64, v: f64| {
+            p.verts
+                .push((s.eval(Point2::new(u, v)), Name::feature(1 + p.verts.len() as u64)));
+            p.verts.len() - 1
+        };
+        let edge = |p: &mut Proto, curve: Curve, range: Interval, a: usize, b: usize| {
+            p.edges.push(PEdge {
+                curve,
+                range,
+                start: a,
+                end: b,
+                name: Name::feature(100 + p.edges.len() as u64),
+            });
+            p.edges.len() - 1
+        };
+        let circ = |v: f64| {
+            Curve::Circle(Circle {
+                frame: Frame::WORLD.with_origin(Point3::new(0.0, 0.0, v)),
+                radius: cone.radius_at(v),
+            })
+        };
+        let line = |u: f64, v0: f64, v1: f64| {
+            let (a, b) = (s.eval(Point2::new(u, v0)), s.eval(Point2::new(u, v1)));
+            (
+                Curve::Line(Line {
+                    origin: a,
+                    dir: (b - a).normalize().unwrap(),
+                }),
+                Interval::new(0.0, a.distance(b)),
+            )
+        };
+        let (h1, h2, h3) = (2.0, 1.0, 0.5);
+        let b = vert(&mut p, 3.5, h1);
+        let c = vert(&mut p, 4.0, h1);
+        let d = vert(&mut p, 4.0, h2);
+        let e = vert(&mut p, 3.0, h2);
+        let f = vert(&mut p, 3.0, h3);
+        let g = vert(&mut p, 0.0, h3);
+        let a = vert(&mut p, 0.0, h1);
+        let bc = edge(&mut p, circ(h1), Interval::new(3.5, 4.0), b, c);
+        let (l, r) = line(4.0, h1, h2);
+        let cd = edge(&mut p, l, r, c, d);
+        // back round, the notch's floor
+        let ed = edge(&mut p, circ(h2), Interval::new(3.0, 4.0), e, d);
+        let (l, r) = line(3.0, h2, h3);
+        let ef = edge(&mut p, l, r, e, f);
+        let fg = edge(&mut p, circ(h3), Interval::new(3.0, dmath::TAU), f, g);
+        let (l, r) = line(0.0, h3, h1);
+        let ga = edge(&mut p, l, r, g, a);
+        let ab = edge(&mut p, circ(h1), Interval::new(0.0, 3.5), a, b);
+        p.faces.push(PFace {
+            surface: s.clone(),
+            // the face below its rim, toward the apex
+            same_sense: false,
+            name: Name::feature(200),
+            shell: 0,
+            loops: vec![vec![
+                (bc, true),
+                (cd, true),
+                (ed, false),
+                (ef, true),
+                (fg, true),
+                (ga, true),
+                (ab, true),
+            ]],
+        });
+        p.shells = 1;
+        let rim = p.faces[0].loops[0].clone();
+        assert!(
+            p.crossings(&rim, &s, 0, 3.5)
+                .iter()
+                .any(|&v| v > cone.apex_v() && v < h1 - 1e-9)
+        );
+        p.add_seams().unwrap();
+        let l = &p.faces[0].loops[0];
+        let seam = l
+            .iter()
+            .map(|x| x.0)
+            .find(|&x| l.iter().filter(|y| y.0 == x).count() == 2)
+            .unwrap();
+        let top = p.edges[seam].start;
+        let q = s.project(p.verts[top].0);
+        assert!(
+            p.crossings(&rim, &s, 0, q.x)
+                .iter()
+                .all(|&v| (v - q.y).abs() < 1e-9 || v <= cone.apex_v()),
+            "the seam at u {} from v {} crosses the rim",
+            q.x,
+            q.y
+        );
+    }
 
     /// A cylinder's side between two rims, with a hole spanning 1.2 pi round it whose top arc
     /// runs against the loop (as files write a hole's edges, each its own way): the seam starts

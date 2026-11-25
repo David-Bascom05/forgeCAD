@@ -250,3 +250,29 @@ fn a_part_with_tori_with_copies_near_over_answers_right_or_refuses() {
         }
     });
 }
+
+/// Haas Tooling 05-0178 #2673: a ball end's corner patch whose sphere's pole lies on one of its
+/// edges, 0.055 mm from the corner. The longitude turns half round there, so the loop looked to
+/// wind round the pole, and the read refused it ("no place on the rim for a second meridian").
+/// The sphere is now framed with its poles clear of the face.
+#[test]
+fn a_sphere_patch_with_its_pole_mid_edge_reads_valid() {
+    sound(&one("ball_corner_pole_mid_edge.step"));
+}
+
+/// Haas Tooling 05-0407 #90615 (a pneumatic vise): a spindle torus's face from a rim down to
+/// the apex, the rim half at one height and half at another. With no pole for a torus the read
+/// refused it ("a closed torus face with one rim and no pole"); the apex is now its pole.
+#[test]
+fn a_spindle_torus_face_down_to_its_apex_reads_valid() {
+    sound(&one("spindle_torus_cap.step"));
+}
+
+/// Haas Tooling 05-0407 #45516: a thread's land, a cylinder's face between a bottom rim and a
+/// rim made of two helices of many turns. The seam joining the rims ran straight along the axis
+/// from the rim's top, across the helices (LoopsCross, FaceWrongSide); it now starts where the
+/// rim comes nearest the other and crosses nothing.
+#[test]
+fn a_thread_land_gets_a_seam_that_crosses_nothing() {
+    sound(&one("thread_land_seam.step"));
+}

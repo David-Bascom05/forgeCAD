@@ -79,12 +79,23 @@ The heads and their PRE-VERIFY lines are in the last section.
        parallel lines with no ends joining them, as the file has them.
      - WORKHOLDING's compile (cam/workholding-haas, forge-workholding-builder compile.rs) reads
        `im.solids` by index. To use sheets it must take `im.sheets` too. That is theirs.
-   - 05-0407 (a pneumatic vise WORKHOLDING wants next): #90615 "a closed torus face with one rim and
-     no pole". A torus face cut along one meridian whose rim is also used by a neighbour.
-     Duplicating the rim gave EdgeUses, so it was reverted; it needs a look at the whole shell.
-     Two more of its solids read but fail check: #2603 (FaceWrongSide, LoopsCross; 1322 faces) and
-     #45516 (FaceWrongSide; measures disagree).
-   - 05-0178: "no place on the rim for a second meridian" (heal.rs cap/join).
+   - Fixed on import-sheets (heal.rs), each with a test. 05-0178 and 05-0407 now read in full:
+     05-0178 gives 4 solids; 05-0407 gives 14 solids, all checking clean.
+     - 05-0178 #2673: a ball end's corner patch whose sphere has its pole 0.055 mm along an
+       edge, mid-edge. The loop looked to wind round the pole ("no place on the rim for a
+       second meridian"). `pole_clear_sphere` gives the same sphere a frame with its poles a
+       quarter turn from the face, which is exact. Only when an edge passes a pole between its
+       ends. Fixture ball_corner_pole_mid_edge.step.
+     - 05-0407 #90615: a spindle torus face from a rim down to the apex ("a closed torus face
+       with one rim and no pole"). `spindle_pole`: the apex (`Torus::pole_v`) is the cap's pole,
+       only where there was none. Fixture spindle_torus_cap.step.
+     - 05-0407 #45516 (a thread's land) and #2603 (a drill point's cone): the seam joining two
+       rims, or a rim to the apex, ran straight across the rim itself (LoopsCross,
+       FaceWrongSide). `clear_seam_start` moves the seam to the rim's point whose line crosses
+       nothing, shortest first, only when the usual seam would cross. `cap` now starts its loop
+       at the seam's vertex, as `join` did. Fixture thread_land_seam.step; unit test
+       `a_seam_to_the_apex_crosses_no_edge_of_its_rim` (#2603 is 5 MB, and a cut of it does
+       not show the fault).
    - 05-0830: "its surfaces would take too long to measure". It is still refused with uncounted
      cache fills, so the read itself is heavy. IMPORT-SPEED tried a per-face mesh budget (2^27)
      and withdrew it: real faces spend too close to any cap (tl-3b #52: 226M; HFL-1313-3 #69702:
