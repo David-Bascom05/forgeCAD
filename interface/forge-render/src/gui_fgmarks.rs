@@ -83,6 +83,25 @@ impl Gui {
         let (Some(p), Some(a)) = (self.fg_part_quiet(), self.fg_anchors.as_ref()) else {
             return vec![];
         };
+        // an id the pointer is on in the Agent tab (a chip) lights what it names, over the row
+        if let Some(id) = self.shell.agent.hover_ref.as_deref() {
+            let mut out: Vec<u32> = match a.role_faces.get(id) {
+                // a named face or role: its faces
+                Some(f) => f.clone(),
+                // a feature (or a group): every face its features made
+                None => p
+                    .feats
+                    .iter()
+                    .filter(|f| under(&f.id, id))
+                    .filter_map(|f| a.role_faces.get(&format!("{}.faces", f.id)))
+                    .flatten()
+                    .copied()
+                    .collect(),
+            };
+            out.sort_unstable();
+            out.dedup();
+            return out;
+        }
         let Some(key) = p.selected.as_deref() else {
             return vec![];
         };

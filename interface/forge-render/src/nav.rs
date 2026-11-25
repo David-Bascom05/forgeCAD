@@ -370,6 +370,11 @@ impl Nav {
     }
 
     /// Where in the world the pointer last was on the part.
+    /// What the pointer is over, as the view last answered (what `marks` pre-lights).
+    pub fn hovered(&self) -> Option<PickHit> {
+        self.hit.filter(|_| self.hit_at.is_some())
+    }
+
     pub fn hit_point(&self) -> Option<[f32; 3]> {
         self.hit.map(|h| h.point)
     }

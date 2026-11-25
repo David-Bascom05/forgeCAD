@@ -61,7 +61,7 @@ pub mod look {
 /// A piece's colour.
 pub fn colour_of(g: &Seg) -> [f32; 3] {
     match g.kind {
-        Kind::Rapid => look::RAPID,
+        Kind::Rapid | Kind::Change => look::RAPID,
         Kind::Plunge => look::PLUNGE,
         Kind::Link => look::LINK,
         Kind::Cut if g.arc.is_some() => look::ARC,
@@ -138,6 +138,9 @@ pub fn ribbon(eye: &Eye, a: [f32; 3], b: [f32; 3], w: f32, c: [f32; 4], out: &mu
 
 /// What of the toolpath to draw.
 pub struct PathShow<'a> {
+    /// The setup shown: only its ops' paths (each setup has its own frame; another's drawn in
+    /// this one's would float in the wrong place). None: every setup's.
+    pub setup: Option<usize>,
     /// Per op: shown or not.
     pub ops: &'a [bool],
     pub rapids: bool,
@@ -184,7 +187,11 @@ impl Values {
 pub fn toolpath(tl: &Timeline, eye: &Eye, show: &PathShow, out: &mut Vec<WorldVert>) {
     let mut pts = Vec::with_capacity(64);
     for (i, g) in tl.segs.iter().enumerate() {
-        if !show.ops.get(g.op as usize).copied().unwrap_or(true) {
+        if !show.ops.get(g.op as usize).copied().unwrap_or(true)
+            || show
+                .setup
+                .is_some_and(|s| tl.ops.get(g.op as usize).is_some_and(|o| o.setup != s))
+        {
             continue;
         }
         if g.kind == Kind::Rapid && !show.rapids {
