@@ -943,14 +943,17 @@ fn walk(
             }
             // a procedural surface may stop at its face's rim: the branch ends there (any part
             // of it back on the face is seeded and traced from there)
-            if ends(a, p, d, h) || ends(b, p, d, h) {
+            // (b asked only where a does not end: as `||` did)
+            if let Some(end) = ends(a, p, d, h).or_else(|| ends(b, p, d, h)) {
+                // an op past a branch that once stalled at a rim (ends()'s second test) may go on
+                // a long way and still not answer: bounded (see CARRIED)
+                if end == End::Rim {
+                    crate::budget::cap_total(CARRIED);
+                }
                 // (a spline patch's rim short of the march: the branch carried onto it, so the
                 // edge there is met, not missed by the hair the march stopped short)
                 if let Some(q) = rim_point(a, b, p, step).or_else(|| rim_point(b, a, p, step)) {
                     pts.push(q);
-                    // an op past a branch it once stopped at may go on a long way and still not
-                    // answer: bounded (see CARRIED)
-                    crate::budget::cap_total(CARRIED);
                 }
                 return Some((pts, false));
             }
@@ -1064,20 +1067,28 @@ pub(crate) fn all_but_touch(na: Vec3, nb: Vec3) -> bool {
 /// than the step (the march stopped a hair short of it, the shortest step reaching past it), the
 /// step's foot is on the edge of the surface's parameters and the step off the surface: a spline
 /// patch whose edge is its face's (ST-28L #645206, a plane across a ruled spline, 7 um short).
-fn ends(s: &Surface, p: Point3, d: Vec3, h: f64) -> bool {
-    let Surface::Procedural(pr) = s else { return false };
+fn ends(s: &Surface, p: Point3, d: Vec3, h: f64) -> Option<End> {
+    let Surface::Procedural(pr) = s else { return None };
     let x = p + d * h;
     let uv = pr.project(x);
     let off = pr.point(uv).distance(x);
     if off > 0.5 * h {
-        return true;
+        return Some(End::Off);
     }
     let rim = |d: crate::curve::Domain1, t: f64| {
         let w = 1e-9 * (d.hi - d.lo).abs().max(1.0);
         d.period.is_none() && (t <= d.lo + w || t >= d.hi - w)
     };
     let dom = crate::surface::SurfaceGeom::domain(s);
-    off > tol::LINEAR && (rim(dom.u, uv.x) || rim(dom.v, uv.y))
+    (off > tol::LINEAR && (rim(dom.u, uv.x) || rim(dom.v, uv.y))).then_some(End::Rim)
+}
+
+/// How `ends` found a surface ends: a step lies off it by about its length, or (the stall's case)
+/// the step's foot is on the rim of its parameters.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum End {
+    Off,
+    Rim,
 }
 
 /// What an op may spend in all once one of its branches is carried onto a spline patch's rim
