@@ -58,6 +58,8 @@ pub struct Stats {
 pub struct Imported {
     pub solids: Vec<Solid>,
     pub refusals: Vec<Refusal>,
+    /// Each use of a solid in the file's assembly, where it has one (`occurrences`).
+    pub occurrences: Vec<Occurrence>,
     pub schema: String,
     pub system: String,
     pub stats: Stats,
@@ -100,14 +102,6 @@ struct Units {
     mm: f64,
     rad: f64,
     uncertainty: f64,
-}
-
-/// Where a placement's origin may move without moving the shape on it (`Reader::placement_with`).
-#[derive(Clone, Copy)]
-enum Slide {
-    No,
-    Along,
-    Across,
 }
 
 struct Reader<'a> {
@@ -306,19 +300,7 @@ impl<'a> Reader<'a> {
         Ok(p)
     }
 
-    /// A point that anchors an axis (a line's, a cylinder's): anywhere along it is the same
-    /// shape, and files put it far out (TR210: a cylinder's origin 500 m along its axis). It is
-    /// slid along `dir` to the foot nearest the world's origin, and only then held to the box.
-    fn point_on_axis(&self, id: u32, dir: UnitVec3) -> R<Point3> {
-        let p = self.point_anywhere(id)?;
-        let d = Vec3::from(dir);
-        let foot = p - d * (p - Point3::ORIGIN).dot(d);
-        if !forge_math::tol::in_model_box(foot) {
-            return refuse(id, "CARTESIAN_POINT", "outside the 1 km model box");
-        }
-        Ok(foot)
-    }
-
+    /// A point, wherever it lies (a line's origin may be any point of it).
     fn point_anywhere(&self, id: u32) -> R<Point3> {
         let a = self.args_of(id, "CARTESIAN_POINT")?;
         let c = self.list(id, "CARTESIAN_POINT", a.get(1))?;
@@ -331,11 +313,8 @@ impl<'a> Reader<'a> {
             self.real(id, "CARTESIAN_POINT", c.get(1))? * m,
             self.real(id, "CARTESIAN_POINT", c.get(2))? * m,
         );
-        // far past the box, a slide along an axis would lose the point's last digits
-        let far = p.x.abs().max(p.y.abs()).max(p.z.abs());
-        // (a NaN is past it too)
-        if far.is_nan() || far > 1e3 * forge_math::tol::MODEL_HALF_SIZE {
-            return refuse(id, "CARTESIAN_POINT", "outside the 1 km model box");
+        if !p.x.is_finite() || !p.y.is_finite() || !p.z.is_finite() {
+            return refuse(id, "CARTESIAN_POINT", "a coordinate is not finite");
         }
         Ok(p)
     }
@@ -358,37 +337,32 @@ impl<'a> Reader<'a> {
     }
 
     fn placement(&self, id: u32) -> R<Frame> {
-        self.placement_with(id, Slide::No)
+        self.placement_sliding(id, |_, _| None)
     }
 
-    /// `placement`, its origin moved where that changes nothing of the shape on it: along z
-    /// for a cylinder's axis, within the x-y plane for a plane (TR210: a plane's origin 500 m out
-    /// on it), to the place nearest the world's origin.
-    fn placement_with(&self, id: u32, slide: Slide) -> R<Frame> {
+    /// A placement whose origin, when it lies outside the model box, `slide` may move to an
+    /// equivalent point (given the far origin and the z axis; None: refused as it stands).
+    fn placement_sliding(&self, id: u32, slide: impl Fn(Point3, UnitVec3) -> Option<Point3>) -> R<Frame> {
         let a = self.args_of(id, "AXIS2_PLACEMENT_3D")?;
+        let pid = self.reference(id, "AXIS2_PLACEMENT_3D", a.get(1))?;
+        let far = self.point_anywhere(pid)?;
         let z = match a.get(2) {
             Some(Value::Ref(r)) => Some(self.direction(*r)?),
             _ => None,
-        };
-        let at = self.reference(id, "AXIS2_PLACEMENT_3D", a.get(1))?;
-        let origin = match slide {
-            Slide::No => self.point(at)?,
-            Slide::Along => self.point_on_axis(at, z.unwrap_or(UnitVec3::Z))?,
-            Slide::Across => {
-                let n = Vec3::from(z.unwrap_or(UnitVec3::Z));
-                let p = self.point_anywhere(at)?;
-                let foot = Point3::ORIGIN + n * (p - Point3::ORIGIN).dot(n);
-                if !forge_math::tol::in_model_box(foot) {
-                    return refuse(at, "CARTESIAN_POINT", "outside the 1 km model box");
-                }
-                foot
-            }
         };
         let x = match a.get(3) {
             Some(Value::Ref(r)) => Some(self.direction(*r)?),
             _ => None,
         };
         let z = z.unwrap_or(UnitVec3::Z);
+        let origin = if forge_math::tol::in_model_box(far) {
+            far
+        } else {
+            match slide(far, z).filter(|&o| forge_math::tol::in_model_box(o)) {
+                Some(o) => o,
+                None => return refuse(pid, "CARTESIAN_POINT", "outside the 1 km model box"),
+            }
+        };
         // the standard's default for a missing ref direction: world x, or y along it
         let hint: Vec3 = match x {
             Some(x) => x.into(),
@@ -583,10 +557,22 @@ impl<'a> Reader<'a> {
         match name {
             "LINE" => {
                 let a = self.args_of(id, "LINE")?;
+                let pid = self.reference(id, "LINE", a.get(1))?;
+                let far = self.point_anywhere(pid)?;
                 let v = self.reference(id, "LINE", a.get(2))?;
                 let va = self.args_of(v, "VECTOR")?;
                 let dir = self.direction(self.reference(v, "VECTOR", va.get(1))?)?;
-                let origin = self.point_on_axis(self.reference(id, "LINE", a.get(1))?, dir)?;
+                // a line's origin is any point of it: one far off (SolidWorks writes them 500 m
+                // out) is moved along it to the point nearest the model's origin
+                let origin = if forge_math::tol::in_model_box(far) {
+                    far
+                } else {
+                    let o = far - dir.get() * (far - Point3::ORIGIN).dot(dir.get());
+                    if !forge_math::tol::in_model_box(o) {
+                        return refuse(pid, "CARTESIAN_POINT", "outside the 1 km model box");
+                    }
+                    o
+                };
                 Ok(Curve::Line(Line { origin, dir }))
             }
             "CIRCLE" => {
@@ -677,15 +663,21 @@ impl<'a> Reader<'a> {
             return self.bspline_surface(id);
         }
         match name {
+            // a plane's or cylinder's origin far off (SolidWorks writes them 500 m out) moved
+            // within the plane, or along the axis, to the point nearest the model's origin
             "PLANE" => {
                 let a = self.args_of(id, name)?;
                 Ok(Surface::Plane(Plane {
-                    frame: self.placement_with(self.reference(id, name, a.get(1))?, Slide::Across)?,
+                    frame: self.placement_sliding(self.reference(id, name, a.get(1))?, |o, z| {
+                        Some(Point3::ORIGIN + z.get() * (o - Point3::ORIGIN).dot(z.get()))
+                    })?,
                 }))
             }
             "CYLINDRICAL_SURFACE" => {
                 let a = self.args_of(id, name)?;
-                let frame = self.placement_with(self.reference(id, name, a.get(1))?, Slide::Along)?;
+                let frame = self.placement_sliding(self.reference(id, name, a.get(1))?, |o, z| {
+                    Some(o - z.get() * (o - Point3::ORIGIN).dot(z.get()))
+                })?;
                 let radius = self.real(id, name, a.get(2))? * m;
                 if !positive(radius) {
                     return refuse(id, name, "radius not positive");
@@ -1018,6 +1010,8 @@ struct Build<'a, 'b> {
     verts: BTreeMap<u32, usize>,
     /// Each EDGE_CURVE's edge and whether the edge runs against the entity's direction.
     edges: BTreeMap<u32, (usize, bool)>,
+    /// The edges that end at each vertex reference, built when a reference must be recovered.
+    ends: Option<BTreeMap<u32, Vec<u32>>>,
     stats: &'b mut Stats,
     salt: Name,
 }
@@ -1027,12 +1021,128 @@ impl Build<'_, '_> {
         if let Some(&v) = self.verts.get(&id) {
             return Ok(v);
         }
-        let a = self.r.args_of(id, "VERTEX_POINT")?;
-        let p = self.r.point(self.r.reference(id, "VERTEX_POINT", a.get(1))?)?;
+        let p = match self.r.args_of(id, "VERTEX_POINT") {
+            Ok(a) => self.r.point(self.r.reference(id, "VERTEX_POINT", a.get(1))?)?,
+            Err(e) => self.vertex_from_curves(id).ok_or(e)?,
+        };
         self.p.verts.push((p, self.salt.with(u64::from(id))));
         let v = self.p.verts.len() - 1;
         self.verts.insert(id, v);
         Ok(v)
+    }
+
+    /// Where a vertex must be when the file's reference to it names something else (SolidWorks
+    /// 2021 has written an ORIENTED_EDGE's id in a vertex's place): the point the curves of the
+    /// edges that end there share, found by projecting onto each in turn, if they meet to within
+    /// 1e-4 of their size and 0.01 mm.
+    fn vertex_from_curves(&mut self, id: u32) -> Option<Point3> {
+        let f = self.r.f;
+        let ends = self.ends.get_or_insert_with(|| {
+            let mut m: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
+            for &(eid, at, n) in &f.ids {
+                for r in &f.records[at as usize..(at + n) as usize] {
+                    if f.name(r) == "EDGE_CURVE" {
+                        let a = f.args(r);
+                        for v in [a.get(1), a.get(2)] {
+                            if let Some(Value::Ref(x)) = v {
+                                m.entry(*x).or_default().push(eid);
+                            }
+                        }
+                    }
+                }
+            }
+            m
+        });
+        let edges = ends.get(&id)?.clone();
+        let (mut curves, mut others) = (Vec::new(), Vec::new());
+        for e in edges {
+            let a = self.r.args_of(e, "EDGE_CURVE").ok()?;
+            let Some(Value::Ref(c)) = a.get(3) else {
+                return None;
+            };
+            curves.push(self.r.curve(*c).ok()?);
+            for v in [a.get(1), a.get(2)] {
+                if let Some(Value::Ref(x)) = v
+                    && *x != id
+                    && let Ok(va) = self.r.args_of(*x, "VERTEX_POINT")
+                    && let Some(Value::Ref(pp)) = va.get(1)
+                    && let Ok(p) = self.r.point(*pp)
+                {
+                    others.push(p);
+                }
+            }
+        }
+        if curves.len() < 2 || others.is_empty() {
+            return None;
+        }
+        let range = |c: &Curve| {
+            let d = c.domain();
+            Interval::new(d.lo.max(-1e7), d.hi.min(1e7))
+        };
+        let miss = |p: Point3| {
+            curves
+                .iter()
+                .map(|c| c.eval(c.closest(p, range(c))).distance(p))
+                .fold(0.0, f64::max)
+        };
+        // starts: the edges' other ends, their middle, and where two of the lines come nearest
+        let n = others.len() as f64;
+        let mut starts = others.clone();
+        starts.push(others.iter().fold(Point3::ORIGIN, |s, q| s + q.to_vec() / n));
+        let lines: Vec<&Line> = curves
+            .iter()
+            .filter_map(|c| if let Curve::Line(l) = c { Some(l) } else { None })
+            .collect();
+        for (i, a) in lines.iter().enumerate() {
+            for b in &lines[i + 1..] {
+                let (u, v, w) = (a.dir.get(), b.dir.get(), a.origin - b.origin);
+                let (uv, uw, vw) = (u.dot(v), u.dot(w), v.dot(w));
+                let den = 1.0 - uv * uv;
+                if den > 1e-6 {
+                    let s = (uv * vw - uw) / den;
+                    let t = (vw - uv * uw) / den;
+                    starts.push(
+                        Point3::ORIGIN + ((a.origin + u * s).to_vec() + (b.origin + v * t).to_vec()) / 2.0,
+                    );
+                }
+            }
+        }
+        // and around each closed curve, and on each line nearest the others
+        for c in &curves {
+            let d = c.domain();
+            if d.period.is_some() {
+                starts.extend((0..8).map(|k| c.eval(d.lo + (d.hi - d.lo) * k as f64 / 8.0)));
+            }
+        }
+        let anchors: Vec<Point3> = starts.clone();
+        for l in &lines {
+            for q in &anchors {
+                starts.push(l.origin + l.dir.get() * (*q - l.origin).dot(l.dir.get()));
+            }
+        }
+        let mut best: Option<(f64, Point3)> = None;
+        for mut p in starts {
+            for _ in 0..2000 {
+                let mut s = Vec3::ZERO;
+                for c in &curves {
+                    s += c.eval(c.closest(p, range(c))).to_vec();
+                }
+                let q = Point3::ORIGIN + s / curves.len() as f64;
+                let moved = q.distance(p);
+                p = q;
+                if moved < 1e-13 {
+                    break;
+                }
+            }
+            let m = miss(p);
+            if best.is_none_or(|(b, _)| m < b) {
+                best = Some((m, p));
+            }
+        }
+        let (m, p) = best?;
+        let size = others.iter().map(|q| q.distance(p)).fold(0.0, f64::max);
+        (m <= (1e-4 * size).clamp(forge_math::tol::LINEAR, 0.01) && forge_math::tol::in_model_box(p))
+            .then_some(p)
     }
 
     fn edge(&mut self, id: u32) -> R<(usize, bool)> {
@@ -1248,7 +1358,9 @@ fn record_deviations(body: &mut Body, stats: &mut Stats) {
             || faces
                 .iter()
                 .any(|&f| matches!(body.face(f).surface, Surface::Procedural(_)));
-        let measure = |n: usize| {
+        let measure = |n: usize, refine: bool| {
+            let x = body.edge(e);
+            let at = |i: usize| x.range.lo + x.range.width() * (i as f64 / n as f64);
             let pts = body.edge_points(e, n);
             faces
                 .iter()
@@ -1256,28 +1368,59 @@ fn record_deviations(body: &mut Body, stats: &mut Stats) {
                     let s = &body.face(f).surface;
                     // each point from the one before, where the walk holds
                     let mut near = None;
-                    let mut worst = 0.0_f64;
+                    let mut gaps: Vec<(f64, forge_math::Point2)> = Vec::with_capacity(pts.len());
                     for &p in &pts {
                         let uv = near.map_or_else(|| s.project(p), |uv| s.project_near(p, uv));
                         near = Some(uv);
-                        worst = worst.max(s.eval(uv).distance(p));
+                        gaps.push((s.eval(uv).distance(p), uv));
+                    }
+                    let mut worst = gaps.iter().fold(0.0_f64, |m, g| m.max(g.0));
+                    if refine && gaps.len() > 2 {
+                        // a gap can peak sharply between samples (a free-form edge's came out 1.15%
+                        // over 256 samples' on MM 2024): around the three highest local peaks, 32
+                        // more each, what 2048 evenly would find at a twentieth of the work
+                        let mut peaks: Vec<usize> = (0..gaps.len())
+                            .filter(|&i| {
+                                (i == 0 || gaps[i].0 >= gaps[i - 1].0)
+                                    && (i + 1 == gaps.len() || gaps[i].0 >= gaps[i + 1].0)
+                            })
+                            .collect();
+                        peaks.sort_by(|&a, &b| gaps[b].0.total_cmp(&gaps[a].0));
+                        for &i in peaks.iter().take(3) {
+                            let (lo, hi) = (at(i.saturating_sub(1)), at((i + 1).min(n)));
+                            let mut uv = gaps[i].1;
+                            for k in 0..=32 {
+                                let t = lo + (hi - lo) * (k as f64 / 32.0);
+                                let p = x.curve.eval(t.min(x.range.hi));
+                                uv = s.project_near(p, uv);
+                                worst = worst.max(s.eval(uv).distance(p));
+                            }
+                        }
                     }
                     worst
                 })
                 .fold(0.0, f64::max)
         };
-        let dev = measure(16);
+        let dev = measure(16, false);
         let dev = if free_form || dev > LINEAR {
-            dev.max(measure(256))
+            let fine = measure(256, false);
+            // an edge off its faces: its peaks looked at closely, as `check` will ask between these
+            // samples once a boolean has trimmed it
+            if fine > LINEAR {
+                dev.max(measure(256, true))
+            } else {
+                dev.max(fine)
+            }
         } else {
             dev
         };
         if dev > LINEAR {
             // with room over what was measured: `check` measures again, after any rigid move and,
             // once a boolean has trimmed the edge, at other points, where a gap that peaks between
-            // these samples comes out larger (by 1.7e-5 of it on a spline edge of GM2-5AX): a
-            // tolerance of exactly the gap fails it
-            let dev = dev * (1.0 + 1e-3) + 1e-9;
+            // these samples comes out larger (by 1.7e-5 of it on a spline edge of GM2-5AX, by
+            // 1.3e-3 on a piece of TRT210's cylinder-cylinder intersection a boolean split off): a
+            // tolerance of exactly the gap fails it. A hundredth of the gap is room for both
+            let dev = dev * (1.0 + 1e-2) + 1e-9;
             body.edges[e.index()].tol = dev;
             stats.tolerant_edges += 1;
             stats.max_edge_tol = stats.max_edge_tol.max(dev);
@@ -1615,8 +1758,12 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
             ctx_of.entry(shell).or_insert(c);
         }
     }
+    let mut uses = Vec::new();
     if let Some(u) = any_ctx.and_then(|c| units_of(&f, c)) {
         stats.assembly = assembly_asks(&f, &Reader { f: &f, u, depth: 0 });
+        if !only_measure {
+            uses = occurrences(&f, &Reader { f: &f, u, depth: 0 });
+        }
     }
     for (id, r) in roots {
         let ctx = ctx_of.get(&id).copied().or(any_ctx);
@@ -1646,6 +1793,7 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
                 },
                 verts: BTreeMap::new(),
                 edges: BTreeMap::new(),
+                ends: None,
                 stats: &mut stats,
                 salt: Name::feature(u64::from(id)).with_str("step"),
             };
@@ -1730,10 +1878,227 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
     Ok(Imported {
         solids,
         refusals,
+        occurrences: uses,
         schema: f.schema.clone(),
         system: f.system.clone(),
         stats,
     })
+}
+
+/// One use of a solid in a file's assembly: the solid's entity, the product names from the top
+/// assembly down to the part, and where the part stands in the top assembly's coordinates (mm).
+#[derive(Clone, Debug)]
+pub struct Occurrence {
+    pub solid: u32,
+    pub path: Vec<String>,
+    pub frame: Frame,
+}
+
+/// The assembly a file's products make (AP203/AP214 PDM usage, §4): from each top product down
+/// its next_assembly_usage_occurrences, each placed by its context dependent shape
+/// representation's item defined transformation, to the solids each product's shape holds. Empty
+/// where the file has no product structure; a use whose placement cannot be read is left out.
+fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> Vec<Occurrence> {
+    let refs = |r: &Record| -> Vec<u32> {
+        f.args(r)
+            .iter()
+            .filter_map(|v| if let Value::Ref(x) = v { Some(*x) } else { None })
+            .collect()
+    };
+    let text = |v: Option<&Value>| match v {
+        Some(Value::Str(a, n)) => f.str_of(*a, *n).trim().to_string(),
+        _ => String::new(),
+    };
+    let mut solids_in: BTreeMap<u32, Vec<u32>> = BTreeMap::new(); // representation -> solids it lists
+    let mut linked: BTreeMap<u32, Vec<u32>> = BTreeMap::new(); // representations related untransformed
+    let mut shape_of: BTreeMap<u32, u32> = BTreeMap::new(); // product definition shape -> definition
+    let mut sdr: Vec<(u32, u32)> = Vec::new(); // (product definition shape, representation)
+    let mut nauo: Vec<(u32, u32, u32)> = Vec::new(); // (id, parent definition, child definition)
+    let mut cdsr: Vec<(u32, u32)> = Vec::new(); // (relationship, product definition shape)
+    let mut rep_name: BTreeMap<u32, String> = BTreeMap::new();
+    let mut pd_formation: BTreeMap<u32, u32> = BTreeMap::new();
+    let mut formation_product: BTreeMap<u32, u32> = BTreeMap::new();
+    let mut product_name: BTreeMap<u32, String> = BTreeMap::new();
+    let is_solid = |x: u32| matches!(kw(f, x), Some("MANIFOLD_SOLID_BREP" | "BREP_WITH_VOIDS"));
+    for &(id, at, n) in &f.ids {
+        let recs = &f.records[at as usize..(at + n) as usize];
+        let has = |k: &str| recs.iter().any(|r| f.name(r) == k);
+        for r in recs {
+            let a = f.args(r);
+            match f.name(r) {
+                "PRODUCT_DEFINITION_SHAPE" => {
+                    if let Some(Value::Ref(d)) = a.get(2) {
+                        shape_of.insert(id, *d);
+                    }
+                }
+                "SHAPE_DEFINITION_REPRESENTATION" => {
+                    if let (Some(Value::Ref(p)), Some(Value::Ref(s))) = (a.first(), a.get(1)) {
+                        sdr.push((*p, *s));
+                    }
+                }
+                "NEXT_ASSEMBLY_USAGE_OCCURRENCE" => {
+                    if let (Some(Value::Ref(p)), Some(Value::Ref(c))) = (a.get(3), a.get(4)) {
+                        nauo.push((id, *p, *c));
+                    }
+                }
+                "CONTEXT_DEPENDENT_SHAPE_REPRESENTATION" => {
+                    if let (Some(Value::Ref(rel)), Some(Value::Ref(p))) = (a.first(), a.get(1)) {
+                        cdsr.push((*rel, *p));
+                    }
+                }
+                "REPRESENTATION_RELATIONSHIP" | "SHAPE_REPRESENTATION_RELATIONSHIP"
+                    if !has("REPRESENTATION_RELATIONSHIP_WITH_TRANSFORMATION") =>
+                {
+                    if let (Some(Value::Ref(x)), Some(Value::Ref(y))) = (a.get(2), a.get(3)) {
+                        linked.entry(*x).or_default().push(*y);
+                        linked.entry(*y).or_default().push(*x);
+                    }
+                }
+                "PRODUCT_DEFINITION" => {
+                    if let Some(Value::Ref(x)) = a.get(2) {
+                        pd_formation.insert(id, *x);
+                    }
+                }
+                "PRODUCT_DEFINITION_FORMATION" | "PRODUCT_DEFINITION_FORMATION_WITH_SPECIFIED_SOURCE" => {
+                    if let Some(Value::Ref(x)) = a.get(2) {
+                        formation_product.insert(id, *x);
+                    }
+                }
+                "PRODUCT" => {
+                    let name = text(a.get(1));
+                    product_name.insert(id, if name.is_empty() { text(a.first()) } else { name });
+                }
+                k if k.ends_with("REPRESENTATION") && !k.contains("RELATIONSHIP") => {
+                    if let Some(Value::List(l, ln)) = a.get(1) {
+                        let s: Vec<u32> = f
+                            .run(*l, *ln)
+                            .iter()
+                            .filter_map(|v| if let Value::Ref(x) = v { Some(*x) } else { None })
+                            .filter(|&x| is_solid(x))
+                            .collect();
+                        if !s.is_empty() {
+                            solids_in.entry(id).or_default().extend(s);
+                        }
+                        rep_name.insert(id, text(a.first()));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    if nauo.is_empty() && sdr.is_empty() {
+        return Vec::new();
+    }
+    // each definition's representations; a representation's solids through untransformed links
+    let mut reps_of: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
+    for &(p, s) in &sdr {
+        if let Some(&d) = shape_of.get(&p) {
+            reps_of.entry(d).or_default().push(s);
+        }
+    }
+    let rep_solids = |start: u32| -> Vec<u32> {
+        let (mut seen, mut todo, mut out) = (vec![start], vec![start], Vec::new());
+        while let Some(x) = todo.pop() {
+            out.extend(solids_in.get(&x).into_iter().flatten().copied());
+            for &y in linked.get(&x).into_iter().flatten() {
+                if !seen.contains(&y) {
+                    seen.push(y);
+                    todo.push(y);
+                }
+            }
+        }
+        out.sort_unstable();
+        out.dedup();
+        out
+    };
+    let name_of = |d: u32| -> String {
+        let p = pd_formation
+            .get(&d)
+            .and_then(|x| formation_product.get(x))
+            .and_then(|x| product_name.get(x));
+        match p {
+            Some(n) if !n.is_empty() => n.clone(),
+            _ => reps_of
+                .get(&d)
+                .and_then(|r| r.iter().find_map(|x| rep_name.get(x).filter(|n| !n.is_empty())))
+                .cloned()
+                .unwrap_or_else(|| format!("#{d}")),
+        }
+    };
+    // each use: its child, and the child's placement in the parent
+    let place_of: BTreeMap<u32, u32> = cdsr
+        .iter()
+        .filter_map(|&(rel, p)| Some((*shape_of.get(&p)?, rel)))
+        .collect();
+    let placement = |use_id: u32, child: u32| -> Option<Frame> {
+        let rel = *place_of.get(&use_id)?;
+        let rs = f.records_of(rel)?;
+        let rr = rs
+            .iter()
+            .find(|r| f.name(r).ends_with("REPRESENTATION_RELATIONSHIP"))?;
+        let rw = rs
+            .iter()
+            .find(|r| f.name(r) == "REPRESENTATION_RELATIONSHIP_WITH_TRANSFORMATION")?;
+        let (rep1, _rep2) = match (f.args(rr).get(2), f.args(rr).get(3)) {
+            (Some(Value::Ref(a)), Some(Value::Ref(b))) => (*a, *b),
+            _ => return None,
+        };
+        let Some(Value::Ref(idt)) = f.args(rw).first() else {
+            return None;
+        };
+        let t = refs(&rec(f, *idt, "ITEM_DEFINED_TRANSFORMATION")?);
+        let (a1, a2) = (
+            reader.placement(*t.first()?).ok()?,
+            reader.placement(*t.get(1)?).ok()?,
+        );
+        // item 1 is in rep 1 and goes onto item 2 in rep 2; the child is whichever rep is its own
+        let child_first = reps_of.get(&child).is_none_or(|r| r.contains(&rep1));
+        Some(if child_first {
+            a2.compose(&a1.inverse())
+        } else {
+            a1.compose(&a2.inverse())
+        })
+    };
+    let children: BTreeMap<u32, Vec<(u32, u32)>> = nauo.iter().fold(BTreeMap::new(), |mut m, &(id, p, c)| {
+        m.entry(p).or_default().push((id, c));
+        m
+    });
+    let used: std::collections::BTreeSet<u32> = nauo.iter().map(|x| x.2).collect();
+    let mut tops: Vec<u32> = reps_of
+        .keys()
+        .chain(children.keys())
+        .copied()
+        .filter(|d| !used.contains(d))
+        .collect();
+    tops.sort_unstable();
+    tops.dedup();
+    let mut out = Vec::new();
+    // (definition, path, frame), depth bounded: a file can make its uses circular
+    let mut todo: Vec<(u32, Vec<String>, Frame)> = tops
+        .into_iter()
+        .map(|d| (d, vec![name_of(d)], Frame::WORLD))
+        .collect();
+    while let Some((d, path, frame)) = todo.pop() {
+        if out.len() > 1_000_000 || path.len() > 64 {
+            break;
+        }
+        for &r in reps_of.get(&d).into_iter().flatten() {
+            for s in rep_solids(r) {
+                out.push(Occurrence {
+                    solid: s,
+                    path: path.clone(),
+                    frame,
+                });
+            }
+        }
+        for &(id, c) in children.get(&d).into_iter().flatten() {
+            let Some(p) = placement(id, c) else { continue };
+            let mut q = path.clone();
+            q.push(name_of(c));
+            todo.push((c, q, frame.compose(&p)));
+        }
+    }
+    out
 }
 
 #[cfg(test)]
