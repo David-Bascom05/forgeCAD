@@ -1,7 +1,8 @@
 //! A full disk under a running server: an edit that cannot be written durably is refused
 //! ("not saved", never acked), the server keeps serving, the log stays whole (a part-written
-//! record is cut back), and once there is room again edits commit, and a restart reopens the log
-//! with every committed op once and its seqs without a gap.
+//! record is cut back); a close while full (its checkpoint and its snapshot record failing
+//! mid-write) loses nothing acked; once there is room again edits commit, and a restart reopens
+//! the log with every committed op once and its seqs without a gap.
 //!
 //! Needs a small filesystem of its own to fill (it is filled for real): ignored by default.
 //!   mkdir -p /tmp/tiny && mount -t tmpfs -o size=4m tmpfs /tmp/tiny
@@ -96,8 +97,16 @@ fn a_full_disk_refuses_edits_keeps_the_log_whole_and_recovers() {
         "refused as not saved: {refused:?}"
     );
     let at_full = s.text();
-    // room again: edits commit
+    // still full, the only member leaves: the document closes, and its checkpoint (the file, a
+    // git commit) and its snapshot (a record appended to the log) both fail mid-write
+    drop(s);
+    std::thread::sleep(Duration::from_millis(800));
+    // room again: the document opens from a whole log, at the last acked text
     std::fs::remove_file(&filler).unwrap();
+    let s = Session::start(&remote, "part.fg", None).unwrap();
+    wait("rejoined after the failed close", || s.ready());
+    assert_eq!(s.text(), at_full, "no acked op lost, nothing unacked applied");
+    // and edits commit
     s.edit(set(77.0)).unwrap();
     wait("acked once there is room", || {
         s.pending() == 0 && s.text().contains("shared w = 77")
