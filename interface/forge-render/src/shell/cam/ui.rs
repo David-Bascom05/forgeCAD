@@ -2427,7 +2427,12 @@ fn finder(
     }
     ui.add_space(4.0);
     let mut pick: Option<String> = None;
-    egui::ScrollArea::vertical().id_salt("cam-tools-list").auto_shrink([false, false]).show(ui, |ui| {
+    ui.spacing_mut().scroll = egui::style::ScrollStyle { foreground_color: true, ..egui::style::ScrollStyle::solid() };
+    egui::ScrollArea::vertical()
+        .id_salt("cam-tools-list")
+        .auto_shrink([false, false])
+        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
+        .show(ui, |ui| {
         let shown: Vec<&forge_tooling::Tool> =
             toollib::sorted(&w.lib.tools).into_iter().filter(|x| toollib::matches(&w.tools_find, x)).collect();
         let doc: Vec<&forge_tooling::Tool> = shown.iter().copied().filter(|x| in_doc.iter().any(|d| d.0 == x.id)).collect();
@@ -2576,7 +2581,19 @@ fn detail_pane(
     });
     let width = (body.width() - 8.0).min(640.0);
     ui.scope_builder(egui::UiBuilder::new().max_rect(body), |ui| {
-        egui::ScrollArea::vertical().id_salt("cam-tools-detail").auto_shrink([false, false]).show(ui, |ui| {
+        // its bar always shown: what is below the pane's edge (the tool's table runs under the
+        // footer on a laptop's screen) is seen to be there (BUTTON-AUDITOR: "Material" cut)
+        // a solid bar, its handle in the ink (the floating one is not drawn at rest; a solid one's
+        // handle takes the fields' fill, the page's own in the dark theme)
+        ui.spacing_mut().scroll = egui::style::ScrollStyle { foreground_color: true, ..egui::style::ScrollStyle::solid() };
+        let out = egui::ScrollArea::vertical()
+            .id_salt("cam-tools-detail")
+            // its own height, the footer's top: the scroll area ran under the footer (cut there,
+            // and no bar: it did not know it was taller than what showed)
+            .max_height(body.height())
+            .auto_shrink([false, false])
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
+            .show(ui, |ui| {
             ui.set_width(body.width() - 8.0);
             if w.tools_aux == 1 {
                 return import_pane(ui, t, w, width, places);
@@ -2663,6 +2680,9 @@ fn detail_pane(
             });
             ui.add_space(12.0);
         });
+        // its viewport and its content, by name: a test reads that the pane scrolls
+        places.push(("cam:tools:detail:view".into(), out.inner_rect));
+        places.push(("cam:tools:detail:content".into(), Rect::from_min_size(out.inner_rect.min, out.content_size)));
     });
 }
 
@@ -3717,8 +3737,11 @@ fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
                 places,
                 "cam:text",
             );
-            if w.text_edit != w.text && !ui.memory(|m| m.has_focus(egui::Id::unique("cam-text-edit"))) {
+            // the document's text changed from what the field was loaded with (an edit elsewhere,
+            // an undo, Apply itself): loaded again while the field is not being typed in
+            if w.text != w.text_base && !ui.memory(|m| m.has_focus(egui::Id::unique("cam-text-edit"))) {
                 w.text_edit = w.text.clone();
+                w.text_base = w.text.clone();
             }
             egui::ScrollArea::vertical()
                 .id_salt("cam-text-scroll")
@@ -3870,9 +3893,18 @@ fn release_short(w: &CamWs) -> &'static str {
 /// The status bar's fix for what blocks release, where one click gets there: a setup with no
 /// `at:` opens its dialog.
 pub fn status_fix(w: &CamWs) -> Option<(&'static str, Action)> {
+    // an export the host has not answered: ask again
+    if w.export_asked.as_ref().is_some_and(|a| a.waiting) {
+        return Some(("Try again", Action::Cam(Ask::RetryExport)));
+    }
     let r = w.run.as_ref()?;
     (release_block(w).is_some() && r.programs.iter().any(|p| p.certified.contains("G5")))
         .then_some(("Place the setup\u{2026}", Action::Cam(Ask::PlaceSetup)))
+}
+
+/// The status bar's fix's hover, where it needs one.
+pub fn status_fix_tip(w: &CamWs) -> Option<&'static str> {
+    w.export_asked.as_ref().is_some_and(|a| a.waiting).then_some(super::nc::RETRY_TIP)
 }
 
 /// Why a Manufacture tool is off, for its tooltip.
