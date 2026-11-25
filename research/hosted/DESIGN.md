@@ -10,7 +10,9 @@ comes from `MEASUREMENTS.md` (measured here) or `PRIOR-ART.md` (cited sources, f
 |---|---|---|
 | sync model | **server-ordered log of typed ops; a late op is re-applied to the head (rebase) and re-validated; Rename rewrites later ops' names; same-param edits are last-writer-wins** | 251 real documents, ~19k op pairs both orders: 96.9% of different-target pairs commute exactly; every non-commuting case is Rename-before-a-user-of-the-old-name (fixable by substitution) or list position (both apply, server order decides). Lean: SetParam commute and LWW proven (`lean/Merge.lean`). |
 | where geometry is computed | **hybrid: every client rebuilds the document locally (as today); compute workers produce heavy, slow-changing results (imports, bend sim, thermoform, CAM, exports, first-open meshes), cached by content hash** | warm rebuild after an edit is 1.5 ms p50 / 38 ms p90 locally, below any network round trip; 0 of 276 documents differ in body or mesh bits across x86-64-v3, v2, one core, wasm/Node and wasm/Chromium (223 that loaded); but the Haas VF-2 takes 13.8 s to open natively and its STEP cannot be meshed on main, and bend sim takes 3.85 s for a 21.7 KB result. |
-| op-log store | **Postgres** (op log, documents, permissions in one transactional store); **content-addressed blobs** (snapshots, meshes, STEP, results) on a filesystem or object store | every durable candidate appends in 0.12–0.20 ms p50 on the same disk, so latency does not decide; Postgres is needed anyway for accounts and sharing, and lets permission check + append be one transaction. FoundationDB and MongoDB: UNKNOWN (not runnable here). |
+| op-log store | **Postgres, PROVISIONAL** until FoundationDB and MongoDB are measured (op log, documents, permissions in one transactional store); **content-addressed blobs** (snapshots, meshes, STEP, results) on a filesystem or object store | every durable candidate appends in 0.12–0.20 ms p50 on the same disk, so latency does not decide; Postgres is needed anyway for accounts and sharing, and lets permission check + append be one transaction. FoundationDB and MongoDB: UNKNOWN (their server binaries were refused by this session's permission system; David's approval has to be given in this session). |
+| determinism | **a requirement, enforced**: every client gets bit-identical geometry from the same op stream; a standing cross-platform determinism gate (§13) | 0 differences measured on every platform this VM can run; sources of divergence listed and closed one by one in §13 |
+| desktop app | **a full client of the hosted server** in SERVED mode; LOCAL mode (any folder, plain files + git, no network) unchanged and never slowed (§14–§15) | one protocol crate shared by native forge-render and the wasm build |
 | history and git | **op seq = the live history (microversions); git stays the version and interchange layer**: a named version or an idle checkpoint becomes a forge-history commit and tag | forge-history save per edit: 3.4–5.2 ms p50, 17–21 ms p99 = 20–30× an op append; git commit per keystroke-level op would also be the wrong granularity for versions. |
 | transport | **WebSocket** for ops and presence; **HTTPS GET** of content-addressed blobs (CDN-cacheable) | WebSocket works in every browser; WebTransport is "Baseline 2026" (Safari 26.4, March 2026). Ops are ~150–250 B. |
 | offline / local | **unchanged**: local forgeCAD keeps files, `F.fg.log`, forge-history; the hosted code lives in new crates and is never linked into the gate binaries | the speed gate's binaries (regen1, bench) do not need a line of the sync code. |
@@ -68,7 +70,7 @@ candidate region (phase 1 ships that probe).
 |---|---|---|---|---|
 | B1 | edit → own view | **= local** (no network on the path); ≤ 16 ms for the 84% of edits that are ≤ 16 ms locally | the client applies its op optimistically and rebuilds warm, exactly as today: 1.5 ms p50, 38 ms p90 native; ×1.31 median in wasm (Node), ×0.99 in Chromium | meets it by construction: nothing waits on the server |
 | B2 | edit → collaborator sees it | **≤ RTT + 2 ms + their local rebuild**; target ≤ 100 ms same region, ≤ 250 ms intercontinental | ½RTT + server validate (0.38 / 3.4–23.7 ms) + durable append (0.20 / 0.36 ms) + ½RTT + collaborator's warm rebuild (1.5 / 38 ms). Same region at 10 ms RTT: ~13 ms p50; NY–London at ≥ 56 ms: ~60 ms p50 | meets it; the p99 term is validation of the largest documents (rack.fg 23.7 ms) — see §4.4 fast path |
-| B3 | open a big project | **≤ local open; first picture ≤ 1 s + mesh download** | Haas VF-2: local native open 13.8 s (and no mesh: meshing the raw STEP fails on main); wasm ~18 s estimated. Hosted with cached display meshes: download 4.22 MB (VF-2's shipped meshes); edits need the import's B-rep only if a feature reads it | hosted is **faster** than local for imports; ordinary parts: cold build 3.5 ms p50, 1.2 s p90, 3.9 s p99 → the server's cached meshes give the first picture, the client builds behind it |
+| B3 | open a big project | **≤ local open; first picture ≤ 1 s + mesh download** | Haas VF-2: local native open 13.8 s = eval_and_build (the STEP import) 10.2 s + measure 2.2 s + process/IO ~1.4 s. The import is a pure function of the STEP's bytes: a content-hashed server result. Measure (mass properties) is not needed for the first picture: run it after, or serve it cached too. Meshing the raw STEP fails on main; wasm ~18 s estimated. Hosted with cached display meshes: download 4.22 MB (VF-2's shipped meshes); edits need the import's B-rep only if a feature reads it | hosted is **faster** than local for imports; ordinary parts: cold build 3.5 ms p50, 1.2 s p90, 3.9 s p99 → the server's cached meshes give the first picture, the client builds behind it |
 | B4 | export, CAM, bend sim | **≤ local; cache hits = download time** | bend sim 3.85 s native for 21.7 KB; thermoform 1–4 s per rebuild; CAM threaded page rerun 0.12 s (CAM-PERF). Compute worker native (≥ wasm speed: wasm is 1.31× native median), result keyed by content hash, so the 2nd collaborator and every reopen get it in one download | meets it; a miss costs the native time + RTT; a hit is ~RTT |
 | B5 | local, offline forgeCAD | **0 instructions more** on every gate line | no hosted code is linked into the gate binaries; the edit path's op emission lives in the host (§7) | to be enforced by the gate on every hosted PR |
 
@@ -256,12 +258,15 @@ the compare produces ops that round-trip — measure on the corpus).
 
 ## 8. (e) Threaded wasm and the forge-alloc race
 
-What I could establish: the threaded browser build uses forge-alloc's eight spin-locked heaps
-(`docs/web.md`); per-thread small-block caches (34d6cad8) and a quick look before flushing
-(c0c6143f) are on `cam/perf-rest`, not main; `alloc/threaded-stress` (3c10b9f2) runs the
-allocator natively on 8–16 threads and passes, and "fails at once with owner_of taking no
-lock". The specific "known race" was not found written up; I asked the coordinator for a
-pointer. **UNKNOWN** until then: its trigger and frequency.
+What is known (coordinator, 2026-11-25): an **out-of-bounds memory access in forge-alloc's
+wasm32+atomics `Alloc::realloc`** while building `rack.fg`, in CI job "browser (threaded) 1" of
+PR #56 (Actions run 45502487175, attempt 1; the rerun passed; the same wasm passed on #54 and
+#55): intermittent. Suspected origin: train 6's per-thread small-block caches (34d6cad8, from
+`cam/perf-rest`). CAM-PERF holds the trace and is hunting the root cause; TRAIN-CONDUCTOR is
+turning the thread cache off in release as a safety measure. `alloc/threaded-stress`
+(3c10b9f2) runs the allocator natively on 8–16 threads and passes. **UNKNOWN**: the root
+cause, and whether the race can also corrupt memory *silently* (wrong bits, no trap) — the
+observed failure trapped. Asked CAM-PERF; this section records implications only.
 
 What it means for hosting, independent of its details:
 - A heap race corrupts memory: a client could build **different bits** or crash. In a hosted
@@ -349,3 +354,156 @@ passes the speed gate with 0 regressions on local lines.
 - Assemblies across documents (references to other documents' versions): Onshape pins
   versions (PRIOR-ART §1); forge-lang's `part(FILE)` reads files; the hosted equivalent is
   "a part at a version or at a document's head" — design in phase 2 with the assembly owners.
+
+## 13. Determinism: a requirement, enforced and tested continuously
+
+David (2026-11-25): clients must get **bit-identical geometry everywhere**. So the server-mesh
+fallback of §3 is a safety net for a bug, never a mode: a mismatch is a **failed gate** in CI
+and a **bug report** in the field.
+
+### 13.1 Every source of divergence, and how each is closed
+
+| source | how it could differ | how it is closed | status / evidence |
+|---|---|---|---|
+| FMA contraction | `a*b+c` fused on one target, not another | Rust/LLVM never contract without fast-math; `clippy.toml` disallows `f64::mul_add` ("fused results differ from separate ops; breaks native/wasm equality") | closed by toolchain + lint; v2 (no FMA unit used) = v3 = wasm on 276 docs |
+| x87 80-bit intermediates | 32-bit x86 builds use x87 | ship no i686 target; x86-64 uses SSE2 scalar (64-bit rounding) | closed by target choice |
+| denormals (FTZ/DAZ) | a target flushing subnormals to zero | wasm requires IEEE subnormals (no FTZ); x86-64 Linux/macOS/Windows and aarch64 Linux/macOS start with FTZ off; no code sets MXCSR/FPCR | closed unless some dependency sets it: **UNKNOWN** for every native library linked into the app (GPU drivers, audio): test = the gate on the app binary, not only on `det` |
+| libm transcendentals | platform `sin`, `exp`, `pow` differ by an ulp between libcs | `clippy.toml` disallows `f64::sin/cos/sin_cos/asin/acos/powf/...` ("platform libm"); the kernel uses its own `forge_math::dmath` (seen in the profile: `dmath::atan`, `atan2`) | closed by lint; keep the lint list complete (`exp`, `ln`, `hypot`, `cbrt`, `tanh` included? check in phase 0) |
+| SIMD | lane order, relaxed ops | wasm built with `+simd128` only, no relaxed-simd (`.cargo/config.toml`); native AVX used only for ops that round per lane as scalars | closed; the gate covers it (v2 vs v3) |
+| NaN payload/sign | wasm leaves NaN bits nondeterministic (PRIOR-ART §6) | hashes and comparisons must never read a NaN's bits; a NaN reaching geometry is a typed error | partly: add a debug check that no NaN reaches a hashed body (phase 0) |
+| usize width | wasm32 is 32-bit, natives 64-bit: overflow, hashing of `usize` | the forge-git wasm usize overflow was a real bug of this kind (coordinator notes §3); gate covers wasm32 | the gate catches; review rule: hash `u64`, not `usize` |
+| hash-map iteration order | std `HashMap` is randomly seeded per process | results must not depend on iteration order; the speed gate pins the seed (`fixedrandom.so`) for counts, which would also **hide** an order dependence — so the determinism gate must run **unpinned, several seeds** | evidence: 5 separate unpinned processes (v3, v2, 1-core, Node, Chromium) gave the same bits on 223–276 docs |
+| thread scheduling | parallel reductions in a different order | `forge_math::par` must combine in index order; 1 core vs 4 cores identical on 276 docs | gate runs 1, 2 and N threads |
+| allocator / addresses | sorting or hashing by pointer; threaded wasm allocator race | no address-dependent order (review + gate on several allocators: glibc, forge-alloc wasm, threaded forge-alloc) | race: §8; gate catches order effects |
+| process-wide memos (`forge-memo`, geomemo, `VOLUMES` in forge-asm) | a memoised result differs from a fresh one | memo keys include every input; gate compares warm-process vs fresh-process bits | 642 warm edits = cold here |
+| compiler/toolchain version | a new rustc changes codegen of float code | pinned toolchain (`rust-toolchain.toml` 1.99.1); a toolchain bump is a gate event | closed by pinning |
+| engines/CPUs not run here | Firefox, Safari, ARM | **UNKNOWN** — see 13.2 | test plan below |
+
+### 13.2 The cross-platform determinism gate
+
+A CI job, required on every PR that touches kernel, forge-lang, forge-alloc, the toolchain or
+`.cargo/config.toml`, and nightly on main:
+
+1. **Corpus**: every `examples/**/*.fg`, the speed gate's parts, the fuzz seeds, and **recorded
+   op streams**: real edit sessions (start text + ops) replayed op by op, hashing after each op
+   (`det`-style: body bits + mesh bits + error kinds). Assemblies hash each placed part.
+2. **Targets**, all producing one file of `doc op# hash` lines:
+   - native x86-64-v3 and x86-64-v2 (Linux), 1 thread and all threads, two HashMap seeds;
+   - native **aarch64** (Linux runner `ubuntu-24.04-arm`; macOS arm64 runner for Apple Silicon)
+     — **UNKNOWN here** (no ARM in this VM);
+   - wasm32 in Node, Chromium, **Firefox** and **WebKit** (Playwright), default and threaded
+     artifacts — Firefox/WebKit **UNKNOWN here** (only Chromium installed);
+   - Windows x86-64 (MSVC) — **UNKNOWN here**.
+3. **Rule**: every line equal to the reference (native x86-64-v3); any difference fails, naming
+   the document, the op, and the first differing vertex/edge. No tolerance: bit identity.
+4. **Harness gap to close first** (phase 0): the browser runner here (`browser/run-wasi-chromium.cjs`)
+   could not load 53 assemblies' sibling files; run the gate through the app's own storage
+   (as `web/tests/parity.cjs` does) or fix the shim, so every document runs in every browser.
+5. **In the field**: the build-hash report of §3 is the same check, live: a mismatch is logged
+   with platform, browser, CPU and the doc/op, and the client shows the server's result for that
+   document until fixed.
+
+Cost: the native and Node runs took 2.5–3 min each for 276 docs here; the browsers similar.
+Sharded like parity.cjs, it fits in the existing web CI time.
+
+## 14. One client library, two hosts: native desktop and wasm
+
+David: the **native desktop app is a full client of the hosted server** (live multi-user,
+shared history, same budgets), not only the browser.
+
+```
+            forge-lang (edit::apply_checked, run, Cache)   <- unchanged, shared
+                         |
+   forge-sync  (pure Rust, no I/O):  op envelope {doc, base_seq, client_op_id, op, inverse},
+               pending queue, rebase (Rename transform), apply incoming, inverse ops for undo,
+               build-hash reports, protocol messages (encode/decode)
+         |                     |                      |
+   Transport trait        Store trait           Clock/Timer trait
+   native: WebSocket      native: files +       native: std
+     on its own thread     .forgecad/sync/      wasm: performance.now
+   wasm: browser            (pending ops,
+     WebSocket (web-sys)    last seq, blob cache)
+                          wasm: OPFS/IndexedDB
+                            (as web/storage.js)
+```
+
+- `forge-sync` holds all protocol logic; both hosts link the same code, so they cannot drift.
+  It has no threads of its own and no I/O: the host feeds it messages and asks it what to send
+  (a "sans-I/O" state machine), so it runs the same on the page's thread, a Worker, or a native
+  thread.
+- What differs per host:
+
+| concern | native desktop | wasm (browser) |
+|---|---|---|
+| threads | build worker thread (today's `plat.rs`), socket on its own thread | build in a dedicated Worker; socket on the page |
+| file access | real files: the served project is a plain folder (§15) | `forge_dirs::fs::mem` filled from OPFS/IndexedDB |
+| offline | full: edits apply to files and queue in `.forgecad/sync/pending`; reconnect rebases (§4.5) | while the tab lives: queue in IndexedDB; a closed tab keeps its queue |
+| caching | content-addressed blobs in `.forgecad/cache/` (meshes, imports, results), shared across projects in the user cache dir | browser Cache API / OPFS, same keys |
+| compute | may run heavy jobs itself (native speed) instead of waiting for a worker; the result's hash is the same key, so it can upload it for others (only if the server trusts clients' results: no — it verifies by recomputing or by hash agreement of two clients; decide in phase 2) | asks compute workers |
+| auth | token in the OS keychain (today's `keyring` use) | session cookie / token in memory |
+
+- Same budgets B1–B4 apply to both hosts. B5 (local never slower) applies to the desktop in
+  LOCAL mode (§15).
+
+## 15. LOCAL and SERVED projects in one app
+
+### 15.1 Identification
+
+- A project is **SERVED** iff its folder holds `.forgecad/remote.toml` (server URL, project id,
+  the user's account name, the last seq applied per document). `.forgecad/` is already in the
+  starter `.gitignore` (forge-history `STARTER_IGNORE`), so the link is never committed.
+- Otherwise it is **LOCAL**: exactly today's behaviour. The app checks for the file **once, when
+  the project opens**; in LOCAL mode no sync code runs, no socket opens, no account is needed,
+  nothing is read or written beyond today's files. Nothing on the edit path tests the mode
+  except the host's "connected?" branch after a successful edit (§7), which the gate measures
+  (B5: 0 instructions on `bench app/edit/cli`; if the branch itself costs instructions, move it
+  behind a function pointer set at open, so LOCAL mode runs today's exact code).
+
+### 15.2 Moving between modes
+
+| action | what happens | history |
+|---|---|---|
+| **publish** (LOCAL → SERVED) | the app uploads every project file (content-addressed) and its git history; the server creates the project; the folder gets `.forgecad/remote.toml` | the project's forge-history commits and version tags become the server's first versions; live op history starts after |
+| **checkout** (server → new local folder, kept in sync) | the app writes every document's text at head, a git repository whose commits are the server's versions, and `remote.toml` | git in the folder = versions; the live op history stays on the server (fetchable) |
+| **sync** (while SERVED) | incoming ops are applied with `edit::apply` and written to the files; local edits go out as ops; versions arrive as new git commits | `git log` in the folder shows the versions |
+| **detach** (SERVED → LOCAL) | delete `remote.toml` (with pending ops sent first, or kept as a branch on request) | the folder is a normal local project with its git history |
+| **attach** an existing folder to an existing served project | allowed only if the folder's texts equal some server version; otherwise it is published as a branch | |
+
+### 15.3 What a served project looks like on disk
+
+A **plain folder plus git**, readable by any tool: the `.fg` texts at the head the client has
+applied, sibling files (STEP, fonts) as files, `.git` with one commit per version
+(forge-history format, trailers naming authors and agents), and `.forgecad/` (ignored) holding
+`remote.toml`, `sync/` (pending ops, last seq) and `cache/`. Other tools may read and run it;
+`git` push/pull to another remote works on the versions.
+
+### 15.4 Hand edits and other tools touching the folder
+
+A text written by something other than the app (an editor, a script, `git checkout`):
+
+1. The desktop notices it: a file watcher while the app runs, and on open a hash compare of
+   each document against the last text the sync applied (stored in `sync/`).
+2. It turns the change into ops: `forge-lang/src/compare.rs` already lists what B changed from A
+   by features and params. If the ops reproduce the new text **exactly** when applied to the
+   old (checked: apply, compare bytes), they are sent as ordinary ops, attributed "hand edit".
+3. If not exact (formatting, comments, an edit no op expresses), it is sent as one coarse op,
+   **`SetText {base_seq, old_hash, new_text}`**: valid only if no op landed on that document
+   since `base_seq`; else refused, and the app offers a three-way merge (base text, server head,
+   the hand-edited text) — the hand edit is never lost: it is also kept as a branch.
+4. A `git checkout` of an old version in a served folder is the same: a hand edit to that text,
+   which becomes "restore version N" (forge-history's Restore is already a new save of an old
+   state).
+
+How often step 2 is exact: **UNKNOWN**; measure in phase 0 by round-tripping compare → ops on
+consecutive versions of the corpus (git history of `examples/`).
+
+## 16. Plan additions
+
+- Phase 0 gains: the determinism gate's harness (13.2 step 4), ARM/Firefox/WebKit/Windows runs,
+  the clippy lint list check, unpinned multi-seed runs; FoundationDB/MongoDB benchmark once
+  approved in this session (append, read since seq, snapshot, plus FDB watches and MongoDB change
+  streams as fan-out); compare → ops exactness rate.
+- Phase 1 builds `forge-sync` sans-I/O with **both hosts from day one** (desktop and wasm), and
+  LOCAL/SERVED identification, publish and checkout (M → M+, about +1–2 weeks).
+- Phase 4 (offline and branches) includes hand-edit reconciliation and `SetText` with
+  three-way merge (M).
