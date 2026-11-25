@@ -357,8 +357,9 @@ enum Ev {
 enum End {
     /// Saved and closed (no members left, or the server stops).
     Normal,
-    /// It never opened (why).
-    NeverOpened(String),
+    /// It never opened: why, and whether trying again may succeed (an I/O error), or not (no
+    /// such document, too large, changed on disk outside the server, a corrupt log).
+    NeverOpened(String, bool),
     /// A panic: the document is quarantined until the server restarts.
     Quarantined,
 }
@@ -1015,7 +1016,7 @@ fn hub(shared: &Arc<Shared>, rx: Receiver<Ev>, tx: SyncSender<Ev>, stop: &Atomic
     // one would leave a gap in its ids) until they leave and reconnect
     let mut shed: HashSet<Conn> = HashSet::new();
     let mut generation: u64 = 0;
-    let drop_doc_conns = |conns: &mut HashMap<Conn, (String, Outbox)>, doc: &str, why: &str| {
+    let drop_doc_conns = |conns: &mut HashMap<Conn, (String, Outbox)>, doc: &str, why: &str, retry: bool| {
         let gone: Vec<Conn> = conns
             .iter()
             .filter(|(_, v)| v.0 == doc)
@@ -1023,7 +1024,11 @@ fn hub(shared: &Arc<Shared>, rx: Receiver<Ev>, tx: SyncSender<Ev>, stop: &Atomic
             .collect();
         for k in gone {
             if let Some((_, out)) = conns.remove(&k) {
-                out.stop(why);
+                if retry {
+                    out.close(Some(why));
+                } else {
+                    out.stop(why);
+                }
             }
         }
     };
@@ -1095,7 +1100,8 @@ fn hub(shared: &Arc<Shared>, rx: Receiver<Ev>, tx: SyncSender<Ev>, stop: &Atomic
                             docs.insert(doc.clone(), h);
                         }
                         Err(e) => {
-                            out.stop(&e);
+                            // (its thread not started: may pass)
+                            out.close(Some(&e));
                             continue;
                         }
                     }
@@ -1178,14 +1184,17 @@ fn hub(shared: &Arc<Shared>, rx: Receiver<Ev>, tx: SyncSender<Ev>, stop: &Atomic
             } => {
                 let why = match how {
                     End::Normal => None,
-                    End::NeverOpened(why) => Some(why),
+                    End::NeverOpened(why, retry) => Some((why, retry)),
                     End::Quarantined => {
                         quarantined.insert(doc.clone());
                         shared.stats().quarantined += 1;
-                        Some("this document is quarantined after a server error".to_string())
+                        Some((
+                            "this document is quarantined after a server error".to_string(),
+                            false,
+                        ))
                     }
                 };
-                if let Some(why) = why {
+                if let Some((why, retry)) = why {
                     // never opened, or quarantined: everyone on it is told
                     if docs.get(&doc).is_some_and(|d| d.generation == g) {
                         docs.remove(&doc);
@@ -1193,7 +1202,7 @@ fn hub(shared: &Arc<Shared>, rx: Receiver<Ev>, tx: SyncSender<Ev>, stop: &Atomic
                     if closing.get(&doc).is_some_and(|c| c.generation == g) {
                         closing.remove(&doc);
                     }
-                    drop_doc_conns(&mut conns, &doc, &why);
+                    drop_doc_conns(&mut conns, &doc, &why, retry);
                     continue;
                 }
                 if closing.get(&doc).is_some_and(|c| c.generation == g) {
@@ -1234,7 +1243,8 @@ fn hub(shared: &Arc<Shared>, rx: Receiver<Ev>, tx: SyncSender<Ev>, stop: &Atomic
                                 }
                                 docs.insert(doc.clone(), h);
                             }
-                            Err(e) => drop_doc_conns(&mut conns, &doc, &e),
+                            // (a thread not started: may pass)
+                            Err(e) => drop_doc_conns(&mut conns, &doc, &e, true),
                         }
                     }
                 }
@@ -1281,14 +1291,18 @@ fn open_actor(
             };
             let room = match catch_unwind(AssertUnwindSafe(|| open_doc(&shared2, &doc2))) {
                 Ok(Ok(r)) => r,
-                Ok(Err(e)) => {
+                Ok(Err((e, retry))) => {
                     // the joins queued meanwhile hear why
                     while let Ok(ev) = rx.try_recv() {
                         if let DocEv::Join { out, .. } = ev {
-                            out.stop(&e);
+                            if retry {
+                                out.close(Some(&e));
+                            } else {
+                                out.stop(&e);
+                            }
                         }
                     }
-                    return ended(End::NeverOpened(e));
+                    return ended(End::NeverOpened(e, retry));
                 }
                 Err(_) => return ended(End::Quarantined),
             };
@@ -1336,28 +1350,42 @@ fn open_actor(
     })
 }
 
-fn open_doc(shared: &Shared, doc: &str) -> Result<Room, String> {
+/// Why a document did not open, and whether trying again may succeed.
+type NotOpened = (String, bool);
+
+fn open_doc(shared: &Shared, doc: &str) -> Result<Room, NotOpened> {
     let c = &shared.c;
-    let path = fsx::canonical_doc(&c.root, doc).map_err(str::to_string)?;
-    let len = std::fs::metadata(&path).map_err(|e| e.to_string())?.len();
+    // (an I/O error may pass: the client retries; anything else would fail the same way again)
+    let io = |e: std::io::Error| {
+        let gone = matches!(
+            e.kind(),
+            std::io::ErrorKind::NotFound | std::io::ErrorKind::InvalidData
+        );
+        (format!("{doc}: {e}"), !gone)
+    };
+    let path = fsx::canonical_doc(&c.root, doc).map_err(|e| (e.to_string(), false))?;
+    let len = std::fs::metadata(&path).map_err(io)?.len();
     if len > MAX_DOC {
-        return Err(format!("{doc}: {len} bytes (at most {MAX_DOC})"));
+        return Err((format!("{doc}: {len} bytes (at most {MAX_DOC})"), false));
     }
-    let text = std::fs::read_to_string(&path).map_err(|e| format!("{doc}: {e}"))?;
+    let text = std::fs::read_to_string(&path).map_err(io)?;
     // a file changed outside the server since it last wrote it: never overwritten silently
     match shared.marks.get(doc) {
         Some(h) if h != forge_sync::text_hash(&text) => {
-            return Err(format!(
-                "{doc} changed on disk outside the server (an editor, a git pull): bringing such a change in is not in \
-                 phase 1 (DESIGN.md §15.4)"
+            return Err((
+                format!(
+                    "{doc} changed on disk outside the server (an editor, a git pull): bringing such a change in is not \
+                     in phase 1 (DESIGN.md §15.4)"
+                ),
+                false,
             ));
         }
         Some(_) => {}
-        None => shared.marks.set(doc, &text).map_err(|e| e.to_string())?,
+        None => shared.marks.set(doc, &text).map_err(io)?,
     }
-    let mut store = shared.store()?;
-    let mut seq = Sequencer::open(store.as_mut(), doc, &text, path.parent().map(Path::to_path_buf))
-        .map_err(|e| e.to_string())?;
+    let mut store = shared.store().map_err(|e| (e, true))?;
+    let mut seq =
+        Sequencer::open(store.as_mut(), doc, &text, path.parent().map(Path::to_path_buf)).map_err(io)?;
     seq.root = Some(c.root.clone());
     let mine = shared
         .abandoned
