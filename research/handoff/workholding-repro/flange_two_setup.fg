@@ -1,0 +1,18 @@
+# WORKHOLDING handoff repro: the μ-band slowdown (research/handoff/WORKHOLDING.md, "default2 is held").
+# Copy beside examples/machined/flange.fg and run cam_time on it: >180 s against haas-vise-05-0404;
+# with standin-vise-150 in both setups, 1.8 s (its own ok false is CAM-CORE's op2 frame, known).
+machining
+shared tol = 0.01
+f    = part("flange.fg", material: "6061-T6")
+m    = machine("generic-vmc3")
+t1   = tool("flat-10", t: 1, stickout: 32, holder: "bt40-er32")
+op1  = setup(f, machine: m, stock: box(margin: (3, 3, 2), below: 3), origin: "top-center", tol: tol, at: (0, 0, -250), fixture: vise("haas-vise-05-0404", across: "x", clamp: 4))
+skim = facing(op1, tool: t1, to: 18, step: 1)
+top  = clear(op1, tool: t1, from: 18, to: 12, step: 3, stepover: 4)
+prof = contour(op1, tool: t1, side: "outside", from: 12, to: 4, step: 4)
+bore = pocket(op1, f.bore_h, tool: t1, stepover: 2.5, step: 3)
+bolts = drill(op1, f.bolts, plan: "auto")
+p1   = program(op1, post: "fanuc", number: 1001)
+op2  = setup(f, from: op1, machine: m, origin: "top-center", tol: tol, at: (0, 0, -250), fixture: vise("haas-vise-05-0404", across: "x", clamp: 6))
+back = facing(op2, tool: t1, to: 0, step: 1)
+p2   = program(op2, post: "fanuc", number: 1002)

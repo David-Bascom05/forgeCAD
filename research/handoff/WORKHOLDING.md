@@ -82,6 +82,18 @@ sha256 the record cites, so a model swapped under a citation is caught either wa
 
 ## default2 is held: a cut at exactly the clearance from a real jaw cannot be decided
 
+**Coordinator's final ruling: `-default2` stays held and goes in no train; the real vises ship
+opt-in by name (`haas-vise-05-0404`, `haas-vise-05-0405`).** `-default2` is ready apart from
+the μ-band fix below: the switch itself, its measurements (+2.6% / +2.7% instructions on
+bracket / manifold, NC and verdicts identical to main) and its tests are done. Once fix (a) or
+(b) lands, rebase it on main, rerun the repro below (it must finish in about the stand-in's
+time), re-measure, pre-verify, and send its line.
+
+Repro: `research/handoff/workholding-repro/flange_two_setup.fg` (copy it beside
+`examples/machined/flange.fg`, then `cargo run --release -p forge-cam-lang --example cam_time --
+flange_two_setup.fg`): over 180 s against `haas-vise-05-0404`; 1.8 s with `standin-vise-150` in
+both setups. Setting `FORGE_CAM_CELLS` prints the branch and bound's cells.
+
 CAM-CORE's two-setup flange (`flange_cam.fg` with an op2 turned over, `facing(op2, to: 0)`)
 runs in 1.8 s against `standin-vise-150` and does not finish in 180 s against
 `haas-vise-05-0404`. With the stand-in it is refused too (`ok false`), so the document has a
