@@ -76,6 +76,12 @@ fn a_face_far_from_its_edges_is_refused_saying_so() {
     assert!(got.solids.is_empty());
     assert_eq!(got.refusals.len(), 1);
     let why = &got.refusals[0].why;
-    assert!(why.contains("lies 50.0 mm from its edges"), "{why}");
-    assert!(why.starts_with("face #"), "{why}");
+    let face = why.strip_prefix("face #").and_then(|x| x.split(' ').next()).expect("a face's entity");
+    assert!(face.parse::<u32>().is_ok(), "{why}");
+    assert_eq!(
+        why,
+        &format!(
+            "face #{face} can't be read: its surface lies 50.0 mm from its own edges (the file disagrees with itself there; exporting it again may help)"
+        )
+    );
 }

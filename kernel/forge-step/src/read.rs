@@ -1990,7 +1990,10 @@ fn healed(
         .find(|&(_, &g)| g > FAR_FACE_MM && g > FAR_FACE_PART * size)
     {
         let face = proto.face_ids.get(fi).map_or(String::new(), |id| format!(" #{id}"));
-        return Err(format!("face{face} lies {} from its edges: the file gives it another surface", far(gap)));
+        return Err(format!(
+            "face{face} can't be read: its surface lies {} from its own edges (the file disagrees with itself there; exporting it again may help)",
+            far(gap)
+        ));
     }
     let budget = forge_geom::budget::scoped(lim.max_evals);
     // a loop running out and back along two edges that lie on each other (a slit of no width)
