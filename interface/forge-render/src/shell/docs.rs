@@ -40,6 +40,7 @@ per_doc!(
         status: String,
         view_tex: Option<egui::TextureId>,
         view_over_tex: Option<egui::TextureId>,
+        view_over_alpha: f32,
         cube_labels: Vec<crate::viewcube::Label>,
         cube_place: Option<crate::viewcube::Place>,
         camera: Option<(crate::camera::Camera, (u32, u32))>,
@@ -71,7 +72,7 @@ per_doc!(
         theme, view, out, view_rect, places, cube_menu, cube_menu_fresh, cube_region, marking, window_box,
         view_blocks, view_owned, side_px, overlays, file_menu, style_set, settings,
         prefs, doc_tabs, active_doc, close_ask, open_paths, open_blocks, doc_scroll, doc_drag, agent,
-        machine,
+        machine, waiting, status_shown,
     ]
 );
 
@@ -94,6 +95,7 @@ impl ShellDoc {
             status: String::new(),
             view_tex: None,
             view_over_tex: None,
+            view_over_alpha: 1.0,
             cube_labels: vec![],
             cube_place: None,
             camera: None,

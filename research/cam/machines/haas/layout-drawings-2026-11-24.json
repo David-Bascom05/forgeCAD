@@ -1,0 +1,446 @@
+{
+ "taken": "2026-11-24",
+ "machines": {
+  "haas-vf-2": {
+   "sources": [
+    {
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf",
+     "doc": "Haas Machine Layout Drawing VF-2/VF-2SS/VF-2TR dated 1/17/2023, PDF hosted by Phillips Corp (HFO) shop; footer: 'All dimensions based on stackup of sheetmetal, subject to variation of 1/2\" ( 13 mm)'; p1: '*All Height Dimensions Based on Suggested Leveling Pad Height' (pad 3.0in [76mm])"
+    },
+    {
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/VF-2_Dimensions.pdf",
+     "doc": "Haas Machine Layout Drawing VF-2 Revision C, March 2016, PDF hosted by haas.co.uk (Haas UK HFO site)"
+    }
+   ],
+   "values": {
+    "overall_w": {
+     "v": 3147.06,
+     "stated": "123.9in [3147mm] OPERATING WIDTH (Installed Dimensions, plan view incl. chip conveyor)",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=1"
+    },
+    "overall_d": {
+     "v": 2250.44,
+     "stated": "88.6in [2249mm] OPERATING DEPTH",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=1",
+     "note": "printed mm 2249 vs 88.6x25.4=2250.44"
+    },
+    "overall_h": {
+     "v": 2722.88,
+     "stated": "107.2in [2724mm] OPERATING HEIGHT",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=1",
+     "note": "printed mm 2724 vs 107.2x25.4=2722.88; to top of column/Z cover, on 3.0in leveling pads"
+    },
+    "top_of_enclosure_window_h": {
+     "v": 2344.42,
+     "stated": "92.3in [2345mm] WINDOW (Height Breakdown, front view; highest enclosure sheet-metal level dimensioned)",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=3",
+     "note": "closest printed figure to 'top of sheet metal'; the label says WINDOW"
+    },
+    "ees_h": {
+     "v": 2298.7,
+     "stated": "90.5in [2300mm] EES",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=3"
+    },
+    "rear_cabinet_top_h": {
+     "v": 2247.9,
+     "stated": "88.5in [2247mm] (side view, top of rear cabinet/equipment)",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=3",
+     "note": "label unnamed in drawing; leader goes to rear top"
+    },
+    "pendant_h": {
+     "v": 1409.7,
+     "stated": "55.5in [1411mm] PENDANT",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=3"
+    },
+    "front_door_clearance_h": {
+     "v": 817.88,
+     "stated": "32.2in [817mm] DOOR CLEARANCE (height of front door-opening sill above floor)",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=3"
+    },
+    "base_top_h": {
+     "v": 543.56,
+     "stated": "21.4in [544mm] (front view, right; leader to top of base sheet metal)",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=3",
+     "note": "unlabelled in drawing"
+    },
+    "unlabelled_front_heights": {
+     "stated": "70in [1778mm]; 58.3in [1480mm]; 39.3in [998mm] (front view left, leaders to door/enclosure features, no labels)",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=3",
+     "v": [
+      1778.0,
+      1480.82,
+      998.22
+     ]
+    },
+    "chip_chute_h": {
+     "v": 713.74,
+     "stated": "28.1in [713mm] CHIP CHUTE",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=3"
+    },
+    "side_door": {
+     "stated": "55.6in [1413mm] SIDE DOOR TOP; 32.2in [818mm] SIDE DOOR BOTTOM; 26.7in [677mm] (side-door width at floor-view); 85deg",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=3",
+     "v": {
+      "top": 1412.24,
+      "bottom": 817.88,
+      "width": 678.18
+     }
+    },
+    "door_opening_w": {
+     "v": 939.8,
+     "stated": "37in [939mm] DOOR OPENING (Width Breakdown, plan)",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=3",
+     "note": "37x25.4=939.8"
+    },
+    "door_swing": {
+     "stated": "R35.7in [906mm]; R13.3in [339mm]; R17.4in [442mm] (door/pendant swing radii, plan view)",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=3",
+     "v": [
+      906.78,
+      337.82,
+      441.96
+     ]
+    },
+    "plan_breakdown_y": {
+     "stated": "from front datum 0in [0mm]: 76.6in [1946mm] (rear, both sides); 71.7in [1822mm]; 50.7in [1288mm]; 46.9in [1191mm]; 28.7in [730mm]; 7.9in [200mm]; -10.5in [266mm]; -3.5in [88mm]",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=3"
+    },
+    "service_clearance": {
+     "v": 914.4,
+     "stated": "Maintain 3 feet [915mm] clearance to the nearest obstruction around all sides of machine perimeter for maintenance access (3ft [914mm] WALL DISTANCE)",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=2"
+    },
+    "floor_envelope_incl_clearance": {
+     "stated": "96.5in [2452mm]; 92.6in [2353mm]; 99.5in [2527mm] (anchor pattern, incl. 3ft wall distance)",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=2",
+     "v": {
+      "x": 2451.1,
+      "y": 2527.3
+     }
+    },
+    "anchor_pattern": {
+     "stated": "Y from rear wall datum 0in: 45in [1142mm], 73.8in [1874mm], 79in [2008mm], 94.3in [2395mm], 99.5in [2527mm]; X: 63.9in [1624mm], 69.3in [1761mm], 92.6in [2353mm], 96.5in [2452mm]; anchor holes \u00d81.0in[25mm]",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=2"
+    },
+    "utilities": {
+     "stated": "POWER 40.9in [1040mm], AIR 44.6in [1134mm], AIR 56.7in [1441mm], POWER 96.3in [2447mm] (plan); POWER 75.8in [1925mm] high, AIR 24.3in [617mm] high",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=2"
+    },
+    "table_h_floor": {
+     "v": 889.0,
+     "stated": "35in (889mm) Table Height",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/VF-2_Dimensions.pdf#page=1",
+     "note": "only in the 2016 Rev C drawing; the 2023 drawing has no table-height label"
+    },
+    "table_size": {
+     "v": 914.4,
+     "stated": "36in [914mm] x 14.5in [368mm]; 3 slots 16mm, 4.9in [125mm] spacing",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=5",
+     "note": "v = length; width 368.3"
+    },
+    "work_cube": {
+     "stated": "30in [762mm] X-AXIS TRAVEL; 16in [406mm] Y-AXIS TRAVEL; 20in [508mm] Z-AXIS TRAVEL; 24in [610mm] TABLE HIGH, 4in [102mm] TABLE LOW (spindle nose to table)",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=4",
+     "v": {
+      "x": 762.0,
+      "y": 406.4,
+      "z": 508.0,
+      "nose_to_table_max": 609.6,
+      "nose_to_table_min": 101.6
+     }
+    },
+    "table_to_enclosure_clearance": {
+     "stated": "12in [304mm]; 10.7in [271mm]; 8.3in [212mm]; 7.7in [195mm]; 3in [75mm] (X&Y-Axis Travel and Clearance)",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=4"
+    },
+    "enclosure_usable_work_space": {
+     "stated": "86in (2184mm) Enclosure Usable Work Space x 40in (1016mm) Enclosure Usable Work Space ('Dimensions shown are at the top of the table, dimensions are reduced as the height increases (5 degree slope inside the sheet-metal)')",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/VF-2_Dimensions.pdf#page=3",
+     "v": {
+      "x": 2184.4,
+      "y": 1016.0
+     }
+    },
+    "spindle_head": {
+     "stated": "17in [432mm] (head width, Z view); 9.2in [234mm] Current Z-AXIS Dimension; 2016: \u00d85.20in (132.1mm) spindle nose, 4.76in (121mm), 2.5in (64mm)",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=4"
+    },
+    "shipping": {
+     "stated": "91.2in [2316mm] SHIPPING WIDTH; 85in [2160mm] SHIPPING DEPTH; 86.2in [2190mm] 30-SMTC HEIGHT; 84.1in [2137mm] SPINDLE POSITION AT SHIPPING; 68.6in [1742mm] UMB-TC ENCLOSURE HEIGHT",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=1",
+     "v": {
+      "w": 2316.48,
+      "d": 2159.0,
+      "h_smtc": 2189.48,
+      "h_spindle": 2136.14,
+      "h_enclosure": 1742.44
+     },
+     "note": "upper bound only"
+    },
+    "leveling_pad_h": {
+     "v": 76.2,
+     "stated": "3.0in [76mm] (Leveling Pad Height)",
+     "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=1"
+    }
+   },
+   "conflicts": [
+    {
+     "what": "overall width",
+     "a": {
+      "v": 3147.06,
+      "stated": "123.9in [3147mm] OPERATING WIDTH",
+      "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=1"
+     },
+     "b": {
+      "v": 3073.4,
+      "stated": "121in (3073mm) (plan, incl. chip conveyor); 90in (2286mm) machine without conveyor",
+      "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/VF-2_Dimensions.pdf#page=1"
+     },
+     "note": "2016 Rev C vs 2023 drawing"
+    },
+    {
+     "what": "overall depth",
+     "a": {
+      "v": 2250.44,
+      "stated": "88.6in [2249mm] OPERATING DEPTH",
+      "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=1"
+     },
+     "b": {
+      "v": 2311.4,
+      "stated": "91in (2311mm) (plan, incl. 55 gal coolant tank; 95-gal tank adds 10in (254mm); CABCOOL option adds 12in (305mm))",
+      "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/VF-2_Dimensions.pdf#page=1"
+     }
+    },
+    {
+     "what": "overall height",
+     "a": {
+      "v": 2722.88,
+      "stated": "107.2in [2724mm] OPERATING HEIGHT",
+      "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=1"
+     },
+     "b": {
+      "v": 2768.6,
+      "stated": "109in (2769mm)",
+      "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/VF-2_Dimensions.pdf#page=1"
+     }
+    },
+    {
+     "what": "door opening width",
+     "a": {
+      "v": 939.8,
+      "stated": "37in [939mm] DOOR OPENING",
+      "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=3"
+     },
+     "b": {
+      "v": 863.6,
+      "stated": "34in (864mm) Door Opening",
+      "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/VF-2_Dimensions.pdf#page=1"
+     }
+    },
+    {
+     "what": "shipping",
+     "a": {
+      "stated": "91.2in [2316mm] SHIPPING WIDTH, 85in [2160mm] SHIPPING DEPTH, 86.2in [2190mm] 30-SMTC HEIGHT",
+      "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=1"
+     },
+     "b": {
+      "stated": "Shipping height (94\"/2388mm) and width (78\"/1981mm) shown; 86in (2184mm) Spindle Head as Shipped; 94in (2388mm) for Cable Carrier",
+      "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/VF-2_Dimensions.pdf#page=1"
+     }
+    },
+    {
+     "what": "leveling pad height",
+     "a": {
+      "stated": "3.0in [76mm]",
+      "url": "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=1"
+     },
+     "b": {
+      "stated": "3.5in (89mm) Leveling Pads",
+      "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/VF-2_Dimensions.pdf#page=1"
+     }
+    },
+    {
+     "what": "service clearance depth (2016)",
+     "a": {
+      "stated": "36in (914 mm) to Nearest Wall or Obstruction; 138in (3505 mm) total depth incl. clearance (Air and Power Inlets)",
+      "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/VF-2_Dimensions.pdf#page=2"
+     }
+    }
+   ],
+   "unknown": [
+    "table/platter height above floor in the 2023 drawing: not labelled (35in only in the 2016 Rev C drawing; 2023 gives 32.2in DOOR CLEARANCE sill and 21.4in base top)",
+    "'top of sheet metal' height: no dimension so named; 92.3in WINDOW is the highest enclosure line dimensioned in the 2023 drawing",
+    "column position/size: no drawing dimensions it (the 2023 p3 6.6in [168mm] at the column top and 24.1in [611mm] in side view are unlabelled)",
+    "saddle size/position: not dimensioned in either drawing",
+    "newer haascnc.com drawing VF-2-2SS-2TR_MLD_11_2021.pdf not read (haascnc.com blocked)"
+   ]
+  },
+  "haas-umc-750": {
+   "sources": [
+    {
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf",
+     "doc": "Haas Machine Layout Drawing - UMC-750/SS/P, footer 'UMC-750/SS/P Revision N, January 2017' (PDF metadata title MLD-UMC-750_Rev_H, 2014), hosted by haas.co.uk (Haas UK HFO site); pre-dates the Q1 2018 standard roof and any later UMC-750 revision"
+    }
+   ],
+   "values": {
+    "overall_w": {
+     "v": 3784.6,
+     "stated": "149\" (3785 mm) (plan, machine incl. chip conveyor)",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=1"
+    },
+    "overall_w_body": {
+     "v": 2844.8,
+     "stated": "112\" (2845 mm) (plan, machine without chip conveyor)",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=1"
+    },
+    "overall_w_with_door_swing": {
+     "v": 4114.8,
+     "stated": "162\" (4115 mm) (plan, to extent of side door swing arc)",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=1"
+    },
+    "overall_d": {
+     "v": 2870.2,
+     "stated": "113\" (2870 mm) (plan, front to rear; also 113\" (2870 mm) in Machine Clearance Dimensions p2)",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=1"
+    },
+    "overall_h": {
+     "v": 3048.0,
+     "stated": "120\" (3048 mm) Max Spindle Height",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=1"
+    },
+    "chip_conveyor_discharge_h": {
+     "v": 876.3,
+     "stated": "34.5\" (876 mm) Min (chip conveyor discharge, front view)",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=1"
+    },
+    "utilities": {
+     "stated": "81\" (2057 mm) Other Side (1 Electrical Connection); 23\" (584 mm) Other Side (2 Air Connection); 36\" (914 mm) and 67\" (1702 mm) from rear (plan)",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=1"
+    },
+    "door_opening_w": {
+     "v": 990.6,
+     "stated": "39\" (991 mm) Door Opening",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=3",
+     "note": "39x25.4=990.6"
+    },
+    "floor_envelope_door_open": {
+     "stated": "183\" (4648 mm) Max x 126\" (3200 mm) Max; Door Open 37\" (940 mm); 38\" (965 mm); 13\" (330 mm)",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=1",
+     "v": {
+      "x": 4648.2,
+      "y": 3200.4,
+      "door_open": 939.8
+     }
+    },
+    "install_clearances": {
+     "stated": "Minimum distance from wall required to install sheet metal: 19\" (483 mm); Minimum distance required to remove conveyor from mill 85\" (2159 mm)",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=1",
+     "v": {
+      "sheet_metal": 482.6,
+      "conveyor": 2159.0
+     }
+    },
+    "anchor_pattern": {
+     "stated": "113\" (2870 mm); 89\" (2261 mm); 21\" (533 mm); 87\" (2210 mm); 63\" (1600 mm); 11\" (279 mm); 26\" (660 mm) x2; 5X \u00d81-1/2 x 8-1/2 DP; Foundation must extend at least 12\" (305 mm) from bored holes",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=1"
+    },
+    "leveling_pad_h": {
+     "v": 88.9,
+     "stated": "3.5\" (89 mm) Leveling Pads",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=1"
+    },
+    "work_cube": {
+     "stated": "Max Travels X 30 in 762 mm, Y 20 in 508 mm, Z 20 in 508 mm, B -35, +110 deg, C 360 deg",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=3",
+     "v": {
+      "x": 762.0,
+      "y": 508.0,
+      "z": 508.0,
+      "b_deg": [
+       -35,
+       110
+      ],
+      "c_deg": 360
+     }
+    },
+    "spindle_to_table": {
+     "stated": "24\" (610 mm) Max Z-Axis Clearance to Table**; 4\" (102 mm) Min**; 20\" (508 mm) Z-Axis Travel; **The UMC-750P's table is 1\" (25.4 mm) shorter than the standard table, clearance is 5-25\" (127-635 mm)",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=5",
+     "v": {
+      "max": 609.6,
+      "min": 101.6
+     }
+    },
+    "tilt_axis_above_platter": {
+     "v": 50.8,
+     "stated": "2.00 \u00b1.01\" (50.8 \u00b1.3 mm) (B-Axis Work Envelope: tilt-axis centreline to table surface)",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=3",
+     "note": "the drawing names the tilt axis B; platter surface is 2.00in below the tilt centreline at B=0"
+    },
+    "platter": {
+     "v": 500.38,
+     "stated": "19.7\" (500 mm) (UMC-750/SS Table Dimensions, platter diameter; 7X 16 mm T-slots 2.48\" (63 mm) pitch)",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=2"
+    },
+    "max_part_swing": {
+     "stated": "\u00d827\" (686 mm) Max Part Swing on C-Axis; \u00d827\" (686 mm) x 18\" (457 mm) Max part/workholding capacity as defined by full B-axis rotation; Max Weight Capacity 660 lb (300 kg)",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=3",
+     "v": {
+      "d": 685.8,
+      "h": 457.2
+     }
+    },
+    "table_to_enclosure": {
+     "stated": "11\" (279 mm) Table to Inside of Sheet Metal; 10.4\" (264 mm) (Y offset of C-axis centre from Y travel centre)",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=3"
+    },
+    "spindle_head": {
+     "stated": "8.9\" (226 mm) and 6.5\" (165 mm) from spindle CL to head front/rear faces; \u00d85.2\" (132 mm) spindle nose; 9.4\" (239 mm)",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=5"
+    },
+    "tool_changer": {
+     "stated": "40+1 Side-Mount; \u00d827\" (686 mm) double arm swing diameter; \u00d830.2\" (767 mm) overall length of arm; arm swings down 4.5\" (114 mm)",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=5"
+    },
+    "shipping": {
+     "stated": "98\" (2489 mm) Max (Spindle Head as Shipped); 113\" (2870 mm); 90\" (2286 mm) Rear sheet metal enclosure removed (For shipping)",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=2",
+     "v": {
+      "h": 2489.2,
+      "w": 2870.2,
+      "d_rear_removed": 2286.0
+     },
+     "note": "upper bound"
+    },
+    "umc750p_table": {
+     "stated": "UMC-750P: 33\" (838 mm) x 14.75\" (374.7 mm) table; 6\" (152.4 mm) Max Part Radius; 24.5\" (622 mm) Max Part Length; A-axis 2.00\" (50.8 mm); Max B-Axis rotation is \u00b145",
+     "url": "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=4",
+     "note": "the P variant only, not the standard trunnion"
+    }
+   },
+   "conflicts": [],
+   "unknown": [
+    "platter/table height above the floor: not printed in the 2017 drawing; the newer umc-750_mld__11_2022.pdf (haascnc.com) was not read",
+    "trunnion/cradle overall dimensions (length, cradle depth, support housings): not dimensioned beyond the 2.00in tilt-axis offset, \u00d819.7in platter and \u00d827in swing",
+    "tilt-axis height above floor (MRZP to floor): not printed; Haas MRZP values are per-machine settings, not published",
+    "column position/size and saddle: not dimensioned",
+    "top of sheet metal height: not printed separately from 120in Max Spindle Height; drawing pre-dates the Q1 2018 roof",
+    "no second source found to cross-check (used listings checked gave no overall dims)"
+   ]
+  }
+ },
+ "blocked": [
+  {
+   "host": "haascnc.com",
+   "why": "Cloudflare bot challenge; not attempted per instructions. Unread: VF-2-2SS-2TR_MLD_11_2021.pdf, umc-750_mld__11_2022.pdf, UMC_Work_Envelope_Comp.pdf, pre-install-guide pages, service.haascnc.com 96-8250a_umc-750.pdf. Search-engine summaries of those PDFs (NOT verified, not used as values) suggested VF-2 2021: operating width 123.5in (3137mm), depth 94in (2389mm), height 120.6in (3064mm); UMC-750 2022: height 120in (3048mm) max."
+  },
+  {
+   "host": "www.directindustry.com",
+   "why": "HTTP 403 to fetch"
+  }
+ ],
+ "notes": [
+  "mm values are inch x 25.4 exactly; Haas-printed mm kept in 'stated'",
+  "PDF copies saved under scratchpad machine-dims/dl"
+ ]
+}
