@@ -76,3 +76,17 @@ def published(repo, name):
     subprocess.run(["git", "-C", repo, "fetch", "-q", "origin", "preverify/maps"], capture_output=True)
     r = subprocess.run(["git", "-C", repo, "show", f"FETCH_HEAD:{name}"], capture_output=True, text=True)
     return r.stdout if r.returncode == 0 else None
+
+
+BUILD_ERROR = re.compile(r"error\[E\d+\]|could not compile|error: linking")
+
+
+def stays_red(name, text):
+    """Why a failed step's log must stay RED whatever the time-budget or main comparison would say
+    (a reason), or None when its failure is wholly made of tests and may be judged: a build that
+    did not compile has no test items, and nothing left over is not a pass."""
+    if BUILD_ERROR.search(text):
+        return "a build or compile error"
+    if not {x for x in items(name, text, {}) if x[0] != "slowish"}:
+        return "a failure no test accounts for"
+    return None

@@ -170,7 +170,7 @@ def target_pkgs(t):
 
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from pvitems import ALONE, items, published  # noqa: E402
+from pvitems import ALONE, items, published, stays_red  # noqa: E402
 SLOW_RED = 2 * float(os.environ.get("BUDGET", "2"))
 # corpus guards (one whole real document per test, named corpus_guard_<doc>): their budget is 15 s
 # alone, not the 2 s of a unit test (the coordinator's ruling); under it, not an overrun at all
@@ -191,13 +191,11 @@ def relative(name, cmd_for, pkgs_of):
     text = open(e["log"], errors="replace").read()
     mine = {x for x in items(name, text) if x[0] != "slowish"}
     # only a step whose failure is wholly made of tests (failed, no result, over the budget) is
-    # judged again: a build that did not compile, or a failure no test line accounts for, stays
-    # RED whatever else is said below (a compile error has no test items: nothing left to relax
-    # is not a pass)
-    e["build_error"] = bool(re.search(r"^error(\[E\d+\])?: |could not compile|error: linking", text, re.M)
-                            and re.search(r"error\[E\d+\]|could not compile|error: linking", text))
-    if e["build_error"] or not mine:
-        e["why_red"] = "a build or compile error" if e["build_error"] else "a failure no test accounts for"
+    # judged again; a build that did not compile, or a failure no test line accounts for, stays RED
+    why = stays_red(name, text)
+    e["build_error"] = why == "a build or compile error"
+    if why:
+        e["why_red"] = why
         print(f"pre-verify {name:7s} FAIL stays: {e['why_red']} (see {e['log']})", flush=True)
         return
     # a test over the time budget on this machine is judged by the budget only well past it: under
