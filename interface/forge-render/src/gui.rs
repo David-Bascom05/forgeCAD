@@ -3708,10 +3708,12 @@ impl Gui {
         } else if let Some(l) = &mut self.fg_view {
             l.renderer.set_parts(std::slice::from_ref(m));
             l.scene.set_part(0, m.center, m.radius, chords);
+            l.scene.set_part_box(0, crate::explode::mesh_box(m));
         } else if let Some(v) = &mut self.view {
             let part = v.scene.placements[0].part;
             v.renderer.set_parts(std::slice::from_ref(m));
             v.scene.set_part(part, m.center, m.radius, chords);
+            v.scene.set_part_box(part, crate::explode::mesh_box(m));
             v.dirty = true;
         }
     }
