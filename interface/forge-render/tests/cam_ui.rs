@@ -967,6 +967,22 @@ fn the_tool_library_scrolls_at_a_laptops_height() {
     assert!(bar > 20, "the scroll bar drawn ({bar} rows)");
 }
 
+/// Setup Sheet written: said by the file's name in the note's ink, its folders on hover (UX-LEAD:
+/// the whole path, in amber, read as a warning).
+#[test]
+fn a_written_sheet_is_said_by_its_name() {
+    let Some((mut h, _)) = open("sheet-said") else { return };
+    h.gui.shell.cam.as_mut().unwrap().command(forge_render::shell::cam::Cmd::SetupSheet);
+    let t0 = std::time::Instant::now();
+    while !h.gui.shell.cam.as_ref().unwrap().said.as_deref().is_some_and(|s| s.starts_with("Wrote ")) {
+        assert!(t0.elapsed().as_secs() < 30, "never written: {:?}", h.gui.shell.cam.as_ref().unwrap().said);
+        h.step();
+    }
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert!(w.said.as_deref().unwrap().contains('/'), "the path kept, for the hover");
+    assert_eq!(forge_render::shell::cam::status_line(w), "Wrote flange_cam-sheet.html");
+}
+
 /// A cycle time is the lower bound and the estimate together (never the estimate alone), and the
 /// estimate counts the tool change the bound counts (the flange changes T1 for T12).
 #[test]
