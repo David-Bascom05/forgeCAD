@@ -1,4 +1,4 @@
 # Machine models are not downloaded by default (no LFS bandwidth on clones, CI or worker sessions).
 # Fetch the ones you use: git lfs pull --include="kernel/forge-machine/data/models/<maker>/<machine>/**"
 [lfs]
-	fetchexclude = kernel/forge-machine/data/models/**
+	fetchexclude = kernel/forge-machine/data/models/**,kernel/forge-workholding/data/models/**

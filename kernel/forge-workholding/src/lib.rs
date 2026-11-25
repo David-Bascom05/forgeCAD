@@ -20,6 +20,7 @@ pub mod generate;
 pub mod geom;
 pub mod lathe;
 pub mod mill;
+pub mod model;
 pub mod schema;
 
 use forge_tooling::toml::{self, Table, Val, num, nums, tables, text};
@@ -330,6 +331,10 @@ const WORDS: &[&str] = &[
     "material",
     "jaw_kind",
     "taper",
+    "model",
+    "replaces",
+    "model_file",
+    "model_rot",
 ];
 
 fn bad(rec: &str, field: &str, why: impl Into<String>) -> WhError {
@@ -600,11 +605,13 @@ impl Record {
                 prims,
             });
         }
-        if kind == Kind::Custom && bodies.is_empty() {
+        // a custom fixture's bodies come from boxes it lists, or from a model of it (a STEP,
+        // IGES or .fg file of the user's, compiled to the checker's faces)
+        if kind == Kind::Custom && bodies.is_empty() && text(t, "model_file").is_none() {
             return Err(WhError::Missing {
                 record: rec,
                 field: "body".into(),
-                fix: "a custom fixture gives its bodies: [[workholding.body]] with [[workholding.body.box]] min/max (its seat at z = 0)".into(),
+                fix: "a custom fixture gives its bodies: model_file = \"PATH\" (a STEP, IGES or .fg of it, beside the document), or [[workholding.body]] with [[workholding.body.box]] min/max (its seat at z = 0)".into(),
             });
         }
         let s = |k: &str| text(t, k).unwrap_or("").to_string();
@@ -922,6 +929,19 @@ pub struct Body {
     /// Where that part sits: the rigid pose from the part file's own frame into the setup's
     /// part frame (None: no part, or none placed: draw the prims).
     pub part_pose: Option<Pose>,
+    /// The maker's model this body is (model::get): its compiled faces are what the checker
+    /// keeps the tool from, posed by the pose (a turn by quarters, then a shift) from the
+    /// device's frame into the part frame; the prims then only envelope it (for drawing and
+    /// for a quick look).
+    pub exact: Option<Exact>,
+}
+
+/// A body's compiled faces: a model's group, and where it is.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Exact {
+    pub model: String,
+    pub group: String,
+    pub pose: Pose,
 }
 
 impl Body {
@@ -933,6 +953,7 @@ impl Body {
             keepout: 0.0,
             part: None,
             part_pose: None,
+            exact: None,
         }
     }
     pub fn bounds(&self) -> (V3, V3) {

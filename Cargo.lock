@@ -114,6 +114,7 @@ dependencies = [
  "forge-post",
  "forge-tooling",
  "forge-topo",
+ "forge-workholding",
 ]
 
 [[package]]
@@ -153,6 +154,7 @@ dependencies = [
  "forge-cam-3d",
  "forge-cam-geom",
  "forge-dirs",
+ "forge-git",
  "forge-lang",
  "forge-library",
  "forge-machine",
@@ -162,8 +164,11 @@ dependencies = [
  "forge-model",
  "forge-post",
  "forge-sketch",
+ "forge-step",
  "forge-tooling",
  "forge-turn-lang",
+ "forge-workholding",
+ "forge-workholding-builder",
 ]
 
 [[package]]
@@ -802,19 +807,27 @@ dependencies = [
  "forge-cam",
  "forge-cam-geom",
  "forge-dirs",
+ "forge-git",
  "forge-lang",
  "forge-math",
  "forge-mesh",
  "forge-post",
  "forge-tooling",
+ "forge-workholding-builder",
 ]
 
 [[package]]
 name = "forge-workholding-builder"
 version = "0.1.0"
 dependencies = [
+ "forge-cam",
+ "forge-cam-geom",
  "forge-dirs",
  "forge-library",
+ "forge-math",
+ "forge-mesh",
+ "forge-step",
+ "forge-topo",
  "forge-workholding",
 ]
 

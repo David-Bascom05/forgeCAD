@@ -5,3 +5,8 @@
 # Shipped machine models (meshes, STEP/Parasolid) live in Git LFS. .lfsconfig keeps them out of
 # normal clones; fetch one with: git lfs pull --include="kernel/forge-machine/data/models/<maker>/<machine>/**"
 kernel/forge-machine/data/models/** filter=lfs diff=lfs merge=lfs -text
+
+# Haas Tooling workholding models (STEP and per-body meshes, by the repo owner's decision, AGENTS.md)
+# live in Git LFS too, kept out of normal clones by .lfsconfig; fetch one with:
+# git lfs pull --include="kernel/forge-workholding/data/models/haas-tooling/<part>/**"
+kernel/forge-workholding/data/models/** filter=lfs diff=lfs merge=lfs -text

@@ -7,19 +7,48 @@ name = "haas-vise-05-0404"
 kind = "vise"
 vendor = "Haas"
 product = "6 in single-station CrossOver vise, 9 in opening (PN 05-0404, Haas Workholding by Kurt: the DX6)"
-note = "Haas sells it (haastooling.com, Haas Automation's own store); haascnc.com refused automated reading; height in conflict: the page gives OAH 110.74 but BH 73.03 + JH 44.07 = 117.10 (and Penn Tool lists 117.09 for the Kurt DX6): measure it; VO 225.0 is the rated opening, J1 0-230.6 the jaws' range (used); OAL with handle 463.75"
-unknown = ["jaw_thickness"]
-conflict = ["height"]
+model = "haas-05-0404"
+note = "Haas sells it (haastooling.com, Haas Automation's own store); haascnc.com refused automated reading. Its bodies are Haas Tooling's own model of it (data/models.toml haas-05-0404), which settles the height the pages left in conflict: the page prints OAH 110.74, but BH 73.03 + JH 44.07 = 117.10 (Penn Tool lists 117.09 for the Kurt DX6), and the model measures 117.094 from its underside to the jaw plates' top, so BH + JH is the one to believe and the printed OAH is not the vise's height. The model also gives the jaw plate's thickness, which no maker publishes. VO 225.0 is the rated opening, J1 0-230.6 the jaws' range (used; the model is drawn 228.60 open); OAL with handle 463.75"
 jaw_width = 150
 jaw_height = 44.07
+jaw_thickness = 18.415
 max_opening = 230.6
 body_length = 426.97
 body_width = 187.73
+height = 117.1
 weight = 35
 [[workholding.cite]]
-fields = ["jaw_width", "jaw_height", "max_opening", "body_length", "body_width", "weight"]
-source = "https://www.haastooling.com/p/05-0404 (JW 150.0, JH 44.07, J1 0.0-230.6, BL 426.97, OAW 187.73, 35.0 kg)"
+fields = ["jaw_width", "jaw_height", "max_opening", "body_length", "body_width", "height", "weight"]
+source = "https://www.haastooling.com/p/05-0404 (JW 150.0, JH 44.07, J1 0.0-230.6, BL 426.97, OAW 187.73, 35.0 kg; height = BH 73.03 + JH 44.07, not the printed OAH 110.74)"
 taken = "2026-11-23"
+[[workholding.cite]]
+fields = ["jaw_thickness"]
+source = "https://www.haastooling.com/p/05-0404 (the 3D model Haas offers there; the file as the repo owner uploaded it, 05-0404.STEP, sha256 21af355a572df8ef225eb419c4a873836edc0f4704f39c1f0398997be2300cbc, data/models/haas-tooling/05-0404/): measured on its mesh to within 0.005, the jaw plate D60-315 from x -90.4748 to -72.0598; the same measurement gives the jaw height 44.069 (the published 44.07) and the vise's height 117.094 (the published BH + JH)"
+taken = "2026-11-25"
+
+[[workholding]]
+name = "haas-vise-05-0405"
+kind = "vise"
+vendor = "Haas"
+product = "4 in single-station CrossOver vise, 6-1/2 in opening (PN 05-0405, Haas Workholding by Kurt: the DX4)"
+model = "haas-05-0405"
+note = "Haas sells it (haastooling.com, Haas Automation's own store); the metric twin is 05-0209 (the same model file). Nothing is in conflict here: the page's OAH 88.52 is its BH 57.15 + JH 31.37, and the model measures 88.519. Its bodies are Haas Tooling's own model (data/models.toml haas-05-0405), which also gives the jaw plate's thickness, which no maker publishes. VO 165.0 is the rated opening, J1 0-165.1 the jaws' range (used; the model is drawn 127.00 open); OAL 348.87"
+jaw_width = 100
+jaw_height = 31.37
+jaw_thickness = 13.894
+max_opening = 165.1
+body_length = 317.5
+body_width = 126.03
+height = 88.52
+weight = 13.6
+[[workholding.cite]]
+fields = ["jaw_width", "jaw_height", "max_opening", "body_length", "body_width", "height", "weight"]
+source = "https://www.haastooling.com/p/05-0405 (JW 100.0, JH 31.37, J1 0.0-165.1, BL 317.5, OAW 126.03, OAH 88.52 = BH 57.15 + JH, 13.6 kg)"
+taken = "2026-11-25"
+[[workholding.cite]]
+fields = ["jaw_thickness"]
+source = "https://www.haastooling.com/p/05-0405 (the 3D model Haas offers there; the file as the repo owner uploaded it, 05-0405.STEP, sha256 09f08b7f047f3ef04186e41e4137f18ca5d8d153983f9bcdcf799b428d44c9ca, data/models/haas-tooling/05-0405/): measured on its mesh to within 0.005, the jaw plate D40-315 from x -65.0494 to -51.1556; the same measurement gives the jaw height 31.369 (the published 31.37) and the vise's height 88.519 (the published OAH)"
+taken = "2026-11-25"
 
 [[workholding]]
 name = "haas-vise-05-0958"

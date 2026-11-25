@@ -7,6 +7,7 @@
 [[workholding]]
 name = "standin-vise-150"
 kind = "vise"
+replaces = "generic-vise-150"
 standin = true
 basis = "a stand-in for the 6 in (150 mm) jaw class of machine vise: jaw width, jaw depth, opening and height rounded from the published Kurt DX6 (kurt-dx6: 152.4 / 44.07 / 230.6 / 117.1); jaw thickness and base sizes are ours (no maker publishes them): measure your vise"
 jaw_width = 150
