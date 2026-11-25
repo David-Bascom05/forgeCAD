@@ -8,13 +8,26 @@
 #   tools/ci/native-tests.py [cargo test args..]     e.g. --workspace, or -p forge-model
 # BUDGET=2 LIMIT=5 JOBS=4 by default (JOBS=2 on a machine shared with other builds; FORGECAD_EACH
 # sets how many parts a suite sweep holds at once); SLOWEST=N lists the N slowest; SKIP="a b":
-# --skip a --skip b.
+# --skip a --skip b. A corpus guard (a test whose name's last `::` segment starts with
+# `corpus_guard_`: one whole real document) has CORPUS_BUDGET=15 s instead, and its LIMIT scales
+# with it (CORPUS_LIMIT, LIMIT x CORPUS_BUDGET / BUDGET by default: 37.5 s).
 import concurrent.futures, json, os, subprocess, sys, time
 
 JOBS = int(os.environ.get("JOBS", "4"))
 BUDGET = float(os.environ.get("BUDGET", "2"))
 LIMIT = float(os.environ.get("LIMIT", "5"))
 SLOWEST = int(os.environ.get("SLOWEST", "10"))
+CORPUS_BUDGET = float(os.environ.get("CORPUS_BUDGET", "15"))
+CORPUS_LIMIT = float(os.environ.get("CORPUS_LIMIT", str(LIMIT * CORPUS_BUDGET / BUDGET)))
+
+
+def budget(test):
+    """(budget, limit) for a test by its name: a corpus guard's, else everyone's."""
+    if test.rsplit("::", 1)[-1].startswith("corpus_guard_"):
+        return CORPUS_BUDGET, CORPUS_LIMIT
+    return BUDGET, LIMIT
+
+
 args = sys.argv[1:] or ["--workspace"]
 build = subprocess.run(["cargo", "test", *args, "--no-run", "--message-format=json"],
                        stdout=subprocess.PIPE, text=True)
@@ -69,7 +82,7 @@ with concurrent.futures.ThreadPoolExecutor(JOBS) as pool:
             if m.get("type") == "test" and m.get("event") in ("ok", "failed"):
                 t = m.get("exec_time", 0.0)
                 tests.append((t, name, m["name"]))
-                if t > BUDGET and m["event"] == "ok":
+                if t > budget(m["name"])[0] and m["event"] == "ok":
                     over.append((t, name, m["name"], exe, cwd))
                 if m["event"] == "failed":
                     failed = True
@@ -93,14 +106,15 @@ for t, name, test in tests[:SLOWEST]:
     print(f"  {t:7.2f} s  {name} {test}")
 slow = 0
 for t, name, test, exe, cwd in sorted(over, reverse=True):
-    if t <= LIMIT:
-        print(f"over the {BUDGET:g} s budget: {name} {test} took {t:.2f} s")
+    b, lim = budget(test)
+    if t <= lim:
+        print(f"over the {b:g} s budget: {name} {test} took {t:.2f} s")
         continue
     a = alone(exe, cwd, test)
-    if a is None or a > BUDGET:
+    if a is None or a > b:
         slow += 1
         took = "no time" if a is None else f"{a:.2f} s"
-        print(f"error: over the {BUDGET:g} s budget: {name} {test} took {t:.2f} s in the run, {took} alone")
+        print(f"error: over the {b:g} s budget: {name} {test} took {t:.2f} s in the run, {took} alone")
     else:
-        print(f"over the {BUDGET:g} s budget: {name} {test} took {t:.2f} s in the run, {a:.2f} s alone")
+        print(f"over the {b:g} s budget: {name} {test} took {t:.2f} s in the run, {a:.2f} s alone")
 sys.exit(1 if bad or slow or not bins else 0)
