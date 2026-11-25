@@ -4,31 +4,51 @@
 # exact body hash, mesh hash and error kinds, for every examples/**/*.fg and every recorded op
 # stream in verify/forge-det/streams (hashed after every op, warm and cold). The `compare` job
 # diffs every platform's lines against linux x86-64-v3 with no tolerance and fails naming the
-# document, the op and the field that differs.
+# document, the op and the field that differs. Never relax a comparison to get green: every
+# divergence is a bug report.
 #
 # The runs are deliberately NOT made alike the way the speed gate makes them: no
-# tools/speed/fixedrandom.so preload (std's HashMap is seeded at random per process, so three
-# separate processes per configuration would expose an iteration-order dependence), 1 thread and
-# all threads (a parallel reduction must combine in index order), FORGECAD_CACHE=off (no disk
-# result cache).
+# tools/speed/fixedrandom.so preload (std's HashMap is seeded at random per process, so separate
+# processes expose an iteration-order dependence), 1 thread and all threads (a parallel reduction
+# must combine in index order), FORGECAD_CACHE=off (no disk result cache).
+#
+# What runs (the `plan` job decides):
+#   pull request  x86-64-v3 and -v2 (1 and N threads), arm64 Linux, wasm in Node (node:wasi and
+#                 the shim) and Chromium; one process per setting
+#   nightly, dispatch  the full matrix: also macOS arm64, Windows, Firefox, WebKit, and three
+#                 separate processes per native setting
+#   push to main  builds only, to refresh the build caches (the checks ran on the pull request)
+# Each setting is split in SHARDS jobs (forge-det --shard K/N) so a job takes well under 20 min.
 name: determinism
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "kernel/**"
+      - "interface/forge-lang/**"
+      - "interface/forge-sync/**"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".cargo/**"
+      - "verify/forge-det/**"
+      - ".github/workflows/determinism.yml"
   pull_request:
     paths:
       - "kernel/**"
       - "interface/forge-lang/**"
-      - "interface/forge-agent/**"
-      - "examples/**"
+      - "interface/forge-sync/**"
+      - "Cargo.lock"
       - "rust-toolchain.toml"
       - ".cargo/**"
-      - "Cargo.lock"
       - "verify/forge-det/**"
       - ".github/workflows/determinism.yml"
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
 
+# A new push to a pull request cancels that pull request's runs still queued or running for its
+# older commits; pushes to main are never cancelled.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -38,23 +58,59 @@ env:
   FORGECAD_CACHE: "off"
 
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      native: ${{ steps.p.outputs.native }}
+      browsers: ${{ steps.p.outputs.browsers }}
+      runs: ${{ steps.p.outputs.runs }}
+      check: ${{ steps.p.outputs.check }}
+      expect: ${{ steps.p.outputs.expect }}
+    steps:
+      - id: p
+        shell: python
+        run: |
+          import json, os
+          ev = os.environ["GITHUB_EVENT_NAME"]
+          full = ev in ("schedule", "workflow_dispatch")
+          x86 = [
+              {"name": "linux-x86-64-v3", "os": "ubuntu-latest", "rustflags": ""},
+              {"name": "linux-x86-64-v2", "os": "ubuntu-latest", "rustflags": "-C target-cpu=x86-64-v2"},
+          ]
+          others = [{"name": "linux-arm64", "os": "ubuntu-24.04-arm", "rustflags": ""}]
+          if full:
+              others += [
+                  {"name": "macos-arm64", "os": "macos-14", "rustflags": ""},
+                  {"name": "windows-x86-64", "os": "windows-latest", "rustflags": ""},
+              ]
+          shards = 4
+          native = [dict(c, threads=t, shard=s) for c in x86 + others for t in ("1", "N") for s in range(shards)]
+          if ev == "push":
+              # main: one build per configuration, only to save its cache
+              native = [n for n in native if n["threads"] == "1" and n["shard"] == 0]
+          browsers = ["chromium"] + (["firefox", "webkit"] if full else [])
+          runs = 3 if full else 1
+          expect = [f"{c['name']}-t{t}-r{r}" for c in x86 + others for t in ("1", "N") for r in range(1, runs + 1)]
+          expect += ["wasm-node", "wasm-node-shim"] + [f"wasm-{b}" for b in browsers]
+          out = {
+              "native": json.dumps({"include": native}),
+              "browsers": json.dumps({"engine": browsers, "shard": list(range(shards))}),
+              "runs": str(runs),
+              "check": "false" if ev == "push" else "true",
+              "expect": " ".join(expect),
+          }
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              for k, v in out.items():
+                  f.write(f"{k}={v}\n")
+
   native:
+    needs: plan
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          # the reference: .cargo/config.toml's x86-64-v3; 3 separate processes per thread
-          # setting (~10 min a run on a 4-core runner, so the settings are separate jobs)
-          - { name: linux-x86-64-v3, key: t1, os: ubuntu-latest, rustflags: "", threads: "1", runs: 3 }
-          - { name: linux-x86-64-v3, key: tN, os: ubuntu-latest, rustflags: "", threads: "N", runs: 3 }
-          # no AVX/FMA unit: the same arithmetic must come out of the older instruction set
-          - { name: linux-x86-64-v2, key: t1, os: ubuntu-latest, rustflags: "-C target-cpu=x86-64-v2", threads: "1", runs: 3 }
-          - { name: linux-x86-64-v2, key: tN, os: ubuntu-latest, rustflags: "-C target-cpu=x86-64-v2", threads: "N", runs: 3 }
-          - { name: linux-arm64, key: all, os: ubuntu-24.04-arm, rustflags: "", threads: "1 N", runs: 1 }
-          - { name: macos-arm64, key: all, os: macos-14, rustflags: "", threads: "1 N", runs: 1 }
-          - { name: windows-x86-64, key: all, os: windows-latest, rustflags: "", threads: "1 N", runs: 1 }
+      matrix: ${{ fromJSON(needs.plan.outputs.native) }}
+    name: native ${{ matrix.name }} t${{ matrix.threads }} s${{ matrix.shard }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 120
+    timeout-minutes: 30
     env:
       RUSTFLAGS: ${{ matrix.rustflags }}
     steps:
@@ -64,29 +120,30 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: det-${{ matrix.name }}
-          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name != 'pull_request' }}
+          save-if: ${{ github.ref == 'refs/heads/main' && matrix.threads == '1' && matrix.shard == 0 }}
       - run: cargo build --release --locked -p forge-det
-      - name: corpus and op streams (1 thread, all threads; separate processes)
+      - name: shard ${{ matrix.shard }}/4 of the corpus and op streams, separate processes
+        if: ${{ needs.plan.outputs.check == 'true' }}
         shell: bash
         run: |
           mkdir -p det
-          bin=target/release/forge-det
-          for t in ${{ matrix.threads }}; do
-            for r in $(seq 1 ${{ matrix.runs }}); do
-              if [ "$t" = 1 ]; then export FORGECAD_THREADS=1; else unset FORGECAD_THREADS; fi
-              "$bin" --corpus --streams > "det/${{ matrix.name }}-t$t-r$r.txt"
-            done
+          if [ "${{ matrix.threads }}" = 1 ]; then export FORGECAD_THREADS=1; fi
+          for r in $(seq 1 ${{ needs.plan.outputs.runs }}); do
+            target/release/forge-det --corpus --streams --shard ${{ matrix.shard }}/4 \
+              > "det/${{ matrix.name }}-t${{ matrix.threads }}-r$r.s${{ matrix.shard }}"
           done
           wc -l det/*
       - uses: actions/upload-artifact@v4
+        if: ${{ needs.plan.outputs.check == 'true' }}
         with:
-          name: det-${{ matrix.name }}-${{ matrix.key }}
+          name: det-${{ matrix.name }}-t${{ matrix.threads }}-s${{ matrix.shard }}
           path: det/
           retention-days: 7
 
   wasm-build:
+    needs: plan
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: toolchain (rust-toolchain.toml, with wasm32-wasip1)
@@ -94,19 +151,25 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: det-wasm
-          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name != 'pull_request' }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # the browser build's profile (fat LTO, one codegen unit): the arithmetic a page runs
       - run: cargo build --profile wasm --locked --target wasm32-wasip1 -p forge-det
       - uses: actions/upload-artifact@v4
+        if: ${{ needs.plan.outputs.check == 'true' }}
         with:
           name: forge-det-wasm
           path: target/wasm32-wasip1/wasm/forge-det.wasm
           retention-days: 1
 
   wasm-node:
-    needs: wasm-build
+    needs: [plan, wasm-build]
+    if: ${{ needs.plan.outputs.check == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -118,25 +181,26 @@ jobs:
       - name: Node's WASI, and Node through the browsers' WASI shim (checks the shim)
         run: |
           mkdir -p det
-          node --no-turbo-fast-api-calls tools/wasi-run.mjs forge-det.wasm --root "$PWD" --corpus --streams > det/wasm-node.txt
+          s=${{ matrix.shard }}
+          node --no-turbo-fast-api-calls tools/wasi-run.mjs forge-det.wasm --root "$PWD" --corpus --streams --shard $s/4 \
+            > det/wasm-node.s$s
           node --no-turbo-fast-api-calls verify/forge-det/web/run.cjs --engine shim --wasm forge-det.wasm --root . \
-            --dirs examples,verify/forge-det/streams -- --corpus --streams > det/wasm-node-shim.txt
+            --dirs examples,verify/forge-det/streams -- --corpus --streams --shard $s/4 > det/wasm-node-shim.s$s
           wc -l det/*
       - uses: actions/upload-artifact@v4
         with:
-          name: det-wasm-node
+          name: det-wasm-node-s${{ matrix.shard }}
           path: det/
           retention-days: 7
 
   wasm-browser:
-    needs: wasm-build
+    needs: [plan, wasm-build]
+    if: ${{ needs.plan.outputs.check == 'true' }}
     strategy:
       fail-fast: false
-      matrix:
-        engine: [chromium, firefox, webkit]
-        shard: [0, 1]
+      matrix: ${{ fromJSON(needs.plan.outputs.browsers) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -154,12 +218,12 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: forge-det-wasm
-      - name: forge-det in ${{ matrix.engine }} (a dedicated Worker), shard ${{ matrix.shard }}/2
+      - name: forge-det in ${{ matrix.engine }} (a dedicated Worker), shard ${{ matrix.shard }}/4
         run: |
           mkdir -p det
           NODE_PATH="$HOME/pw/node_modules" node verify/forge-det/web/run.cjs --engine ${{ matrix.engine }} \
             --wasm forge-det.wasm --root . --dirs examples,verify/forge-det/streams \
-            -- --corpus --streams --shard ${{ matrix.shard }}/2 > det/wasm-${{ matrix.engine }}-s${{ matrix.shard }}.txt
+            -- --corpus --streams --shard ${{ matrix.shard }}/4 > det/wasm-${{ matrix.engine }}.s${{ matrix.shard }}
           wc -l det/*
       - uses: actions/upload-artifact@v4
         with:
@@ -167,11 +231,12 @@ jobs:
           path: det/
           retention-days: 7
 
+  # a plain pass/fail check: every expected platform present, every line equal to the reference
   compare:
-    needs: [native, wasm-node, wasm-browser]
-    if: ${{ !cancelled() }}
+    needs: [plan, native, wasm-node, wasm-browser]
+    if: ${{ !cancelled() && needs.plan.outputs.check == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -181,17 +246,15 @@ jobs:
           merge-multiple: true
       - name: every platform bit for bit against linux x86-64-v3 (1 thread, run 1)
         run: |
-          ls -l det
-          # the browser shards are halves of one run: put each engine's halves together
-          for e in chromium firefox webkit; do
-            if ls det/wasm-$e-s*.txt >/dev/null 2>&1; then cat det/wasm-$e-s*.txt > det/wasm-$e.txt; rm det/wasm-$e-s*.txt; fi
+          set -e
+          cd det
+          # a setting's four shards are one run: put them together (every shard must be there)
+          for f in ${{ needs.plan.outputs.expect }}; do
+            for s in 0 1 2 3; do
+              test -s "$f.s$s" || { echo "MISSING $f shard $s (a gate not run is not a pass)"; exit 1; }
+            done
+            cat "$f".s0 "$f".s1 "$f".s2 "$f".s3 > "$f.txt"
           done
-          ref=det/linux-x86-64-v3-t1-r1.txt
-          # every platform must be there: a missing one is a gate not run, not a pass
-          for f in linux-x86-64-v3-t1-r1 linux-x86-64-v3-tN-r1 linux-x86-64-v2-t1-r1 linux-x86-64-v2-tN-r1 \
-                   linux-arm64-t1-r1 linux-arm64-tN-r1 macos-arm64-t1-r1 macos-arm64-tN-r1 \
-                   windows-x86-64-t1-r1 windows-x86-64-tN-r1 wasm-node wasm-node-shim wasm-chromium wasm-firefox wasm-webkit; do
-            test -s "det/$f.txt" || { echo "MISSING det/$f.txt"; exit 1; }
-          done
-          others=$(ls det/*.txt | grep -v -x "$ref")
-          python3 verify/forge-det/compare.py "$ref" $others
+          ref=linux-x86-64-v3-t1-r1.txt
+          others=$(ls *.txt | grep -v -x "$ref")
+          python3 ../verify/forge-det/compare.py "$ref" $others
