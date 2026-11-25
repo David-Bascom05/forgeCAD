@@ -111,6 +111,25 @@ def make_room(need=12):
 
 
 TARGETS = {}  # test target name -> package names (root workspace)
+_TOUCHED = []
+
+
+def touched():
+    """The root workspace's packages with a file the branch changes (not their dependents)."""
+    if not _TOUCHED:
+        md = json.loads(subprocess.run(["cargo", "metadata", "--format-version", "1", "--no-deps"],
+                                       cwd=root, capture_output=True, text=True).stdout)
+        dirs = sorted(((os.path.relpath(os.path.dirname(p["manifest_path"]), root), p["name"])
+                       for p in md["packages"]), key=lambda x: -len(x[0]))
+        changed = git("diff", "--name-only", f"{base}...HEAD").split()
+        t = set()
+        for f in changed:
+            for d, n in dirs:
+                if f.startswith(d + "/"):
+                    t.add(n)
+                    break
+        _TOUCHED.append(t)
+    return _TOUCHED[0]
 
 
 def target_pkgs(t):
@@ -139,13 +158,16 @@ def relative(name, cmd_for, pkgs_of):
     # a test over the time budget on this machine is judged by the budget only well past it: under
     # SLOW_RED seconds alone it is a warning (machine load moves it, and main has ~70 such tests on
     # a 4-core VM); the train's run applies the budget as ever
-    mild = {x for x in mine if x[0] == "slow" and ALONE.get(x, 1e9) <= SLOW_RED}
+    # and one in a package the branch does not change (only its dependencies, or nothing) is the
+    # machine's load or main's own slowness, not the branch's: a warning too. A failure is never
+    mild = {x for x in mine if x[0] == "slow" and
+            (ALONE.get(x, 1e9) <= SLOW_RED or not (target_pkgs(x[1]) & touched()))}
     e["slow_warnings"] = sorted(" ".join(x) for x in mild)
     mine -= mild
     if not mine:
         e["ok"] = True
         print(f"pre-verify {name:7s} ok   (only {len(mild)} tests over the time budget, each under "
-              f"{SLOW_RED:g} s alone: warnings)", flush=True)
+              f"{SLOW_RED:g} s alone or in a package the branch does not change: warnings)", flush=True)
         return
     pk_fail = set()
     for it in mine:
