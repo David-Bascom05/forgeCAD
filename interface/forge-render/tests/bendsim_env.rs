@@ -1298,9 +1298,19 @@ fn a_staged_clip() {
     open(&mut h, &part);
     click(&mut h, "tab:Environments");
     click(&mut h, "tool:Bend Simulation");
+    // BENDSIM_CLIP_PRESS=none: the stand-in tooling (no stations); BENDSIM_CLIP_PUNCHES=a,b and
+    // BENDSIM_CLIP_SEQUENCE=name,name: the tools and the order asked (a collision case)
+    let list = |k: &str| {
+        std::env::var(k)
+            .ok()
+            .map(|v| v.split(',').map(str::to_string).collect::<Vec<_>>())
+    };
+    let staged = press != "none";
     let choice = Choice {
-        press: Some(press),
-        stations_auto: true,
+        press: staged.then_some(press),
+        stations_auto: staged,
+        punches: list("BENDSIM_CLIP_PUNCHES"),
+        sequence: list("BENDSIM_CLIP_SEQUENCE"),
         ..Choice::default()
     };
     h.gui
@@ -1316,9 +1326,8 @@ fn a_staged_clip() {
     {
         let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
         let sim = b.sim.as_ref().expect("simulated");
-        assert!(sim.plan.feasible, "{}", h.gui.shell.status);
-        let st = sim.stage.as_ref().expect("a staged program");
-        for (k, s) in st.stations.iter().enumerate() {
+        assert!(sim.plan.feasible || !staged, "{}", h.gui.shell.status);
+        for (k, s) in sim.stage.iter().flat_map(|st| st.stations.iter()).enumerate() {
             eprintln!(
                 "station {} {} {} y {} bends {:?}",
                 k + 1,
