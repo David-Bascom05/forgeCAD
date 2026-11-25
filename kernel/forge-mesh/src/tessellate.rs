@@ -295,6 +295,20 @@ fn uv_scale(s: &Surface) -> (f64, f64) {
 }
 
 /// Grid steps for points inside a face, where the surface curves in both directions.
+/// A cylinder's row spacing (`dv`, along its axis), no closer than the chord tolerance needs. Rows
+/// 2 r du apart keep its triangles shapely, but under a radius smaller than the chord the whole
+/// cylinder lies within the tolerance of a flat strip and rows buy nothing: a 0.025 mm fillet
+/// 663 mm long (ST-30-35Y #716088) was 50,000 rows, and a solid of such fillets ran its drawing's
+/// budget out. There rows are no closer than 2 c max_angle, what they are at r = c; at r >= c
+/// nothing changes. (`old-sampling`: as before.)
+fn row_floor(r: f64, dv: f64, q: &Quality) -> f64 {
+    if cfg!(feature = "old-sampling") || r >= q.chord {
+        dv
+    } else {
+        dv.max(2.0 * q.chord * q.max_angle)
+    }
+}
+
 fn interior_steps(s: &Surface, q: &Quality) -> Option<(f64, f64)> {
     match s {
         Surface::Plane(_) => None,
@@ -302,7 +316,10 @@ fn interior_steps(s: &Surface, q: &Quality) -> Option<(f64, f64)> {
         // (rows four columns apart let refinement near a boundary run on, splitting edges
         // into ones as long, and leave triangles across two columns: 3.5 chords deep;
         // research/mesh-bounds/)
-        Surface::Cylinder(c) => Some((arc_step(c.radius, q), 2.0 * c.radius * arc_step(c.radius, q))),
+        Surface::Cylinder(c) => {
+            let du = arc_step(c.radius, q);
+            Some((du, row_floor(c.radius, 2.0 * c.radius * du, q)))
+        }
         Surface::Cone(c) => {
             let r = c.radius.max(1.0);
             Some((arc_step(r, q), 2.0 * r * arc_step(r, q)))
