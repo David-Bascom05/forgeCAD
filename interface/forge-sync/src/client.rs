@@ -209,18 +209,6 @@ impl Client {
         match m {
             Down::Welcome { seq, text, you, snap } => {
                 self.you = you;
-                // this connection is placed: the pending ops go now, in order (a retry of one
-                // the server committed is answered with its Ack again or AlreadyCommitted)
-                if !self.welcomed {
-                    self.welcomed = true;
-                    for p in &self.pending {
-                        self.outbox.push(Up::Op {
-                            base: p.base,
-                            id: p.id,
-                            op: p.op.clone(),
-                        });
-                    }
-                }
                 // a catch-up: the entries follow
                 self.joining = false;
                 if snap {
@@ -229,8 +217,27 @@ impl Client {
                     self.confirmed = text;
                     self.seq = seq;
                     self.recent.clear();
+                    // the pending ops now stand on this text (they replay on it here): sent from
+                    // it, they cannot fall behind the server's latest snapshot
+                    for p in &mut self.pending {
+                        p.base = seq;
+                    }
                     self.replay();
                     ev.push(Event::Changed);
+                }
+                // every Welcome (a join, a reconnect, a Resync's snapshot) sends every pending op
+                // again, in order: the server answers one it committed with its Ack again or
+                // AlreadyCommitted (by client and op id), so none is lost and none is held
+                // forever (DESIGN.md §4.2)
+                {
+                    self.welcomed = true;
+                    for p in &self.pending {
+                        self.outbox.push(Up::Op {
+                            base: p.base,
+                            id: p.id,
+                            op: p.op.clone(),
+                        });
+                    }
                 }
             }
             Down::Ack { id, seq, op, inv, th } => {

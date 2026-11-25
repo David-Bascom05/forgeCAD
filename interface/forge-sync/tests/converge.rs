@@ -563,3 +563,44 @@ fn retries_are_answered_by_marks_and_refused_ids() {
         "{r:?}"
     );
 }
+
+/// The clients review, M2: a Resync's snapshot Welcome resends every pending op (from the
+/// snapshot's seq, so it cannot fall behind a compaction), and the server's answer for one it
+/// had committed (its Ack again, at a seq the snapshot holds) clears it: never pending forever.
+#[test]
+fn a_snapshot_welcome_resends_pending_and_a_committed_one_clears() {
+    let mut c = Client::new("part.fg", "c0", "t");
+    let welcome = |seq| Down::Welcome {
+        seq,
+        text: DOC.into(),
+        you: "ada".into(),
+        snap: true,
+    };
+    c.receive(welcome(0));
+    c.edit(set_w(41.0)).unwrap();
+    c.outbox.clear();
+    // diverged: a Resync; the snapshot (seq 7) already holds the op, committed at seq 5
+    let mut holds = DOC.replace("shared w = 40", "shared w = 41");
+    holds.push('\n');
+    c.receive(Down::Welcome {
+        seq: 7,
+        text: holds,
+        you: "ada".into(),
+        snap: true,
+    });
+    assert!(
+        matches!(c.outbox.as_slice(), [Up::Op { id: 1, base: 7, .. }]),
+        "{:?}",
+        c.outbox
+    );
+    assert_eq!(c.pending().len(), 1);
+    c.receive(Down::Ack {
+        id: 1,
+        seq: 5,
+        op: set_w(41.0),
+        inv: None,
+        th: 0,
+    });
+    assert!(c.pending().is_empty(), "the committed op is no longer pending");
+    assert_eq!(c.text(), c.confirmed());
+}
