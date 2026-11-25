@@ -1,18 +1,23 @@
 # HOSTED-BUILD handoff
 
 The state of the hosted build (research/hosted/DESIGN.md, on design/hosted), kept current by
-HOSTED-BUILD. Updated 2026-11-25 (evening).
+HOSTED-BUILD. Updated 2026-11-25 (night).
 
 ## Branches
 
+All four hosted branches have origin/main (Train 10, 247a2694) merged in. TRAIN-CONDUCTOR
+accepted server-hardening bc12d3e0, client-native 84b3ea49 and client-web 2fd9bea8 for T12;
+the heads below are those plus the main merge (and, on client-web, the --sync hardening).
+
 | Branch | What | State |
 |---|---|---|
-| `hosted/server` | forge-sync (sans-I/O protocol), forge-ws (RFC 6455, no new crates), forge-server (actors, hub, file log, git versions), forge-remote (native client, remotes.toml trust) | security OK for loopback/dev only. `main` merged in. Pre-verify (pv 13d78f06) rerun pending after the e2e latency fix (06e1f281) |
-| `hosted/server-hardening` | N1–N9, HOSTED-DESIGN's N1–N9 review (H1–H3, M1–M3, L1–L5), the clients review's protocol parts (M2, H2a, H2b) | awaiting HOSTED-DESIGN's re-review, then pre-verify |
-| `hosted/client-native` | the desktop app as a client (forge-render: `sync_link`, `fg::Session`) | the clients review's H1–H3 and M1 fixed locally, being tested |
-| `hosted/client-web` | the browser app as a client (web-sys WebSocket, `?sync=`) | contains client-native. `hosted/server` merged in locally. Needs the client fixes merged in, plus the web lows |
-| `hosted/lean-rebase` | the Lean model of rebase | pre-verify pending (needs `main` merged in) |
-| `ci/determinism` | cross-platform bit identity: forge-det + compare.py | CAM documents report-only (e14ece17, David's ruling); `main` merged in (9204a3c2); pre-verify running |
+| `hosted/server` | forge-sync (sans-I/O protocol), forge-ws (RFC 6455, no new crates), forge-server (actors, hub, file log, git versions), forge-remote (native client, remotes.toml trust) | superseded by server-hardening, which contains it |
+| `hosted/server-hardening` | N1–N9, the reviews' fixes, load/soak/fault/disk-full tests | 576d8e34. Pre-verify GREEN at bc12d3e0; later commits are tests, the handoff, and the main merge |
+| `hosted/client-native` | the desktop app as a client (forge-render: `sync_link`, `fg::Session`) | f8c9038c. UX-LEAD OK. Main merge conflicts in forge-render (both sides' fields kept) |
+| `hosted/client-web` | the browser app as a client (web-sys WebSocket, `?sync=`, `forgecad web --sync`) | 5aa6912b. Security review SAFE; its two hardening fixes are in (afc58f54: wss:// unless loopback, strict origin parse). Pre-verify pending |
+| `hosted/release-sketches` | forge-lang's `release_sketches()` / `ReleaseOnDrop`: the kept-sketch leak's root fix | a7668e22, GREEN-EXCEPT-RENDER, gate ok |
+| `hosted/lean-rebase` | the Lean model of rebase | LANG-PROOFS' (now inactive) |
+| `ci/determinism` | cross-platform bit identity: forge-det + compare.py; folded-vs-runtime `--consts`; the ipow native and wasm runners | d6083ef8. f6f92445 GREEN |
 
 ## Protocol (PROTOCOL = 2)
 
@@ -78,6 +83,8 @@ tick).
 2. Clients review mediums: M3 (report hashes only for builds of exactly the seq's text), M4
    (hosted undo before an Ack), M5 (apply_all as one atomic group), M6 (done: a re-check right
    before the rename). Web lows (a stopped link stops; the token is scoped to its address).
-3. Load, soak and fault injection: done (above). Still to do: a multi-hour soak, a disk-full
-   fault, and the cross-platform bit-identity CI over hosted's own hashes.
+3. Load, soak and fault injection: done (above), and the disk-full test (tests/diskfull.rs:
+   refused as not saved, the log stays whole, a close while full loses nothing acked). The
+   ipow wasm runner is in ci/determinism. A 50-minute soak (40 documents, churn) is the
+   check on the ~4 KB/op residual: the in-memory log, capped at 1 MiB per document.
 4. Not in scope: users, orgs and auth (HOSTED-DESIGN is writing that plan).
