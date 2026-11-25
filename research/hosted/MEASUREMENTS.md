@@ -78,13 +78,17 @@ app rebuilds) and then **cold-in-process** (an empty `Cache`, but the process's 
 
 - 540 of 642 warm edits (84%) rebuilt within one 60 Hz frame (16 ms); 593 (92%) within 100 ms.
 - warm-vs-cold bits: every warm rebuild's body hash equals the cold rebuild's of the same text
-  (no `WARM_COLD_DIFFER` line). Determinism across the cache holds on this corpus.
-- **Anomaly (a performance bug on the local path; not hosting-specific):** in some assemblies a
-  warm rebuild is far slower than a fresh one. `examples/rack18u/hw/tests/hinge_pin.fg`,
-  SetParam `size_m6` 6 → 6.3: warm 5.9–6.0 s, fresh 10 ms, the same 7 `ExpectFailed` errors
-  both ways; `examples/rack18u/asm/post_kit.fg`, SetParam `m6` 6 → 6.3: warm 4.3 s, fresh 30 ms.
-  Reproduced 3 times (`DET_WHY=1 det`). Both change a thread size to a non-standard one.
-  Reported to the coordinator; root cause UNKNOWN (profile `asm.rs`'s warm path).
+  (no `WARM_COLD_DIFFER` line). Determinism across the cache holds on this corpus. Note the
+  "cold" rebuild here ran in the same process (memos warm): `cold2_ms` is not a fresh-process time.
+- **Slow edits in assemblies (a local performance issue, not hosting-specific; first reported
+  here as warm-vs-cold, which was WRONG).** `examples/rack18u/hw/tests/hinge_pin.fg`, SetParam
+  `size_m6` 6 → 6.3: 5.96 s warm and 5.96 s cold in a fresh process (`proto/src/bin/warmrepro.rs`),
+  same bits; `post_kit.fg`, `m6` 6 → 6.3: 9.26 s. The earlier "fresh 10 ms" ran in the same
+  process after the warm run, so forge-lang's process-wide memo already held the result. All the
+  time is the assembly's overlap check: the exact boolean intersection of a modelled M6 thread
+  (forge-geom `Screw`) with the part it now interferes with; callgrind: `Screw::nearest_turn`
+  52.6% self, 40.9 M calls, under `intcurve::trace_marched` (78.5%). Reported to the coordinator
+  with options; owner to be assigned.
 - Thermoform documents rebuild their wall simulation on every edit (cover.fg 1.8–2.1 s): heavy
   results, compute-worker candidates.
 

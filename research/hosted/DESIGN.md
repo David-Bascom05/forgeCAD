@@ -311,7 +311,7 @@ without a machine, keep 4 optional, ask Anthropic before considering 5.
 |---|---|---|---|
 | cross-engine/CPU float divergence (Firefox, Safari, ARM) | low by spec; **untested** | collaborators see different geometry | build-hash reports + server fallback; CI matrix Firefox/WebKit/ARM in phase 1 |
 | threaded-wasm allocator race | known to exist (details UNKNOWN) | divergence or crash | unshared-worker build by default (§8) |
-| warm-cache assembly pathology (4–6 s warm vs 10–30 ms fresh, MEASUREMENTS §b) | reproduced 3× on 2 files | B1/B2 blown for those edits, locally too | report to the owner (done); hosted adds nothing |
+| slow assembly edits when modelled threads interfere (5.96 s / 9.26 s in the overlap check's exact screw intersection; MEASUREMENTS §b) | reproduced on 2 files, warm = cold | B1/B2 blown for those edits, locally too | reported with profile; owner to be assigned; hosted adds nothing |
 | validation p99 on large docs (24 ms) | measured | B2 p99 | fast path §4.4; profile `apply` (11.5 ms p99 for a text splice is high) |
 | span ops (LiftLiteral, Respell) after rebase | untested | spurious refusals | refuse unless span text unchanged; measure in phase 1 |
 | Postgres failover time | UNKNOWN | writes stall during failover | measure in phase 2 |
