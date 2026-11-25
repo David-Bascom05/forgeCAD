@@ -2537,6 +2537,14 @@ impl Procedural for VarBlend {
     fn project(&self, p: Point3) -> Point2 {
         self.nearest(p)
     }
+    /// A spring of this very blend is its v = k line at u = s (Track::on_surface): in closed
+    /// form, where projecting its samples would solve for each ball. Another blend's (a copy's,
+    /// moved) is projected as before.
+    fn curve_uv(&self, c: &ProcCurve) -> Option<(Point2, Vec2)> {
+        let t = c.as_any()?.downcast_ref::<Track>()?;
+        (t.k < 2 && std::ptr::eq(Arc::as_ptr(&t.blend), self))
+            .then(|| (Point2::new(0.0, t.k as f64), Vec2::new(1.0, 0.0)))
+    }
     fn bbox(&self, uv: Box2) -> Box3 {
         let s0 = uv.u.lo.clamp(self.lo, self.hi);
         let s1 = uv.u.hi.clamp(s0, self.hi);
@@ -2638,6 +2646,9 @@ impl Track {
 impl ProceduralCurve for Track {
     fn exact_d1(&self) -> bool {
         true
+    }
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
     }
     /// A spring is the blend's v = k line, s its u.
     fn on_surface(&self, t: f64) -> Option<(Surface, Point2, Vec2)> {
@@ -3515,6 +3526,37 @@ mod tests {
                     c.name
                 );
             }
+        }
+    }
+
+    /// A spring's closed-form parameters (curve_uv) are where projecting its points puts them,
+    /// and lie on it; the centre track and a moved copy's springs have none (projected instead).
+    #[test]
+    fn a_springs_parameters_are_in_closed_form_where_projection_finds_them() {
+        let mut r = Rng::new(12);
+        for c in cases() {
+            let s = c.blend.surface();
+            let Surface::Procedural(pr) = &s else { panic!("{} is procedural", c.name) };
+            for k in 0..2 {
+                let crate::Curve::Procedural(pc) = c.blend.track(k) else { panic!("a track") };
+                let (base, dir) = pr.curve_uv(&pc).expect("this blend's spring");
+                let dom = pc.domain().interval();
+                for _ in 0..20 {
+                    let t = r.range(dom.lo, dom.hi);
+                    let uv = base + dir * t;
+                    let p = pc.deriv(t).p;
+                    assert!(pr.point(uv).distance(p) < 1e-9, "{} spring {k} at {t}", c.name);
+                    let q = pr.project(p);
+                    assert!(pr.point(q).distance(p) < 1e-9, "{} spring {k} projects", c.name);
+                    assert!((q.y - uv.y).abs() < 1e-6 && (q.x - uv.x).abs() < 1e-6, "{} {q:?} {uv:?}", c.name);
+                }
+            }
+            let crate::Curve::Procedural(centre) = c.blend.track(2) else { panic!("a track") };
+            assert!(pr.curve_uv(&centre).is_none(), "{}: the centre is off the surface", c.name);
+            let f = crate::testing::rand_frame(&mut r);
+            let crate::Curve::Procedural(moved) = c.blend.track(0) else { panic!("a track") };
+            let moved = moved.0.transformed(&f);
+            assert!(pr.curve_uv(&moved).is_none(), "{}: a moved copy's spring is another blend's", c.name);
         }
     }
 
