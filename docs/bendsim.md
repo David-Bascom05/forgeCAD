@@ -130,6 +130,7 @@ z up from the die's top.
 | `handling` | (warning) least distance, the part carried through the operator's move into the step, to every body of the press, vs `clearance` |
 | `tool_rating` | the sheet's thickness vs a tool's published `max_thickness` (only where the maker gives one) |
 | `no_flattening` | a hem's pre-bend passes, but no punch and die on the press flatten it (count of passing flattening setups vs 1) |
+| `offset` | an offset stroke: the part's offset (how far the stroke takes the far wall down) vs the inserts' Z, a hundredth either way |
 
 `handling`: every step after the first. The move is the planned one: lift off the die, pull out
 towards the operator until the part's sphere is in front of every body, turn there, push in, set
@@ -216,3 +217,18 @@ Tools carry a `role` in a tooling file: `bend` (the default), `flatten` (a flat 
 flat die), `hem` (a combination die: a V for the pre-bend beside a pad that flattens; not yet
 simulated), `offset` with its `z`; and an optional `max_thickness`. The published figures read so
 far are in research/bendsim/tools/hems-data.md.
+
+## Offsets
+
+Two bends next to each other, the second off the first's flange (the web, nothing else off it), the
+same turn the other way on a parallel line, can be made in one stroke on an offset pair: a punch
+and a die whose `role` is `offset` with one `z`. The planner tries such a pair first where one is
+mounted; the step's `stroke` is `offset` and it makes both bends. The outer walls stay level
+through the stroke (the base on the die's high face, the far wall pushed down by the punch's
+step), both bends turning together. The offset is checked against the inserts' Z (`offset`), and
+the stroke, the open height, the segments, the ratings and every tool through it; the force is not
+checked (no maker publishes it) and the part on itself is not yet checked through the two bends.
+Where no pair passes, the two bends are bent one at a time, as any others. The catalogue holds
+WILA's INZU-002 inserts (Z3 to Z8) in its HU-001 top holder and HU-005 or HU-006 bottom holder
+(WILA catalogue pp.94-95); a maker's insert ratings (`max_thickness`) refuse a sheet thicker than
+an insert of that Z takes.

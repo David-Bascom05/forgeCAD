@@ -498,10 +498,11 @@ fn punch_rec(file: &str, t: &Table) -> Result<PunchRec, CatalogError> {
     r.check_cites(&prov)?;
     let mut unknown = Vec::new();
     // a flattening punch has no tip: its face is flat
-    let (tip_radius, tip_angle) = if role == crate::tooling::Role::Flatten {
-        (tip_radius.or(Some(0.0)), tip_angle.or(Some(90.0)))
-    } else {
-        (tip_radius, tip_angle)
+    let (tip_radius, tip_angle) = match role {
+        crate::tooling::Role::Flatten => (tip_radius.or(Some(0.0)), tip_angle.or(Some(90.0))),
+        // an offset insert: no tip, its step's angle published
+        crate::tooling::Role::Offset { .. } => (tip_radius.or(Some(0.0)), tip_angle),
+        _ => (tip_radius, tip_angle),
     };
     for (k, v) in [
         ("height", height),
@@ -623,11 +624,11 @@ fn die_rec(file: &str, t: &Table) -> Result<DieRec, CatalogError> {
     r.check_cites(&prov)?;
     let mut unknown = Vec::new();
     // a flattening die has no V: its top is flat
-    let flat = role == crate::tooling::Role::Flatten;
-    let (v, angle, rs) = if flat {
-        (v.or(Some(0.0)), angle.or(Some(90.0)), rs.or(Some(0.0)))
-    } else {
-        (v, angle, rs)
+    let (v, angle, rs) = match role {
+        crate::tooling::Role::Flatten => (v.or(Some(0.0)), angle.or(Some(90.0)), rs.or(Some(0.0))),
+        // an offset insert: its step's angle is its own, published; no V
+        crate::tooling::Role::Offset { .. } => (v.or(Some(0.0)), angle, rs.or(Some(0.0))),
+        _ => (v, angle, rs),
     };
     for (k, x) in [
         ("v", v),
@@ -1090,10 +1091,10 @@ mod tests {
             assert!(p.prov.real, "{}", p.id);
             if let Ok(x) = &p.punch {
                 // a flattening punch has a face, no tip: its height is what places it
-                let fields: &[&str] = if x.role == crate::tooling::Role::Flatten {
-                    &["height", "role"]
-                } else {
-                    &["height", "tip_radius", "tip_angle"]
+                let fields: &[&str] = match x.role {
+                    crate::tooling::Role::Flatten => &["height", "role"],
+                    crate::tooling::Role::Offset { .. } => &["height", "role", "tip_angle", "z"],
+                    _ => &["height", "tip_radius", "tip_angle"],
                 };
                 for f in fields.iter().copied() {
                     assert_eq!(p.prov.status(f), Some(Status::Published), "{} {f}", p.id);
@@ -1104,10 +1105,10 @@ mod tests {
         for d in &c.dies {
             if let Ok(x) = &d.die {
                 // a flattening die is a block, no V
-                let fields: &[&str] = if x.role == crate::tooling::Role::Flatten {
-                    &["height", "role"]
-                } else {
-                    &["v", "angle", "shoulder_radius", "height"]
+                let fields: &[&str] = match x.role {
+                    crate::tooling::Role::Flatten => &["height", "role"],
+                    crate::tooling::Role::Offset { .. } => &["height", "role", "angle", "z"],
+                    _ => &["v", "angle", "shoulder_radius", "height"],
                 };
                 for f in fields.iter().copied() {
                     assert_eq!(d.prov.status(f), Some(Status::Published), "{} {f}", d.id);

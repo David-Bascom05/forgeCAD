@@ -5383,3 +5383,2335 @@ status = "published"
 source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.87"
 taken = "2026-11-25"
 value = "OZU-384/1 515 mm"
+
+[[punch]]
+id = "wila/HU-001+INZU-002-Z3"
+maker = "WILA"
+name = "Offset top holder HU-001 with INZU-002 Z3 insert"
+real = true
+clamp = "wila-ns"
+kind = "straight"
+role = "offset"
+z = 3
+height = 98
+tip_angle = 90
+width = 50
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[punch.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-001 Top Holder, New Standard adaption and Safety-Pins, bottom suitable for inserts type INZU; INZU-002 set of inserts, top and bottom"
+
+[[punch.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[punch.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 3"
+
+[[punch.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-001: Working height 98 mm incl. inserts"
+
+[[punch.cite]]
+path = "tip_angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[punch.cite]]
+path = "width"
+status = "estimate"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "the adaption drawn 50 wide; the insert 23"
+basis = "the widest width drawn for the holder, all the way down (the holder's body width is not dimensioned): errs large"
+
+[[punch.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[punch.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-001/1 515 mm; inserts 515 mm"
+
+[[die]]
+id = "wila/HU-005+INZU-002-Z3"
+maker = "WILA"
+name = "Offset bottom holder HU-005 with INZU-002 Z3 insert"
+real = true
+clamp = "wila-ns"
+role = "offset"
+z = 3
+height = 74
+angle = 90
+width = 60
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[die.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-005 Bottom Holder, OZU adaption 13x20 mm, top suitable for inserts type INZU; used with HU-001"
+
+[[die.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[die.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 3"
+
+[[die.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-005: Working height 74 mm incl. inserts"
+
+[[die.cite]]
+path = "angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[die.cite]]
+path = "width"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-005 drawn 60 wide"
+
+[[die.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[die.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-005/1 515 mm; inserts 515 mm"
+
+[[punch]]
+id = "wila/HU-001+INZU-002-Z3.5"
+maker = "WILA"
+name = "Offset top holder HU-001 with INZU-002 Z3.5 insert"
+real = true
+clamp = "wila-ns"
+kind = "straight"
+role = "offset"
+z = 3.5
+height = 98
+tip_angle = 90
+width = 50
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[punch.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-001 Top Holder, New Standard adaption and Safety-Pins, bottom suitable for inserts type INZU; INZU-002 set of inserts, top and bottom"
+
+[[punch.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[punch.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 3,5"
+
+[[punch.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-001: Working height 98 mm incl. inserts"
+
+[[punch.cite]]
+path = "tip_angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[punch.cite]]
+path = "width"
+status = "estimate"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "the adaption drawn 50 wide; the insert 23"
+basis = "the widest width drawn for the holder, all the way down (the holder's body width is not dimensioned): errs large"
+
+[[punch.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[punch.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-001/1 515 mm; inserts 515 mm"
+
+[[die]]
+id = "wila/HU-005+INZU-002-Z3.5"
+maker = "WILA"
+name = "Offset bottom holder HU-005 with INZU-002 Z3.5 insert"
+real = true
+clamp = "wila-ns"
+role = "offset"
+z = 3.5
+height = 74
+angle = 90
+width = 60
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[die.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-005 Bottom Holder, OZU adaption 13x20 mm, top suitable for inserts type INZU; used with HU-001"
+
+[[die.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[die.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 3,5"
+
+[[die.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-005: Working height 74 mm incl. inserts"
+
+[[die.cite]]
+path = "angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[die.cite]]
+path = "width"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-005 drawn 60 wide"
+
+[[die.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[die.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-005/1 515 mm; inserts 515 mm"
+
+[[punch]]
+id = "wila/HU-001+INZU-002-Z4"
+maker = "WILA"
+name = "Offset top holder HU-001 with INZU-002 Z4 insert"
+real = true
+clamp = "wila-ns"
+kind = "straight"
+role = "offset"
+z = 4
+height = 98
+tip_angle = 90
+width = 50
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[punch.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-001 Top Holder, New Standard adaption and Safety-Pins, bottom suitable for inserts type INZU; INZU-002 set of inserts, top and bottom"
+
+[[punch.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[punch.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 4"
+
+[[punch.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-001: Working height 98 mm incl. inserts"
+
+[[punch.cite]]
+path = "tip_angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[punch.cite]]
+path = "width"
+status = "estimate"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "the adaption drawn 50 wide; the insert 23"
+basis = "the widest width drawn for the holder, all the way down (the holder's body width is not dimensioned): errs large"
+
+[[punch.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[punch.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-001/1 515 mm; inserts 515 mm"
+
+[[die]]
+id = "wila/HU-005+INZU-002-Z4"
+maker = "WILA"
+name = "Offset bottom holder HU-005 with INZU-002 Z4 insert"
+real = true
+clamp = "wila-ns"
+role = "offset"
+z = 4
+height = 74
+angle = 90
+width = 60
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[die.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-005 Bottom Holder, OZU adaption 13x20 mm, top suitable for inserts type INZU; used with HU-001"
+
+[[die.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[die.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 4"
+
+[[die.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-005: Working height 74 mm incl. inserts"
+
+[[die.cite]]
+path = "angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[die.cite]]
+path = "width"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-005 drawn 60 wide"
+
+[[die.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[die.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-005/1 515 mm; inserts 515 mm"
+
+[[punch]]
+id = "wila/HU-001+INZU-002-Z4.5"
+maker = "WILA"
+name = "Offset top holder HU-001 with INZU-002 Z4.5 insert"
+real = true
+clamp = "wila-ns"
+kind = "straight"
+role = "offset"
+z = 4.5
+height = 98
+tip_angle = 90
+width = 50
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[punch.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-001 Top Holder, New Standard adaption and Safety-Pins, bottom suitable for inserts type INZU; INZU-002 set of inserts, top and bottom"
+
+[[punch.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[punch.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 4,5"
+
+[[punch.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-001: Working height 98 mm incl. inserts"
+
+[[punch.cite]]
+path = "tip_angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[punch.cite]]
+path = "width"
+status = "estimate"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "the adaption drawn 50 wide; the insert 23"
+basis = "the widest width drawn for the holder, all the way down (the holder's body width is not dimensioned): errs large"
+
+[[punch.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[punch.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-001/1 515 mm; inserts 515 mm"
+
+[[die]]
+id = "wila/HU-005+INZU-002-Z4.5"
+maker = "WILA"
+name = "Offset bottom holder HU-005 with INZU-002 Z4.5 insert"
+real = true
+clamp = "wila-ns"
+role = "offset"
+z = 4.5
+height = 74
+angle = 90
+width = 60
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[die.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-005 Bottom Holder, OZU adaption 13x20 mm, top suitable for inserts type INZU; used with HU-001"
+
+[[die.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[die.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 4,5"
+
+[[die.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-005: Working height 74 mm incl. inserts"
+
+[[die.cite]]
+path = "angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[die.cite]]
+path = "width"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-005 drawn 60 wide"
+
+[[die.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[die.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-005/1 515 mm; inserts 515 mm"
+
+[[punch]]
+id = "wila/HU-001+INZU-002-Z5"
+maker = "WILA"
+name = "Offset top holder HU-001 with INZU-002 Z5 insert"
+real = true
+clamp = "wila-ns"
+kind = "straight"
+role = "offset"
+z = 5
+height = 98
+tip_angle = 90
+width = 50
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[punch.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-001 Top Holder, New Standard adaption and Safety-Pins, bottom suitable for inserts type INZU; INZU-002 set of inserts, top and bottom"
+
+[[punch.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[punch.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 5"
+
+[[punch.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-001: Working height 98 mm incl. inserts"
+
+[[punch.cite]]
+path = "tip_angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[punch.cite]]
+path = "width"
+status = "estimate"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "the adaption drawn 50 wide; the insert 23"
+basis = "the widest width drawn for the holder, all the way down (the holder's body width is not dimensioned): errs large"
+
+[[punch.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[punch.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-001/1 515 mm; inserts 515 mm"
+
+[[die]]
+id = "wila/HU-005+INZU-002-Z5"
+maker = "WILA"
+name = "Offset bottom holder HU-005 with INZU-002 Z5 insert"
+real = true
+clamp = "wila-ns"
+role = "offset"
+z = 5
+height = 74
+angle = 90
+width = 60
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[die.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-005 Bottom Holder, OZU adaption 13x20 mm, top suitable for inserts type INZU; used with HU-001"
+
+[[die.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[die.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 5"
+
+[[die.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-005: Working height 74 mm incl. inserts"
+
+[[die.cite]]
+path = "angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[die.cite]]
+path = "width"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-005 drawn 60 wide"
+
+[[die.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[die.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-005/1 515 mm; inserts 515 mm"
+
+[[punch]]
+id = "wila/HU-001+INZU-002-Z5.5"
+maker = "WILA"
+name = "Offset top holder HU-001 with INZU-002 Z5.5 insert"
+real = true
+clamp = "wila-ns"
+kind = "straight"
+role = "offset"
+z = 5.5
+height = 98
+tip_angle = 90
+width = 50
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[punch.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-001 Top Holder, New Standard adaption and Safety-Pins, bottom suitable for inserts type INZU; INZU-002 set of inserts, top and bottom"
+
+[[punch.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[punch.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 5,5"
+
+[[punch.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-001: Working height 98 mm incl. inserts"
+
+[[punch.cite]]
+path = "tip_angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[punch.cite]]
+path = "width"
+status = "estimate"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "the adaption drawn 50 wide; the insert 23"
+basis = "the widest width drawn for the holder, all the way down (the holder's body width is not dimensioned): errs large"
+
+[[punch.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[punch.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-001/1 515 mm; inserts 515 mm"
+
+[[die]]
+id = "wila/HU-005+INZU-002-Z5.5"
+maker = "WILA"
+name = "Offset bottom holder HU-005 with INZU-002 Z5.5 insert"
+real = true
+clamp = "wila-ns"
+role = "offset"
+z = 5.5
+height = 74
+angle = 90
+width = 60
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[die.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-005 Bottom Holder, OZU adaption 13x20 mm, top suitable for inserts type INZU; used with HU-001"
+
+[[die.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[die.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 5,5"
+
+[[die.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-005: Working height 74 mm incl. inserts"
+
+[[die.cite]]
+path = "angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[die.cite]]
+path = "width"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-005 drawn 60 wide"
+
+[[die.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[die.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-005/1 515 mm; inserts 515 mm"
+
+[[punch]]
+id = "wila/HU-001+INZU-002-Z6"
+maker = "WILA"
+name = "Offset top holder HU-001 with INZU-002 Z6 insert"
+real = true
+clamp = "wila-ns"
+kind = "straight"
+role = "offset"
+z = 6
+height = 98
+tip_angle = 90
+width = 50
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[punch.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-001 Top Holder, New Standard adaption and Safety-Pins, bottom suitable for inserts type INZU; INZU-002 set of inserts, top and bottom"
+
+[[punch.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[punch.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 6"
+
+[[punch.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-001: Working height 98 mm incl. inserts"
+
+[[punch.cite]]
+path = "tip_angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[punch.cite]]
+path = "width"
+status = "estimate"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "the adaption drawn 50 wide; the insert 23"
+basis = "the widest width drawn for the holder, all the way down (the holder's body width is not dimensioned): errs large"
+
+[[punch.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[punch.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-001/1 515 mm; inserts 515 mm"
+
+[[die]]
+id = "wila/HU-005+INZU-002-Z6"
+maker = "WILA"
+name = "Offset bottom holder HU-005 with INZU-002 Z6 insert"
+real = true
+clamp = "wila-ns"
+role = "offset"
+z = 6
+height = 74
+angle = 90
+width = 60
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[die.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-005 Bottom Holder, OZU adaption 13x20 mm, top suitable for inserts type INZU; used with HU-001"
+
+[[die.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[die.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 6"
+
+[[die.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-005: Working height 74 mm incl. inserts"
+
+[[die.cite]]
+path = "angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[die.cite]]
+path = "width"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-005 drawn 60 wide"
+
+[[die.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[die.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-005/1 515 mm; inserts 515 mm"
+
+[[punch]]
+id = "wila/HU-001+INZU-002-Z6.5"
+maker = "WILA"
+name = "Offset top holder HU-001 with INZU-002 Z6.5 insert"
+real = true
+clamp = "wila-ns"
+kind = "straight"
+role = "offset"
+z = 6.5
+height = 98
+tip_angle = 90
+width = 50
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[punch.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-001 Top Holder, New Standard adaption and Safety-Pins, bottom suitable for inserts type INZU; INZU-002 set of inserts, top and bottom"
+
+[[punch.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[punch.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 6,5"
+
+[[punch.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-001: Working height 98 mm incl. inserts"
+
+[[punch.cite]]
+path = "tip_angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[punch.cite]]
+path = "width"
+status = "estimate"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "the adaption drawn 50 wide; the insert 23"
+basis = "the widest width drawn for the holder, all the way down (the holder's body width is not dimensioned): errs large"
+
+[[punch.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[punch.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-001/1 515 mm; inserts 515 mm"
+
+[[die]]
+id = "wila/HU-005+INZU-002-Z6.5"
+maker = "WILA"
+name = "Offset bottom holder HU-005 with INZU-002 Z6.5 insert"
+real = true
+clamp = "wila-ns"
+role = "offset"
+z = 6.5
+height = 74
+angle = 90
+width = 60
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[die.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-005 Bottom Holder, OZU adaption 13x20 mm, top suitable for inserts type INZU; used with HU-001"
+
+[[die.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[die.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 6,5"
+
+[[die.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-005: Working height 74 mm incl. inserts"
+
+[[die.cite]]
+path = "angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[die.cite]]
+path = "width"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-005 drawn 60 wide"
+
+[[die.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[die.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-005/1 515 mm; inserts 515 mm"
+
+[[punch]]
+id = "wila/HU-001+INZU-002-Z7"
+maker = "WILA"
+name = "Offset top holder HU-001 with INZU-002 Z7 insert"
+real = true
+clamp = "wila-ns"
+kind = "straight"
+role = "offset"
+z = 7
+height = 98
+tip_angle = 90
+width = 50
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[punch.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-001 Top Holder, New Standard adaption and Safety-Pins, bottom suitable for inserts type INZU; INZU-002 set of inserts, top and bottom"
+
+[[punch.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[punch.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 7"
+
+[[punch.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-001: Working height 98 mm incl. inserts"
+
+[[punch.cite]]
+path = "tip_angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[punch.cite]]
+path = "width"
+status = "estimate"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "the adaption drawn 50 wide; the insert 23"
+basis = "the widest width drawn for the holder, all the way down (the holder's body width is not dimensioned): errs large"
+
+[[punch.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[punch.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-001/1 515 mm; inserts 515 mm"
+
+[[die]]
+id = "wila/HU-005+INZU-002-Z7"
+maker = "WILA"
+name = "Offset bottom holder HU-005 with INZU-002 Z7 insert"
+real = true
+clamp = "wila-ns"
+role = "offset"
+z = 7
+height = 74
+angle = 90
+width = 60
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[die.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-005 Bottom Holder, OZU adaption 13x20 mm, top suitable for inserts type INZU; used with HU-001"
+
+[[die.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[die.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 7"
+
+[[die.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-005: Working height 74 mm incl. inserts"
+
+[[die.cite]]
+path = "angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[die.cite]]
+path = "width"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-005 drawn 60 wide"
+
+[[die.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[die.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-005/1 515 mm; inserts 515 mm"
+
+[[punch]]
+id = "wila/HU-001+INZU-002-Z7.5"
+maker = "WILA"
+name = "Offset top holder HU-001 with INZU-002 Z7.5 insert"
+real = true
+clamp = "wila-ns"
+kind = "straight"
+role = "offset"
+z = 7.5
+height = 98
+tip_angle = 90
+width = 50
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[punch.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-001 Top Holder, New Standard adaption and Safety-Pins, bottom suitable for inserts type INZU; INZU-002 set of inserts, top and bottom"
+
+[[punch.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[punch.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 7,5"
+
+[[punch.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-001: Working height 98 mm incl. inserts"
+
+[[punch.cite]]
+path = "tip_angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[punch.cite]]
+path = "width"
+status = "estimate"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "the adaption drawn 50 wide; the insert 23"
+basis = "the widest width drawn for the holder, all the way down (the holder's body width is not dimensioned): errs large"
+
+[[punch.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[punch.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-001/1 515 mm; inserts 515 mm"
+
+[[die]]
+id = "wila/HU-005+INZU-002-Z7.5"
+maker = "WILA"
+name = "Offset bottom holder HU-005 with INZU-002 Z7.5 insert"
+real = true
+clamp = "wila-ns"
+role = "offset"
+z = 7.5
+height = 74
+angle = 90
+width = 60
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[die.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-005 Bottom Holder, OZU adaption 13x20 mm, top suitable for inserts type INZU; used with HU-001"
+
+[[die.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[die.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 7,5"
+
+[[die.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-005: Working height 74 mm incl. inserts"
+
+[[die.cite]]
+path = "angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[die.cite]]
+path = "width"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-005 drawn 60 wide"
+
+[[die.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[die.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-005/1 515 mm; inserts 515 mm"
+
+[[punch]]
+id = "wila/HU-001+INZU-002-Z8"
+maker = "WILA"
+name = "Offset top holder HU-001 with INZU-002 Z8 insert"
+real = true
+clamp = "wila-ns"
+kind = "straight"
+role = "offset"
+z = 8
+height = 98
+tip_angle = 90
+width = 50
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[punch.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-001 Top Holder, New Standard adaption and Safety-Pins, bottom suitable for inserts type INZU; INZU-002 set of inserts, top and bottom"
+
+[[punch.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[punch.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 8"
+
+[[punch.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-001: Working height 98 mm incl. inserts"
+
+[[punch.cite]]
+path = "tip_angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[punch.cite]]
+path = "width"
+status = "estimate"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "the adaption drawn 50 wide; the insert 23"
+basis = "the widest width drawn for the holder, all the way down (the holder's body width is not dimensioned): errs large"
+
+[[punch.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[punch.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-001/1 515 mm; inserts 515 mm"
+
+[[die]]
+id = "wila/HU-005+INZU-002-Z8"
+maker = "WILA"
+name = "Offset bottom holder HU-005 with INZU-002 Z8 insert"
+real = true
+clamp = "wila-ns"
+role = "offset"
+z = 8
+height = 74
+angle = 90
+width = 60
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[die.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-005 Bottom Holder, OZU adaption 13x20 mm, top suitable for inserts type INZU; used with HU-001"
+
+[[die.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[die.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 8"
+
+[[die.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-005: Working height 74 mm incl. inserts"
+
+[[die.cite]]
+path = "angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[die.cite]]
+path = "width"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-005 drawn 60 wide"
+
+[[die.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[die.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-005/1 515 mm; inserts 515 mm"
+
+[[die]]
+id = "wila/HU-006+INZU-002-Z3"
+maker = "WILA"
+name = "Offset bottom holder HU-006 with INZU-002 Z3 insert"
+real = true
+clamp = "wila-ns"
+role = "offset"
+z = 3
+height = 100
+angle = 90
+width = 60
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[die.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-006 Bottom Holder, OZU adaption 13x20 mm, top suitable for inserts type INZU; used with HU-001"
+
+[[die.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[die.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 3"
+
+[[die.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-006: Working height 100 mm incl. inserts"
+
+[[die.cite]]
+path = "angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[die.cite]]
+path = "width"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-006 drawn 60 wide"
+
+[[die.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[die.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-006/1 515 mm; inserts 515 mm"
+
+[[die]]
+id = "wila/HU-006+INZU-002-Z3.5"
+maker = "WILA"
+name = "Offset bottom holder HU-006 with INZU-002 Z3.5 insert"
+real = true
+clamp = "wila-ns"
+role = "offset"
+z = 3.5
+height = 100
+angle = 90
+width = 60
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[die.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-006 Bottom Holder, OZU adaption 13x20 mm, top suitable for inserts type INZU; used with HU-001"
+
+[[die.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[die.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 3,5"
+
+[[die.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-006: Working height 100 mm incl. inserts"
+
+[[die.cite]]
+path = "angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[die.cite]]
+path = "width"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-006 drawn 60 wide"
+
+[[die.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[die.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-006/1 515 mm; inserts 515 mm"
+
+[[die]]
+id = "wila/HU-006+INZU-002-Z4"
+maker = "WILA"
+name = "Offset bottom holder HU-006 with INZU-002 Z4 insert"
+real = true
+clamp = "wila-ns"
+role = "offset"
+z = 4
+height = 100
+angle = 90
+width = 60
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[die.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-006 Bottom Holder, OZU adaption 13x20 mm, top suitable for inserts type INZU; used with HU-001"
+
+[[die.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[die.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 4"
+
+[[die.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-006: Working height 100 mm incl. inserts"
+
+[[die.cite]]
+path = "angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[die.cite]]
+path = "width"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-006 drawn 60 wide"
+
+[[die.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[die.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-006/1 515 mm; inserts 515 mm"
+
+[[die]]
+id = "wila/HU-006+INZU-002-Z4.5"
+maker = "WILA"
+name = "Offset bottom holder HU-006 with INZU-002 Z4.5 insert"
+real = true
+clamp = "wila-ns"
+role = "offset"
+z = 4.5
+height = 100
+angle = 90
+width = 60
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[die.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-006 Bottom Holder, OZU adaption 13x20 mm, top suitable for inserts type INZU; used with HU-001"
+
+[[die.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[die.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 4,5"
+
+[[die.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-006: Working height 100 mm incl. inserts"
+
+[[die.cite]]
+path = "angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[die.cite]]
+path = "width"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-006 drawn 60 wide"
+
+[[die.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[die.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-006/1 515 mm; inserts 515 mm"
+
+[[die]]
+id = "wila/HU-006+INZU-002-Z5"
+maker = "WILA"
+name = "Offset bottom holder HU-006 with INZU-002 Z5 insert"
+real = true
+clamp = "wila-ns"
+role = "offset"
+z = 5
+height = 100
+angle = 90
+width = 60
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[die.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-006 Bottom Holder, OZU adaption 13x20 mm, top suitable for inserts type INZU; used with HU-001"
+
+[[die.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[die.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 5"
+
+[[die.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-006: Working height 100 mm incl. inserts"
+
+[[die.cite]]
+path = "angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[die.cite]]
+path = "width"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-006 drawn 60 wide"
+
+[[die.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[die.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-006/1 515 mm; inserts 515 mm"
+
+[[die]]
+id = "wila/HU-006+INZU-002-Z5.5"
+maker = "WILA"
+name = "Offset bottom holder HU-006 with INZU-002 Z5.5 insert"
+real = true
+clamp = "wila-ns"
+role = "offset"
+z = 5.5
+height = 100
+angle = 90
+width = 60
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[die.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-006 Bottom Holder, OZU adaption 13x20 mm, top suitable for inserts type INZU; used with HU-001"
+
+[[die.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[die.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 5,5"
+
+[[die.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-006: Working height 100 mm incl. inserts"
+
+[[die.cite]]
+path = "angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[die.cite]]
+path = "width"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-006 drawn 60 wide"
+
+[[die.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[die.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-006/1 515 mm; inserts 515 mm"
+
+[[die]]
+id = "wila/HU-006+INZU-002-Z6"
+maker = "WILA"
+name = "Offset bottom holder HU-006 with INZU-002 Z6 insert"
+real = true
+clamp = "wila-ns"
+role = "offset"
+z = 6
+height = 100
+angle = 90
+width = 60
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[die.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-006 Bottom Holder, OZU adaption 13x20 mm, top suitable for inserts type INZU; used with HU-001"
+
+[[die.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[die.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 6"
+
+[[die.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-006: Working height 100 mm incl. inserts"
+
+[[die.cite]]
+path = "angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[die.cite]]
+path = "width"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-006 drawn 60 wide"
+
+[[die.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[die.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-006/1 515 mm; inserts 515 mm"
+
+[[die]]
+id = "wila/HU-006+INZU-002-Z6.5"
+maker = "WILA"
+name = "Offset bottom holder HU-006 with INZU-002 Z6.5 insert"
+real = true
+clamp = "wila-ns"
+role = "offset"
+z = 6.5
+height = 100
+angle = 90
+width = 60
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[die.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-006 Bottom Holder, OZU adaption 13x20 mm, top suitable for inserts type INZU; used with HU-001"
+
+[[die.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[die.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 6,5"
+
+[[die.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-006: Working height 100 mm incl. inserts"
+
+[[die.cite]]
+path = "angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[die.cite]]
+path = "width"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-006 drawn 60 wide"
+
+[[die.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[die.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-006/1 515 mm; inserts 515 mm"
+
+[[die]]
+id = "wila/HU-006+INZU-002-Z7"
+maker = "WILA"
+name = "Offset bottom holder HU-006 with INZU-002 Z7 insert"
+real = true
+clamp = "wila-ns"
+role = "offset"
+z = 7
+height = 100
+angle = 90
+width = 60
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[die.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-006 Bottom Holder, OZU adaption 13x20 mm, top suitable for inserts type INZU; used with HU-001"
+
+[[die.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[die.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 7"
+
+[[die.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-006: Working height 100 mm incl. inserts"
+
+[[die.cite]]
+path = "angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[die.cite]]
+path = "width"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-006 drawn 60 wide"
+
+[[die.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[die.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-006/1 515 mm; inserts 515 mm"
+
+[[die]]
+id = "wila/HU-006+INZU-002-Z7.5"
+maker = "WILA"
+name = "Offset bottom holder HU-006 with INZU-002 Z7.5 insert"
+real = true
+clamp = "wila-ns"
+role = "offset"
+z = 7.5
+height = 100
+angle = 90
+width = 60
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[die.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-006 Bottom Holder, OZU adaption 13x20 mm, top suitable for inserts type INZU; used with HU-001"
+
+[[die.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[die.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 7,5"
+
+[[die.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-006: Working height 100 mm incl. inserts"
+
+[[die.cite]]
+path = "angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[die.cite]]
+path = "width"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-006 drawn 60 wide"
+
+[[die.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[die.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-006/1 515 mm; inserts 515 mm"
+
+[[die]]
+id = "wila/HU-006+INZU-002-Z8"
+maker = "WILA"
+name = "Offset bottom holder HU-006 with INZU-002 Z8 insert"
+real = true
+clamp = "wila-ns"
+role = "offset"
+z = 8
+height = 100
+angle = 90
+width = 60
+max_load = 980.665
+segments = [{ length = 515, count = 1 }]
+
+[[die.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-006 Bottom Holder, OZU adaption 13x20 mm, top suitable for inserts type INZU; used with HU-001"
+
+[[die.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "Set of inserts, top and bottom, for making offsets"
+
+[[die.cite]]
+path = "z"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 Z 8"
+
+[[die.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-006: Working height 100 mm incl. inserts"
+
+[[die.cite]]
+path = "angle"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.95"
+taken = "2026-11-25"
+value = "INZU-002 alpha = 90 deg"
+
+[[die.cite]]
+path = "width"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94"
+taken = "2026-11-25"
+value = "HU-006 drawn 60 wide"
+
+[[die.cite]]
+path = "max_load"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "100 t/m (x 9.80665 kN/t)"
+
+[[die.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.94-95"
+taken = "2026-11-25"
+value = "HU-006/1 515 mm; inserts 515 mm"

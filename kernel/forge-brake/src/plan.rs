@@ -690,6 +690,18 @@ impl<'a> Search<'a> {
             }
             self.explored += 1;
             let st = self.sim_offset(done, j, k, s, true);
+            if std::env::var_os("BENDSIM_TRACE").is_some() {
+                eprintln!(
+                    "offset {j}+{k} {} {} rot {} -> {:?}",
+                    st.punch,
+                    st.die,
+                    s.rotate,
+                    st.failures()
+                        .iter()
+                        .map(|c| (c.rule, c.value, c.limit, c.tool.clone(), c.phase))
+                        .collect::<Vec<_>>()
+                );
+            }
             if st.pass() {
                 return Some(st);
             }

@@ -1110,3 +1110,50 @@ lip = hem(base.edge(plan.outline[0]), kind: \"open\", gap: t, length: 10)\n";
     assert_eq!(steps[1].get("punch").and_then(Json::str), Some("wila/BIU-041"));
     assert_eq!(steps[1].get("die").and_then(Json::str), Some("wila/OZU-384"));
 }
+
+/// A Z on WILA's offset tools: a 6 mm offset made in one stroke on the HU-001 / HU-006 holders
+/// with INZU-002 Z6 inserts (cited from WILA's catalogue pp.94-95), the reply saying the stroke
+/// and the offset rule at the part's offset; on Z5 inserts the offset rule refuses them and the
+/// Z is two air bends.
+#[test]
+fn a_z_on_wila_offset_tools_is_one_stroke() {
+    let src = "shared t = 1\nshared r = 1\nshared k = ratio(0.4)\n\
+sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (40, 300))\n}\n\
+base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
+web = flange(base.edge(plan.outline[1]), height: 7)\n\
+far = flange(web.tip, height: 30, side: \"down\")\n";
+    let ask_on = |z: &str| {
+        forge_lang::bendsim::parse(
+            &[
+                "press",
+                "trumpf-trubend-5130",
+                "punches",
+                &format!("wila/BIU-001,wila/HU-001+INZU-002-{z}"),
+                "dies",
+                &format!("wila/OZU-061,wila/HU-006+INZU-002-{z}"),
+            ]
+            .map(String::from),
+        )
+        .unwrap()
+    };
+    let a = ask_src(src, None, None, &ask_on("Z6"));
+    assert!(a.ok, "{}", a.text);
+    let steps = arr(&a.json, "steps");
+    let strokes: Vec<&str> = steps
+        .iter()
+        .filter_map(|s| s.get("stroke").and_then(Json::str))
+        .collect();
+    assert_eq!(strokes, ["offset"], "{}", a.text);
+    let off = arr(&steps[0], "checks")
+        .into_iter()
+        .find(|c| c.get("rule").and_then(Json::str) == Some("offset"))
+        .unwrap_or_else(|| panic!("{}", a.text));
+    assert_eq!(off.get("verdict").and_then(Json::str), Some("pass"), "{off}");
+    let b = ask_src(src, None, None, &ask_on("Z5"));
+    assert!(b.ok, "{}", b.text);
+    let strokes: Vec<String> = arr(&b.json, "steps")
+        .iter()
+        .filter_map(|s| s.get("stroke").and_then(Json::str).map(String::from))
+        .collect();
+    assert!(strokes.iter().all(|s| s == "bend"), "{strokes:?}");
+}
