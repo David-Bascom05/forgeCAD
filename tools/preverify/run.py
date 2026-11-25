@@ -167,6 +167,13 @@ def target_pkgs(t):
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pvitems import ALONE, items, published  # noqa: E402
 SLOW_RED = 2 * float(os.environ.get("BUDGET", "2"))
+# corpus guards (one whole real document per test, named corpus_guard_<doc>): their budget is 15 s
+# alone, not the 2 s of a unit test (the coordinator's ruling); under it, not an overrun at all
+CORPUS_PREFIX, CORPUS_BUDGET = "corpus_guard_", float(os.environ.get("CORPUS_BUDGET", "15"))
+
+
+def corpus(x):
+    return x[2].rsplit("::", 1)[-1].startswith(CORPUS_PREFIX)
 
 
 def relative(name, cmd_for, pkgs_of):
@@ -182,8 +189,10 @@ def relative(name, cmd_for, pkgs_of):
     # a 4-core VM); the train's run applies the budget as ever
     # and one in a package the branch does not change (only its dependencies, or nothing) is the
     # machine's load or main's own slowness, not the branch's: a warning too. A failure is never
-    mild = {x for x in mine if x[0] == "slow" and
+    mine = {x for x in mine if not (x[0] == "slow" and corpus(x) and ALONE.get(x, 1e9) <= CORPUS_BUDGET)}
+    mild = {x for x in mine if x[0] == "slow" and not corpus(x) and
             (ALONE.get(x, 1e9) <= SLOW_RED or not (target_pkgs(x[1]) & touched()))}
+    mild |= {x for x in mine if x[0] == "slow" and corpus(x) and not (target_pkgs(x[1]) & touched())}
     e["slow_warnings"] = sorted(" ".join(x) for x in mild)
     mine -= mild
     if not mine:
