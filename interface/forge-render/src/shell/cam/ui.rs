@@ -577,7 +577,15 @@ impl Shell {
                 if let Some(s) = &w.said
                     && blocked.as_ref().is_none_or(|b| &b.sentence != s)
                 {
-                    note(ui, s, width, t.warn);
+                    // a file written is said by its name in the note's ink, the path on hover;
+                    // what went wrong in amber (UX-LEAD)
+                    let (short, done) = said_words(s);
+                    let r0 = ui.cursor().min.y;
+                    note(ui, &short, width, if done { t.ink2 } else { t.warn });
+                    if short != *s {
+                        let r = Rect::from_min_max(pos2(area.left(), r0), pos2(area.left() + width, ui.cursor().min.y));
+                        ui.interact(r, ui.scope_id().with("cam-said"), Sense::hover()).on_hover_text(s.as_str());
+                    }
                 }
             });
         if let Some(id) = sel {
@@ -2427,7 +2435,12 @@ fn finder(
     }
     ui.add_space(4.0);
     let mut pick: Option<String> = None;
-    egui::ScrollArea::vertical().id_salt("cam-tools-list").auto_shrink([false, false]).show(ui, |ui| {
+    ui.spacing_mut().scroll = egui::style::ScrollStyle { foreground_color: true, ..egui::style::ScrollStyle::solid() };
+    egui::ScrollArea::vertical()
+        .id_salt("cam-tools-list")
+        .auto_shrink([false, false])
+        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
+        .show(ui, |ui| {
         let shown: Vec<&forge_tooling::Tool> =
             toollib::sorted(&w.lib.tools).into_iter().filter(|x| toollib::matches(&w.tools_find, x)).collect();
         let doc: Vec<&forge_tooling::Tool> = shown.iter().copied().filter(|x| in_doc.iter().any(|d| d.0 == x.id)).collect();
@@ -2576,7 +2589,19 @@ fn detail_pane(
     });
     let width = (body.width() - 8.0).min(640.0);
     ui.scope_builder(egui::UiBuilder::new().max_rect(body), |ui| {
-        egui::ScrollArea::vertical().id_salt("cam-tools-detail").auto_shrink([false, false]).show(ui, |ui| {
+        // its bar always shown: what is below the pane's edge (the tool's table runs under the
+        // footer on a laptop's screen) is seen to be there (BUTTON-AUDITOR: "Material" cut)
+        // a solid bar, its handle in the ink (the floating one is not drawn at rest; a solid one's
+        // handle takes the fields' fill, the page's own in the dark theme)
+        ui.spacing_mut().scroll = egui::style::ScrollStyle { foreground_color: true, ..egui::style::ScrollStyle::solid() };
+        let out = egui::ScrollArea::vertical()
+            .id_salt("cam-tools-detail")
+            // its own height, the footer's top: the scroll area ran under the footer (cut there,
+            // and no bar: it did not know it was taller than what showed)
+            .max_height(body.height())
+            .auto_shrink([false, false])
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
+            .show(ui, |ui| {
             ui.set_width(body.width() - 8.0);
             if w.tools_aux == 1 {
                 return import_pane(ui, t, w, width, places);
@@ -2663,6 +2688,9 @@ fn detail_pane(
             });
             ui.add_space(12.0);
         });
+        // its viewport and its content, by name: a test reads that the pane scrolls
+        places.push(("cam:tools:detail:view".into(), out.inner_rect));
+        places.push(("cam:tools:detail:content".into(), Rect::from_min_size(out.inner_rect.min, out.content_size)));
     });
 }
 
@@ -3717,8 +3745,11 @@ fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
                 places,
                 "cam:text",
             );
-            if w.text_edit != w.text && !ui.memory(|m| m.has_focus(egui::Id::unique("cam-text-edit"))) {
+            // the document's text changed from what the field was loaded with (an edit elsewhere,
+            // an undo, Apply itself): loaded again while the field is not being typed in
+            if w.text != w.text_base && !ui.memory(|m| m.has_focus(egui::Id::unique("cam-text-edit"))) {
                 w.text_edit = w.text.clone();
+                w.text_base = w.text.clone();
             }
             egui::ScrollArea::vertical()
                 .id_salt("cam-text-scroll")
@@ -3752,11 +3783,28 @@ fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
     r.map(|r| r.response.rect)
 }
 
+/// What the workspace said, as shown: a file it wrote or exported by its own name, not its
+/// folders ("Wrote /a/b/bracket_cam-sheet.html" → "Wrote bracket_cam-sheet.html"), and whether it
+/// is a thing done (shown in the note's ink) rather than one refused or failed (amber).
+pub fn said_words(s: &str) -> (String, bool) {
+    let name = |p: &str| p.trim_end_matches('/').rsplit(['/', '\\']).next().unwrap_or(p).to_string();
+    for done in ["Wrote ", "Exported ", "Downloaded "] {
+        if let Some(rest) = s.strip_prefix(done) {
+            // "Exported 3 files to /a/b": the folder by its name too
+            if let Some((what, dir)) = rest.split_once(" to ") {
+                return (format!("{done}{what} to {}", name(dir)), true);
+            }
+            return (format!("{done}{}", name(rest)), true);
+        }
+    }
+    (s.to_string(), s == "Export cancelled")
+}
+
 /// The status bar's words for the workspace.
 pub fn status_line(w: &CamWs) -> String {
-    // what was just refused (an export, a post) first, until the text or the run changes
+    // what was just said (refused, written, exported) first, until the text or the run changes
     if let Some(s) = &w.said {
-        return s.clone();
+        return said_words(s).0;
     }
     let n = w.stmts.iter().filter(|s| s.is_op() && !s.suppressed).count();
     let built = w
@@ -3870,9 +3918,18 @@ fn release_short(w: &CamWs) -> &'static str {
 /// The status bar's fix for what blocks release, where one click gets there: a setup with no
 /// `at:` opens its dialog.
 pub fn status_fix(w: &CamWs) -> Option<(&'static str, Action)> {
+    // an export the host has not answered: ask again
+    if w.export_asked.as_ref().is_some_and(|a| a.waiting) {
+        return Some(("Try again", Action::Cam(Ask::RetryExport)));
+    }
     let r = w.run.as_ref()?;
     (release_block(w).is_some() && r.programs.iter().any(|p| p.certified.contains("G5")))
         .then_some(("Place the setup\u{2026}", Action::Cam(Ask::PlaceSetup)))
+}
+
+/// The status bar's fix's hover, where it needs one.
+pub fn status_fix_tip(w: &CamWs) -> Option<&'static str> {
+    w.export_asked.as_ref().is_some_and(|a| a.waiting).then_some(super::nc::RETRY_TIP)
 }
 
 /// Why a Manufacture tool is off, for its tooltip.
@@ -4221,6 +4278,18 @@ mod tests {
 
     /// The simulation's header says a certified run as the chip does: no raw certification
     /// string ("full except G4 (leftover not computed)"), the code on the hover's first line.
+    /// A file written or exported is said by its name, its folders on hover; a refusal stays whole.
+    #[test]
+    fn what_was_done_is_said_by_the_files_name() {
+        assert_eq!(super::said_words("Wrote /tmp/x/customer-acme/cam/bracket_cam-sheet.html"), ("Wrote bracket_cam-sheet.html".to_string(), true));
+        assert_eq!(super::said_words("Exported /home/u/out/prog.nc"), ("Exported prog.nc".to_string(), true));
+        assert_eq!(super::said_words("Exported 3 files to /home/u/nc"), ("Exported 3 files to nc".to_string(), true));
+        assert_eq!(super::said_words("Downloaded prog.nc"), ("Downloaded prog.nc".to_string(), true));
+        assert!(super::said_words("Export cancelled").1);
+        let r = "Program prog can't be released: setup op1 isn't placed on the machine.";
+        assert_eq!(super::said_words(r), (r.to_string(), false));
+    }
+
     /// A lathe tool reads in words from its record, never its key (UX-LEAD).
     #[test]
     fn lathe_tools_read_in_words() {

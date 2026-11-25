@@ -154,6 +154,10 @@ pub(super) fn pick_row(
     places: &mut Vec<(String, Rect)>,
 ) -> bool {
     let (r, resp) = ui.allocate_exact_size(vec2(DIALOG_W, 34.0), Sense::click());
+    if waiting {
+        // the dialog's focus is this pick: keys go to the view (STANDARD §9)
+        places.push(("focus:pick".into(), r));
+    }
     let p = ui.painter();
     let (edge, fill) = if waiting {
         (t.focus, t.raised)
@@ -199,3 +203,27 @@ pub(super) fn pick_row(
 
 /// Where a row's field starts, after its word.
 pub(super) const FIELD_AT: f32 = 92.0;
+
+/// STANDARD §9: a dialog whose first input is typed opens with that field focused, its text
+/// selected. Called each frame the dialog is drawn, before the field; `key` names the dialog
+/// (it's fresh when it wasn't drawn the frame before), `id` is the field's TextEdit id.
+pub(crate) fn focus_on_open(ctx: &egui::Context, key: &str, id: egui::Id, text: &str) {
+    // (last frame drawn, frame opened): a window's first frame is egui's unseen sizing pass,
+    // where focus doesn't hold, so it's asked for over its first few frames, till it's had
+    let seen = egui::Id::unique(("dialog-shown", key));
+    let frame = ctx.cumulative_frame_nr();
+    let opened = match ctx.data(|d| d.get_temp::<(u64, u64)>(seen)) {
+        Some((last, opened)) if last + 1 >= frame => opened,
+        _ => frame,
+    };
+    ctx.data_mut(|d| d.insert_temp(seen, (frame, opened)));
+    if frame - opened < 4 && ctx.memory(|m| m.focused()) != Some(id) {
+        ctx.memory_mut(|m| m.request_focus(id));
+        let mut s = egui::text_edit::TextEditState::load(ctx, id).unwrap_or_default();
+        s.cursor.set_char_range(Some(egui::text::CCursorRange::two(
+            egui::text::CCursor::new(0),
+            egui::text::CCursor::new(text.chars().count()),
+        )));
+        s.store(ctx, id);
+    }
+}

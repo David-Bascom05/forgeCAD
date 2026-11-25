@@ -137,6 +137,8 @@ pub struct Occ {
     pub placement: Option<usize>,
     /// Its part's thermoform moulds, placed with it, drawn when their row's eye says.
     pub tooling: Option<usize>,
+    /// Its part's own material (the part document's `props(material:)`), for its look.
+    pub material: Option<String>,
 }
 
 /// An assembly's solve for the screen and the panel. Each distinct part is meshed once (by its
@@ -152,6 +154,8 @@ pub struct AsmView {
     /// again (the worker holds no GPU after the first: a device kept on a thread outlives the
     /// driver at exit).
     pub restage: Option<Vec<PartMesh>>,
+    /// Whose meshes `restage` holds, and how many (`AsmMeshes::lineage`).
+    pub lineage: (u64, usize),
     pub joints: Vec<forge_lang::asm::JointOut>,
     pub mobility: usize,
     pub bom: Vec<(String, usize)>,
@@ -226,7 +230,9 @@ pub struct Built {
 }
 
 impl Built {
-    pub fn summary(&self) -> String {
+    /// The status line's words for the build: the short state first (valid, the volume in
+    /// `sys`'s units, the faces), the details after, so a narrow status bar's cut takes those.
+    pub fn summary(&self, sys: crate::shell::ux::System) -> String {
         if self.preview {
             return "opening: the last build on screen while it builds".into();
         }
@@ -235,10 +241,10 @@ impl Built {
         }
         let mut s = match &self.measure {
             Some(m) => format!(
-                "volume {} mm³ · {} faces · {} · ",
-                crate::shell::fg::short((m.volume * 10.0).round() / 10.0),
-                m.faces,
-                if m.problems == 0 { "valid" } else { "INVALID" }
+                "{} · {} · {} faces · ",
+                if m.problems == 0 { "valid" } else { "INVALID" },
+                crate::shell::ux::show(m.volume, crate::shell::ux::Qty::Volume, sys),
+                m.faces
             ),
             None if self.ok => "nothing built · ".into(),
             None => "not built · ".into(),
@@ -1155,6 +1161,9 @@ impl Worker {
             let view = self.gpu.take().map(|gpu| {
                 let parts = vec![mesh.clone()];
                 let mut scene = Scene::new(&part_info(&parts), vec![Placement::at(0, [0.0; 3])]);
+                // the part's own box, so framing fits the part, not the sphere round it (a slender
+                // shaft filled a third of that sphere's cube)
+                scene.set_part_boxes(parts.iter().map(crate::explode::mesh_box).collect());
                 scene.set_explode(0.0);
                 make_view(gpu, parts, scene)
             });
@@ -1290,6 +1299,7 @@ impl Worker {
             let view = self.gpu.take().map(|gpu| {
                 let parts = vec![mesh.clone().unwrap_or_else(PartMesh::empty)];
                 let mut scene = Scene::new(&part_info(&parts), vec![Placement::at(0, [0.0; 3])]);
+                scene.set_part_boxes(parts.iter().map(crate::explode::mesh_box).collect());
                 scene.set_explode(0.0);
                 make_view(gpu, parts, scene)
             });
@@ -1435,12 +1445,26 @@ pub use crate::shell::fg::is_assembly;
 /// An assembly's part meshes so far: one per distinct body (by content), in the order made.
 #[derive(Default)]
 pub struct AsmMeshes {
+    /// Which these are, among all made in this run (0 until asked: `lineage`): `all` only
+    /// grows, so a renderer holding the first so many of them needs only the rest.
+    id: u64,
     by_key: HashMap<u64, usize>,
     pub all: Vec<PartMesh>,
     /// Each mesh's exact body.
     pub bodies: Vec<Arc<forge_topo::Body>>,
     /// Each mesh's box in its part's space: what the exploded view keeps apart.
     pub boxes: Vec<crate::explode::Aabb>,
+}
+
+impl AsmMeshes {
+    /// These meshes, and how many there are now.
+    pub fn lineage(&mut self) -> (u64, usize) {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        if self.id == 0 {
+            self.id = NEXT.fetch_add(1, Ordering::Relaxed);
+        }
+        (self.id, self.all.len())
+    }
 }
 
 /// A harness's piece in the view: a wire's tube, or a covered segment's sleeve.
@@ -1560,6 +1584,7 @@ fn asm_view(
             file: file.clone(),
             placement,
             tooling,
+            material: out.part_docs.get(file).and_then(|d| d.props.material.clone()),
         });
     }
     let mut harness_placed = vec![];
@@ -1671,7 +1696,14 @@ fn asm_view(
         let mut scene = Scene::new(&part_info(&parts), placements);
         scene.set_explode(0.0);
         scene.set_part_boxes(meshes.boxes.clone());
-        Some(make_view(gpu, parts, scene))
+        #[allow(unused_mut)]
+        let mut made = make_view(gpu, parts, scene);
+        // the renderer holds the first so many of these meshes, all of them then
+        #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
+        if !meshes.all.is_empty() {
+            made.0.set_lineage(Some(meshes.lineage()));
+        }
+        Some(made)
     } else {
         if restage {
             *shape = Some(now);
@@ -1686,6 +1718,7 @@ fn asm_view(
         placed,
         meshes: new_meshes,
         restage: all,
+        lineage: meshes.lineage(),
         joints: out.joints.clone(),
         mobility: out.mobility,
         bom: out.bom.clone(),

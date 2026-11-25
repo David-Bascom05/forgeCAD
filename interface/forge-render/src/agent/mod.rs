@@ -4,6 +4,7 @@
 //! one undo step a turn.
 
 pub mod apptools;
+pub mod bridge;
 pub mod claude;
 pub mod codex;
 pub mod conversations;
@@ -39,24 +40,90 @@ impl Out {
     }
 }
 
+/// A picture sent with a message: the view (markup, or the view attached) or one pasted.
+#[derive(Clone, PartialEq, Eq)]
+pub struct Picture {
+    /// Its type, for the model: image/png, image/jpeg, image/gif or image/webp.
+    pub media: &'static str,
+    pub bytes: Vec<u8>,
+}
+
+impl std::fmt::Debug for Picture {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Picture({}, {} bytes)", self.media, self.bytes.len())
+    }
+}
+
+/// The most a pasted picture may be: the models' own limit is about 5 MB a picture.
+pub const PICTURE_BYTES: usize = 5 << 20;
+/// The most pictures one message takes.
+pub const PICTURES: usize = 20;
+/// The most they may add up to (as sent: a message's body holds a third more, as base64, under
+/// forgecad web's 12 MB; room left for the view's picture).
+pub const PICTURES_BYTES: usize = 7 << 20;
+
+impl Picture {
+    pub fn png(bytes: Vec<u8>) -> Picture {
+        Picture {
+            media: "image/png",
+            bytes,
+        }
+    }
+
+    /// A picture the models read, by its first bytes (not its name): None for anything else.
+    pub fn sniff(bytes: Vec<u8>) -> Option<Picture> {
+        let media = match bytes.as_slice() {
+            [0x89, b'P', b'N', b'G', ..] => "image/png",
+            [0xFF, 0xD8, 0xFF, ..] => "image/jpeg",
+            [b'G', b'I', b'F', b'8', ..] => "image/gif",
+            [b'R', b'I', b'F', b'F', _, _, _, _, b'W', b'E', b'B', b'P', ..] => "image/webp",
+            _ => return None,
+        };
+        Some(Picture { media, bytes })
+    }
+
+    /// Its file name's extension.
+    pub fn ext(&self) -> &'static str {
+        self.media.strip_prefix("image/").unwrap_or("png")
+    }
+}
+
 pub trait Backend: Send {
-    /// A message from the person, and a picture with it (PNG): a new turn.
-    fn send(&mut self, prompt: String, picture: Option<Vec<u8>>);
+    /// A message from the person, and the pictures with it: a new turn.
+    fn send(&mut self, prompt: String, pictures: Vec<Picture>);
     /// Stop the turn that's running; it ends with `Done { stopped: true }`.
     fn stop(&mut self);
     /// The document open in the app now, in the same folder.
     fn set_file(&mut self, _file: &Path) {}
+    /// The person's answer to `Event::Permission { id, .. }`.
+    fn answer(&mut self, _id: &str, _a: crate::shell::agent::Answer) {}
+    /// What may run without asking, from now on.
+    fn set_mode(&mut self, _m: crate::shell::agent::Mode) {}
+    /// Back to the mode the person's own settings give (`bypassPermissions`, `auto`...), after
+    /// choosing another here. Not in the page: a page may not turn a bypass back on.
+    fn set_own_mode(&mut self, _flag: &str) {}
 }
 
 /// The project's source files, read recursively after each tool: changed or new since last
-/// seen, with what it held before (None: it's new).
+/// seen, with what it held before (None: it's new). A file whose size and modified time are as
+/// last seen isn't read again, so a check costs a listing, not the project's bytes.
 pub struct Watch {
     pub dir: PathBuf,
-    seen: std::collections::HashMap<PathBuf, String>,
+    seen: std::collections::HashMap<PathBuf, Seen>,
+}
+
+struct Seen {
+    len: u64,
+    modified: Option<std::time::SystemTime>,
+    text: String,
 }
 
 /// Larger files are not watched. Project traversal also bounds the file count.
 const WATCH_BYTES: u64 = 4 << 20;
+
+/// A modified time this close to now is read anyway: a filesystem with coarse times (one or two
+/// seconds) can give a quick second write of the same size the first write's time.
+const FRESH: std::time::Duration = std::time::Duration::from_secs(3);
 
 impl Watch {
     pub fn new(dir: &Path) -> Watch {
@@ -68,25 +135,48 @@ impl Watch {
         w
     }
 
-    fn scan(&self) -> Vec<(PathBuf, String)> {
-        project::files(&self.dir)
-            .into_iter()
-            .filter(|p| p.metadata().is_ok_and(|m| m.is_file() && m.len() <= WATCH_BYTES))
-            .filter_map(|p| Some((p.clone(), forge_dirs::fs::read_to_string(&p).ok()?)))
-            .collect()
-    }
-
     /// Changes to files that were there come first, then new files, each by name.
     pub fn check(&mut self) -> Vec<Event> {
+        // the clock that runs in the page too (std's panics in wasm)
+        let now = forge_math::clock::system_now();
+        let mut files: Vec<(PathBuf, u64, Option<std::time::SystemTime>)> = project::files(&self.dir)
+            .into_iter()
+            .filter_map(|p| {
+                let m = p
+                    .metadata()
+                    .ok()
+                    .filter(|m| m.is_file() && m.len() <= WATCH_BYTES)?;
+                Some((p, m.len(), m.modified().ok()))
+            })
+            .collect();
+        files.sort_by_key(|(p, ..)| (!self.seen.contains_key(p), p.clone()));
         let mut out = Vec::new();
-        let mut files = self.scan();
-        files.sort_by_key(|(p, _)| (!self.seen.contains_key(p), p.clone()));
-        for (p, text) in files {
-            let before = self.seen.get(&p).cloned();
+        for (p, len, modified) in files {
+            if let Some(s) = self.seen.get(&p)
+                && s.len == len
+                && modified.is_some()
+                && s.modified == modified
+                && modified
+                    .and_then(|m| now.duration_since(m).ok())
+                    .is_some_and(|age| age > FRESH)
+            {
+                continue;
+            }
+            let Ok(text) = forge_dirs::fs::read_to_string(&p) else {
+                continue;
+            };
+            let before = self.seen.insert(
+                p.clone(),
+                Seen {
+                    len,
+                    modified,
+                    text: text.clone(),
+                },
+            );
+            let before = before.map(|s| s.text);
             if before.as_deref() == Some(text.as_str()) {
                 continue;
             }
-            self.seen.insert(p.clone(), text.clone());
             out.push(Event::FileChanged {
                 path: p.display().to_string(),
                 before,
@@ -190,6 +280,9 @@ pub struct FileRec {
     /// A made file's place while undone; the document open when the app switched to it.
     pub trash: Option<PathBuf>,
     pub opened_from: Option<String>,
+    /// From a saved conversation: its Undo and Redo check the file is still as they'd leave it
+    /// (the document's own undo steps aren't these any more).
+    pub restored: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -237,6 +330,7 @@ impl Turns {
                 undone: false,
                 trash: None,
                 opened_from: None,
+                restored: false,
             });
         }
         let f = t.files.iter_mut().find(|f| f.path == path).expect("recorded");
@@ -245,6 +339,19 @@ impl Turns {
             d.external(text, &t.label, f.key, true);
         }
         first
+    }
+
+    /// A saved conversation's turns, as its Diff cards name them: each file marked restored.
+    pub fn restore(&mut self, mut done: Vec<TurnRec>) {
+        for t in &mut done {
+            for f in &mut t.files {
+                self.next += 1;
+                f.key = self.next;
+                f.restored = true;
+            }
+        }
+        self.done = done;
+        self.open = None;
     }
 
     pub fn file_mut(&mut self, path: &str) -> Option<&mut FileRec> {
@@ -336,6 +443,26 @@ pub fn program(name: &str) -> String {
         }
     }
     name.to_string()
+}
+
+/// Start an agent's process. A program that a moment ago was written (an update being installed;
+/// in the tests, a fake agent script) can still be open for writing in a process another thread
+/// just forked, until that one runs its own program: exec then fails with "Text file busy"
+/// (ETXTBSY). That passes in a moment, so it's tried again a few times before it's an error.
+// (an agent's process is started only natively: a page never gets here, so the sleep is not the
+// page's, as in codex.rs and claude.rs)
+#[cfg_attr(target_arch = "wasm32", allow(clippy::disallowed_methods))]
+pub fn spawn(c: &mut std::process::Command) -> std::io::Result<std::process::Child> {
+    let mut tries = 0;
+    loop {
+        match c.spawn() {
+            Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy && tries < 50 => {
+                tries += 1;
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            r => return r,
+        }
+    }
 }
 
 pub fn clean_env(c: &mut std::process::Command) {

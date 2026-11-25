@@ -286,6 +286,8 @@ answer is to record the distance (§4), or to refuse.
 ## 8. Open
 
 - The strict vertex bound (§5): ruled composed for now; David may reopen it.
+- Tests deciding at one threshold that part by a hair (§10): the drill point's V is still made
+  twice inside the boolean; only its slit face no longer survives.
 - **A sequential wrong Ok, on main too**, found when the n-ary diag search's best sequence was
   replayed through `boolean`. Two unions of `drift_adv edge` (or `diag`), by original index:
   - q25 = [-0.4870355810546001, 0.1901779229804108, -0.27625441155899466, -0.295604682866215,
@@ -377,3 +379,35 @@ without it on the gate's coplanar lines (the test sits in the walk's hottest bra
 was harmful is UNKNOWN). Cheaper forms were tried: a counter shared across threads (up to
 0.08%) is a hidden input, since a concurrent boolean could move it, and refusing in the walk
 itself refused valid sequential Oks. So it is held for a judgment, and the wrong Ok stands.
+
+## 10. A real part at the boundary: slit faces
+
+KERNEL-STRESS's Haas sweep intersects each solid with a copy of itself, shifted by half its
+box width. The box is grown by LINEAR on each side, so the shift is 1e-5 more than half the
+part's width, and every face of the copy lands LINEAR plus rounding off its twin. Every test
+there sits on its threshold, and two tests that each decide at their own tolerance can disagree.
+
+GM2-5AX "lightweight v1", solid #650885 (1520 faces), `int_over`: the copy's drill point (a
+118° cone, radius 2.5527) has its axis 1.00000004e-5 off the part's wall x = 1044.575.
+- `plane_cone` reads the apex as off the plane (just past LINEAR) and gives a hyperbola 6e-6
+  wide, hugging the cone's two seam lines.
+- `trim` finds the curve runs along those seam lines and imprints them on the wall. But its test
+  that a stretch is boundary, not a new edge, puts their ends and middle just past their
+  tolerance, so the hyperbola is a new edge too.
+- The tip's V is made twice; one copy is left as a face of its own whose loop walks the V out
+  and back (zero area). `check` passes that. `unify` then dropped the loop as a slit and left
+  the face with no loop: FaceNoLoops, a wrong Ok.
+
+Fix (proof/slit-faces): `unify` kills a face whose loops are all slits, with them. On the solid,
+the result passes `check`, and union plus intersection equals twice the volume to 5.7e-15. Over
+the file's first 60 solids (about 1000 ops), only this op's verdict changes. Test:
+`a_face_of_slits_alone_goes_whole`.
+
+Making the tests agree at the boundary was tried and is not done:
+- Snapping `plane_cone` to the generators within LINEAR plus rounding moved the disagreement
+  to the coplanar test (HoleOutside, both over ops).
+- Not making a new edge of a stretch along edges the curve runs along left the cone half
+  classified across the V from the wall's dropped region: an inconsistent classification.
+
+The V is still made twice inside the boolean; it is the slit face that no longer survives.
+Tests deciding at one threshold, where they can part by a hair, remain open (§8).

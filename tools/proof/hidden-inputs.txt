@@ -170,8 +170,8 @@ no-output (allocator bookkeeping: spin locks, page owners and heaps, never a val
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|atomic|owner: [AtomicU8; 1 << 16],
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|atomic|owner: [const { AtomicU8::new(0) }; 1 << 16],
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|atomic|use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
-no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|static|static ALLOC: Alloc = Alloc {
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|static|static ALLOC: Alloc = Alloc(UnsafeCell::new(Heap::new()));
+no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|static|static ALLOC: Alloc = Alloc::new(Mem {
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|static|static CACHE: core::cell::UnsafeCell<Cache> = const { core::cell::UnsafeCell::new(Cache::new()) };
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|thread_local|std::thread_local! {
 no-output (work index, counter or stop flag)  @ forge-asm/src/check.rs|atomic|let next = std::sync::atomic::AtomicUsize::new(0);
@@ -353,8 +353,6 @@ no-output (powi: small integer exponents, same bits native and wasm; ban-list it
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam-geom/src/drop.rs|float|let db = (b[0] - x).powi(2) + (b[1] - y).powi(2);
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-cam-geom/src/offset.rs|hash-order|type Made = HashMap<(u64, u64), Vec<(Region, Offsets)>>;
 speed (cache answering a function of its own key)  @ forge-cam-geom/src/offset.rs|static|static MADE: Mutex<Option<Made>> = Mutex::new(None);
-no-output (prints only)  @ forge-cam-geom/src/real.rs|env|let dbg = std::env::var("FORGE_CAM_DEBUG").is_ok();
-no-output (looked up by key only: get, entry, insert, contains; a fixed, unseeded hash)  @ forge-cam-geom/src/real.rs|hash-order|struct Memo(std::collections::HashMap<Key, R, std::hash::BuildHasherDefault<Fx>>);
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-cam-geom/src/region.rs|hash-order|static VALID: Mutex<Option<HashMap<u64, Vec<Region>>>> = Mutex::new(None);
 speed (cache answering a function of its own key)  @ forge-cam-geom/src/region.rs|static|static VALID: Mutex<Option<HashMap<u64, Vec<Region>>>> = Mutex::new(None);
 no-output (prints only)  @ forge-cam/src/adaptive.rs|env|if cur[2] == z && std::env::var_os("FORGE_ADAPTIVE_DIAG").is_some() {
@@ -761,8 +759,8 @@ no-output (powi: small integer exponents, same bits native and wasm; ban-list it
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-tooling/src/feeds.rs|float|let i = |d: f64| std::f64::consts::PI * d.powi(4) / 64.0;
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-tooling/src/instances.rs|float|l.iter().map(|x| (x - m).powi(2)).sum::<f64>() / (l.len() - 1) as f64
 no-output (constant tables or print switches)  @ forge-tooling/src/lib.rs|env|include!(concat!(env!("OUT_DIR"), "/builtin.rs"));
-speed (lazy field or constant table)  @ forge-tooling/src/lib.rs|lazy|static BUILT: std::sync::OnceLock<Library> = std::sync::OnceLock::new();
-speed (lazy field or constant table)  @ forge-tooling/src/lib.rs|static|static BUILT: std::sync::OnceLock<Library> = std::sync::OnceLock::new();
+speed (lazy field or constant table)  @ forge-tooling/src/lib.rs|lazy|static BUILT: std::sync::OnceLock<std::sync::Arc<Library>> = std::sync::OnceLock::new();
+speed (lazy field or constant table)  @ forge-tooling/src/lib.rs|static|static BUILT: std::sync::OnceLock<std::sync::Arc<Library>> = std::sync::OnceLock::new();
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-tooling/src/resolve.rs|float|0.25 * PI * (d * d - (d - allow.v).max(0.0).powi(2))
 speed (lazy field or constant table)  @ forge-topo/src/body.rs|lazy|Cached(std::sync::OnceLock::new())
 speed (lazy field or constant table)  @ forge-topo/src/body.rs|lazy|pub struct Cached<T>(std::sync::OnceLock<T>);
@@ -808,3 +806,7 @@ speed (lazy field or constant table)  @ forge-vendor/src/lib.rs|static|static B:
 speed (cache answering a function of its own key)  @ forge-vendor/src/lib.rs|static|static CACHE: OnceLock<Cache> = OnceLock::new();
 keyed (declared: the library files cached() used, path and hash of the bytes its key holds; Run::libraries)  @ forge-vendor/src/lib.rs|static|static PROFILE_SOURCES: forge_material::SourceTable = std::sync::Mutex::new(Vec::new());
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-workholding/src/lathe.rs|float|let len = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+no-output (prints only: FORGE_CAM_DEBUG traces each sign refinement to stderr)  @ forge-num/src/real.rs|env|let dbg = *DBG.get_or_init(|| std::env::var("FORGE_CAM_DEBUG").is_ok());
+no-output (prints only: the FORGE_CAM_DEBUG flag, read once)  @ forge-num/src/real.rs|lazy|static DBG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+no-output (prints only: the FORGE_CAM_DEBUG flag, read once)  @ forge-num/src/real.rs|static|static DBG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+no-output (lookups only: get/insert/remove, never iterated; a fixed unseeded hasher, Fx)  @ forge-num/src/real.rs|hash-order|struct Memo(std::collections::HashMap<Key, R, std::hash::BuildHasherDefault<Fx>>);

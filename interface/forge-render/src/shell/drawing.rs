@@ -317,6 +317,8 @@ pub struct DrawingEnv {
     lines_for: Option<(usize, usize)>,
     made_n: usize,
     pub message: String,
+    /// A command's words for the status line, said once (an event over the status's state).
+    pub said: Option<String>,
     pub busy: bool,
     pointer: Option<Point2>,
     /// The file as it was before each edit, and after each undone one.
@@ -390,6 +392,7 @@ impl DrawingEnv {
             lines_for: None,
             made_n: 0,
             message: String::new(),
+            said: None,
             busy: false,
             pointer: None,
             undo: vec![],
@@ -917,10 +920,13 @@ impl DrawingEnv {
                     self.src = s;
                 }
                 self.regen();
+                // a click is answered even when the views were already up to date
+                self.said = Some(format!("Views updated from {}", name_of(&self.path)));
                 return;
             }
             DwgCmd::Fit => {
                 self.fitted = false;
+                self.said = Some("The sheet fitted to the view".into());
                 return;
             }
             DwgCmd::NewSheet => {
@@ -1719,8 +1725,11 @@ impl Shell {
         self.drawing_mode_bar(&ctx, canvas);
         self.resize_edges(ui, s);
         self.menus(&ctx);
+        if let Some(w) = self.drawing.as_mut().and_then(|d| d.said.take()) {
+            self.status = w;
+        }
         if let Some(env) = &self.drawing {
-            self.status = match (&env.tool, env.busy) {
+            let state = match (&env.tool, env.busy) {
                 _ if !env.message.is_empty() => env.message.clone(),
                 (Some(tool), _) => tool.prompt(env.step()).to_string(),
                 (None, true) => match env.progress {
@@ -1743,6 +1752,8 @@ impl Shell {
                     }
                 }
             };
+            // the drawing's state, under a command's words (UX-LEAD: a reply isn't swallowed)
+            self.state_status(&ctx, state);
         }
     }
 
@@ -2836,6 +2847,9 @@ fn fcf_form(ui: &mut Ui, f: &mut FcfForm, t: super::theme::Theme) {
     ui.horizontal(|ui| {
         ui.toggle_value(&mut f.dia, "\u{d8}");
         ui.add(egui::TextEdit::singleline(&mut f.tol).desired_width(70.0));
+        // a drawing's lengths are millimetres (the sheet's, forge_draw)
+        ui.label(egui::RichText::new("mm").color(t.ink2))
+            .on_hover_text("The tolerance zone's size, in the drawing's millimetres");
         for (k, m) in MODS.iter().enumerate() {
             ui.toggle_value(&mut f.mods[k], *m);
         }
@@ -2993,30 +3007,50 @@ impl Shell {
             .resizable(false)
             .default_pos(pos2(500.0, 220.0))
             .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
+            .show_fit(ctx, |ui| {
                 ui.label(egui::RichText::new(format!("From {}", name_of(&nd.model))).font(semi(13.0)));
                 ui.label("Sheet size");
+                // five sizes a row; two in a narrow window (the 480 px pass)
+                let per = if ctx.content_rect().width() < super::theme::NARROW {
+                    2
+                } else {
+                    5
+                };
                 egui::Grid::new("sizes").show(ui, |ui| {
                     for (k, (n, w, h)) in forge_draw::sheet::SIZES.iter().enumerate() {
-                        if ui
-                            .selectable_label(nd.size == k, format!("{n}  {w} x {h}"))
-                            .clicked()
-                        {
+                        // ANSI's letters are inch sheets, ISO's A sizes millimetre ones: each
+                        // in its own unit, the size muted beside the name (UX-LEAD)
+                        let sys = if n.starts_with('A') && n.len() > 1 {
+                            super::ux::System::Metric
+                        } else {
+                            super::ux::System::Inch
+                        };
+                        let (q, _) = super::ux::convert(*w, super::ux::Qty::Length, sys);
+                        let size = format!(
+                            "{} \u{d7} {}",
+                            forge_units::trim(q),
+                            super::ux::show(*h, super::ux::Qty::Length, sys)
+                        );
+                        let mut job = egui::text::LayoutJob::default();
+                        let style = |c| egui::TextFormat::simple(sans(13.0), c);
+                        job.append(n, 0.0, style(self.theme.ink));
+                        job.append(&size, 8.0, style(self.theme.ink2));
+                        if ui.selectable_label(nd.size == k, job).clicked() {
                             nd.size = k;
                         }
-                        if k % 5 == 4 {
+                        if k % per == per - 1 {
                             ui.end_row();
                         }
                     }
                 });
                 if nd.model.ends_with(".fg") {
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         ui.label("Where");
                         ui.selectable_value(&mut nd.in_file, true, "In this file");
                         ui.selectable_value(&mut nd.in_file, false, "A drawing file beside it");
                     });
                 }
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label("Standard");
                     ui.selectable_value(&mut nd.iso, false, "ANSI (ASME Y14.5-2018), third angle");
                     ui.selectable_value(&mut nd.iso, true, "ISO 1101");

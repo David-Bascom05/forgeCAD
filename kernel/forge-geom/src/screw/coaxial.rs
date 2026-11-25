@@ -117,11 +117,13 @@ impl Screw {
         if nd.abs() <= 1e-12 * d.length() {
             // the section along the profile: met at the one angle where the motion brings it on
             if nab.abs() <= 1e-12 {
-                return if gap.abs() <= tol::LINEAR {
-                    None
+                // the section on the profile and carried along it: the face lies on the surface
+                // (a thread's crest or root band on its own cylinder)
+                return Some(if gap.abs() <= tol::LINEAR {
+                    SurfaceSurface::Coincident
                 } else {
-                    Some(SurfaceSurface::Empty)
-                };
+                    SurfaceSurface::Empty
+                });
             }
             let u = gap / nab;
             if !self.ue.contains(u) {
@@ -711,5 +713,54 @@ mod tests {
             }
         }
         assert!(checked > 500 && traced > 200, "{checked} {traced}");
+    }
+
+    /// A face whose section lies along a coaxial cylinder's wall and that does not drift (a thread's
+    /// crest or root band) lies on that cylinder: Coincident, not a pair for the tracer (which
+    /// traced two coincident surfaces, and the boolean then found the face untouched On the other
+    /// body: rack18u hinge_pin's UntouchedOnOther). Off the wall by more than LINEAR it is Empty.
+    #[test]
+    fn a_band_on_its_own_cylinder_is_coincident() {
+        let mut r = Rng::new(7381);
+        for _ in 0..40 {
+            let f = rand_frame(&mut r);
+            let (rad, b) = (r.range(2.0, 4.0), r.range(-0.3, 0.3));
+            let h = r.range(-1.0, 1.0);
+            let loop_ = [
+                Section::Line {
+                    a: Point2::new(rad, h),
+                    b: Point2::new(rad, h + 0.4),
+                },
+                Section::Line {
+                    a: Point2::new(rad, h + 0.4),
+                    b: Point2::new(rad + 0.5, h + 0.2),
+                },
+                Section::Line {
+                    a: Point2::new(rad + 0.5, h + 0.2),
+                    b: Point2::new(rad, h),
+                },
+            ];
+            let Some(faces) = Screw::loop_faces(f, &loop_, 0.0, b, Interval::new(0.0, 9.0)) else {
+                continue;
+            };
+            let band = faces[0].clone().surface();
+            // the axis either way along it
+            let up = if r.bool() { f.z() } else { -f.z() };
+            let mut cyl = |radius: f64| {
+                Surface::Cylinder(Cylinder {
+                    frame: Frame::from_z(f.origin + f.z() * r.range(-2.0, 2.0), up),
+                    radius,
+                })
+            };
+            assert_eq!(meet_coaxial(&band, &cyl(rad)), Some(SurfaceSurface::Coincident));
+            assert_eq!(
+                meet_coaxial(&cyl(rad + 0.5 * tol::LINEAR), &band),
+                Some(SurfaceSurface::Coincident)
+            );
+            assert_eq!(
+                meet_coaxial(&band, &cyl(rad + 3.0 * tol::LINEAR)),
+                Some(SurfaceSurface::Empty)
+            );
+        }
     }
 }

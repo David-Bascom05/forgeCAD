@@ -25,8 +25,8 @@ pub mod toollib;
 pub mod schema;
 pub mod turnview;
 mod ui;
-pub use ui::{CYCLE_TIP, alt_clear_words, certified_words, check_lines, cycle_words, text_panel_h};
-pub use ui::{Blocked, disabled_why, groups, release_block, release_words, status_fix, status_line};
+pub use ui::{CYCLE_TIP, alt_clear_words, said_words, certified_words, check_lines, cycle_words, text_panel_h};
+pub use ui::{Blocked, disabled_why, groups, release_block, release_words, status_fix, status_fix_tip, status_line};
 
 use doc::{Edit, Role, Stmt};
 use std::path::PathBuf;
@@ -91,6 +91,8 @@ pub enum Ask {
     SectionView,
     /// The unplaced setup's dialog (a refusal's fix: G5 needs its `at:`).
     PlaceSetup,
+    /// The export asked again (the host's save dialog never answered, or is not showing).
+    RetryExport,
     /// NC Programs: every program's files with the host's Save As.
     ExportNc,
     /// The setup sheet and tool list with the host's Save As.
@@ -120,6 +122,7 @@ impl From<Ask> for Cmd {
             Ask::CheckNow => Cmd::CheckNow,
             Ask::SectionView => Cmd::SectionView,
             Ask::PlaceSetup => Cmd::PlaceSetup,
+            Ask::RetryExport => Cmd::RetryExport,
             Ask::ExportNc => Cmd::ExportNc(None),
             Ask::ExportSheet => Cmd::ExportSheet,
             Ask::RepostStale => Cmd::RepostStale,
@@ -165,6 +168,8 @@ pub enum Cmd {
     SectionView,
     /// The unplaced setup's dialog.
     PlaceSetup,
+    /// The export asked again (the host's save dialog never answered, or is not showing).
+    RetryExport,
     /// Post program NAME (or all) into the document's folder.
     PostNc(Option<String>),
     /// The Post Process dialog at the K-th program.
@@ -254,7 +259,9 @@ pub struct CamWs {
     /// Where the host's run lands.
     pub job: Arc<Mutex<Option<run::Run>>>,
     /// A run's quality measured after the run was shown (the text it is for, and it).
-    pub quality_job: Arc<Mutex<Option<(String, forge_cam_quality::JobQ)>>>,
+    /// Every measure finished since last taken: a run's measure can end after a later run's
+    /// (one slot let it overwrite the later one, whose quality then never came).
+    pub quality_job: Arc<Mutex<Vec<(String, forge_cam_quality::JobQ)>>>,
     /// An adaptive op's comparison: the same setup, tool and heights as `clear` at its defaults
     /// (forge-cam-quality's alternative_clear), measured off the UI thread: (op, the run's text
     /// it is for, its bound and estimate, or None when it does not build). `alt_job` is the
@@ -288,11 +295,24 @@ pub struct CamWs {
     pub checks_open: bool,
     pub text_open: bool,
     pub text_edit: String,
+    /// The document's text `text_edit` was loaded from: loaded again only when the document's
+    /// text changes from it (an edit elsewhere, an undo), never because the field lost focus
+    /// (clicking Apply takes the focus first: the typed text was put back before Apply read it).
+    pub text_base: String,
     pub undo: Vec<String>,
     pub redo: Vec<String>,
     pub parts: Vec<PartInfo>,
     /// Said to the user (an edit refused, a file written).
     pub said: Option<String>,
+    /// `said` as last put in the shell's status (it is put there once, when it changes).
+    pub said_shown: Option<String>,
+    /// The properties column's tab now shown, in words (the view's way back to it names it).
+    pub col_label: String,
+    /// An op's or a setup's sheet was open last frame (a new one shows the column again).
+    pub sheet_was: bool,
+    /// An export handed to the host: when, what, and the words said then; while those words
+    /// stand 10 s on, the host has not answered (`nc::EXPORT_WAIT_MS`).
+    pub export_asked: Option<nc::ExportAsked>,
     /// The setup sheet and program asked to be written (path, text).
     pub want_write: Vec<(String, String)>,
     /// A rename in the browser: the row and its text.
@@ -354,7 +374,7 @@ impl CamWs {
             want_check: false,
             running: None,
             job: Arc::new(Mutex::new(None)),
-            quality_job: Arc::new(Mutex::new(None)),
+            quality_job: Arc::new(Mutex::new(Vec::new())),
             alt: None,
             alt_job: Arc::new(Mutex::new(None)),
             alt_asked: None,
@@ -378,9 +398,14 @@ impl CamWs {
             checks_open: false,
             text_open: false,
             text_edit: String::new(),
+            text_base: String::new(),
             undo: vec![],
             redo: vec![],
             parts: vec![],
+            said_shown: None,
+            col_label: String::new(),
+            sheet_was: false,
+            export_asked: None,
             said: None,
             want_write: vec![],
             renaming: None,
@@ -727,9 +752,15 @@ impl CamWs {
                 self.close_windows();
                 self.text_open = open;
                 self.text_edit = self.text.clone();
+                self.text_base = self.text.clone();
             }
             Cmd::AutoGenerate => self.auto = !self.auto,
             Cmd::SectionView => self.turnview.open = !self.turnview.open,
+            Cmd::RetryExport => match self.export_asked.take() {
+                Some(a) if a.sheet => self.export_sheet(),
+                Some(a) => self.export_programs(a.which.as_deref()),
+                None => {}
+            },
             // the first setup with no `at:` (its work offset in machine coordinates), opened
             Cmd::PlaceSetup => {
                 let su = self

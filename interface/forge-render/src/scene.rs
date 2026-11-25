@@ -55,6 +55,9 @@ pub struct Scene {
     gone: Vec<bool>,
     /// Drawn only as a ghost (`Overlay::face_ghosts`): left out of the draws and picks.
     ghost: Vec<bool>,
+    /// Every placement left out of the draws and picks for now, the scene kept as it is (the
+    /// CAM simulation draws the part itself, in each setup's frame).
+    pub hidden: bool,
     /// Every placement's rows as the GPU holds them, and the bytes changed since the last upload.
     pub rows_bytes: Vec<u8>,
     dirty: Option<(usize, usize)>,
@@ -90,7 +93,7 @@ impl Scene {
         list.clear();
         draws.clear();
         let mut by_part: Vec<(u32, u32)> = (0..self.placements.len())
-            .filter(|&i| !self.gone[i] && !self.ghost[i])
+            .filter(|&i| !self.hidden && !self.gone[i] && !self.ghost[i])
             .map(|i| (self.placements[i].part, i as u32))
             .collect();
         by_part.sort_unstable();
@@ -163,6 +166,7 @@ impl Scene {
             boxes: Vec::new(),
             gone: placements.iter().map(|p| squashed(&p.rows)).collect(),
             ghost: vec![false; placements.len()],
+            hidden: false,
             placements,
             rows_bytes,
             dirty: None,
@@ -196,6 +200,11 @@ impl Scene {
     pub fn set_part(&mut self, part: u32, center: [f32; 3], radius: f32, chords: Vec<f32>) {
         self.centers[part as usize] = center;
         self.chords[part as usize] = chords;
+        // a box kept from the old shape would frame the old part (a sheet's flat pattern framed as
+        // its folded part): the new sphere's cube until the caller gives the tight box
+        if let Some(b) = self.boxes.get_mut(part as usize) {
+            *b = (center.map(|c| c - radius), center.map(|c| c + radius));
+        }
         for i in 0..self.placements.len() {
             if self.placements[i].part == part {
                 let rows = self.placements[i].rows;
@@ -271,6 +280,14 @@ impl Scene {
     /// Each part's box in its own space: bounds then hold what's shown, tightly.
     pub fn set_part_boxes(&mut self, boxes: Vec<crate::explode::Aabb>) {
         self.boxes = boxes;
+    }
+
+    /// One part's box after its shape changed (after `set_part`); ignored when the scene keeps no
+    /// boxes.
+    pub fn set_part_box(&mut self, part: u32, b: crate::explode::Aabb) {
+        if let Some(x) = self.boxes.get_mut(part as usize) {
+            *x = b;
+        }
     }
 
     /// The box of what's shown, by the parts' boxes (none without them, or with nothing shown).
@@ -364,7 +381,7 @@ impl Scene {
             (Some(a), Some((b, true))) => away(a, x, y, z, r) || away(b, x, y, z, r),
         };
         for i in 0..self.x.len() {
-            if self.gone[i] || self.ghost[i] {
+            if self.hidden || self.gone[i] || self.ghost[i] {
                 continue;
             }
             let (x, y, z, r) = (self.x[i], self.y[i], self.z[i], -self.r[i]);

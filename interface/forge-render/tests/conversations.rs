@@ -40,6 +40,7 @@ fn chats_round_trip_locally_and_stay_scoped_to_their_project() {
             text: "Use a fork mount".into(),
             refs: vec!["base".into()],
             markup: None,
+            pictures: 0,
         },
         Entry::Agent {
             text: "The fork mount is ready.".into(),
@@ -298,13 +299,31 @@ printf '{"type":"turn.completed","usage":{}}\n'
         .clone();
     let before = std::fs::read_to_string(root.join(".agent-run/arguments.txt")).unwrap();
     let mut reopened = view(&root, &storage, &program);
+    // the Agent tab, reopened, comes back with the project's last conversation (+ starts anew)
+    reopened.step();
+    assert!(
+        reopened
+            .gui
+            .shell
+            .agent
+            .entries
+            .iter()
+            .any(|e| matches!(e, Entry::User { text, .. } if text == "Second optical discussion")),
+        "the last conversation is back"
+    );
     send(&mut reopened, "/resume");
     reopened.step();
     reopened.step();
     assert!(reopened.gui.shell.agent.resume_open);
     assert_eq!(reopened.gui.shell.agent.saved_chats.len(), 2);
     assert!(
-        reopened.gui.shell.agent.entries.is_empty(),
+        !reopened
+            .gui
+            .shell
+            .agent
+            .entries
+            .iter()
+            .any(|e| matches!(e, Entry::User { text, .. } if text.contains("/resume"))),
         "slash command isn't sent to the model"
     );
     assert!(reopened.click(&format!("agent:resume:{id}")));
@@ -454,7 +473,7 @@ fn restored_endpoint_context_is_sent_to_the_model_on_the_next_turn() {
             ("content", "A fork mount will work".into()),
         ]),
     ]);
-    backend.send("Continue the design".into(), None);
+    backend.send("Continue the design".into(), vec![]);
     loop {
         let event = rx.recv_timeout(std::time::Duration::from_secs(15)).unwrap();
         if let Event::Done { error, .. } = event {

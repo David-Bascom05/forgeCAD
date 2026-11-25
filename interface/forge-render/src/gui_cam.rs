@@ -7,6 +7,12 @@ use super::Gui;
 use crate::origin::WorldVert;
 use crate::shell::cam::{CamWs, run};
 
+/// In a narrow view: the height the half-size cube takes at the top (its margin, half of
+/// `viewcube::WIDGET_PX`, a margin), and the width of the tool strip at the right (its 32 px, its
+/// 12 px from the edge, a margin).
+const CUBE_HALF_COVER: f32 = 8.0 + 0.5 * crate::viewcube::WIDGET_PX + 8.0;
+const STRIP_COVER: f32 = 32.0 + 12.0 + 8.0;
+
 impl Gui {
     /// Opens a machining document: the workspace, over its part (opened as the view's model).
     pub(super) fn open_cam(&mut self, path: &str, text: &str) -> bool {
@@ -42,22 +48,47 @@ impl Gui {
         let done = w.job.lock().unwrap_or_else(|e| e.into_inner()).take();
         let mut changed = false;
         // a run's quality, measured after it was taken in
-        let measured = w.quality_job.lock().unwrap_or_else(|e| e.into_inner()).take();
+        let measured = std::mem::take(&mut *w.quality_job.lock().unwrap_or_else(|e| e.into_inner()));
         let took = done.is_some();
         if let Some(r) = done {
             w.ran(r);
             changed = true;
             self.shell.status = crate::shell::cam::status_line(w);
         }
-        if let Some((text, q)) = measured
-            && let Some(r) = w.run.as_mut().filter(|r| r.text == text && r.quality.is_none())
-        {
-            r.quality = Some(q);
-            changed = true;
+        // the one for the run shown, whichever order they ended in (the others are for texts
+        // since changed)
+        for (text, q) in measured {
+            if let Some(r) = w.run.as_mut().filter(|r| r.text == text && r.quality.is_none()) {
+                r.quality = Some(q);
+                changed = true;
+            }
         }
         if !took && self.shell.status.is_empty() && w.run.is_some() && w.running.is_none() {
             // nothing else to say (a view loaded after the run cleared it): the run's state
             self.shell.status = crate::shell::cam::status_line(w);
+        }
+        // a narrow window's turns: a sheet opened (an op's, a setup's) shows the column again
+        let sheet = w.op_dlg.is_some() || w.setup_dlg.is_some();
+        if sheet && !w.sheet_was {
+            self.shell.column_shown = true;
+        }
+        w.sheet_was = sheet;
+        // an export the host has not answered in 10 s: said so, with Try again
+        w.export_wait(crate::viewer::now_ms());
+        if let Some(a) = w.export_asked.as_ref().filter(|a| !a.waiting) {
+            // a frame when the wait is up (nothing else may draw one meanwhile)
+            let left = (a.at_ms + crate::shell::cam::nc::EXPORT_WAIT_MS - crate::viewer::now_ms()).max(0.0);
+            self.ctx.request_repaint_after(std::time::Duration::from_millis(left as u64 + 20));
+        }
+        // what the workspace just said (an export asked, a refusal) is the shell's status too, as
+        // drawn: the status bar draws the workspace's line, and what reads the shell's status
+        // (the page's state, the UI audit) sees the same words
+        // (once, when it is said: what comes after, "Generating", is not undone)
+        if w.said != w.said_shown {
+            if let Some(s) = &w.said {
+                self.shell.status = s.clone();
+            }
+            w.said_shown = w.said.clone();
         }
         // a run asked for, none going
         if w.want_run && w.running.is_none() {
@@ -78,7 +109,7 @@ impl Gui {
                 waker();
                 if let Some(cam) = cam {
                     let q = run::measure_cam(&cam);
-                    *qslot.lock().unwrap_or_else(|e| e.into_inner()) = Some((text, q));
+                    qslot.lock().unwrap_or_else(|e| e.into_inner()).push((text, q));
                     waker();
                 }
             });
@@ -306,12 +337,19 @@ impl Gui {
                 crate::frame::Bounds::new([c[0] - r, c[1] - r, c[2] - r], [c[0] + r, c[1] + r, c[2] + r])
             }
         };
+        // a narrow view: its tool strip (the right edge) and its cube (half size, the top right)
+        // cover the part where they are drawn, so it is framed clear of them (UX-LEAD)
+        let (narrow_top, narrow_right) = if vr.width() < crate::nav::NARROW_VIEW_PX {
+            (CUBE_HALF_COVER, STRIP_COVER)
+        } else {
+            (0.0, 0.0)
+        };
         let view = crate::frame::ViewRect {
             width: vr.width(),
             height: vr.height(),
             // the simulation's panel is in the properties column (outside `vr`) whenever there is
             // one, docked or not yet: only its timeline covers the view
-            covered: [0.0, 0.0, side[0], cover + side[1]],
+            covered: [0.0, narrow_top, side[0] + narrow_right, cover + side[1]],
         };
         // from the direction the view is seen from now, the subject at the standard's 70 %
         let (yaw, pitch) = (v.nav.camera.yaw.to_degrees(), v.nav.camera.pitch.to_degrees());

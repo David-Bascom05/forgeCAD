@@ -35,9 +35,14 @@ fn fixture(name: &str) -> String {
     .unwrap()
 }
 
+/// The events, less the permission mode each session says (tests/agent_approvals.rs reads it).
 fn parse(name: &str) -> (Vec<Event>, Parser) {
     let mut p = Parser::default();
-    let evs = fixture(name).lines().flat_map(|l| p.line(l)).collect();
+    let evs = fixture(name)
+        .lines()
+        .flat_map(|l| p.line(l))
+        .filter(|e| !matches!(e, Event::Mode(_) | Event::Commands(_) | Event::Usage { .. }))
+        .collect();
     (evs, p)
 }
 
@@ -224,7 +229,7 @@ fn an_openai_compatible_endpoint_edits_the_file_through_its_tools() {
         },
         out,
     );
-    b.send("make the base plate 10 mm thicker".into(), None);
+    b.send("make the base plate 10 mm thicker".into(), vec![]);
     let mut evs = Vec::new();
     while let Ok(e) = rx.recv_timeout(std::time::Duration::from_secs(60)) {
         let done = matches!(e, Event::Done { .. });
@@ -421,6 +426,7 @@ fn in_the_app_a_turn_reloads_the_part_as_one_undo_step_and_the_tabs_keep_their_s
             Entry::Tool { .. } => "tool",
             Entry::Diff { .. } => "diff",
             Entry::Note { .. } => "note",
+            Entry::Permission { .. } => "permission",
         })
         .collect();
     assert_eq!(kinds, ["user", "tool", "tool", "agent", "diff"]);
