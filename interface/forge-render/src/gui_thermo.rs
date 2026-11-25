@@ -307,7 +307,7 @@ impl Gui {
                     waker();
                 }),
             );
-            return format!("Exporting {file}…");
+            return format!("Exporting {file}");
         }
         written(&file, export_bytes(g, id, e, art))
     }

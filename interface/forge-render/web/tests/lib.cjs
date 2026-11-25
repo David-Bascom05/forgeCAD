@@ -45,8 +45,16 @@ async function page(b, url, prepare) {
   p.on("worker", (w) => w.on?.("console", heard));
   p.on("pageerror", (e) => p.problems.push(`page error: ${e.message}`));
   await prepare?.(p);
-  await p.goto(url);
+  await p.goto(withWorker(url));
   return p;
+}
+
+/// FORGE_WORKER=0|1: every page's builds on its own thread (0) or the build worker (1), the
+/// default build's two ways (unless the test chose one).
+function withWorker(url) {
+  const w = process.env.FORGE_WORKER;
+  if (w === undefined || /[?&]worker=/.test(url)) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}worker=${w}`;
 }
 
 function check(p) {
@@ -159,4 +167,5 @@ function tmpdir(tag) {
   return fs.mkdtempSync(path.join(require("node:os").tmpdir(), `forgecad-${tag}-`));
 }
 
-module.exports = { repo, bins, browser, page, check, until, loaded, frames, serve, native, differs, tmpdir, pixels, shot, SAME };
+module.exports = {
+  withWorker, repo, bins, browser, page, check, until, loaded, frames, serve, native, differs, tmpdir, pixels, shot, SAME };

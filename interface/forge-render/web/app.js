@@ -11,8 +11,8 @@
 //   ?offscreen=WxH  frames drawn to a texture, not the canvas (a headless browser's software
 //                    WebGPU can't show a canvas); forgecad.pixels() reads them
 //   ?threads=0       the single-threaded build even where the page is cross-origin isolated
-//   ?worker=0|1      the single-threaded build's builds on the page's own thread (0), or on the
-//                    build worker (1: a Web Worker with its own memory, build.js)
+//   ?worker=1        the single-threaded build's builds on the build worker (a Web Worker with its
+//                    own memory, build.js), not the page's own thread (?worker=0, the default)
 //   ?noapp           no canvas: the kernel and files only (the parity test)
 
 import { Mirror, ServerBackend, localBackend, cleanPath } from "./storage.js";

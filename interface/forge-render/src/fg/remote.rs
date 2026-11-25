@@ -883,8 +883,8 @@ pub mod worker {
                 }) =>
             {
                 Told::Project(Err(
-                    "Project Geometry: this edge's curve is a blend's or an intersection's, which the \
-                     browser's build worker can't hand over yet (open with ?worker=0 to project it)"
+                    "Project Geometry can't project this edge in the browser yet: its curve comes \
+                     from a blend or an intersection. The desktop app can."
                         .into(),
                 ))
             }

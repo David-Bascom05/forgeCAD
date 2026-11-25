@@ -39,7 +39,8 @@ if [ -n "$PARITY_EXAMPLES" ]; then
 else
   node web/tests/parity.cjs "$out"
 fi
-# the threaded artifact: the page never blocks for a build
-if [ -n "$THREADED" ]; then
-  node web/tests/responsive.cjs "$out"
-fi
+# the default build's build worker: the same builds as on the page's own thread (?worker=0), and
+# the page never blocks for a build or a check (the threaded artifact too, when built)
+node web/tests/buildworker.cjs "$out"
+node web/tests/responsive.cjs "$out"
+# FORGE_WORKER=1: every test above again with the builds on the build worker (?worker=1)
