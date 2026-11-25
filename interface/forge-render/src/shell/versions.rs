@@ -288,18 +288,27 @@ impl Shell {
     /// The header bar: Create Version and Release, the filter, Show saves, the document picked.
     fn versions_top(&mut self, ui: &mut Ui) {
         let t = self.theme;
+        let none = self.no_document();
         ui.horizontal(|ui| {
-            let b = ui.add(primary(&t, "Create Version"));
+            // a version is of a part: none open, nothing to keep
+            let why = "Off: no part open, so nothing to keep a version of";
+            let b = ui
+                .add_enabled(!none, primary(&t, "Create Version"))
+                .on_disabled_hover_text(why);
             self.places.push(("versions:create".into(), b.rect));
             if b.clicked() {
                 self.versions.dialog = Some((String::new(), String::new()));
             }
-            let b = ui.button(egui::RichText::new("Release").font(sans(12.0)));
+            let b = ui
+                .add_enabled(
+                    !none,
+                    egui::Button::new(egui::RichText::new("Release").font(sans(12.0))),
+                )
+                .on_disabled_hover_text(why);
             self.places.push(("versions:release".into(), b.rect));
             if b.clicked() {
                 self.versions.release = Some((String::new(), String::new(), false));
             }
-            let none = self.no_document();
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let mut on = self.versions.show_saves;
                 // (UX-LEAD: what it shows, said; a bare "Saves" read as a setting)
@@ -795,12 +804,22 @@ impl Shell {
                 .constrain_to(area)
                 .show_fit(ctx, |ui| {
                     ui.label(egui::RichText::new("Name").font(sans(12.0)));
+                    let next = format!(
+                        "v{}",
+                        self.versions
+                            .nodes
+                            .iter()
+                            .filter_map(|n| n.n)
+                            .max()
+                            .map_or(1, |m| m + 1)
+                    );
                     let id = egui::Id::unique("versions-create-name");
                     super::dialog::focus_on_open(ui.ctx(), "versions-create", id, &name);
                     let r = ui.add(
                         egui::TextEdit::singleline(&mut name)
                             .id(id)
-                            .hint_text("v1")
+                            // left empty, it's named as the next version (forge-history)
+                            .hint_text(next)
                             .desired_width(320.0),
                     );
                     self.places.push(("versions:dialog:name".into(), r.rect));

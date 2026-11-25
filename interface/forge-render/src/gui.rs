@@ -1034,6 +1034,14 @@ impl Gui {
                 Action::Machine(c) => self.machine_cmd(c),
                 Action::Versions(c) => {
                     use crate::shell::versions::{VersionsAct, VersionsCmd};
+                    // a folder with no history can't keep a version: the panel says so and offers
+                    // Turn on history (a Create there failed with its words never shown)
+                    let kept = self.vers_kept();
+                    if !kept && matches!(c, VersionsCmd::Create | VersionsCmd::Release) {
+                        let what = if matches!(c, VersionsCmd::Create) { "Create Version" } else { "Release" };
+                        self.shell.status =
+                            format!("{what}: this folder keeps no history. Turn it on in Versions first");
+                    }
                     let v = &mut self.shell.versions;
                     if self.shell.agent.tab != crate::shell::agent::SideTab::Versions {
                         self.shell.agent.tab = crate::shell::agent::SideTab::Versions;
@@ -1041,8 +1049,9 @@ impl Gui {
                     }
                     match c {
                         VersionsCmd::Show => {}
-                        VersionsCmd::Create => v.dialog = Some((String::new(), String::new())),
-                        VersionsCmd::Release => v.release = Some((String::new(), String::new(), false)),
+                        VersionsCmd::Create if kept => v.dialog = Some((String::new(), String::new())),
+                        VersionsCmd::Release if kept => v.release = Some((String::new(), String::new(), false)),
+                        VersionsCmd::Create | VersionsCmd::Release => {}
                         VersionsCmd::UpdateAll => v.out.push(VersionsAct::Update(None)),
                         // the newest version against the working copy
                         VersionsCmd::CompareCurrent => {
