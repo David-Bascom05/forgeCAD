@@ -1858,6 +1858,9 @@ pub struct Headless {
     time: f64,
     pending: Vec<egui::Event>,
     pointer: egui::Pos2,
+    /// Each step's frame on the UI thread (ms, the GPU's wait after it left out), while `Some`:
+    /// the big-model bench's (research/big-render).
+    pub frame_log: Option<Vec<[f64; 5]>>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1900,6 +1903,7 @@ impl Headless {
             time: 0.0,
             pending: Vec::new(),
             pointer: egui::Pos2::ZERO,
+            frame_log: None,
         })
     }
 
@@ -1970,8 +1974,13 @@ impl Headless {
         self.time += 1.0 / 60.0;
         let view = self.view.clone();
         let px = self.px();
+        let t = crate::viewer::now_ms();
         let out = self.gui.frame(raw, &view, px);
         self.gui.picks();
+        if let Some(log) = &mut self.frame_log {
+            let m = &out.times;
+            log.push([crate::viewer::now_ms() - t, m.ui, m.tess, m.view, m.draw]);
+        }
         let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
         self.gui.picks();
         out
