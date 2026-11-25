@@ -43,6 +43,33 @@ pub const CSP: &str = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval';
      img-src 'self' blob: data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; \
      base-uri 'none'; frame-ancestors 'none'";
 
+/// [`CSP`], with the hosted sync server's origin (`--sync`) as the one other place the page may
+/// connect to: its WebSocket (research/hosted). Nothing else is widened.
+pub fn csp(sync: Option<&str>) -> String {
+    match sync {
+        Some(o) => CSP.replace("connect-src 'self'", &format!("connect-src 'self' {o}")),
+        None => CSP.to_string(),
+    }
+}
+
+/// `--sync`'s URL as a CSP origin (`ws://HOST:PORT`, `wss://HOST:PORT`): a WebSocket URL only,
+/// and only the characters of a host and port (nothing that could end or add a directive).
+fn sync_origin(url: &str) -> Result<String, String> {
+    let (scheme, rest) = url
+        .split_once("://")
+        .filter(|(s, _)| *s == "ws" || *s == "wss")
+        .ok_or("--sync: a ws:// or wss:// URL")?;
+    let host = rest.split('/').next().unwrap_or("");
+    let ok = !host.is_empty()
+        && host
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | ':' | '-' | '[' | ']'));
+    if !ok {
+        return Err("--sync: a URL's host and port only".into());
+    }
+    Ok(format!("{scheme}://{host}"))
+}
+
 pub struct Config {
     pub root: PathBuf,
     pub app: Option<PathBuf>,
@@ -52,10 +79,13 @@ pub struct Config {
     pub writable: bool,
     /// `--agent`: the page's agent is the person's Claude Code, run here (agent_bridge.rs).
     pub agent: Option<Arc<crate::agent_bridge::Agent>>,
+    /// `--sync URL`: the hosted sync server the page's `?sync=` may connect to (its origin is
+    /// added to the page's connect-src, header and <meta> both).
+    pub sync: Option<String>,
 }
 
-const USAGE: &str =
-    "forgecad web DIR [--port P] [--bind ADDR] [--token T] [--app WEBDIR] [--read-only] [--agent]";
+const USAGE: &str = "forgecad web DIR [--port P] [--bind ADDR] [--token T] [--app WEBDIR] [--read-only] [--agent] \
+     [--sync ws://HOST:PORT/sync]";
 
 /// The command line's words after `web`.
 pub fn main(args: &[String]) -> ExitCode {
@@ -80,6 +110,7 @@ fn parse(args: &[String]) -> Result<Config, String> {
     let (mut root, mut app, mut bind, mut port, mut token, mut writable) =
         (None, None, IpAddr::from([127, 0, 0, 1]), 8080u16, None, true);
     let mut agent = false;
+    let mut sync = None;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         let mut val = |name: &str| it.next().cloned().ok_or(format!("{name} takes a value"));
@@ -90,6 +121,7 @@ fn parse(args: &[String]) -> Result<Config, String> {
             "--app" => app = Some(PathBuf::from(val("--app")?)),
             "--read-only" => writable = false,
             "--agent" => agent = true,
+            "--sync" => sync = Some(sync_origin(&val("--sync")?)?),
             s if s.starts_with("--") => return Err(format!("{s}: not an option")),
             s if root.is_none() => root = Some(PathBuf::from(s)),
             s => return Err(format!("{s}: one folder only")),
@@ -132,6 +164,7 @@ fn parse(args: &[String]) -> Result<Config, String> {
         token,
         writable,
         agent,
+        sync,
     })
 }
 
@@ -331,12 +364,12 @@ fn read_request(r: &mut BufReader<TcpStream>) -> Result<Option<Request>, Respons
 
 /// The response; to a HEAD its head only (its Content-Length still the body's): a body sent
 /// would be read as the next response on a kept connection.
-fn write_response(s: &mut TcpStream, r: &Response, keep: bool, head: bool) -> std::io::Result<()> {
+fn write_response(s: &mut TcpStream, r: &Response, keep: bool, head: bool, csp: &str) -> std::io::Result<()> {
     let mut text = format!(
         "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nX-Content-Type-Options: nosniff\r\n\
          Cache-Control: no-cache\r\nCross-Origin-Opener-Policy: same-origin\r\n\
          Cross-Origin-Embedder-Policy: require-corp\r\nReferrer-Policy: no-referrer\r\n\
-         Content-Security-Policy: {CSP}\r\nConnection: {}\r\n",
+         Content-Security-Policy: {csp}\r\nConnection: {}\r\n",
         r.status,
         reason(r.status),
         r.kind,
@@ -357,6 +390,7 @@ fn write_response(s: &mut TcpStream, r: &Response, keep: bool, head: bool) -> st
 fn connection(s: TcpStream, c: &Config, lock: &Mutex<()>) -> std::io::Result<()> {
     let mut out = s.try_clone()?;
     let mut r = BufReader::new(s);
+    let csp = csp(c.sync.as_deref());
     loop {
         let (resp, keep, head) = match read_request(&mut r) {
             Ok(None) => return Ok(()),
@@ -367,7 +401,7 @@ fn connection(s: TcpStream, c: &Config, lock: &Mutex<()>) -> std::io::Result<()>
                     && let Some(a) = &c.agent
                 {
                     return match agent_gate(&q, a) {
-                        Err(e) => write_response(&mut out, &e, false, false),
+                        Err(e) => write_response(&mut out, &e, false, false, &csp),
                         Ok(client) => stream_events(&mut out, a, &q, &client),
                     };
                 }
@@ -378,7 +412,7 @@ fn connection(s: TcpStream, c: &Config, lock: &Mutex<()>) -> std::io::Result<()>
             }
             Err(e) => (e, false, false),
         };
-        write_response(&mut out, &resp, keep, head)?;
+        write_response(&mut out, &resp, keep, head, &csp)?;
         if !keep {
             return Ok(());
         }
@@ -1094,12 +1128,23 @@ fn static_file(c: &Config, path: &str) -> Response {
     };
     let p = app.join(&rel);
     match std::fs::read(&p) {
-        Ok(b) if p.is_file() => Response {
-            status: 200,
-            kind: mime(&p),
-            headers: vec![],
-            body: b,
-        },
+        Ok(mut b) if p.is_file() => {
+            // the page's own <meta> policy is enforced too: it names the sync server as well
+            if rel == std::path::Path::new("index.html")
+                && let Some(o) = &c.sync
+                && let Ok(t) = String::from_utf8(b.clone())
+            {
+                b = t
+                    .replacen("connect-src 'self'", &format!("connect-src 'self' {o}"), 1)
+                    .into_bytes();
+            }
+            Response {
+                status: 200,
+                kind: mime(&p),
+                headers: vec![],
+                body: b,
+            }
+        }
         _ => error(404, "no such file"),
     }
 }
@@ -1108,6 +1153,21 @@ fn static_file(c: &Config, path: &str) -> Response {
 #[cfg(all(test, not(target_os = "wasi")))]
 mod tests {
     use super::*;
+
+    /// --sync widens connect-src by the sync server's origin only, and takes nothing that could
+    /// end or add a directive.
+    #[test]
+    fn sync_adds_one_origin_to_connect_src() {
+        assert_eq!(sync_origin("ws://127.0.0.1:7878/sync").unwrap(), "ws://127.0.0.1:7878");
+        assert_eq!(sync_origin("wss://cad.example:443/sync").unwrap(), "wss://cad.example:443");
+        for bad in ["http://x/sync", "ws://", "ws://a;script-src *", "ws://a b", "ws://a'/x", "javascript:x"] {
+            assert!(sync_origin(bad).is_err(), "{bad}");
+        }
+        let c = csp(Some("ws://127.0.0.1:7878"));
+        assert!(c.contains("connect-src 'self' ws://127.0.0.1:7878;"), "{c}");
+        assert_eq!(c.replace(" ws://127.0.0.1:7878", ""), CSP);
+        assert_eq!(csp(None), CSP);
+    }
 
     #[test]
     fn a_path_never_leaves_the_folder() {
@@ -1511,6 +1571,7 @@ mod tests {
             token: token.map(str::to_string),
             writable,
             agent: None,
+            sync: None,
         });
         std::thread::spawn(move || run(l, c));
         (at, root)

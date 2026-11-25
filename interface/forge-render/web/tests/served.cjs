@@ -26,9 +26,8 @@ boss = extrude(top.c, t)
 const TOKEN = "0123456789abcdef-browser";
 const server = process.env.FORGE_SERVER ?? path.join(t.repo, "target/release/forge-server");
 
-function startServer(dir, origin) {
+function startServer(dir, origin, port) {
   return new Promise((ok, fail) => {
-    const port = 40000 + Math.floor(Math.random() * 10000);
     const s = spawn(server, [dir, "--port", String(port), "--user", `tab:${TOKEN}`, "--origin", origin], {
       stdio: ["ignore", "ignore", "pipe"],
     });
@@ -60,9 +59,12 @@ async function same(a, b, what, min = 0) {
   const app = path.resolve(process.argv[2] ?? "web/out");
   const dir = t.tmpdir("served");
   fs.writeFileSync(path.join(dir, "plate.fg"), PART);
-  const { url, proc: web } = await t.serve(dir, app);
-  const origin = new URL(url).origin;
-  const { ws, proc: srv } = await startServer(dir, origin);
+  // the page's CSP lets it connect to its own origin and the sync server named by --sync only:
+  // both ports are chosen first, the sync server started, then the page's server with --sync
+  const wport = 20000 + Math.floor(Math.random() * 20000);
+  const sport = 40000 + Math.floor(Math.random() * 10000);
+  const { ws, proc: srv } = await startServer(dir, `http://localhost:${wport}`, sport);
+  const { url, proc: web } = await t.serve(dir, app, ["--port", String(wport), "--sync", ws]);
   const b = await t.browser();
   try {
     const q = `?open=plate.fg&offscreen=640x400&sync=${encodeURIComponent(ws)}&sync_token=${TOKEN}`;
