@@ -1,0 +1,31 @@
+name: Train 13 full ST20 comparison
+on:
+  push:
+    branches: [diagnostics/train13-st20-archive]
+permissions:
+  contents: read
+jobs:
+  haas:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    env:
+      CARGO_INCREMENTAL: 0
+      REFERENCE: 18169987f63df6c0ee7ece19aec8d9c2b280bfa1
+      CANDIDATE: 6c6d2d391305cd1ae253d582c93103dff416fdce
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 6c6d2d391305cd1ae253d582c93103dff416fdce
+          fetch-depth: 0
+          filter: blob:none
+      - name: Compare the same models under both kernels
+        shell: bash
+        run: |
+          tools/kernel-stress/compare.sh "$REFERENCE" "$CANDIDATE" -j 1 -o "$RUNNER_TEMP/train-diff" ST-20-25_Reboot_Solid_Model_2019-05r2.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: st20-full-archive
+          path: |
+            ${{ runner.temp }}/train-diff/diff-*.md
+            ${{ runner.temp }}/train-diff/*/*.jsonl
