@@ -92,3 +92,5 @@ The ledger write through the GitHub connector returned an internal error. A norm
 
 - Train 12's first hosted gate passed against `5a3f4875b4d57f23f8e1f653b4f43c84b5c01031` with identical geometry and 20,017,033,325 strict instructions on both sides. Hosted Clippy found four banned test-only integer-power calls. Fixed head `772bbf9c9f22d4d760c1f2efb3578c6dbbd0b011` passed strict pre-verify Clippy locally. [Exact-head CI rerun](https://github.com/David-Bascom05/forgeCAD/actions/runs/45673007725) pending.
 - Train 13 passed 32 focused local Boolean regression tests on `7ed230ec0b554a8b1a3eb3b0bbdd8390edc67aa3`.
+
+- Train 12 rerun on `772bbf9c9f22d4d760c1f2efb3578c6dbbd0b011` passed Clippy, WASM and exact Callgrind. The native suite's assertions passed, but test budgets failed. Its baseline run stopped at a candidate-only package, leaving inherited and new slow cases unresolved. Train 12 head `ec2b48aeef9de68163be9347019974f11f6c90f0` corrects that comparison. New tests remain subject to the time budget. [Hosted rerun](https://github.com/David-Bascom05/forgeCAD/actions/runs/45681076188).
