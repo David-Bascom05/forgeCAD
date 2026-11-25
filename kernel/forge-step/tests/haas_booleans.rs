@@ -121,3 +121,29 @@ fn another_oring_with_a_copy_over_it() {
 fn a_part_with_tori_with_a_copy_over_it() {
     over_copy(&one("tori_167faces.step"));
 }
+
+/// HRTA6 #56170 with copies over it at offsets around 0.41 of its width. With the tori traced
+/// apart (and FLAT-SITES' cone-apex unify fix), union and intersection both check, but at 0.4137
+/// they make up 972 mm3 less than twice the part and at 0.417 126 more; 0.415 and 0.42 are
+/// refused. Main refuses all of them. Open: the O-ring fix waits on it.
+#[test]
+#[ignore = "open: union + intersection do not add up once the tori trace apart"]
+fn a_part_with_tori_with_copies_near_over() {
+    let b = one("tori_167faces.step");
+    let w = b.faces_box().x.width();
+    let v = volume(&b);
+    for k in [0.40, 0.405, 0.41, 0.412, 0.4137, 0.415, 0.417, 0.42, 0.43] {
+        let copy = moved(&b, forge_math::Vec3::new(k * w, 0.0, 0.0));
+        let (Ok(u), Ok(i)) = (
+            boolean(&b, &copy, Op::Union, 9000),
+            boolean(&b, &copy, Op::Intersect, 9000),
+        ) else {
+            continue;
+        };
+        let miss = volume(&u) + volume(&i) - 2.0 * v;
+        assert!(
+            miss.abs() < 1e-6 * v,
+            "offset {k}: union + intersection - 2V = {miss}"
+        );
+    }
+}
