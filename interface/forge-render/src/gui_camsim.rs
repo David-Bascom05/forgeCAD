@@ -50,6 +50,7 @@ impl Gui {
                 ui.part = old.part;
                 ui.tool = old.tool;
                 ui.fixture = old.fixture;
+                ui.checked = old.checked;
                 ui.follow = old.follow;
                 ui.shop_eye = old.shop_eye;
                 ui.detail = old.detail;
@@ -400,8 +401,56 @@ pub fn geometry(
     if st.fixture
         && let Some(s) = st.sim.setups.get(setup)
     {
-        for (_, lo, hi) in &s.fixture {
-            draw::solid_box(*lo, *hi, draw::look::FIXTURE, &mut solid);
+        let colour = |body: bool| {
+            if body {
+                draw::look::VISE_BODY
+            } else {
+                draw::look::FIXTURE
+            }
+        };
+        if s.holding.is_empty() {
+            // an old record's boxes, as the checks hold them: the bed (painted iron), its jaws and
+            // parallels (steel)
+            for (k, (_, lo, hi)) in s.fixture.iter().enumerate() {
+                draw::solid_box(*lo, *hi, colour(s.fixture_body.get(k) == Some(&true)), &mut solid);
+            }
+        } else {
+            // a library device: each body its real part, posed, where it is downloaded; else its
+            // own tight primitives (never the checker's enclosing boxes, which reach past it)
+            for b in &s.holding {
+                let mesh = b.part.as_ref().and_then(|(p, m, t)| {
+                    let tr = crate::camsim::machine::holding_part(p)?;
+                    Some((tr, *m, *t))
+                });
+                match mesh {
+                    Some((tr, m, t)) => {
+                        let c = colour(b.body);
+                        let ap = |v: [f64; 3]| {
+                            [
+                                m[0][0] * v[0] + m[0][1] * v[1] + m[0][2] * v[2],
+                                m[1][0] * v[0] + m[1][1] * v[1] + m[1][2] * v[2],
+                                m[2][0] * v[0] + m[2][1] * v[1] + m[2][2] * v[2],
+                            ]
+                        };
+                        solid.reserve(tr.tri.len() * 3);
+                        for tri in &tr.tri {
+                            for &k in tri {
+                                let p = ap(tr.pos[k as usize]);
+                                let n = ap(tr.nrm[k as usize]);
+                                solid.push(crate::origin::WorldVert {
+                                    at: [(p[0] + t[0]) as f32, (p[1] + t[1]) as f32, (p[2] + t[2]) as f32],
+                                    colour: draw::shade_pub(c, [n[0] as f32, n[1] as f32, n[2] as f32]),
+                                });
+                            }
+                        }
+                    }
+                    None => {
+                        for (lo, hi) in &b.boxes {
+                            draw::solid_box(*lo, *hi, colour(b.body), &mut solid);
+                        }
+                    }
+                }
+            }
         }
     }
     // the tool at the time shown, red where a failed check's move now names it
@@ -444,6 +493,9 @@ pub fn geometry(
             .flat_map(|c| [c.a.clone(), c.b.clone()])
             .collect();
         mv.draw_with(st.t, &hit, &mut solid, world);
+        if st.checked {
+            mv.draw_checked(st.t, world);
+        }
     }
     // the toolpath
     let show = PathShow {
@@ -567,6 +619,8 @@ impl Gui {
                     st.jump(f * total);
                 }
                 "machine" => st.machine = on()?,
+                // what the collision check takes for each body, see-through
+                "checked" => st.checked = on()?,
                 // the simulation's own framing: the stock and the tool's tip now (STANDARD §2)
                 "fit" if v == "sim" => refit = true,
                 "fit" => {
@@ -589,6 +643,14 @@ impl Gui {
                                 [1.0; 3],
                                 &mut tris,
                             );
+                        }
+                        // the stock and what holds it (the vise on the table)
+                        "holding" => {
+                            let s = st.sim.setups.get(st.setup_now()).ok_or("no setup")?;
+                            draw::solid_box(s.stock.min, s.stock.max, [1.0; 3], &mut tris);
+                            for (_, lo, hi) in &s.fixture {
+                                draw::solid_box(*lo, *hi, [1.0; 3], &mut tris);
+                            }
                         }
                         _ => {
                             let s = st.sim.setups.get(st.setup_now()).ok_or("no setup")?;

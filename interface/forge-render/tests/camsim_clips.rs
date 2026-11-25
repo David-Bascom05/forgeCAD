@@ -166,3 +166,58 @@ fn the_mould_core_finishing_clip() {
     let play = move |u: f64| format!("t={}", t0 + u * (t1 - t0));
     clip(&mut h, "camsim-mould-finish", &[(14.0, &play)]);
 }
+
+/// The flange's posted program on the Haas VF-2 (David), held in the real Haas vise
+/// (Haas Tooling 05-0404, the workholding library's `haas-vise-05-0404`: its base on the
+/// table, the stock in its jaws): the operator's view, the table carrying the part under the
+/// head, then the end compared against the part. The machine's and the vise's models where
+/// they are downloaded (Git LFS), else their records' parts.
+#[test]
+fn the_flange_on_the_vf2_clip() {
+    let dir = copied("vf2", &["flange.fg"]);
+    let src = std::fs::read_to_string(machined().join("flange_cam.fg"))
+        .unwrap()
+        .replace("machine(\"generic-vmc3\")", "machine(\"haas-vf-2\")")
+        .replace("post: \"fanuc\"", "post: \"haas\"")
+        // 6 below the part, 3 of it in the jaws: the profile's break-through stays above them
+        .replace("below: 3)", "below: 6)")
+        .replace(
+            ", at: (0, 0, -250))",
+            ", fixture: vise(\"haas-vise-05-0404\", across: \"x\", clamp: 3))",
+        );
+    std::fs::write(dir.join("flange_vf2_cam.fg"), src).unwrap();
+    let Some(mut h) = open(&dir.join("flange_vf2_cam.fg")) else {
+        return;
+    };
+    {
+        let st = h.gui.shell.camsim.as_ref().unwrap();
+        assert!(st.sim.cam.ok, "{:?}", st.sim.cam.errors);
+        let mv = st.sim.machines[0]
+            .as_ref()
+            .unwrap_or_else(|e| panic!("the VF-2 runs it: {e}"));
+        assert_eq!(mv.run.seat, Some(0.0), "the vise on the table");
+    }
+    let total = h.gui.shell.camsim.as_ref().unwrap().total();
+    // the eye on the vise and the stock in it, held in the machine (the operator's view), back
+    // far enough for the head over them: the table carries the part and the vise under the
+    // still head
+    h.gui
+        .camsim_command(&format!(
+            "source=machine;machine=1;fixture=1;tab=program;colour=material;part=hidden;played=1;follow=0;t={};fit=holding;eye=shop",
+            0.3 * total
+        ))
+        .unwrap();
+    if let Some(v) = h.gui.view.as_mut() {
+        v.nav.camera.dist *= 2.4;
+        v.nav.camera.pitch = 22f32.to_radians();
+        v.mark_dirty();
+    }
+    let total = h.gui.shell.camsim.as_ref().unwrap().total();
+    let play = move |u: f64| format!("t={}", u * total);
+    let end = |_u: f64| "source=toolpath;colour=compare;paths=0;at=1;fit=holding".to_string();
+    clip(
+        &mut h,
+        "camsim-flange-vf2-vise",
+        &[(1.0, &|_| "t=0".into()), (22.0, &play), (3.0, &end)],
+    );
+}

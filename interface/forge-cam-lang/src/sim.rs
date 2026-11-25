@@ -25,6 +25,18 @@ pub struct SimSetup {
     pub tol: f64,
     /// The workholding's pieces as boxes (name, min, max), in this setup's frame.
     pub fixture: Vec<(String, [f64; 3], [f64; 3])>,
+    /// Per piece of `fixture`: a body of the device (its base, a riser, a plate), not a jaw or
+    /// a parallel, by the workholding library's role where the device is one of its own (else
+    /// an old vise's "bed").
+    pub fixture_body: Vec<bool>,
+    /// The plane the workholding stands on (the machine table), in this setup's frame, when
+    /// known: a workholding library device's mount. None: no workholding, or an old record's
+    /// boxes, which stop at the bed and say nothing of the table.
+    pub table_z: Option<f64>,
+    /// The workholding library's placed device, a body each, for drawing: its real part (a
+    /// mesh relative to forge-workholding's data/models, posed into this setup's frame) where
+    /// it has one, else its own tight primitives. Empty for an old record's boxes.
+    pub holding: Vec<HoldingBody>,
     /// Its name, if it has one.
     pub fixture_name: Option<String>,
     /// The setup this one continues, turned over.
@@ -74,6 +86,9 @@ impl Cam {
                     origin: s.origin,
                     tol: s.tol,
                     fixture: s.fixture.as_ref().map(|f| f.boxes()).unwrap_or_default(),
+                    fixture_body: s.fixture.as_ref().map(body_pieces).unwrap_or_default(),
+                    table_z: s.fixture.as_ref().and_then(|f| f.table_z),
+                    holding: s.fixture.as_ref().map(holding_bodies).unwrap_or_default(),
                     fixture_name: s.fixture.as_ref().map(|f| f.name.clone()),
                     from: s.from,
                     jaws_for: self.jaws_for(s),
@@ -124,6 +139,13 @@ pub struct MachineRun {
     /// The workholding as the check took it (part frame on the machine); the stock is left
     /// to the certified checker (it changes as it is cut).
     pub work: Vec<forge_machine::collide::CBody>,
+    /// The workholding's base above the part mount's datum (the table), mm, in the part's frame
+    /// on the machine: 0 where it is seated (as it is placed with no `at:`), positive floating
+    /// above the table, negative sunk into it. None: the setup has no workholding, or one whose
+    /// table plane is unknown (`Fixture::table_z`: an old record's boxes).
+    pub seat: Option<f64>,
+    /// The workholding's extent in the document's part frame (lowest corner, highest).
+    pub holding: Option<([f64; 3], [f64; 3])>,
 }
 
 impl MachineRun {
@@ -223,9 +245,15 @@ impl Cam {
         // the part on the machine: centred on the datum, its lowest (stock or workholding) on it
         let mut lo = s.stock.min;
         let hi = s.stock.max;
+        // (a library device stands on its table plane; an old record's boxes, on their lowest)
         if let Some(f) = &s.fixture {
-            for (_, a, _) in f.boxes() {
-                lo[2] = lo[2].min(a[2]);
+            match f.table_z {
+                Some(z) => lo[2] = z,
+                None => {
+                    for (_, a, _) in f.boxes() {
+                        lo[2] = lo[2].min(a[2]);
+                    }
+                }
             }
         }
         let mut shift = [-0.5 * (lo[0] + hi[0]), -0.5 * (lo[1] + hi[1]), -lo[2]];
@@ -348,6 +376,20 @@ impl Cam {
         // part), the envelopes where a part has none
         let (trees, _) = forge_machine_lang::real_trees(&def, None);
         let contacts = collide::check_with(&setup, &tl, &checked, &trees);
+        let holding = s.fixture.as_ref().map(|f| {
+            f.boxes().iter().fold(
+                ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]),
+                |(lo, hi), (_, a, b)| {
+                    (
+                        [lo[0].min(a[0]), lo[1].min(a[1]), lo[2].min(a[2])],
+                        [hi[0].max(b[0]), hi[1].max(b[1]), hi[2].max(b[2])],
+                    )
+                },
+            )
+        });
+        // the table plane where the device gives one: an old record's boxes give none (their
+        // lowest is the bed's slab, not the base on the table), so nothing is said of it
+        let seat = s.fixture.as_ref().and_then(|f| f.table_z).map(|z| z + shift[2]);
 
         Ok(MachineRun {
             program: prog.name.clone(),
@@ -362,6 +404,8 @@ impl Cam {
             tl,
             contacts,
             work,
+            seat,
+            holding,
             def,
         })
     }
@@ -392,4 +436,57 @@ impl Cam {
         let s = self.setups.get(si)?;
         crate::machines::record(&s.machine)?.changer.as_ref()?.change_s
     }
+}
+
+/// Per piece of a fixture's boxes: a body of the device (base, riser, plate, column, module,
+/// a chuck's body), not what holds (jaws, parallels, clamps, studs), by the workholding
+/// library's roles where it placed the device, else an old vise's "bed".
+fn body_pieces(f: &forge_cam::fixture::Fixture) -> Vec<bool> {
+    use forge_workholding::Role;
+    f.boxes()
+        .iter()
+        .map(|(name, _, _)| match &f.placed {
+            Some(p) => p.bodies.iter().find(|b| &b.name == name).is_some_and(|b| {
+                matches!(
+                    b.role,
+                    Role::Base | Role::Riser | Role::Plate | Role::Column | Role::Module | Role::ChuckBody
+                )
+            }),
+            None => name == "bed",
+        })
+        .collect()
+}
+
+/// A body of a placed workholding device, as the simulation draws it.
+#[derive(Clone, Debug)]
+pub struct HoldingBody {
+    pub name: String,
+    /// The device's body (base, riser, plate..), not what holds (jaws, parallels..).
+    pub body: bool,
+    /// Its real part: a path relative to forge-workholding's data/models (an STL) or its parts
+    /// folder (a `.fg`), and the pose from the part's own frame into the setup's (rows of the
+    /// rotation, then the shift).
+    pub part: Option<(String, [[f64; 3]; 3], [f64; 3])>,
+    /// Its primitives' bounds (the body's own tight boxes): drawn where the part is not there.
+    pub boxes: Vec<([f64; 3], [f64; 3])>,
+}
+
+fn holding_bodies(f: &forge_cam::fixture::Fixture) -> Vec<HoldingBody> {
+    use forge_workholding::Role;
+    let Some(p) = &f.placed else { return vec![] };
+    p.bodies
+        .iter()
+        .map(|b| HoldingBody {
+            name: b.name.clone(),
+            body: matches!(
+                b.role,
+                Role::Base | Role::Riser | Role::Plate | Role::Column | Role::Module | Role::ChuckBody
+            ),
+            part: match (&b.part, &b.part_pose) {
+                (Some(part), Some(pose)) => Some((part.clone(), pose.m, pose.t)),
+                _ => None,
+            },
+            boxes: b.prims.iter().map(|q| q.grown(b.keepout).bounds()).collect(),
+        })
+        .collect()
 }
