@@ -536,7 +536,7 @@ impl BendSimUi {
         let Ok(s) = &self.sim else { return vec![] };
         let mut d = vec![false; s.model.bends.len()];
         for st in s.plan.steps.iter().take(self.step) {
-            d[st.bend] = true;
+            st.mark(&mut d);
         }
         d
     }
@@ -1600,6 +1600,16 @@ pub fn why_tools(sim: &Sim, cat: Option<&fb::catalog::Catalog>, k: usize) -> (St
     (line, list.join("\n"))
 }
 
+/// A stroke that is not a plain air bend, in words after the bend: " · pre-bend", " · flatten",
+/// " · offset with <the other bend>" (BENDSIM-TOOLS' hems and offsets); nothing for a bend.
+pub fn stroke_words(sim: &Sim, s: &fb::Step) -> String {
+    match s.stroke {
+        fb::Stroke::Air => String::new(),
+        fb::Stroke::Offset { k } => format!(" · offset with {}", sim.names.get(k).map_or("?", |x| x.as_str())),
+        other => format!(" · {}", other.word()),
+    }
+}
+
 fn prop(ui: &mut egui::Ui, t: &Theme, label: &str, value: String, key: Option<&str>) {
     let r = ui.label(egui::RichText::new(label).color(t.ink2));
     if let Some(k) = key {
@@ -1730,7 +1740,7 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
     let cat = st.catalog.as_ref().and_then(|c| c.as_ref().ok());
     if let Some(s) = plan.steps.get(st.step) {
         let ok = s.pass();
-        let title = format!("Bend {} · {}", st.step + 1, names[s.bend]);
+        let title = format!("Bend {} · {}{}", st.step + 1, names[s.bend], stroke_words(sim, s));
         // the badge beside the title when both fit, else on its own row under it (its words
         // never run over the title)
         let fits = {
@@ -2523,10 +2533,11 @@ pub fn overlay(ui: &egui::Ui, rect: egui::Rect, st: &mut BendSimUi) {
         // the caption: which bend, what it makes, where in its motion; the tools are the sheet's
         lines.push((
             format!(
-                "Bend {} · {} · {:.0}° · {}",
+                "Bend {} · {} · {:.0}°{} · {}",
                 st.step + 1,
                 sim.names[s.bend],
                 s.angle.to_degrees(),
+                stroke_words(sim, s),
                 stage.word()
             ),
             egui::Color32::from_gray(230),

@@ -1310,6 +1310,7 @@ fn a_staged_clip() {
         press: staged.then_some(press),
         stations_auto: staged,
         punches: list("BENDSIM_CLIP_PUNCHES"),
+        dies: list("BENDSIM_CLIP_DIES"),
         sequence: list("BENDSIM_CLIP_SEQUENCE"),
         ..Choice::default()
     };

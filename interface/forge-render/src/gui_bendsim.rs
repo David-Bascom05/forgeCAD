@@ -816,7 +816,7 @@ impl Gui {
                 }
                 let mut done = vec![false; sim.model.bends.len()];
                 for s in &sim.plan.steps[..step] {
-                    done[s.bend] = true;
+                    s.mark(&mut done);
                 }
                 forge_brake::contacts_of(&sim.model, &sim.tooling, &done, st)
             });
