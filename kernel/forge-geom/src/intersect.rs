@@ -1427,6 +1427,34 @@ mod tests {
         }
     }
 
+    /// A line anchored far off (UMC-500 #69561: a plane across a cylinder half a kilometre in
+    /// radius meets it in lines anchored on its axis, 495 m away) meets a torus where the same line
+    /// anchored near it does: from the far anchor the quartic's terms reached 1e22, cancelled, and
+    /// its crossings were lost.
+    #[test]
+    fn a_line_from_far_off_meets_a_torus_where_a_near_one_does() {
+        let t = Torus {
+            frame: Frame::WORLD,
+            major: 10.0,
+            minor: 2.0,
+        };
+        let x = Vec3::X.normalize().unwrap();
+        let r = 44.0_f64.sqrt();
+        for (y, want) in [(0.0, vec![-12.0, -8.0, 8.0, 12.0]), (10.0, vec![-r, r])] {
+            for from in [-30.0, -495_000.0] {
+                let line = Line::new(Point3::new(from, y, 0.0), x);
+                let LineSurface::Hits(h) = line_torus(&line, &t) else {
+                    panic!("hits expected");
+                };
+                let at: Vec<f64> = h.iter().map(|h| h.point.x).collect();
+                assert_eq!(at.len(), want.len(), "from {from}, y {y}: {at:?}");
+                for (a, w) in at.iter().zip(&want) {
+                    assert!((a - w).abs() < 1e-6, "from {from}, y {y}: {at:?}");
+                }
+            }
+        }
+    }
+
     /// A spindle's quartic also holds its other sheet (apple for lemon): a line hits only the used one.
     #[test]
     fn a_line_hits_one_sheet_of_a_spindle() {
