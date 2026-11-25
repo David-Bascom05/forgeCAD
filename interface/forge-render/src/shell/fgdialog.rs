@@ -204,6 +204,7 @@ fn value_row(
     let edit = ui.put(
         field,
         egui::TextEdit::singleline(text)
+            .id(field_id(&name))
             .font(mono(13.0))
             .desired_width(field.width() - 14.0)
             .margin(vec2(7.0, 5.0)),
@@ -232,6 +233,115 @@ fn value_row(
         );
     }
     places.push((name, field));
+}
+
+/// A value field's id: by its place name, so focus can be put in it.
+fn field_id(name: &str) -> egui::Id {
+    egui::Id::unique(("fg-field", name))
+}
+
+/// Focus where the user acts first (STANDARD §9). A dialog with no pick to make: its first
+/// field, its text selected, as it opens. A pick-first one: the pick, keys to the view; but a
+/// digit typed with nothing focused starts the entry in its first number field (pick the edges,
+/// type 2, Enter).
+/// What a digit handed to a field replaced: Esc puts it back (STANDARD §9).
+#[derive(Clone)]
+struct DigitUndo {
+    id: egui::Id,
+    param: &'static str,
+    was: String,
+}
+
+fn undo_key() -> egui::Id {
+    egui::Id::unique("fg-digit-undo")
+}
+
+/// Esc in the field a digit started: its old value back, the keys back to the view (the pick
+/// slot still takes picks), the dialog left open. Whether it was that Esc.
+pub(super) fn digit_escape(ctx: &egui::Context, tool: &mut FgTool) -> bool {
+    let Some(u) = ctx.data(|d| d.get_temp::<DigitUndo>(undo_key())) else {
+        return false;
+    };
+    // (egui has already taken the focus from the field for this Esc; the undo is kept only while
+    // the field held it, focus_first drops it once it's left)
+    ctx.data_mut(|d| d.remove::<DigitUndo>(undo_key()));
+    if let Some(p) = tool.params.iter_mut().find(|p| p.name == u.param) {
+        p.text = u.was;
+    }
+    ctx.memory_mut(|m| m.surrender_focus(u.id));
+    true
+}
+
+fn focus_first(ctx: &egui::Context, tool: &FgTool) {
+    let hide = shown_only_with_picks(tool);
+    let Some(p) = tool
+        .params
+        .iter()
+        .find(|p| needs(tool.kind, p.name).is_none() && !hide.contains(&p.name))
+    else {
+        return;
+    };
+    let id = field_id(&format!("fg:tool:param:{}", p.name));
+    let free = ctx.memory(|m| m.focused().is_none());
+    // a digit alone: not mid-drag, no other key or modifier held
+    let digit = || {
+        ctx.input(|i| {
+            use egui::Key as K;
+            let alone = !i.pointer.any_down()
+                && !(i.modifiers.ctrl || i.modifiers.command || i.modifiers.alt)
+                && i.keys_down.iter().all(|k| {
+                    matches!(
+                        k,
+                        K::Num0
+                            | K::Num1
+                            | K::Num2
+                            | K::Num3
+                            | K::Num4
+                            | K::Num5
+                            | K::Num6
+                            | K::Num7
+                            | K::Num8
+                            | K::Num9
+                            | K::Period
+                            | K::Minus
+                    )
+                });
+            alone
+                && i.events.iter().any(|e| {
+                    matches!(e, egui::Event::Text(s)
+                    if s.starts_with(|c: char| c.is_ascii_digit() || c == '.' || c == '-'))
+                })
+        })
+    };
+    // the field a digit started, left (Enter, a click): nothing to put back
+    if ctx
+        .data(|d| d.get_temp::<DigitUndo>(undo_key()))
+        .is_some_and(|u| ctx.memory(|m| m.focused()) != Some(u.id))
+    {
+        ctx.data_mut(|d| d.remove::<DigitUndo>(undo_key()));
+    }
+    let handed = free && !tool.slots.is_empty() && digit();
+    if handed {
+        let u = DigitUndo {
+            id,
+            param: p.name,
+            was: p.text.clone(),
+        };
+        ctx.data_mut(|d| d.insert_temp(undo_key(), u));
+    }
+    if tool.slots.is_empty() {
+        super::dialog::focus_on_open(ctx, "fg-dialog", id, &p.text);
+    } else if handed {
+        ctx.memory_mut(|m| m.request_focus(id));
+        // the text selected: what's typed replaces it
+        let mut s = egui::text_edit::TextEditState::load(ctx, id).unwrap_or_default();
+        let n = p.text.chars().count();
+        s.cursor.set_char_range(Some(egui::text::CCursorRange::two(
+            egui::text::CCursor::new(0),
+            egui::text::CCursor::new(n),
+        )));
+        s.store(ctx, id);
+    }
 }
 
 /// A chip: a pick to take back out, or a choice to take.
@@ -443,7 +553,7 @@ impl Shell {
             Asked::Nothing => {}
         }
         self.status = match &tool.error {
-            Some(e) => format!("{}: {}", e.kind(), e.text()),
+            Some(e) => e.text(),
             None => tool.prompt(),
         };
         fg.tool = Some(tool);
@@ -472,7 +582,7 @@ impl Shell {
             .fixed_size(vec2(DIALOG_W, 0.0))
             .frame(frame)
             .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
+            .show_fit(ctx, |ui| {
                 ui.label(egui::RichText::new(format!("Edit Occurrence {}", e.occ)).font(semi(14.0)));
                 ui.label(
                     egui::RichText::new(format!("of {}: empty fields take the default", e.component))
@@ -589,6 +699,7 @@ impl Shell {
             }
         }
 
+        focus_first(ui.ctx(), tool);
         ui.add_space(2.0);
         heading(ui, "Input Geometry", t);
         let mut activate = None;

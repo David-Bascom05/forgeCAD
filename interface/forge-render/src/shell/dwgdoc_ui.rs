@@ -9,6 +9,7 @@
 use super::dwgcmd::{Inp, want};
 use super::dwgdoc::{Cmd, DwgDoc, Press, Run, TOGGLES, View};
 use super::dwgprops::Switch;
+use super::placed::Placed as _;
 use super::theme::{mono, sans, semi};
 use super::{Action, Shell, icons};
 use crate::dwgview::gpu::{Look, Paint};
@@ -1554,7 +1555,7 @@ impl Shell {
             .default_size(vec2(520.0, 320.0))
             .default_pos(pos2(area.right() - 560.0, area.bottom() - 380.0))
             .constrain_to(area)
-            .show(ctx, |ui| {
+            .show_fit(ctx, |ui| {
                 if d.drawing.warnings.is_empty() {
                     ui.label("Every object in this file was decoded.");
                     return;
