@@ -2509,10 +2509,17 @@ fn library_vise(
 /// The workholding record that takes an old forge-tooling name's place: the one whose
 /// `replaces` word is that name (the data says which; no name is written here).
 fn successor<'a>(wh: &'a forge_workholding::Library, name: &str) -> Option<&'a forge_workholding::Record> {
-    wh.records
+    // a real record that replaces the name wins over a stand-in that does
+    let mut it = wh
+        .records
         .iter()
         .map(|(r, _)| r)
-        .find(|r| r.words.get("replaces").is_some_and(|x| x == name))
+        .filter(|r| r.words.get("replaces").is_some_and(|x| x == name));
+    let first = it.next()?;
+    if !first.standin {
+        return Some(first);
+    }
+    Some(it.find(|r| !r.standin).unwrap_or(first))
 }
 
 /// Runs a machining document (its file's directory finds the part) on the built-in library.

@@ -2182,20 +2182,33 @@ fn a_vise_from_the_workholding_library_or_the_old_record() {
         .unwrap();
     assert!((base.bounds().0[2] - t).abs() < 1e-9, "{:?} {t}", base.bounds());
     assert!((f.jaw_top - t - 100.0).abs() < 1e-9, "{} {t}", f.jaw_top);
-    // the old name is the library's stand-in, said so
-    let cam = forge_cam_lang::run(&doc("generic-vise-150"), &dir);
-    assert!(cam.ok, "{:?}", cam.errors);
-    assert!(cam.warnings.iter().any(|w| w.contains("standin-vise-150")));
-    assert!(cam.setup_view(0).unwrap().fixture.unwrap().table_z.is_some());
-    // a name only the old forge-tooling library has keeps its boxes, warned: no table plane
-    let cam = forge_cam_lang::run(&doc("generic-vise-100"), &dir);
+    // the old generic names are now the real Haas vises, each said in a warning, and each
+    // checked against the maker's model (no boxes, and a table plane)
+    for (old, now) in [
+        ("generic-vise-150", "haas-vise-05-0404"),
+        ("generic-vise-100", "haas-vise-05-0405"),
+    ] {
+        let cam = forge_cam_lang::run(&doc(old), &dir);
+        assert!(cam.ok, "{old}: {:?}", cam.errors);
+        assert!(
+            cam.warnings
+                .iter()
+                .any(|w| w.contains(now) && w.contains("the maker's own model")),
+            "{old}: {:?}",
+            cam.warnings
+        );
+        let f = cam.setup_view(0).unwrap().fixture.unwrap();
+        assert!(f.table_z.is_some() && f.enveloped.is_empty() && f.placed.is_some());
+        assert!(f.shaped.iter().any(|s| s.0 == "base"), "{old}: {:?}", f.boxes());
+    }
+    // a stand-in named outright is still placed as one, and says so
+    let cam = forge_cam_lang::run(&doc("standin-vise-150"), &dir);
     assert!(cam.ok, "{:?}", cam.errors);
     assert!(
+        cam.warnings.iter().all(|w| !w.contains("is now")),
+        "{:?}",
         cam.warnings
-            .iter()
-            .any(|w| w.contains("old forge-tooling record"))
     );
-    assert!(cam.setup_view(0).unwrap().fixture.unwrap().table_z.is_none());
     // a name neither knows is refused
     let cam = forge_cam_lang::run(&doc("no-such-vise"), &dir);
     assert!(

@@ -8,6 +8,7 @@ kind = "vise"
 vendor = "Haas"
 product = "6 in single-station CrossOver vise, 9 in opening (PN 05-0404, Haas Workholding by Kurt: the DX6)"
 model = "haas-05-0404"
+replaces = "generic-vise-150"
 note = "Haas sells it (haastooling.com, Haas Automation's own store); haascnc.com refused automated reading. Its bodies are Haas Tooling's own model of it (data/models.toml haas-05-0404), which settles the height the pages left in conflict: the page prints OAH 110.74, but BH 73.03 + JH 44.07 = 117.10 (Penn Tool lists 117.09 for the Kurt DX6), and the model measures 117.094 from its underside to the jaw plates' top, so BH + JH is the one to believe and the printed OAH is not the vise's height. The model also gives the jaw plate's thickness, which no maker publishes. VO 225.0 is the rated opening, J1 0-230.6 the jaws' range (used; the model is drawn 228.60 open); OAL with handle 463.75"
 jaw_width = 150
 jaw_height = 44.07
@@ -32,6 +33,7 @@ kind = "vise"
 vendor = "Haas"
 product = "4 in single-station CrossOver vise, 6-1/2 in opening (PN 05-0405, Haas Workholding by Kurt: the DX4)"
 model = "haas-05-0405"
+replaces = "generic-vise-100"
 note = "Haas sells it (haastooling.com, Haas Automation's own store); the metric twin is 05-0209 (the same model file). Nothing is in conflict here: the page's OAH 88.52 is its BH 57.15 + JH 31.37, and the model measures 88.519. Its bodies are Haas Tooling's own model (data/models.toml haas-05-0405), which also gives the jaw plate's thickness, which no maker publishes. VO 165.0 is the rated opening, J1 0-165.1 the jaws' range (used; the model is drawn 127.00 open); OAL 348.87"
 jaw_width = 100
 jaw_height = 31.37
