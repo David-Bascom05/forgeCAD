@@ -396,6 +396,7 @@ fn approvals_pictures() {
                     text: format!("Round {k}: fillet the top edges 2 mm and check the wall"),
                     refs: vec![],
                     markup: None,
+                    pictures: 0,
                 });
                 long.push(Entry::Tool {
                     id: format!("old{k}"),

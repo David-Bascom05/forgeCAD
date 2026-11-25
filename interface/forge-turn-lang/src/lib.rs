@@ -117,7 +117,8 @@ pub struct TurnCam {
     tools: Vec<(TurnTool, u32)>,
     setups: Vec<(String, Setup)>,
     paths: Vec<(String, usize, OpPath)>,
-    lib: forge_tooling::Library,
+    /// The tooling library (read only: shared, the built-in one never copied).
+    lib: std::sync::Arc<forge_tooling::Library>,
     /// Per part, its stock; per setup, its part; per tool, its library insert's id.
     stocks: Vec<Option<Stock>>,
     setup_part: Vec<usize>,
@@ -915,12 +916,12 @@ fn certify_memo(
 }
 
 pub fn run(src: &str, dir: &Path) -> TurnCam {
-    run_with(src, dir, false, forge_tooling::Library::builtin())
+    run_with(src, dir, false, forge_tooling::Library::builtin_shared())
 }
 
 /// `run` with the exact in-process stock and the G4 leftover (`forgecad cam F check`).
 pub fn run_checked(src: &str, dir: &Path) -> TurnCam {
-    run_with(src, dir, true, forge_tooling::Library::builtin())
+    run_with(src, dir, true, forge_tooling::Library::builtin_shared())
 }
 
 /// `run` (or, `exact`, `run_checked`) on a given tooling library: the one the user's levels make
@@ -928,10 +929,10 @@ pub fn run_checked(src: &str, dir: &Path) -> TurnCam {
 /// over the built-in), so inserts and turning holders made in the builder reach
 /// `lathe_tool(holder:, insert:)`.
 pub fn run_with_library(src: &str, dir: &Path, exact: bool, lib: forge_tooling::Library) -> TurnCam {
-    run_with(src, dir, exact, lib)
+    run_with(src, dir, exact, std::sync::Arc::new(lib))
 }
 
-fn run_with(src: &str, dir: &Path, exact: bool, lib: forge_tooling::Library) -> TurnCam {
+fn run_with(src: &str, dir: &Path, exact: bool, lib: std::sync::Arc<forge_tooling::Library>) -> TurnCam {
     let mut cam = TurnCam {
         lib,
         exact,

@@ -19,6 +19,7 @@ per_doc!(
         fg: Option<crate::fg::Session>,
         last_built: Option<crate::gui::LastBuilt>,
         fg_view: Option<Loaded>,
+        fg_restage: Option<crate::gui::Restage>,
         fg_folded: Option<crate::mesh::PartMesh>,
         fg_flat: Option<crate::mesh::PartMesh>,
         fg_sketch: Option<crate::shell::fgsketch::Opened>,
