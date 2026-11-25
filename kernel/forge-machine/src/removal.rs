@@ -411,6 +411,19 @@ pub fn mill(s: &Setup, tl: &Timeline, min: V3, max: V3, step: f64) -> Result<Mil
     mill_with(s, tl, min, max, step, TipForm::Closed)
 }
 
+/// One cell's outcome on one move, worked out on its own (`mill_with` applies them in order).
+struct Cell {
+    i: usize,
+    x: f64,
+    y: f64,
+    cur: f64,
+    low: f64,
+    new: f64,
+    contact: Option<f64>,
+    crash: Option<f64>,
+    pieces: Vec<(usize, f64, f64)>,
+}
+
 /// `mill` with the tip's form chosen (tests check the affine form against the chained one).
 #[doc(hidden)]
 pub fn mill_with(
@@ -541,16 +554,22 @@ pub fn mill_with(
         let mut holder: Option<HolderHit> = None;
         let mut vol = 0.0;
         let mut worst: Option<(f64, V3)> = None;
-        for j in j0..=j1.min(ny - 1) {
+        // each row's cells worked out side by side (a cell's outcome reads only its own height,
+        // which no other cell of this move changes), then applied in row and column order: the
+        // same heights, volume (summed in the same order), holder hit, probe contact and rapid
+        // cut as one cell after another
+        let rows = forge_math::par::map((j1.min(ny - 1) + 1).saturating_sub(j0), |dj| {
+            let j = j0 + dj;
+            // the tip's own instance (its scratch is per instance, overwritten at every call: the
+            // same bits as the one above)
+            let p = tip_path(s, seg, t, form).expect("built for this move above");
+            let mut out: Vec<Cell> = Vec::new();
             for i in i0..=i1.min(nx - 1) {
                 let (x, y) = map.node(i, j);
                 let cur = map.z[j * nx + i];
                 if cur <= map.bottom {
                     continue;
                 }
-                // cells the move cannot change, skipped with the same results: already below the
-                // tip's lowest point (no cutter reaches under it, every other piece is above the
-                // tip), or, on a line, farther from the path than the widest piece reaches
                 if cur <= lowest - 1e-6 {
                     continue;
                 }
@@ -568,8 +587,6 @@ pub fn mill_with(
                     }
                 };
                 let low = match seg.path {
-                    // a line at one height: the cutter's lowest over the node is at the path's
-                    // nearest point (its profile only rises with distance), in closed form
                     Path::Line if flat => {
                         let d = seg_dist([a[0], a[1]], [b[0], b[1]], [x, y]);
                         match profile(r, corner, d) {
@@ -593,25 +610,19 @@ pub fn mill_with(
                         sampled_min(&env, n)
                     }
                 };
-                if probe {
-                    // the ball removes nothing: a contact triggers (skip) or crashes (otherwise)
-                    if low < cur - 1e-6 {
-                        if skip {
-                            let u = first_contact(&env, cur);
-                            if first.is_none_or(|(f, _)| u < f) {
-                                first = Some((u, [x, y, cur]));
-                            }
-                        } else if probe_hit.is_none_or(|(d, _)| cur - low > d) {
-                            probe_hit = Some((cur - low, [x, y, low]));
-                        }
+                let mut contact = None;
+                let mut crash = None;
+                if probe && low < cur - 1e-6 {
+                    if skip {
+                        contact = Some(first_contact(&env, cur));
+                    } else {
+                        crash = Some(cur - low);
                     }
                 }
                 let new = if probe { cur } else { low.max(map.bottom) };
-                // each non-cutting piece: a flat-bottomed cylinder `from` above the tip
                 let after = new.min(cur);
-                // no piece above the cutter can reach below the move's lowest tip + its `from`:
-                // when the cell is at or under that, none can hit it (the same results, skipped)
                 let reachable = after > lowest + lowest_from - 1e-6;
+                let mut pieces = Vec::new();
                 for (pi, (pr, from, _)) in tool.body.iter().enumerate().skip(1).filter(|_| reachable) {
                     let penv = |u: f64| -> f64 {
                         let c = p(u);
@@ -629,7 +640,40 @@ pub fn mill_with(
                         ),
                     };
                     let dz = after - plow;
-                    if dz > 1e-6 && holder.as_ref().is_none_or(|h| dz > h.depth) {
+                    if dz > 1e-6 {
+                        pieces.push((pi, dz, plow));
+                    }
+                }
+                out.push(Cell {
+                    i,
+                    x,
+                    y,
+                    cur,
+                    low,
+                    new,
+                    contact,
+                    crash,
+                    pieces,
+                });
+            }
+            out
+        });
+        for (dj, row) in rows.into_iter().enumerate() {
+            let j = j0 + dj;
+            for c in row {
+                let (i, x, y, cur, new) = (c.i, c.x, c.y, c.cur, c.new);
+                if let Some(u) = c.contact
+                    && first.is_none_or(|(f, _)| u < f)
+                {
+                    first = Some((u, [x, y, cur]));
+                }
+                if let Some(d) = c.crash
+                    && probe_hit.is_none_or(|(e, _)| d > e)
+                {
+                    probe_hit = Some((d, [x, y, c.low]));
+                }
+                for (pi, dz, plow) in c.pieces {
+                    if holder.as_ref().is_none_or(|h| dz > h.depth) {
                         holder = Some(HolderHit {
                             line: seg.line,
                             segment: si,

@@ -126,14 +126,16 @@ fn height_bound(s: &Setup, seg: &Segment, t: u32, corner: f64) -> f64 {
 /// affine form with the search within their bounds of the reference (chained tip, search).
 fn compare(s: &Setup, prog: &str, min_cutting: usize) {
     let tl = sim::simulate(prog, s).unwrap();
-    let mut worst_tip = 0.0f64;
-    let mut max_bound = 0.0f64;
-    let mut max_h = 0.0f64;
-    let mut cutting = 0;
     let corner = match s.tools[0].cut {
         Cut::Mill { corner, .. } => corner,
         _ => unreachable!(),
     };
+    let (lo, hi) = ([-43.0, -43.0, 0.0], [43.0, 43.0, 23.0]);
+    let tl = &tl;
+    let mut worst_tip = 0.0f64;
+    let mut max_bound = 0.0f64;
+    let mut max_h = 0.0f64;
+    let mut cutting = 0;
     for seg in &tl.segments {
         let Some(t) = seg.tool else { continue };
         let (Some(a), Some(c)) = (s.tip_affine(seg, t), s.tip_along(seg, t)) else {
@@ -155,12 +157,17 @@ fn compare(s: &Setup, prog: &str, min_cutting: usize) {
             worst_tip = worst_tip.max(gap);
         }
     }
+    // the three height maps (the reference and the two forms) side by side, where threads are
+    // (forge_math::par; one after another under WASI): each the same computation as alone
+    let forms = [TipForm::Chained, TipForm::Affine, TipForm::Closed];
+    let mut maps = forge_math::par::map(forms.len(), |k| {
+        removal::mill_with(s, tl, lo, hi, 0.5, forms[k]).unwrap()
+    })
+    .into_iter();
+    let (rr, ra, rc) = (maps.next().unwrap(), maps.next().unwrap(), maps.next().unwrap());
     assert!(cutting >= min_cutting, "{cutting}");
-    let (lo, hi) = ([-43.0, -43.0, 0.0], [43.0, 43.0, 23.0]);
-    let rr = removal::mill_with(s, &tl, lo, hi, 0.5, TipForm::Chained).unwrap();
     let mut gaps = Vec::new();
-    for form in [TipForm::Affine, TipForm::Closed] {
-        let r = removal::mill_with(s, &tl, lo, hi, 0.5, form).unwrap();
+    for (form, r) in [(TipForm::Affine, ra), (TipForm::Closed, rc)] {
         assert_eq!(r.map.z.len(), rr.map.z.len());
         let worst = r
             .map
