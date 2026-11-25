@@ -80,3 +80,14 @@ Every rewrite runs the same cases with the same assertions, and old and new catc
 
 Diagnosed and sent to its owner, not changed here: forge-sheet contour fuzz_random_profiles. One case of 250 takes 322 s,
 the folded-clash search refining an at-the-limit stretch to 2^-48.
+
+## Test classes and their time budgets (pre-verify and the train)
+
+| class | how it's recognised | budget, alone | over budget |
+|---|---|---|---|
+| unit / property test | default | 2 s (native-tests.py BUDGET) | in a package the branch changes: RED if new, or >20% slower than main's same test when timed back to back (least of two each); a warning if main has it too. In other packages: a warning |
+| corpus guard | name `corpus_guard_<doc>`, one whole real document per #[test] | 15 s (CORPUS_BUDGET) | the same rules, against 15 s |
+
+Corpus guards run in parallel. libtest runs a binary's tests on all cores, and native-tests.py runs JOBS binaries at once, so one
+test per document is never serialised unless a test takes a global lock. Don't take one. The train's native-tests.py needs
+the same per-class budget (tools/ci, FALLBACK's; asked). Failures are RED wherever they are, unless main fails the same test.
