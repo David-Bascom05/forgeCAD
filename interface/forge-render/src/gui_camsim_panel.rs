@@ -1707,6 +1707,7 @@ pub fn checked_line(markers: &[Marker], leftover_done: bool) -> (String, bool) {
             "shank_collision",
             "fixture_collision",
             "holder_into_stock",
+            "holder_into_stock_grid",
             "machine_collision",
             "workholding_off_table",
         ],
@@ -1715,6 +1716,7 @@ pub fn checked_line(markers: &[Marker], leftover_done: bool) -> (String, bool) {
     let (r, rn) = said(
         &[
             "rapid_into_stock",
+            "rapid_into_stock_grid",
             "rapid_into_part",
             "rapid_into_workholding",
             "rapid_clear",
@@ -1772,7 +1774,7 @@ pub fn note_words(raw: &str) -> String {
 }
 
 /// A check's rule as a group's title.
-fn rule_title(rule: &str) -> String {
+pub fn rule_title(rule: &str) -> String {
     match rule {
         "holder_collision" => "Holder hits".into(),
         "fixture_collision" => "Fixture hits".into(),
@@ -1785,6 +1787,9 @@ fn rule_title(rule: &str) -> String {
         "rapid_into_part" => "Rapids into the part".into(),
         "rapid_into_workholding" => "Rapids into the workholding".into(),
         "holder_into_stock" => "Holder into the stock".into(),
+        // the display grid's, not proven: said so in their heading
+        "rapid_into_stock_grid" => "Rapids into the stock (approximate)".into(),
+        "holder_into_stock_grid" => "Holder into the stock (approximate)".into(),
         "machine_collision" => "Machine collisions".into(),
         "workholding_off_table" => "Workholding off the table".into(),
         "refused" => "Refused ops".into(),

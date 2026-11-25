@@ -255,7 +255,9 @@ impl Sim {
         Ok(())
     }
 
-    /// The stock as the playing timeline cuts it, checked on the grid: each rapid's cutter
+    /// The stock as the playing timeline cuts it, checked on the grid (approximate, never a
+    /// proven check: their rules are `rapid_into_stock_grid` and `holder_into_stock_grid`,
+    /// apart from the certified checker's `rapid_into_stock`; their words say so): each rapid's cutter
     /// before it cuts, and each move's shank and holder after, against the material there is
     /// (a display-grid check, as fine as the stock's cells: the toolpath's own are the certified
     /// checker's; this is for the posted code on a machine). Markers, worst per move.
@@ -283,15 +285,15 @@ impl Sim {
                 out.push(Marker {
                     op: Some(g.op as usize),
                     setup: s,
-                    rule: "rapid_into_stock".into(),
+                    rule: "rapid_into_stock_grid".into(),
                     verdict: "fail".into(),
                     at,
                     t: g.t0,
                     text: format!(
-                        "{name}: a rapid goes {d:.3} mm into the stock as cut (move {})",
+                        "{name}: a rapid goes about {d:.2} mm into the stock as cut (move {}). {GRID_NOTE}",
                         g.mv
                     ),
-                    row: format!("move {} \u{b7} {d:.2} mm into the stock as cut", g.mv),
+                    row: format!("move {} \u{b7} about {d:.2} mm into the stock as cut", g.mv),
                     tool: String::new(),
                     part: "cutter".into(),
                     region: None,
@@ -305,15 +307,15 @@ impl Sim {
                 out.push(Marker {
                     op: Some(g.op as usize),
                     setup: s,
-                    rule: "holder_into_stock".into(),
+                    rule: "holder_into_stock_grid".into(),
                     verdict: "fail".into(),
                     at,
                     t: g.t0,
                     text: format!(
-                        "{name}: the shank or holder goes {d:.3} mm into the stock as cut (move {})",
+                        "{name}: the shank or holder goes about {d:.2} mm into the stock as cut (move {}). {GRID_NOTE}",
                         g.mv
                     ),
-                    row: format!("move {} \u{b7} {d:.2} mm into the stock as cut", g.mv),
+                    row: format!("move {} \u{b7} about {d:.2} mm into the stock as cut", g.mv),
                     tool: String::new(),
                     part: "shank/holder".into(),
                     region: None,
@@ -806,6 +808,9 @@ pub fn check_sentence(c: &forge_cam::ops::CheckOut) -> String {
         )
     }
 }
+
+/// What a stock marker from the display grid says of itself: it is approximate, not proven.
+pub const GRID_NOTE: &str = "Approximate: measured on the simulation's display grid, not a proven check.";
 
 /// A failed check's kind, by what happened: a rapid that goes into the stock, the part or the
 /// workholding is a crash, not a near miss, and is a kind of its own ("rapid_into_stock", ..);

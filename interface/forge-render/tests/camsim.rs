@@ -395,11 +395,9 @@ fn the_flanges_posted_program_on_its_machine() {
     );
     // the posted code's rapids and holders against the stock as it cuts it: none
     assert!(
-        sim.markers
-            .iter()
-            .all(|k| k.rule != "rapid_into_stock" && k.rule != "holder_into_stock"),
+        sim.markers.iter().all(|k| !k.rule.ends_with("_into_stock_grid")),
         "{:?}",
-        sim.markers.iter().find(|k| k.rule.ends_with("_into_stock"))
+        sim.markers.iter().find(|k| k.rule.ends_with("_into_stock_grid"))
     );
     // played as the source: the machine's time, the same stock at the end
     let end_tp = {
@@ -529,8 +527,19 @@ fn rapids_and_holders_against_the_stock_as_cut() {
     assert!(
         issues
             .iter()
-            .any(|m| m.rule == "rapid_into_stock" && m.op == Some(b)),
+            .any(|m| m.rule == "rapid_into_stock_grid" && m.op == Some(b)),
         "{issues:?}"
+    );
+    // never read as a proven check: their kind and their words say they are approximate
+    let m = issues.iter().find(|m| m.rule == "rapid_into_stock_grid").unwrap();
+    assert!(
+        m.text.contains("Approximate") && m.row.contains("about"),
+        "{}",
+        m.text
+    );
+    assert_eq!(
+        forge_render::gui_camsim_panel::rule_title("rapid_into_stock_grid"),
+        "Rapids into the stock (approximate)"
     );
 }
 
