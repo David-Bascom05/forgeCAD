@@ -54,12 +54,15 @@ if stage == "render":
     # its clippy builds wasm32-unknown-unknown, which rust-toolchain.toml does not list
     subprocess.run(["rustup", "target", "add", "wasm32-unknown-unknown"],
                    cwd=os.path.join(repo, "interface/forge-render"), capture_output=True)
-def make_room(need=15):
+def make_room(need=25, cap=30):
     """Under NEED GB free: whole build profiles (target/{debug,release,wasm32-*}, the root's and
     forge-render's), until there is room (a profile goes whole: cargo rebuilds it next time; a
     profile half pruned could be trusted with outputs gone). Profiles of 1 GB or more go first,
     least recently used first; small ones (forge-render's wasm32 clippy, ~0.2 GB) only after,
-    since dropping them frees little and costs a rebuild."""
+    since dropping them frees little and costs a rebuild. NEED is 25 GB: a cold release build of
+    forge-render takes ~16 GB, so 15 left too little for one to finish. And any profile over CAP GB
+    goes before any other: it holds stale outputs of earlier shas and only grows (forge-render's
+    debug reached 39 GB while release, 16 GB, was the one dropped and could not be rebuilt)."""
     import shutil
     free = lambda: shutil.disk_usage(repo).free / 2**30
     if free() >= need:
@@ -79,11 +82,12 @@ def make_room(need=15):
                   [os.path.join(t, x) for x in (os.listdir(t) if os.path.isdir(t) else []) if x.startswith("wasm32")]):
             if os.path.isdir(d):
                 gb = size(d)
-                profs.append((gb < 1, os.path.getmtime(d), gb, d))
-    for _, _, gb, d in sorted(profs):
+                profs.append((gb <= cap, gb < 1, os.path.getmtime(d), gb, d))
+    for *_, gb, d in sorted(profs):
         if free() >= need:
             break
-        print(f"(only {free():.0f} GB free: removing {d}, {gb:.1f} GB, the least recently used large build)", flush=True)
+        why = f"over the {cap} GB cap" if gb > cap else "the least recently used large build" if gb >= 1 else "a small build"
+        print(f"(only {free():.0f} GB free: removing {d}, {gb:.1f} GB, {why})", flush=True)
         shutil.rmtree(d, ignore_errors=True)
 
 
