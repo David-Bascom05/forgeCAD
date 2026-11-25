@@ -1361,6 +1361,72 @@ mod tests {
     use forge_math::rng::Rng;
     use forge_math::{Point2, dmath};
 
+    /// The subdivision reuses g at a leaf's ends from the search's own evaluations, which is
+    /// right only if a traced curve's point at t is the same whichever evaluation of the curve it
+    /// is: a procedural face's curve sets its parameter hints on its first evaluation, and its
+    /// very first one, before them, could take another way. Pinned on fresh curves (each t the
+    /// curve's first evaluation ever) round a screw face cut by a plane: the first point is the
+    /// later one, bit for bit, and the search's answer on a fresh curve is a warmed curve's.
+    #[test]
+    fn a_traced_curves_first_evaluation_is_its_later_ones() {
+        use crate::screw::{Screw, Section};
+        let sec = |a: (f64, f64), b: (f64, f64)| Section::Line {
+            a: Point2::new(a.0, a.1),
+            b: Point2::new(b.0, b.1),
+        };
+        let loop_ = [
+            sec((8.0, -1.0), (11.0, -1.0)),
+            sec((11.0, -1.0), (11.0, 1.0)),
+            sec((11.0, 1.0), (8.0, 1.0)),
+            sec((8.0, 1.0), (8.0, -1.0)),
+        ];
+        let faces = Screw::loop_faces(
+            Frame::WORLD,
+            &loop_,
+            0.0,
+            0.8,
+            Interval::new(0.0, 4.0 * dmath::PI),
+        )
+        .expect("a screw");
+        let cut = Surface::Plane(Plane::new(Frame::from_z(
+            Point3::new(0.0, 0.0, 3.0),
+            Vec3::new(0.2, 0.1, 1.0).normalize().unwrap(),
+        )));
+        let region = Box3::from_points([Point3::new(-15.0, -15.0, -5.0), Point3::new(15.0, 15.0, 15.0)]);
+        let across = Surface::Plane(Plane::new(Frame::from_z(Point3::new(0.0, 0.0, 0.0), UnitVec3::X)));
+        let mut seen = 0;
+        for face in faces {
+            let s = face.surface();
+            let fresh = || crate::intcurve::trace(&s, &cut, region).unwrap_or_default();
+            let n = fresh().len();
+            for k in 0..n {
+                let hi = fresh()[k].domain_hi();
+                for i in 0..8 {
+                    let t = hi * (i as f64 + 0.37) / 8.0;
+                    let c = Curve::Intersection(std::sync::Arc::new(fresh().swap_remove(k)));
+                    let first = across.implicit(c.eval(t));
+                    let again = across.implicit(c.eval(t));
+                    assert_eq!(first.to_bits(), again.to_bits(), "curve {k} t {t}");
+                    seen += 1;
+                }
+                let range = Interval::new(0.0, hi);
+                let cold = Curve::Intersection(std::sync::Arc::new(fresh().swap_remove(k)));
+                let warm = Curve::Intersection(std::sync::Arc::new(fresh().swap_remove(k)));
+                let _ = warm.eval(0.5 * hi);
+                let key = |r: CurveSurface| match r {
+                    CurveSurface::Hits(h) => h.iter().map(|h| (h.t.to_bits(), h.point)).collect::<Vec<_>>(),
+                    _ => Vec::new(),
+                };
+                assert_eq!(
+                    key(curve_surface(&cold, range, &across)),
+                    key(curve_surface(&warm, range, &across)),
+                    "curve {k}"
+                );
+            }
+        }
+        assert!(seen > 0, "the cut found no curve");
+    }
+
     /// A line within ANGULAR of parallel to a plane, over a long range: decided over the range,
     /// not at its origin (B1, research/kernel-audit/tilt-wrong-ok.md).
     #[test]
