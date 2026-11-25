@@ -290,6 +290,12 @@ if clippy:
         e["new"] = [" ".join(x) for x in new]
         # (mine is never empty here: the denied run failed, so the warned one printed something,
         # unless the failure was not a lint, e.g. a build error, which stays RED)
+        if mine & theirs:
+            print("pre-verify clippy: main has these lints itself. They are not your branch's: do NOT "
+                  "change them on your branch (some are deliberate, e.g. forge-topo body.rs's closure, "
+                  "which SPINE's Aeneas translation needs; train 7 allows it):", flush=True)
+            for x in sorted(mine & theirs)[:10]:
+                print(f"    main's own: {x[2]}: {x[1]} {x[3]}", flush=True)
         if mine and not new:
             e["ok"] = True
             print(f"pre-verify clippy ok   (only diagnostics main has too: {len(mine & theirs)})", flush=True)
