@@ -401,6 +401,9 @@ pub fn program(name: &str) -> String {
 /// in the tests, a fake agent script) can still be open for writing in a process another thread
 /// just forked, until that one runs its own program: exec then fails with "Text file busy"
 /// (ETXTBSY). That passes in a moment, so it's tried again a few times before it's an error.
+// (an agent's process is started only natively: a page never gets here, so the sleep is not the
+// page's, as in codex.rs and claude.rs)
+#[cfg_attr(target_arch = "wasm32", allow(clippy::disallowed_methods))]
 pub fn spawn(c: &mut std::process::Command) -> std::io::Result<std::process::Child> {
     let mut tries = 0;
     loop {
