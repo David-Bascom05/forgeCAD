@@ -1376,9 +1376,15 @@ impl Gui {
         times.events = now_ms() - t0;
         let mut animating = self.camsim_tick();
         if let Some(v) = &mut self.view {
+            let was = v.nav.camera;
             if v.nav.tick(now_ms()) {
                 v.dirty = true;
                 animating = true;
+            } else if v.nav.camera != was {
+                // a view change's last step (the camera put at its end) is drawn too: a slow frame
+                // can take a change from its start to its end in one tick, and the picture stayed
+                // where it began
+                v.dirty = true;
             }
             if let Some(t) = v.nav.explode_tick(now_ms()) {
                 v.scene.set_explode(t);
@@ -1583,10 +1589,12 @@ impl Gui {
             if self.bend.showing() {
                 world.extend(self.bend.outline_tris(&v.nav.camera, v.size));
             }
+            // the simulation draws the part itself, in each setup's frame (turned over, in soft
+            // jaws): the document's own model, in its own frame, would float in the wrong place
+            let simulating = self.shell.camsim.is_some() && self.shell.tab == crate::shell::CAM_TAB;
+            v.scene.hidden = simulating;
             let solid = match self.shell.camsim.as_deref_mut() {
-                Some(st) if self.shell.tab == crate::shell::CAM_TAB => {
-                    gui_camsim::geometry(st, &v.nav.camera, v.size, &mut world)
-                }
+                Some(st) if simulating => gui_camsim::geometry(st, &v.nav.camera, v.size, &mut world),
                 _ => vec![],
             };
             let behind = extra_behind;
@@ -1627,8 +1635,19 @@ impl Gui {
             };
             // the build's flags on the faces of what they're of; Compare's colours over them
             let flagged;
+            let studio_lit;
             let colours: &[crate::render::FaceColour] = if self.bend.showing() {
                 &[]
+            } else if self.shell.env == Some(crate::shell::env::EnvId::RenderStudio) {
+                // the Studio's chosen parts in the selection's colour, the row under the pointer
+                // fainter (its occurrences pre-lit, as the browser's are)
+                studio_lit = gui_studio::lit(
+                    &self.shell.studio,
+                    &v.scene,
+                    &v.renderer.cpu_parts,
+                    self.shell.theme.selection,
+                );
+                &studio_lit
             } else if self.vers.colours.is_empty() {
                 flagged = self.fg_marks_was.1.clone();
                 &flagged
@@ -2418,7 +2437,7 @@ impl Gui {
                     .collect(),
             });
             if let Some(p) = &mut self.shell.fg {
-                p.summary = b.summary();
+                p.summary = b.summary(crate::shell::ux::System::of_doc(self.shell.units));
                 // a part that gained a component is an assembly now (and back)
                 p.assembly = b.asm.is_some();
                 p.feats = b.feats;
@@ -3422,7 +3441,8 @@ impl Gui {
         let Some(p) = &mut self.shell.fg else { return };
         let Some(tool) = &mut p.tool else {
             self.shell.status = match &text {
-                Ok(a) => format!("Picked: {a}"),
+                // in words, as the Agent tab's chip says it: "end face of extrude1"
+                Ok(a) => format!("Picked: {}", crate::shell::agent::describe_lower(a)),
                 Err(e) => format!("Picked: {}", e.text()),
             };
             p.picked = Some(text);

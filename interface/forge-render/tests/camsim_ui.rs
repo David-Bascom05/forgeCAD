@@ -264,3 +264,157 @@ fn issues_of_two_kinds_in_the_checks() {
     assert_eq!(st.issue, Some(k));
     assert!(!st.issue_new, "opened and scrolled to once");
 }
+
+/// What one frame draws: (opaque vertices, translucent ones) at the simulation's time now.
+fn drawn(h: &mut Headless) -> (usize, usize) {
+    let cam = h.gui.view.as_ref().unwrap().nav.camera;
+    let st = h.gui.shell.camsim.as_deref_mut().unwrap();
+    st.drawn_key = None;
+    let mut world = vec![];
+    let solid = forge_render::gui::gui_camsim::geometry(st, &cam, (1400, 860), &mut world);
+    (solid.len(), world.len())
+}
+
+/// Soft jaws (David): while the bracket's jaws are cut, the part they will hold is not in the
+/// machine. It is not drawn unless asked (then faint, where it will sit: the gripping setup's
+/// part, in the same frame), and once the jaws are done it is drawn seated in them. No other
+/// setup's toolpath is drawn in the jaws' frame (op1's floated over them).
+#[test]
+fn soft_jaws_hold_no_part_while_they_are_cut() {
+    let dir = copied("jaws", &["bracket.fg", "bracket_cam.fg"]);
+    let Some(mut h) = open(&dir.join("bracket_cam.fg"), (1400.0, 860.0), true) else {
+        return;
+    };
+    for _ in 0..20 {
+        h.step();
+    }
+    let st = h.gui.shell.camsim.as_ref().unwrap();
+    let jaws = st
+        .sim
+        .setups
+        .iter()
+        .position(|s| s.jaws_for.is_some())
+        .expect("a jaw setup");
+    let grip = st.sim.setups[jaws].jaws_for.unwrap();
+    assert_eq!(st.sim.setups[grip].name, "op2");
+    let part_v = st.sim.part_tris[grip].len() * 3;
+    assert!(part_v > 0);
+    let cutj = st.sim.tl.ops.iter().find(|o| o.setup == jaws).unwrap().clone();
+    // mid-cut, the workspace's selection on op1's setup: nothing of op1's in the jaws' frame
+    h.gui
+        .camsim_command(&format!(
+            "t={};part=solid;paths=1;jawpart=0;tool=0;stock=0;fixture=0",
+            0.5 * (cutj.t0 + cutj.t1)
+        ))
+        .unwrap();
+    let (solid_off, world_off) = drawn(&mut h);
+    assert_eq!(
+        solid_off, 0,
+        "nothing solid: no part (the jaw setup's own is the stock)"
+    );
+    shot(&mut h, "native-sim-09-soft-jaws-cut-1400x860");
+    // the reference, asked for: faint (translucent), the gripping setup's part
+    h.gui.camsim_command("jawpart=1").unwrap();
+    let (solid_on, world_on) = drawn(&mut h);
+    assert_eq!(solid_on, 0);
+    assert_eq!(world_on - world_off, part_v, "the part, faint");
+    // the jaws done: the part seated, solid, asked or not
+    h.gui.camsim_command(&format!("jawpart=0;t={}", cutj.t1)).unwrap();
+    let (solid_end, _) = drawn(&mut h);
+    assert_eq!(solid_end, part_v, "seated in the finished jaws");
+    // the paths drawn mid-cut are the jaw setup's alone
+    let st = h.gui.shell.camsim.as_ref().unwrap();
+    let show = forge_render::camsim::draw::PathShow {
+        setup: Some(jaws),
+        ops: &vec![true; st.sim.tl.ops.len()],
+        rapids: true,
+        upto: None,
+        played_only: false,
+        width: 2.0,
+        picked: None,
+        values: None,
+        selected: None,
+    };
+    let all = forge_render::camsim::draw::PathShow { setup: None, ..show };
+    let eye = forge_render::camsim::draw::Eye {
+        at: [0.0, 0.0, 500.0],
+        forward: [0.0, 0.0, -1.0],
+        parallel: true,
+        mm_px: 0.1,
+    };
+    let (mut a, mut b) = (vec![], vec![]);
+    forge_render::camsim::draw::toolpath(&st.sim.tl, &eye, &show, &mut a);
+    forge_render::camsim::draw::toolpath(&st.sim.tl, &eye, &all, &mut b);
+    assert!(!a.is_empty() && a.len() < b.len(), "{} of {}", a.len(), b.len());
+}
+
+/// Tool changes (David): the flange's T1 → T11 (the spot drill) after the bore, and T11 → T12 (the
+/// drill) between the bolts' passes, are on the timeline: up clear, the swap for the machine
+/// record's 2.5 s (generic-vmc3's changer), across and down; the old tool before half the swap,
+/// the new one after; the status line names the new tool.
+#[test]
+fn tool_changes_are_played() {
+    let dir = copied("change", &["flange.fg", "flange_cam.fg"]);
+    let Some(mut h) = open(&dir.join("flange_cam.fg"), (1400.0, 860.0), true) else {
+        return;
+    };
+    let st = h.gui.shell.camsim.as_ref().unwrap();
+    let tl = &st.sim.tl;
+    let tools = st.sim.cam.sim_tools();
+    let ts: Vec<(u32, u32)> = tl
+        .changes
+        .iter()
+        .map(|c| (tools[c.from as usize].t, tools[c.to as usize].t))
+        .collect();
+    assert_eq!(ts, vec![(1, 11), (11, 12)]);
+    let c = tl.changes[0];
+    assert!(c.cited, "generic-vmc3's changer cites its time");
+    let pause: f64 = tl.segs[c.first..]
+        .iter()
+        .take_while(|g| g.kind == forge_render::camsim::timeline::Kind::Change)
+        .filter(|g| g.a == g.b)
+        .map(|g| g.dt)
+        .sum();
+    assert!((pause - 2.5).abs() < 1e-9, "the swap, 2.5 s: {pause}");
+    // the old tool up to mid-swap, the new one after; the pieces are no path's move
+    let mid = 0.5 * (c.t0 + c.t1);
+    let tool_at = |h: &Headless, t: f64| {
+        let st = h.gui.shell.camsim.as_ref().unwrap();
+        let i = st.sim.tl.seg_at(t).unwrap();
+        st.sim.tl.segs[i].tool
+    };
+    assert_eq!(tool_at(&h, c.t0 + 1e-6), c.from);
+    assert_eq!(tool_at(&h, c.t1 - 1e-6), c.to);
+    h.gui
+        .camsim_command(&format!("t={mid};tab=program;part=hidden"))
+        .unwrap();
+    shot(&mut h, "native-sim-10-tool-change-1400x860");
+}
+
+/// The tool's label never travels with the tool (David): while playing it is not drawn; paused,
+/// only with the pointer on the tool (or asked for, as the review shots do).
+#[test]
+fn the_tool_label_does_not_follow_the_tool() {
+    let dir = copied("label", &["flange.fg", "flange_cam.fg"]);
+    let Some(mut h) = open(&dir.join("flange_cam.fg"), (1400.0, 860.0), true) else {
+        return;
+    };
+    h.gui.camsim_command("op=2;at=0.5;play").unwrap();
+    for _ in 0..6 {
+        h.step();
+    }
+    assert!(h.placed("camsim:toolnote").is_none(), "no label while playing");
+    h.gui.camsim_command("pause").unwrap();
+    for _ in 0..4 {
+        h.step();
+    }
+    assert!(
+        h.placed("camsim:toolnote").is_none(),
+        "paused, the pointer elsewhere: no label"
+    );
+    h.gui.camsim_command("label=1").unwrap();
+    for _ in 0..4 {
+        h.step();
+    }
+    assert!(h.placed("camsim:toolnote").is_some(), "asked for: shown");
+}

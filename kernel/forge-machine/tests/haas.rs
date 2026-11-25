@@ -242,9 +242,9 @@ fn vf2_posted_job_end_to_end() {
     let c = Control::for_dialect(&m, "haas", 1).unwrap();
     assert_eq!(c.letters, vec!['Y', 'X', 'Z']);
     let mut s = Setup::new(&m, c).unwrap();
-    // part frame = the table top centre: the spindle is over it at X -381, Y -203 (mid-travel);
-    // Z word 0 at the table top: q_Z = word - 610 + H
-    s.wcs = vec![(54, vec![-203.0, -381.0, -610.0])];
+    // part frame = the table top centre: the spindle is over it at X -381, Y -211.6 (the spindle
+    // at home as Haas's model has it); Z word 0 at the table top: q_Z = word - 610 + H
+    s.wcs = vec![(54, vec![-211.6, -381.0, -610.0])];
     s.tools = vec![mill_tool(1, 110.0, 6.0), mill_tool(2, 140.0, 4.0)];
     s.h = vec![(1, 110.0), (2, 140.0)];
     let tl = sim::simulate(&text, &s).unwrap();

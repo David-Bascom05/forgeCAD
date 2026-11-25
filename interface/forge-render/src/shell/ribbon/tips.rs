@@ -108,6 +108,13 @@ fn why(s: &Shell, scope: &str, name: &str) -> String {
     {
         return w;
     }
+    // the Machine Builder's own tools: off for its own reasons, never for want of a part
+    if s.env == Some(super::super::env::EnvId::MachineBuilder)
+        && let Some(m) = &s.machine
+        && let Some(w) = super::super::machine::why_off(m, name)
+    {
+        return w;
+    }
     if s.no_document() && scope != "thermo" {
         return "open or create a part first (File > New, or Open)".into();
     }
@@ -196,7 +203,10 @@ impl Shell {
         let (line, key) = tip(scope, tool.name).unwrap_or(("", ""));
         // a Manufacture tool that is off: why, first
         if tool.action.is_none()
-            && let Some(why) = self.cam.as_ref().and_then(|w| super::super::cam::disabled_why(w, tool.name))
+            && let Some(why) = self
+                .cam
+                .as_ref()
+                .and_then(|w| super::super::cam::disabled_why(w, tool.name))
         {
             ui.label(RichText::new(why).font(sans(12.0)).color(t.warn));
         }
