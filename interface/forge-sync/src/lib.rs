@@ -310,6 +310,9 @@ pub const MAX_NAME: usize = 256;
 /// The most ops one group may have (its bytes are bounded by the server's largest message, and
 /// its check runs under the same time budget as one op's).
 pub const MAX_GROUP_OPS: usize = 256;
+/// The largest message a client may send (the server reads no more of one: a client keeps its
+/// edits under it, or the server would close the connection on every resend).
+pub const MAX_UP: usize = 512 << 10;
 
 /// [`check_limits`] for a group: 1 to [`MAX_GROUP_OPS`] ops, each within the limits.
 pub fn check_group(ops: &[Op]) -> Result<(), Refusal> {
@@ -429,6 +432,20 @@ pub fn validate(
         return Err(lang(e.clone()));
     }
     Ok((text, now))
+}
+
+/// [`validate`], then the group's exact inverse on `head` (each op's on the text it applied to,
+/// in reverse order; None if one has none): what a [`sequencer::Check`] returns.
+pub fn check_and_invert(
+    head: &str,
+    head_counts: Option<&Counts>,
+    ops: &[Op],
+    dir: Option<std::path::PathBuf>,
+    root: Option<std::path::PathBuf>,
+) -> Result<sequencer::Checked, Refusal> {
+    let (text, counts) = validate(head, head_counts, ops, dir, root)?;
+    let inv = sequencer::group_inverse(head, ops, &text);
+    Ok((text, counts, inv))
 }
 
 /// A group's ops applied in order (no check).

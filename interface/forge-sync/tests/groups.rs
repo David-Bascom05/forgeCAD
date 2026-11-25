@@ -388,3 +388,223 @@ fn a_protocol_2_log_entry_reads_as_a_group_of_one() {
         Some(e)
     );
 }
+
+// HOSTED-DESIGN's M5 review (research/hosted/reviews/m5-groups.md).
+
+/// High: an edit before the first Welcome is made on a text whose version this client does not
+/// know; sent with base 0 the server would rebase it through ops it was made after (a set of
+/// the new `w` landed on `width`). Refused, nothing queued; after the Welcome its base is the
+/// Welcome's seq and it lands on the right name.
+#[test]
+fn an_edit_before_the_first_welcome_is_refused_not_sent_with_a_guessed_base() {
+    let mut st = MemStore::default();
+    let mut s = Sequencer::open(&mut st, "part.fg", DOC, None).unwrap();
+    s.submit(&mut st, "bob", "bob-c", 0, 1, &[rename("w", "width")])
+        .unwrap();
+    s.submit(
+        &mut st,
+        "bob",
+        "bob-c",
+        1,
+        2,
+        &[Op::AddFeature {
+            before: Some("plan".into()),
+            text: "shared w = 5".into(),
+        }],
+    )
+    .unwrap();
+    let mut room = Room::new(s);
+    let mut ada = Client::new("part.fg", "ada-c", "t");
+    ada.outbox.clear();
+    let after = DOC.replace("shared w = 40", "shared w = 7");
+    assert!(matches!(
+        ada.local(set("w", 7.0), after),
+        Err(Refusal::Invalid { .. })
+    ));
+    assert!(ada.edit(set("w", 7.0)).is_err());
+    assert!(ada.edit_group(vec![set("w", 7.0)]).is_err());
+    assert!(
+        ada.pending().is_empty() && ada.outbox.is_empty(),
+        "nothing queued or sent"
+    );
+    for (_, d) in room.join(0, "ada-c", "ada", None) {
+        ada.receive(d);
+    }
+    ada.edit(set("w", 7.0)).unwrap();
+    assert_eq!(ada.pending()[0].base, 2, "made on the Welcome's text");
+    for u in std::mem::take(&mut ada.outbox) {
+        for (_, d) in room.receive(&mut st, 0, u).0 {
+            ada.receive(d);
+        }
+    }
+    let head = room.seq.head();
+    assert!(
+        head.contains("shared w = 7") && head.contains("shared width = 40"),
+        "{head}"
+    );
+    assert_eq!(ada.text(), head);
+}
+
+/// Medium 2: a group outside the limits is refused by the client itself, nothing queued (sent,
+/// the server would refuse it or, over its message size, close the connection on every resend).
+#[test]
+fn the_client_refuses_a_group_outside_the_limits() {
+    let mut w = World::new(&["ada"]);
+    let c = &mut w.cs[0];
+    let view = c.text().to_string();
+    assert!(c.local_group(vec![], view.clone()).is_err());
+    assert!(
+        c.local_group(vec![set("w", 41.0); forge_sync::MAX_GROUP_OPS + 1], view.clone())
+            .is_err()
+    );
+    let big: Vec<Op> = (0..3)
+        .map(|k| Op::AddFeature {
+            before: Some("plan".into()),
+            text: format!("shared big{k} = 1 // {}", "x".repeat(200 << 10)),
+        })
+        .collect();
+    let r = c.local_group(big, view.clone());
+    assert!(
+        matches!(&r, Err(Refusal::Invalid { why }) if why.contains("bytes")),
+        "{r:?}"
+    );
+    assert!(c.pending().is_empty() && c.outbox.is_empty());
+    assert_eq!(c.text(), view);
+    // the next edit gets the next id as if nothing happened
+    assert_eq!(c.edit(set("w", 41.0)).unwrap(), 1);
+}
+
+/// Medium 1: the group's inverse is the checker's (worked out inside the check and its time
+/// budget), not computed again on the document's thread after it.
+#[test]
+fn the_inverse_comes_from_the_check() {
+    struct NoInverse;
+    impl forge_sync::Check for NoInverse {
+        fn check(
+            &mut self,
+            head: &str,
+            counts: Option<&forge_sync::Counts>,
+            ops: &[Op],
+            dir: Option<std::path::PathBuf>,
+            root: Option<std::path::PathBuf>,
+        ) -> Result<forge_sync::sequencer::Checked, Refusal> {
+            let (t, c) = forge_sync::validate(head, counts, ops, dir, root)?;
+            Ok((t, c, None))
+        }
+    }
+    let mut st = MemStore::default();
+    let mut s = Sequencer::open(&mut st, "part.fg", DOC, None).unwrap();
+    let c = s
+        .submit(&mut st, "ada", "ada-c", 0, 1, &[set("w", 41.0)])
+        .unwrap();
+    assert_eq!(
+        c.entry.inv,
+        Some(vec![set("w", 40.0)]),
+        "the default check inverts"
+    );
+    s.checker = Box::new(NoInverse);
+    let c = s
+        .submit(&mut st, "ada", "ada-c", 1, 2, &[set("w", 42.0)])
+        .unwrap();
+    assert_eq!(c.entry.inv, None, "the checker's inverse is the one kept");
+}
+
+/// Medium 3: a group with no exact inverse is an undo barrier, said: Undo never skips it to
+/// take back the edit before it.
+#[test]
+fn a_group_with_no_inverse_is_an_undo_barrier() {
+    let two = Op::AddFeature {
+        before: Some("plan".into()),
+        text: "shared a = 1\nshared b = 2".into(),
+    };
+    let after = forge_lang::edit::apply(DOC, &two).expect("applies");
+    assert!(
+        forge_sync::inverse::inverse(DOC, &two, &after).is_none(),
+        "the precondition"
+    );
+    let mut w = World::new(&["ada"]);
+    w.cs[0].edit(set("w", 41.0)).unwrap();
+    w.pump();
+    w.cs[0].edit_group(vec![set("h", 13.0), two]).unwrap();
+    w.pump();
+    let before = w.converged().to_string();
+    for _ in 0..2 {
+        let r = w.cs[0].undo().expect("a step is there");
+        assert!(
+            matches!(&r, Err(Refusal::Invalid { why }) if why.contains("cannot be undone")),
+            "{r:?}"
+        );
+        w.pump();
+        assert_eq!(w.converged(), before, "w = 41 stays: nothing older is undone");
+    }
+}
+
+/// Medium 4 (older than M5): a second Undo takes back the edit before, never redoes the first.
+#[test]
+fn a_second_undo_does_not_redo_the_first() {
+    let mut w = World::new(&["ada"]);
+    w.cs[0].edit(set("w", 41.0)).unwrap();
+    w.pump();
+    w.cs[0].edit(set("h", 13.0)).unwrap();
+    w.pump();
+    w.cs[0].undo().unwrap().unwrap();
+    w.pump();
+    assert!(w.converged().contains("shared h = 12") && w.converged().contains("shared w = 41"));
+    w.cs[0].undo().unwrap().unwrap();
+    w.pump();
+    let head = w.converged();
+    assert!(
+        head.contains("shared h = 12") && head.contains("shared w = 40"),
+        "{head}"
+    );
+    assert!(w.cs[0].undo().is_none(), "nothing left: the undos are not steps");
+}
+
+/// A concurrent rename that two ops of one group read: both rebased onto the new name.
+#[test]
+fn a_concurrent_rename_reaches_every_op_of_a_group() {
+    let mut w = World::new(&["ada", "bob"]);
+    w.cs[1].edit(rename("w", "width")).unwrap();
+    w.cs[0]
+        .edit_group(vec![
+            set("w", 41.0),
+            Op::AddFeature {
+                before: Some("plan".into()),
+                text: "shared k = w + 1".into(),
+            },
+        ])
+        .unwrap();
+    let ada_out = std::mem::take(&mut w.cs[0].outbox);
+    w.pump(); // bob's rename first
+    for u in ada_out {
+        w.deliver(0, u);
+    }
+    w.pump();
+    let head = w.converged().to_string();
+    assert!(
+        head.contains("shared width = 41") && head.contains("shared k = width + 1"),
+        "{head}"
+    );
+    assert!(!head.contains("shared w "), "{head}");
+}
+
+/// Undo through a collaborator's rename: the inverse lands on the renamed parameter.
+#[test]
+fn undo_through_a_collaborators_rename() {
+    let mut w = World::new(&["ada", "bob"]);
+    w.cs[0].edit(set("w", 41.0)).unwrap();
+    w.pump();
+    w.cs[1].edit(rename("w", "width")).unwrap();
+    w.pump();
+    w.cs[0].undo().unwrap().unwrap();
+    let ev = w.pump();
+    assert!(
+        ev[0].iter().all(|e| !matches!(e, Event::Refused { .. })),
+        "{ev:?}"
+    );
+    let head = w.converged();
+    assert!(
+        head.contains("shared width = 40") && !head.contains("shared w "),
+        "{head}"
+    );
+}

@@ -387,36 +387,33 @@ impl Session {
         self.lock().client.pending().len()
     }
     /// The app applied and checked `op` on `text()` and got `after` (its edit path, unchanged):
-    /// queue and send it. Returns the op's id.
-    pub fn local(&self, op: Op, after: String) -> u64 {
-        let mut s = self.lock();
-        let id = s.client.local(op, after);
-        s.sent.insert(id, Instant::now());
-        s.flush();
-        id
+    /// queue and send it. Returns the op's id; refused (nothing queued) before the first
+    /// Welcome, or outside the protocol's limits.
+    pub fn local(&self, op: Op, after: String) -> Result<u64, forge_sync::Refusal> {
+        self.local_group(vec![op], after)
     }
     /// The app applied a group of ops (an apply-all) in order on `text()`, checked the result
     /// and got `after`: queue and send it as one (the server commits all or none). Its id.
-    pub fn local_group(&self, ops: Vec<Op>, after: String) -> u64 {
+    pub fn local_group(&self, ops: Vec<Op>, after: String) -> Result<u64, forge_sync::Refusal> {
         let mut s = self.lock();
-        let id = s.client.local_group(ops, after);
+        let id = s.client.local_group(ops, after)?;
         s.sent.insert(id, Instant::now());
         s.flush();
-        id
+        Ok(id)
+    }
+    /// `apply_checked` on `text()`, then [`local`](Self::local).
+    pub fn edit(&self, op: Op) -> Result<u64, forge_sync::Refusal> {
+        let mut s = self.lock();
+        let id = s.client.edit(op)?;
+        s.sent.insert(id, Instant::now());
+        s.flush();
+        Ok(id)
     }
     /// The group applied on `text()` and its result checked, then
     /// [`local_group`](Self::local_group).
     pub fn edit_group(&self, ops: Vec<Op>) -> Result<u64, forge_sync::Refusal> {
         let mut s = self.lock();
         let id = s.client.edit_group(ops)?;
-        s.sent.insert(id, Instant::now());
-        s.flush();
-        Ok(id)
-    }
-    /// `apply_checked` on `text()`, then [`local`](Self::local).
-    pub fn edit(&self, op: Op) -> Result<u64, forge_lang::error::Error> {
-        let mut s = self.lock();
-        let id = s.client.edit(op)?;
         s.sent.insert(id, Instant::now());
         s.flush();
         Ok(id)
