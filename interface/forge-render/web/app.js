@@ -248,6 +248,8 @@ window.forge_export = async (json) => {
   const blob = one
     ? new Blob([enc.encode(files[0].text)], { type: "text/plain" })
     : zip(files.map((f) => ({ path: f.path, bytes: enc.encode(f.text) })));
+  // the app says what was done, when it is done (it said "choose where…" at the click)
+  const tell = (words) => fc.app_exported(words);
   if (window.showSaveFilePicker && !window.FORGE_DOWNLOAD_ONLY) {
     try {
       const h = await window.showSaveFilePicker({ suggestedName: fname });
@@ -255,13 +257,19 @@ window.forge_export = async (json) => {
       await w.write(blob);
       await w.close();
       window.forge_exported = h.name;
+      tell(`Exported ${h.name}`);
       return;
     } catch (e) {
-      if (e.name === "AbortError") return;
+      if (e.name === "AbortError") {
+        tell("Export cancelled");
+        return;
+      }
+      // refused (no user activation left, a policy): the download below
     }
   }
   download(fname, blob);
   window.forge_exported = fname;
+  tell(`Downloaded ${fname}`);
 };
 window.forge_save_as = (name) => {
   const n = prompt("Save as (a path in the project)", name || "part.fg");
