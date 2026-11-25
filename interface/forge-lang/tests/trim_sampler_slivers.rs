@@ -49,7 +49,10 @@ fn a_bore_across_a_hair_wide_strip_leaves_its_material_exactly() {
         let got = volume(&part(w, cx, r, true)) - volume(&part(w, cx, r, false));
         // w x 20 x 2, less the bore's part of it (the chord's length across x, integrated)
         let n = 4000;
-        let chord = |x: f64| 2.0 * (r * r - (cx - x).powi(2)).max(0.0).sqrt();
+        let chord = |x: f64| {
+            let dx = cx - x;
+            2.0 * (r * r - dx * dx).max(0.0).sqrt()
+        };
         let cut: f64 = (0..n)
             .map(|i| chord(10.0 + w * (i as f64 + 0.5) / n as f64))
             .sum::<f64>()
