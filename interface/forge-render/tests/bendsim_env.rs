@@ -1285,7 +1285,16 @@ fn a_staged_clip() {
         return;
     };
     let press = std::env::var("BENDSIM_CLIP_PRESS").unwrap_or_else(|_| "trumpf-trubend-5130".into());
-    let Some(mut h) = headless() else { return };
+    // BENDSIM_CLIP_SIZE=1920x1080: the window's size (default 1400x860)
+    let size = std::env::var("BENDSIM_CLIP_SIZE")
+        .ok()
+        .and_then(|s| {
+            let (w, h) = s.split_once('x')?;
+            Some((w.parse::<f32>().ok()?, h.parse::<f32>().ok()?))
+        })
+        .unwrap_or((1400.0, 860.0));
+    let Ok(mut h) = Headless::new(size, 1.0) else { return };
+    h.step();
     open(&mut h, &part);
     click(&mut h, "tab:Environments");
     click(&mut h, "tool:Bend Simulation");
