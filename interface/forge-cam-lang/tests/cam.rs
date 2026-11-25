@@ -2170,6 +2170,18 @@ fn a_vise_from_the_workholding_library_or_the_old_record() {
     let f = cam.setup_view(0).unwrap().fixture.unwrap();
     assert!(f.table_z.is_some() && f.placed.is_some());
     assert!(f.boxes().iter().any(|b| b.0 == "base"));
+    // the base stands on the table plane, and the jaws' top is the vise's height above it
+    let t = f.table_z.unwrap();
+    let base = f
+        .placed
+        .as_ref()
+        .unwrap()
+        .bodies
+        .iter()
+        .find(|b| b.name == "base")
+        .unwrap();
+    assert!((base.bounds().0[2] - t).abs() < 1e-9, "{:?} {t}", base.bounds());
+    assert!((f.jaw_top - t - 100.0).abs() < 1e-9, "{} {t}", f.jaw_top);
     // the old name is the library's stand-in, said so
     let cam = forge_cam_lang::run(&doc("generic-vise-150"), &dir);
     assert!(cam.ok, "{:?}", cam.errors);

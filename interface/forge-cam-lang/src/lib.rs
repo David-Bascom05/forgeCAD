@@ -3322,10 +3322,6 @@ impl Cam {
         }
     }
 
-    /// Soft jaws for the part as setup `from:` left it, turned over: the pocket is what the jaw
-    /// tool cuts of the part's sections in the grip band grown by `fit`; refused unless the
-    /// part, and everything `from:` left in the band, seats in it, and the seat carries at least
-    /// `min_contact` (default a quarter of the part's largest section).
     /// The vise a document names: the workholding library's record (a vise or a self-centring
     /// vise), an old forge-tooling name resolved to its library successor (with a warning
     /// saying so), or None when only the old forge-tooling record knows the name (its boxes:
@@ -3410,6 +3406,10 @@ impl Cam {
         }
     }
 
+    /// Soft jaws for the part as setup `from:` left it, turned over: the pocket is what the jaw
+    /// tool cuts of the part's sections in the grip band grown by `fit`; refused unless the
+    /// part, and everything `from:` left in the band, seats in it, and the seat carries at least
+    /// `min_contact` (default a quarter of the part's largest section).
     fn soft_jaw(&mut self, name: &str, a: &BTreeMap<String, V>) -> Result<V, String> {
         let v = match a.get("#0") {
             Some(V::Vise(v)) => v.clone(),
