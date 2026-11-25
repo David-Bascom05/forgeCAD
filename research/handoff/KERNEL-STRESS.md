@@ -15,7 +15,7 @@ trains 8 to 10.
 | kernel-stress | 85601f88 | the harness (verify/forge-stress, tools/kernel-stress), the corpus and report (research/kernel-stress), the reader's fixes (forge-step: direction noise, whole torus, flat holes filled), the section fixes (forge-agent), forge-asm rigid_copy | PRE-VERIFY GREEN on main 10d87778, tool b9318989; the line is with TRAIN-CONDUCTOR |
 | op-budget | fd8c9da2 | every top-level op has a work budget (`budget::OP`, MESH for a file body's mesh); par helpers share it; an op's spend does not hang on order or threads (`uncounted` cache fills, memo costs); an op is cut short only past its budget, whatever its threads hold (`Money`: bank, debt, out); `isolated` | independent re-review running; pre-verify at fd8c9da2 running when this was written |
 | gate/nurbs-ops | e5d88107 | the speed gate's first NURBS ops (`stepop1`: the quarter box on two small Haas solids), strict lines | WIP: the baseline lines and the isolation table still to add (Open work 2). Lands before ks/far-line-torus |
-| ks/far-line-torus | 67b0d622 (code 2963c65e) | FALLBACK's two tracer fixes (it contains ks/nurbs-stall 6502ae9a) bounded: `budget::cap_total(CARRIED = 2^24)` once a branch is carried onto a spline rim; a trace stops once its op is over; ssi's memo asks a remembered search's cap again | independent re-review running; lands after op-budget and gate/nurbs-ops |
+| ks/far-line-torus | f1cef02b (code 2963c65e + nested-budget fix) | FALLBACK's two tracer fixes (it contains ks/nurbs-stall 6502ae9a) bounded: `budget::cap_total(CARRIED = 2^24)` once a branch is carried onto a spline rim; a trace stops once its op is over; ssi's memo asks a remembered search's cap again | independent re-review running; lands after op-budget and gate/nurbs-ops |
 | mass-cap | a622f957 | forge-topo mass: a cap round a NURBS apex weighs right (it was silently zero) | main 10d87778 merged; merge main again and pre-verify |
 | face-box | 6815ce67 | forge-topo uv: a face on a surface closed one way gets a box as far as its loops reach | main 10d87778 merged; merge main again and pre-verify |
 | import-sheets | (this file's branch) | open shells read as sheets (`Imported::sheets`), drawn by the machine-model path; heal.rs: a sphere's pole mid-edge, a spindle torus's apex, seams that cross their rims; `tools/kernel-stress/edge_fit.py` | not pre-verified. Conflicts with IMPORT-SPEED's `finish` split (import/faces): rebase onto it once that is on main (agreed) |
@@ -66,9 +66,10 @@ main first. The native step prints FAIL before its verdict; read the verdict lin
 
 ## Open work
 
-1. **The re-review of op-budget fd8c9da2 and ks/far-line-torus 67b0d622.** On SAFE: pre-verify
-   op-budget, then gate/nurbs-ops, then far-line-torus, lines to TRAIN-CONDUCTOR. On ISSUE: fix
-   and repeat.
+1. **Landing op-budget fd8c9da2 and ks/far-line-torus.** The re-review found blockers A and B SAFE
+   and one ISSUE: a nested `scoped` reset the outer's TOTAL and CAPPED. That is fixed at f1cef02b,
+   with a test. Pre-verify op-budget, then gate/nurbs-ops, then far-line-torus, and send the lines
+   to TRAIN-CONDUCTOR.
 2. **gate/nurbs-ops**: run `GATE_COUNTER=callgrind tools/speed/gate.sh` on a quiet machine, append
    the `noop stepop1`, `k018-box op` and `ring-box op` lines to tools/speed/baseline-valgrind.txt
    (only those: callgrind counts are exact, every other line must come out unmoved, which is the
@@ -109,9 +110,7 @@ main first. The native step prints FAIL before its verdict; read the verdict lin
 
 ## Risks
 
-- **Two budget edges the re-review noted, not fixed:** a nested non-shared `scoped` (check.rs:465)
-  clears CAPPED when it drops, so an op could be capped twice (the second cut from the lowered
-  total; harmless today: CARRIED is the only cap); certify's TRACED memo (feature certified_trace,
+- **A budget edge the re-review noted, not fixed:** certify's TRACED memo (feature certified_trace,
   off by default) keeps a trace that gave up on the budget as None, answered so after.
 - **Fills are not bounded.** `uncounted` runs a cache fill unbounded, by design: a fill cut short
   would leave a half-made value in a cache later builds share. A runaway inside a fill is neither
