@@ -44,6 +44,11 @@ The heads and their PRE-VERIFY lines are in the last section.
      where before it was refused as "its surfaces would take too long to measure". That refusal
      depended on what was read before it, the order-dependence IMPORT-SPEED found. It reads as
      740337 mm3, and check flags it (FaceWrongSide x8), so nothing wrong is passed as right.
+     The file is wrong there, shown without forge's code by `tools/kernel-stress/edge_fit.py
+     FILE 57090 90466`. EDGE_CURVE #57090's B-spline lies on face #91854 to 1e-13 but 0.960 mm
+     off face #5840, all along it; its vertices are 0.375 to 0.48 mm off both faces. The file's
+     uncertainty is 1e-5. All 8 faces are the same (two tube ends at x=1343 and 1433). Any
+     repair moves geometry by about 1 mm, so none is exact.
    - Not done: the op-level A/B on the files whose ops spend near OP. Run
      `tools/kernel-stress/compare.sh d023bee7 op-budget` (about 7 h for both sides at -j3).
 2. **op-cancel.**
@@ -61,10 +66,19 @@ The heads and their PRE-VERIFY lines are in the last section.
      - 05-0182 and 05-0959: directions written with noise where 0 was meant (parts of 7e-161),
        which laid faces out in a 1e-160 span. Such parts are now 0. 05-0182 was the one blocking
        WORKHOLDING's vise record.
-   - Genuine sheets, not solids (OPEN_SHELL "a sheet, not a solid"): 05-0807, 05-0994, 05-0995,
-     08-1865, 08-1866, and the sheet shells of 05-0223, 05-0224, 08-1717. Their once-used edges
-     don't pair up as unsewn edges (checked: matching ends, different middles), so sewing doesn't
-     help. Reading them needs sheet bodies, a feature.
+   - 05-0807: a shell missing flat faces, now filled exactly (`fill_flat_holes`).
+   - Genuine sheets, not solids: 05-0994, 05-0995, 08-1865, 08-1866, and the open shells of
+     05-0223, 05-0224 and 08-1717. Their once-used edges don't pair up as unsewn edges (checked:
+     matching ends, different middles), so sewing doesn't help.
+     - Branch import-sheets reads each as a sheet: `Imported::sheets`, a body of its faces with
+       `unverified` saying so, no mass. Its shell is still among the refusals, and never among
+       the solids, so booleans and mass never see it.
+     - The machine model path (`model_files::read`) draws sheets with the solids.
+     - All 51 open shells in those 8 files read and mesh, in 0.1 s or less each. Two single
+       faces of 05-0994 and 05-0995 mesh to nothing: slivers 0.3 x 0.025 mm whose loops are two
+       parallel lines with no ends joining them, as the file has them.
+     - WORKHOLDING's compile (cam/workholding-haas, forge-workholding-builder compile.rs) reads
+       `im.solids` by index. To use sheets it must take `im.sheets` too. That is theirs.
    - 05-0407 (a pneumatic vise WORKHOLDING wants next): #90615 "a closed torus face with one rim and
      no pole". A torus face cut along one meridian whose rim is also used by a neighbour.
      Duplicating the rim gave EdgeUses, so it was reverted; it needs a look at the whole shell.

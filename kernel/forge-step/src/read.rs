@@ -23,6 +23,17 @@ pub struct Solid {
     pub mass: Option<forge_topo::mass::MassProps>,
 }
 
+/// A surface model's shell that does not close, read as the faces it is: for what works on faces
+/// (a machine's or a fixture's model drawn, clearance against its faces), never for what needs a
+/// volume. Its shell stays a refusal among the solids; `body.unverified` says it is a sheet.
+pub struct Sheet {
+    pub entity: u32,
+    pub name: String,
+    pub body: Body,
+    /// Its edges that bound one face only.
+    pub open_edges: usize,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Refusal {
     pub entity: u32,
@@ -58,6 +69,8 @@ pub struct Stats {
 pub struct Imported {
     pub solids: Vec<Solid>,
     pub refusals: Vec<Refusal>,
+    /// The open shells that are not solids, as sheets: each is among `refusals` too.
+    pub sheets: Vec<Sheet>,
     /// Each use of a solid in the file's assembly, where it has one (`occurrences`).
     pub occurrences: Vec<Occurrence>,
     pub schema: String,
@@ -1732,10 +1745,22 @@ fn voids_inward(body: &Body) -> bool {
 }
 
 pub(crate) fn finish(
+    proto: Proto,
+    uncertainty: f64,
+    lim: &Limits,
+    stats: &mut Stats,
+) -> Result<(Body, Option<forge_topo::mass::MassProps>), String> {
+    finish_as(proto, uncertainty, lim, stats, false)
+}
+
+/// `finish`; for a `sheet` (a shell that does not close), with nothing measured that needs a
+/// volume.
+fn finish_as(
     mut proto: Proto,
     uncertainty: f64,
     lim: &Limits,
     stats: &mut Stats,
+    sheet: bool,
 ) -> Result<(Body, Option<forge_topo::mass::MassProps>), String> {
     if proto.faces.is_empty() {
         return Err("a solid with no faces".into());
@@ -1776,6 +1801,14 @@ pub(crate) fn finish(
         return Err("a face laid out over a span of its parameters below 2^-433".into());
     }
     record_deviations(&mut body, stats);
+    if sheet {
+        let over = forge_geom::budget::over();
+        drop(budget);
+        if over {
+            return Err(TOO_LONG.into());
+        }
+        return Ok((body, None));
+    }
     let agree = measures_agree(&body);
     drop(budget);
     let (unverified, mass) = agree?;
@@ -1823,6 +1856,7 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
     let mut stats = Stats::default();
     let mut refusals = Vec::new();
     let mut solids = Vec::new();
+    let mut sheets = Vec::new();
     // each solid's context: from the representation that lists it
     let mut ctx_of: BTreeMap<u32, u32> = BTreeMap::new();
     let mut any_ctx = None;
@@ -1929,7 +1963,9 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
             if built.is_ok() && f.name(&r) == "OPEN_SHELL" {
                 fill_flat_holes(&mut proto, (10.0 * forge_math::tol::LINEAR).max(u.uncertainty));
             }
-            // an open shell is a solid only if it closes: every edge between two faces' uses
+            // an open shell is a solid only if it closes: every edge between two faces' uses; one
+            // that does not is read as a sheet besides
+            let mut open = 0;
             let built = built.and_then(|()| {
                 if f.name(&r) != "OPEN_SHELL" {
                     return Ok(());
@@ -1942,6 +1978,7 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
                         }
                     }
                 }
+                open = uses.iter().filter(|&&n| n == 1).count();
                 match uses.iter().filter(|&&n| n != 2).count() {
                     0 => Ok(()),
                     n => refuse(
@@ -1983,7 +2020,30 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
                         }),
                     }
                 }
-                Err(x) => refusals.push(x),
+                Err(x) => {
+                    // edges each bound one face or two, none more: a sheet
+                    let sheet = open > 0 && !only_measure && {
+                        let mut uses = vec![0u32; proto.edges.len()];
+                        for face in &proto.faces {
+                            for &(e, _) in face.loops.iter().flatten() {
+                                uses[e] += 1;
+                            }
+                        }
+                        uses.iter().all(|&n| n == 1 || n == 2)
+                    };
+                    if sheet && let Ok((mut body, _)) = finish_as(proto, u.uncertainty, lim, &mut stats, true)
+                    {
+                        body.unplaced = stats.assembly > 0;
+                        body.unverified = Some(format!("a sheet, not a solid: {open} edges bound one face"));
+                        sheets.push(Sheet {
+                            entity: id,
+                            name,
+                            body,
+                            open_edges: open,
+                        });
+                    }
+                    refusals.push(x)
+                }
             }
             break;
         }
@@ -1994,6 +2054,7 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
     Ok(Imported {
         solids,
         refusals,
+        sheets,
         occurrences: uses,
         schema: f.schema.clone(),
         system: f.system.clone(),

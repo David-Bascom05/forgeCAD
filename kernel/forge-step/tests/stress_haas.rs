@@ -349,9 +349,33 @@ fn a_surface_model_shell_that_closes_is_a_solid() {
     let close = sh + sm[sh..].find(')').unwrap();
     let last = sh + sm[sh..close].rfind(',').unwrap();
     let wall_less = format!("{}{}", &sm[..last], &sm[close..]);
-    let r = import(wall_less.as_bytes(), &Limits::default());
-    assert!(r.map_or(true, |i| i.solids.is_empty()
-        && i.refusals.iter().any(|x| x.kind == "OPEN_SHELL")));
+    let i = import(wall_less.as_bytes(), &Limits::default()).unwrap();
+    assert!(i.solids.is_empty() && i.refusals.iter().any(|x| x.kind == "OPEN_SHELL"));
+    // and read as the sheet it is (its two ends), for what works on faces: no volume, and
+    // flagged so
+    assert_eq!(i.sheets.len(), 1);
+    let s = &i.sheets[0];
+    assert_eq!((s.body.face_ids().count(), s.open_edges), (2, 2));
+    assert!(
+        s.body
+            .unverified
+            .as_deref()
+            .is_some_and(|w| w.starts_with("a sheet"))
+    );
+    let q = forge_mesh::Quality::default();
+    let m = forge_mesh::tessellate::tessellate_tolerant(&s.body, &q).unwrap();
+    let area: f64 = m
+        .triangles
+        .iter()
+        .map(|t| {
+            let [a, b, c] = t.map(|k| m.positions[k as usize]);
+            0.5 * (b - a).cross(c - a).length()
+        })
+        .sum();
+    // two disks of radius 5, drawn inside their rims: short by at most the rims times the chord
+    let want = 2.0 * forge_math::dmath::PI * 25.0;
+    let rims = 2.0 * 2.0 * forge_math::dmath::PI * 5.0;
+    assert!(area <= want && want - area < rims * q.chord, "{area} vs {want}");
 }
 
 /// A reference past 32 bits (SolidWorks writes #18446744073709551615, -1, for one it lost: VF-2,

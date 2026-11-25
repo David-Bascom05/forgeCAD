@@ -189,20 +189,24 @@ pub fn read(name: &str, bytes: &[u8]) -> Result<Vec<Piece>, String> {
             // names stands as the file has it)
             let mut meshed: std::collections::BTreeMap<u32, Option<Piece>> = Default::default();
             let mut failed = 0;
-            for s in &imp.solids {
+            // the solids, and the sheets (a surface model's shells that do not close: a model is
+            // drawn, and cleared, by its faces)
+            let bodies = (imp.solids.iter().map(|s| (s.entity, &s.name, &s.body)))
+                .chain(imp.sheets.iter().map(|s| (s.entity, &s.name, &s.body)));
+            for (entity, name, body) in bodies {
                 let q = forge_mesh::Quality {
-                    chord: 5e-4 * s.body.faces_box().diagonal(),
+                    chord: 5e-4 * body.faces_box().diagonal(),
                     ..forge_mesh::Quality::default()
                 };
-                let m = forge_mesh::tessellate::tessellate_tolerant(&s.body, &q)
+                let m = forge_mesh::tessellate::tessellate_tolerant(body, &q)
                     .ok()
                     .map(|m| Piece {
                         pos: m.positions.iter().map(|p| [p.x, p.y, p.z]).collect(),
                         tri: m.triangles.clone(),
-                        name: s.name.clone(),
+                        name: name.clone(),
                     });
                 failed += usize::from(m.is_none());
-                meshed.insert(s.entity, m);
+                meshed.insert(entity, m);
             }
             let mut v = Vec::new();
             let mut placed = std::collections::BTreeSet::new();
