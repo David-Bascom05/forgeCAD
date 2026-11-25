@@ -3173,15 +3173,18 @@ mod tests {
 /// included), every piece against every tool not proven clear, with its region. A step whose
 /// tool checks all pass has none, and costs nothing.
 pub fn contacts_of(m: &Model, tl: &Tooling, done: &[bool], step: &Step) -> Vec<Contact> {
+    // a check that ran and failed or is Near (one that could not run, `unchecked`, has no
+    // region to give: an offset's part on itself, not yet simulated through its two bends)
+    let flagged = |c: &&Check| c.unchecked.is_none() && (!c.pass || c.near.is_some());
     let selfs = step
         .checks
         .iter()
-        .any(|c| c.rule == Rule::SelfCollision && (!c.pass || c.near.is_some()));
+        .any(|c| c.rule == Rule::SelfCollision && flagged(&c));
     let mut phases: Vec<Phase> = step
         .checks
         .iter()
         .filter(|c| matches!(c.rule, Rule::ToolCollision | Rule::ClosesOnPunch | Rule::Withdraw))
-        .filter(|c| !c.pass || c.near.is_some())
+        .filter(flagged)
         .filter_map(|c| c.phase)
         .collect();
     phases.sort_by_key(|p| *p as u8);
@@ -3931,5 +3934,24 @@ mod offset_plan_tests {
                 "{c:?}"
             );
         }
+    }
+    /// A passing offset step whose part-on-itself check could not run (not yet simulated
+    /// through two bends) gives no collision regions: only checks that ran give contacts.
+    #[test]
+    fn a_check_that_did_not_run_gives_no_contacts() {
+        let m = Model::new(&super::offset_tests_zed(8.0)).unwrap();
+        let tl = with_offset(drop_of(&m), None);
+        let p = plan(&m, &tl, &Options::default());
+        let st = &p.steps[0];
+        assert!(st.pass() && st.stroke == Stroke::Offset { k: 1 });
+        // reported as not checked: neither a fail (a warning, not in the failures) nor a pass
+        let sc = st.checks.iter().find(|c| c.rule == Rule::SelfCollision).unwrap();
+        assert!(
+            sc.unchecked.is_some() && !sc.pass && sc.severity == Severity::Warning,
+            "{sc:?}"
+        );
+        assert!(sc.value.is_nan() && !sc.certified);
+        assert!(st.failures().is_empty());
+        assert!(contacts_of(&m, &tl, &[false, false], st).is_empty());
     }
 }
