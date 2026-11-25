@@ -174,7 +174,9 @@ no-output (allocator bookkeeping: spin locks, page owners and heaps, never a val
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|static|static ALLOC: Alloc = Alloc(UnsafeCell::new(Heap::new()));
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|static|static CACHE: core::cell::UnsafeCell<Cache> = const { core::cell::UnsafeCell::new(Cache::new()) };
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|thread_local|std::thread_local! {
+no-output (test switch, as its static line)  @ forge-asm/src/check.rs|atomic|pub static CERTIFY_FROM_MESHES: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 no-output (work index, counter or stop flag)  @ forge-asm/src/check.rs|atomic|let next = std::sync::atomic::AtomicUsize::new(0);
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-asm/src/check.rs|hash-order|static AREAS: std::sync::Mutex<Option<std::collections::HashMap<u128, Option<f64>>>> = std::sync::Mutex::new(None);
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-asm/src/check.rs|hash-order|static GAPS: std::sync::Mutex<Option<std::collections::HashMap<GapKey, Gap>>> = std::sync::Mutex::new(None);
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-asm/src/check.rs|hash-order|static NARROWS: std::sync::Mutex<Option<std::collections::HashMap<NarrowKey, Narrow>>> =
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-asm/src/check.rs|hash-order|static VOLUMES: std::sync::Mutex<Option<std::collections::HashMap<VolumeKey, Result<f64, ExactFail>>>> =
@@ -187,6 +189,8 @@ speed (lazy field or constant table)  @ forge-asm/src/check.rs|lazy|content: Onc
 speed (lazy field or constant table)  @ forge-asm/src/check.rs|lazy|sharp: OnceLock::new(),
 speed (lazy field or constant table)  @ forge-asm/src/check.rs|lazy|sharp: OnceLock<Vec<[bool; 3]>>,
 speed (lazy field or constant table)  @ forge-asm/src/check.rs|lazy|use std::sync::{Arc, OnceLock};
+speed (cache answering a function of its own key: a solid's identity hash -> its exact area bound)  @ forge-asm/src/check.rs|static|static AREAS: std::sync::Mutex<Option<std::collections::HashMap<u128, Option<f64>>>> = std::sync::Mutex::new(None);
+no-output (test switch, true in every shipped build; only tests/asm_certify.rs sets it, to compare with the exact path: the verdicts are the same either way (check::certify), the reported volume is exact or a proven lower bound)  @ forge-asm/src/check.rs|static|pub static CERTIFY_FROM_MESHES: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 speed (cache answering a function of its own key)  @ forge-asm/src/check.rs|static|static FRESH: std::sync::Mutex<Option<Learned>> = std::sync::Mutex::new(None);
 speed (cache answering a function of its own key)  @ forge-asm/src/check.rs|static|static GAPS: std::sync::Mutex<Option<std::collections::HashMap<GapKey, Gap>>> = std::sync::Mutex::new(None);
 speed (cache answering a function of its own key)  @ forge-asm/src/check.rs|static|static NARROWS: std::sync::Mutex<Option<std::collections::HashMap<NarrowKey, Narrow>>> =
