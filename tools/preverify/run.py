@@ -18,7 +18,7 @@ $PREVERIFY_CACHE, else the conservative selection):
 Writes $PREVERIFY_CACHE/record-<branch sha>.json and prints the line to send the train conductor.
 PREVERIFY_CACHE defaults to ~/.cache/forge-preverify. JOBS (tests) defaults to 3.
 """
-import argparse, json, os, shutil, subprocess, sys, tempfile, time
+import argparse, json, os, re, shutil, subprocess, sys, tempfile, time
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--base", default="origin/main")
@@ -117,8 +117,52 @@ if pk:
 if render:
     clippy.append(["sh", "-c", "cd interface/forge-render && CLIPPY_CONF_DIR=\"$PWD/web/clippy\" "
                    "cargo clippy --lib --locked --target wasm32-unknown-unknown -- -D warnings"])
+
+
+def lints(cmd, cwd):
+    """The set of clippy/rustc diagnostics a command prints: (level, code, file, message), with no
+    line numbers (they move between base and branch)."""
+    c = [x for x in cmd]
+    if c[0] == "cargo":
+        c = c[:2] + ["--message-format=short"] + c[2:]
+    else:
+        c = ["sh", "-c", c[2].replace("cargo clippy", "cargo clippy --message-format=short")]
+    # (the base's run shares the branch's target directory: its dependencies are already built)
+    env = dict(os.environ, **test_env)
+    env.setdefault("CARGO_TARGET_DIR", os.path.join(root, "target"))
+    r = subprocess.run(c, cwd=cwd, env=env, capture_output=True, text=True)
+    out = set()
+    for l in (r.stdout + r.stderr).splitlines():
+        m = re.match(r"^(\S+?):\d+:\d+: (warning|error)(\[\S+\])?: (.*)$", l)
+        if m:
+            out.add((m.group(2), m.group(3) or "", m.group(1), m.group(4)))
+    return out
+
+
 if clippy:
     step("clippy", clippy, env=test_env)
+    if not record["steps"]["clippy"]["ok"] and (not only or "clippy" in only):
+        # judged on what the branch adds: clippy on BASE with the same packages, in a scratch
+        # worktree; RED only for a diagnostic BASE does not have. (A lint main has, fixed in a train
+        # not yet landed, is not this branch's. The train runs clippy whole, -D warnings, as ever.)
+        wt = tempfile.mkdtemp(prefix="pv-base.")
+        subprocess.run(["git", "worktree", "add", "-q", "--detach", wt, base], check=True)
+        try:
+            mine, theirs = set(), set()
+            for cmd in clippy:
+                mine |= lints(cmd, root)
+                theirs |= lints(cmd, wt)
+        finally:
+            subprocess.run(["git", "worktree", "remove", "--force", wt])
+        new = sorted(mine - theirs)
+        e = record["steps"]["clippy"]
+        e["main_has"] = len(mine & theirs)
+        e["new"] = [" ".join(x) for x in new]
+        if mine and not new:
+            e["ok"] = True
+            print(f"pre-verify clippy ok   (only diagnostics main has too: {len(mine & theirs)})", flush=True)
+        else:
+            print(f"pre-verify clippy FAIL ({len(new)} the branch adds; first: {e['new'][:1]})", flush=True)
 if pk:
     step("native", [[sys.executable, "tools/ci/native-tests.py", *ps(pk)]], env=test_env)
 if render:
