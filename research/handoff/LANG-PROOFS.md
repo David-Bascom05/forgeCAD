@@ -8,9 +8,9 @@ determinism and wording items of 2026-11-25. Wound down at the coordinator's req
 
 | branch | sha | what | state |
 |---|---|---|---|
-| `claude/lang-det` | 8be3bcac | f64::log10 replaced by an exact decimal exponent (forge-lang, forge-render's two saved uses); one source run per checked SetParam; edits evaluate inside the document's own root (`edit::At`); `research/forge-lang/determinism.md` | second review SAFE; pre-verify on main c135b274 run; final pre-verify after TRAIN-CONDUCTOR's gate-memfns re-baseline |
-| `claude/powi` | 7fce97b1 | on lang-det: `forge_math::ipow`, every f64/f32 powi migrated, clippy disallows powi and f64 exp2/sinh/cosh/tanh/ln_1p/exp_m1; `mass::floors` | second review SAFE (bit-identical to compiler-rt across 108.8M cases); gate bits identical, band +0.0003%; pre-verify after lang-det's |
-| `claude/expect-words` | (this branch) | a failed expect in words (`expected no interferences, found 1`), the line as written its detail (hover in the app) | screenshot sent to UX-LEAD; pre-verify after the re-baseline |
+| `claude/lang-det` | 8be3bcac | f64::log10 replaced by an exact decimal exponent (forge-lang, forge-render's two saved uses); one source run per checked SetParam; edits evaluate inside the document's own root (`edit::At`); `research/forge-lang/determinism.md` | second review SAFE; PRE-VERIFY GREEN on main c135b274 (tool b9318989), sent to TRAIN-CONDUCTOR |
+| `claude/powi` | 8d552fef | on lang-det: `forge_math::ipow`, every f64/f32 powi migrated, clippy disallows powi and f64 exp2/sinh/cosh/tanh/ln_1p/exp_m1; `mass::floors` | second review SAFE (bit-identical to compiler-rt across 108.8M cases); gate bits identical, band +0.0003%; main 10d87778 merged in; `tools/proof/hidden-inputs.txt` regenerated (the migrated powi lines gone, ipow.rs classed no-output); pre-verify sent to TRAIN-CONDUCTOR |
+| `claude/expect-words` | (this branch, main 10d87778 merged in) | a failed expect in words (`expected no interferences, found 1`), the line as written its detail (hover in the app) | UX-LEAD: UX OK; pre-verify sent to TRAIN-CONDUCTOR |
 
 Order: lang-det, then powi (it contains lang-det), then expect-words (independent of both).
 
@@ -36,9 +36,9 @@ rows of 4b/5).
 - **Hosted callers of `edit`.** The hosted server's validation, open replay and client (not in
   this tree) should call the `_at` forms with the session's root; the coordinator has asked
   HOSTED-BUILD. `refactor::apply_checked` still checks with no directory.
-- **Folded-vs-runtime check in CI.** Asked HOSTED-BUILD (ci/determinism): release builds on
-  x86-64, aarch64 and wasm32 of a bits dump of constant expressions, diffed, so a host-dependent
-  fold of any intrinsic is caught, not only powi's.
+- **Folded-vs-runtime check in CI.** Done by HOSTED-BUILD on `ci/determinism` @3b80742d (a bits
+  dump of constant expressions, folded and at run time, diffed). Still open on their side: the
+  wasm32 runner for the ipow cases.
 - **Separate workspaces still call powi** (`research/*` prototypes, `verify/ieee754/check`): not
   linted by CI, not shipped.
 
