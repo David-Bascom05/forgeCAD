@@ -365,7 +365,12 @@ def lints(cmd, cwd):
 
 if clippy:
     step("clippy", clippy, env=test_env)
-    if record["steps"].get("clippy", {}).get("ok") is False:
+    clippy_log = record["steps"].get("clippy", {}).get("log")
+    # a real compile error (an error code, not a lint denied by -D warnings) is never re-judged
+    if clippy_log and re.search(r"error\[E\d+\]", open(clippy_log, errors="replace").read()):
+        record["steps"]["clippy"]["why_red"] = "a compile error"
+        print("pre-verify clippy FAIL stays: a compile error (error[E...])", flush=True)
+    elif record["steps"].get("clippy", {}).get("ok") is False:
         # judged on what the branch adds: clippy on BASE with the same packages, in a scratch
         # worktree; RED only for a diagnostic BASE does not have. (A lint main has, fixed in a train
         # not yet landed, is not this branch's. The train runs clippy whole, -D warnings, as ever.)
