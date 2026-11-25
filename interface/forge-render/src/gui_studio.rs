@@ -120,6 +120,16 @@ pub(super) fn lit(
 }
 
 impl Gui {
+    /// The Studio's live view, while it's open (tests: its target, to stop it).
+    pub fn studio_live(&mut self) -> Option<&mut Live> {
+        self.studio.as_mut().map(|h| &mut h.live)
+    }
+
+    /// The GPU drawing the window (tests: a software rasteriser's frames are its own measure).
+    pub fn adapter(&self) -> &wgpu::AdapterInfo {
+        &self.adapter
+    }
+
     /// One frame of the Studio; true while it has more to do (the window should draw again).
     pub(super) fn studio_frame(&mut self) -> bool {
         let active = self.shell.env == Some(EnvId::RenderStudio);
@@ -429,7 +439,11 @@ impl Gui {
         let now = now_ms();
         host.live.pace.after(now - host.last);
         host.last = now;
-        let more = host.live.frame(view, settings, size);
+        // a final render asked or under way has the GPU: the live picture waits, as it is (on a
+        // software GPU a live sample is seconds, and the click must answer at once)
+        let rendering = host.queue.progress() != Progress::Idle
+            || st.asks.iter().any(|a| matches!(a, Ask::Image | Ask::Turntable));
+        let more = !rendering && host.live.frame(view, settings, size);
         if !st.denoise && more {
             host.live.tracer.show(settings.exposure, false);
         }
@@ -472,6 +486,8 @@ impl Gui {
 
         // final renders
         let mut written: Option<((u32, u32), Vec<u8>)> = None;
+        // a job asked this frame starts on the next: this one shows its progress, no more
+        let mut asked_now = false;
         for ask in std::mem::take(&mut st.asks) {
             match ask {
                 Ask::Cancel => {
@@ -509,6 +525,7 @@ impl Gui {
                         }
                     };
                     st.result = None;
+                    asked_now = true;
                     if host.render_started.is_none() {
                         host.render_started = Some(now_ms());
                     }
@@ -525,17 +542,19 @@ impl Gui {
                 }
             }
         }
-        host.queue.tick(
-            &self.device,
-            &self.queue,
-            || Some((built, mats, Lut::new(512))),
-            &host.env,
-            |path, size, rgba| {
-                let r = crate::studio::save_png(path, size, &rgba);
-                written = Some((size, rgba));
-                r
-            },
-        );
+        if !asked_now {
+            host.queue.tick(
+                &self.device,
+                &self.queue,
+                || Some((built, mats, Lut::new(512))),
+                &host.env,
+                |path, size, rgba| {
+                    let r = crate::studio::save_png(path, size, &rgba);
+                    written = Some((size, rgba));
+                    r
+                },
+            );
+        }
         if let Some(w) = written.take() {
             host.written = Some(w);
         }

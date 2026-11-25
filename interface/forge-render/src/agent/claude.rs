@@ -3,7 +3,7 @@
 // desktop only: a page starts no CLI (std's threads and sleeps never run there)
 #![cfg_attr(target_arch = "wasm32", allow(clippy::disallowed_methods))]
 
-use super::{Backend, Event, Out, Watch, clean_env};
+use super::{Backend, Event, Out, Watch, clean_env, spawn};
 use crate::shell::agent::{Answer, Mode, present, tool_summary};
 use forge_agent::json::Json;
 use std::collections::HashSet;
@@ -430,7 +430,7 @@ impl ClaudeCode {
         clean_env(&mut c);
         // the folder as it is before the agent can touch it: a write in its first moment is a change
         let watch = self.watch.clone();
-        let mut child = c.spawn().map_err(|e| {
+        let mut child = spawn(&mut c).map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 Event::Problem {
                     text: "Claude Code isn't installed.".into(),
