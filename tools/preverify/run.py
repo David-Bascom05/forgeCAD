@@ -123,41 +123,9 @@ def target_pkgs(t):
     return TARGETS.get(t.replace("-", "_"), set())
 
 
-ALONE = {}  # ("slow", binary, test) -> seconds alone, from native-tests.py's budget lines
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from pvitems import ALONE, items, published  # noqa: E402
 SLOW_RED = 2 * float(os.environ.get("BUDGET", "2"))
-
-
-def items(name, text):
-    """What failed in a step's log, as comparable items (no times, no line numbers)."""
-    out, pending, binary = set(), [], ""
-    for l in text.splitlines():
-        m = re.match(r"^\s*Running (\S+)", l)
-        if m:
-            binary = m.group(1)
-        m = re.match(r"^test (\S+) \.\.\. FAILED", l)
-        if m:
-            pending.append(m.group(1))
-            if name == "render":
-                out.add(("fail", binary, m.group(1)))
-            continue
-        m = re.match(r"^test result: .*\((\S+)\)$", l)
-        if m:
-            out |= {("fail", m.group(1), x) for x in pending}
-            pending = []
-        m = re.match(r"^error: (\S+?)(-[0-9a-f]{16})? reported no result", l)
-        if m:
-            out.add(("noresult", m.group(1), ""))
-        m = re.match(r"^error: over the \S+ s budget: (\S+) (\S+) took .*?(?:([0-9.]+) s|no time) alone", l)
-        if m:
-            k = ("slow", m.group(1), m.group(2))
-            out.add(k)
-            ALONE.setdefault(k, float(m.group(3)) if m.group(3) else 1e9)
-        m = re.match(r"^(FAILED|NO RESULT): (\S+) (\S+) \(", l)
-        if m:
-            out.add(("wasm", m.group(2), m.group(3)))
-    if name != "render":
-        out |= {("fail", "?", x) for x in pending}
-    return out
 
 
 def relative(name, cmd_for, pkgs_of):
@@ -167,7 +135,7 @@ def relative(name, cmd_for, pkgs_of):
     e = record["steps"].get(name)
     if not e or e["ok"]:
         return
-    mine = items(name, open(e["log"], errors="replace").read())
+    mine = {x for x in items(name, open(e["log"], errors="replace").read()) if x[0] != "slowish"}
     # a test over the time budget on this machine is judged by the budget only well past it: under
     # SLOW_RED seconds alone it is a warning (machine load moves it, and main has ~70 such tests on
     # a 4-core VM); the train's run applies the budget as ever
@@ -184,6 +152,15 @@ def relative(name, cmd_for, pkgs_of):
         pk_fail |= pkgs_of(it)
     if not mine or (name != "render" and not pk_fail):
         return  # nothing comparable (a build error, say): stays RED
+    # main's own results for this commit, if a verifier published them: no rerun
+    pub = published(root, f"results-{base}-{name}.json")
+    if pub:
+        doc = json.loads(pub)
+        theirs = {tuple(x.split(" ", 2)) if x.count(" ") >= 2 else tuple(x.split(" ")) + ("",)
+                  for x in doc["items"]}
+        log = f"published results-{base}-{name}.json ({doc.get('toolchain', '')})"
+        judge(name, e, mine, theirs, log)
+        return
     wt = tempfile.mkdtemp(prefix="pv-base.")
     subprocess.run(["git", "worktree", "add", "-q", "--detach", wt, base], check=True)
     log = e["log"] + ".base"
@@ -196,6 +173,11 @@ def relative(name, cmd_for, pkgs_of):
     finally:
         subprocess.run(["git", "worktree", "remove", "--force", wt])
     theirs = items(name, open(log, errors="replace").read())
+    judge(name, e, mine, theirs, log)
+
+
+def judge(name, e, mine, theirs, log):
+    theirs = set(theirs) | {("slow", b, t) for k, b, t in theirs if k == "slowish"}
     new = sorted(mine - theirs)
     e["main_identical"] = sorted(" ".join(x) for x in mine & theirs)
     e["new"] = [" ".join(x) for x in new]

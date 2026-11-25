@@ -71,6 +71,18 @@ failed = sorted(set(re.findall(r"^test (\S+) \.\.\. FAILED", text, re.M)) |
 # the toolchain the checkout pins (rust-toolchain.toml), as it ran here: a verdict is stamped with it
 tc = " / ".join(subprocess.run(c, cwd=repo, capture_output=True, text=True).stdout.strip()
                 for c in (["rustc", "-V"], ["cargo", "clippy", "-V"]))
+# this stage's items for this commit, published (branch preverify/maps), so a branch's pre-verify
+# on this commit as its main compares against them instead of running main again
+if stage in ("native", "render", "wasm"):
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import json
+    from pvitems import ALONE, items, publish
+    its = items(stage, text)
+    doc = {"sha": sha, "stage": stage, "exit": code, "toolchain": tc,
+           "items": sorted(" ".join(x) for x in its),
+           "alone": {" ".join(k): v for k, v in ALONE.items()}}
+    if not publish(repo, f"results-{sha}-{stage}.json", json.dumps(doc, indent=0)):
+        print("(could not publish this stage's results)")
 print(f"VERIFY {stage} {sha} exit {code} {secs}s [{tc}]" +
       (f" failed: {' '.join(failed)}" if failed else "") + f"\nlog: {log}")
 sys.exit(code)
