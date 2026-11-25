@@ -174,6 +174,14 @@ research/import-speed/far-face/. Two traps: drawing the far face itself (VS-3 #4
 minutes and fails, and so does drawing without the edges' tolerances (the mesher meets an edge off
 its faces only by them). VS-3 #478011 is still not drawn, as before D, in 7.4 s.
 
+### STEP's Unicode escapes are never decoded (its own change, agreed with the coordinator)
+
+`part21::File::str_of` returns a string's bytes as written, so `\X2\00d600e1...\X0\` (UTF-16),
+`\X4\` (UTF-32), `\X\hh` (latin-1) and `\S\c` (the upper half) show raw in every name the app
+takes from a file: piece names, the Split list, the drawn-without note (the Cobot package's
+"HC5 Joint 5 / 14\X2\00d600e1...\X0\"). A decoder at the parser is small, but it changes piece
+names and so the app digests of every file whose names use it: its own differential, not done.
+
 ### Gap rule tier 2 (not written yet)
 
 Agreed with KERNEL-STRESS and the coordinator: one gap rule, held on `import/faces`. Tier 1 is
