@@ -1139,6 +1139,38 @@ fn densify(a: &Surface, b: &Surface, pts: Vec<Point3>, closed: bool) -> Vec<Poin
     densify_to(a, b, pts, closed, CHAIN_TOL)
 }
 
+/// How near an edge's cubic stays to the intersection it stands for, about (as SPINE_TOL).
+const EDGE_TOL: f64 = 1e-3;
+
+/// An intersection curve as a C1 cubic through its chain, filled in to within EDGE_TOL, with the
+/// exact tangents there: as a STEP file gives such an edge. Evaluating the exact curve searches
+/// both surfaces at every point, and a body's measure asks for thousands of points on each edge
+/// (most of an XT read's time went there). None for any other curve, or a chain the cubic
+/// cannot take.
+pub(crate) fn splined(c: &Curve) -> Option<Curve> {
+    let Curve::Intersection(ic) = c else { return None };
+    let pts = densify_to(&ic.a, &ic.b, ic.pts.clone(), ic.closed, EDGE_TOL);
+    let m = pts.len();
+    if m < 2 {
+        return None;
+    }
+    let mut tans = Vec::with_capacity(m);
+    for i in 0..m {
+        let chord = if ic.closed {
+            pts[(i + 1) % m] - pts[(i + m - 1) % m]
+        } else {
+            pts[(i + 1).min(m - 1)] - pts[i.saturating_sub(1)]
+        };
+        let t = direction(&ic.a, &ic.b, pts[i])?;
+        tans.push(if t.dot(chord) < 0.0 { -t } else { t });
+    }
+    // the chain goes one way: a tangent turned back is a cusp the cubic would loop through
+    if (0..m - 1).any(|i| tans[i].dot(tans[i + 1]) < 0.0) {
+        return None;
+    }
+    hermite(&pts, &tans, ic.closed)
+}
+
 /// How near a blend's spine stays to the true one between its points, about: the cubic's error
 /// falls with the fourth power of the step that a chord's middle within this of the curve gives.
 const SPINE_TOL: f64 = 1e-3;
