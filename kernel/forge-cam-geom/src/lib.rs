@@ -10,14 +10,15 @@
 //! - [`check`]: the certified tool–part clearance checker: branch and bound over the part's faces
 //!   and the motion, verdicts Clear (proven), Hit (a real witness) or Undecided (refused).
 //!
-//! The crate depends on nothing, so the whole of it is the Aeneas target (L4). It is written in
-//! that style: loops over indices, no closures in the algorithms, no iterator chains, no u128.
+//! The crate depends only on forge-num (which depends on nothing), so the whole of it is an Aeneas
+//! target (L4). It is written in that style: loops over indices, no closures in the algorithms, no iterator chains, no u128.
 // Arithmetic is spelled as plain methods (Aeneas translates them; operator traits it does not).
 #![allow(clippy::should_implement_trait, clippy::manual_map, clippy::manual_div_ceil)]
 // `!(x > 0.0)` is deliberate: it refuses NaN as well.
 #![allow(clippy::neg_cmp_op_on_partial_ord)]
 
 pub mod arr;
+pub mod axisplane;
 pub mod big;
 pub mod boolean;
 pub mod check;
