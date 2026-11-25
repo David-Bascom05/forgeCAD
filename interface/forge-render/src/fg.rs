@@ -725,10 +725,19 @@ pub enum Msg {
 }
 
 fn whole(body: &forge_topo::Body, flat: Option<&forge_topo::Body>) -> (PartMesh, Option<PartMesh>) {
-    let mesh = tess::build_part(body).unwrap_or_else(|e| {
-        eprintln!("forge-app: can't mesh it: {e:?}");
-        PartMesh::empty()
-    });
+    let mesh = match tess::build_part_reporting(body) {
+        Ok((m, left)) => {
+            // drawn without the faces that cannot be meshed: said, face by face
+            for l in &left {
+                eprintln!("forge-app: face {} left out of the drawing: {}", l.face, l.why);
+            }
+            m
+        }
+        Err(e) => {
+            eprintln!("forge-app: can't mesh it: {e:?}");
+            PartMesh::empty()
+        }
+    };
     let flat = flat.map(|b| tess::build_part(b).unwrap_or_else(|_| PartMesh::empty()));
     (mesh, flat)
 }
