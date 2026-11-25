@@ -1,7 +1,7 @@
 # CAM-PERF handoff
 
 CAM-PERF's brief was to find the CAM's most expensive time costs and cut them without weakening
-any check. Everything below is as of main c135b274 (train 7).
+any check. Everything below is as of main 10d87778 (train 8).
 
 ## Landed in main
 
@@ -66,7 +66,7 @@ manifold rerun. No output depends on it.
   - Big and small blocks keep to their heaps in `realloc`; a cross-heap move goes through
     alloc + copy + dealloc.
 
-**What this branch adds (`alloc/threaded-stress`).**
+**On main since train 8 (from `alloc/threaded-stress`).**
 - The threaded allocator takes its memory through `Mem { base, grow }`, so it runs natively over
   an arena.
 - `tests::threaded_stress` is a native multi-threaded alloc/realloc/free stress.
