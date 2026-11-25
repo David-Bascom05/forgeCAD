@@ -266,12 +266,19 @@ enum Out {
     Close,
 }
 
-/// A connection's queue to its writer, bounded in bytes.
+/// A connection's queue to its writer, bounded in bytes ([`QUEUE_BYTES`]) and messages
+/// ([`QUEUE_MSGS`]). An unbounded channel under those caps: its memory is what is queued. (A
+/// sync_channel of 65536 slots allocated 3 MB per connection up front, idle or not: 300
+/// connections held ~1 GB for nothing.)
 #[derive(Clone)]
 struct Outbox {
-    tx: SyncSender<(Out, usize)>,
+    tx: std::sync::mpsc::Sender<(Out, usize)>,
     bytes: Arc<AtomicUsize>,
+    msgs: Arc<AtomicUsize>,
 }
+
+/// The most messages a connection's queue holds (with [`QUEUE_BYTES`]): past it, too slow.
+pub const QUEUE_MSGS: usize = 65536;
 
 impl Outbox {
     /// Queued, or false: the connection is too slow (or gone) and must be dropped.
@@ -285,9 +292,15 @@ impl Outbox {
             self.bytes.fetch_sub(n, Ordering::SeqCst);
             return false;
         }
-        match self.tx.try_send((m, n)) {
+        if self.msgs.fetch_add(1, Ordering::SeqCst) >= QUEUE_MSGS {
+            self.msgs.fetch_sub(1, Ordering::SeqCst);
+            self.bytes.fetch_sub(n, Ordering::SeqCst);
+            return false;
+        }
+        match self.tx.send((m, n)) {
             Ok(()) => true,
-            Err(TrySendError::Full(_)) | Err(TrySendError::Disconnected(_)) => {
+            Err(_) => {
+                self.msgs.fetch_sub(1, Ordering::SeqCst);
                 self.bytes.fetch_sub(n, Ordering::SeqCst);
                 false
             }
@@ -417,6 +430,44 @@ struct Timed {
     /// rejoining does not reset it) and the whole server's.
     abandoned: Arc<AtomicUsize>,
     all: Arc<AtomicUsize>,
+    /// The thread validations run on, kept from one op to the next (a thread per op leaked:
+    /// the load soak measured 38 KB of resident memory per op, for ever); a new one only after
+    /// a run is abandoned (that thread finishes its run and ends).
+    worker: Option<std::sync::mpsc::SyncSender<Box<dyn FnOnce() + Send>>>,
+}
+
+impl Timed {
+    fn worker(&mut self) -> Result<&std::sync::mpsc::SyncSender<Box<dyn FnOnce() + Send>>, Refusal> {
+        if self.worker.is_none() {
+            let (tx, rx) = std::sync::mpsc::sync_channel::<Box<dyn FnOnce() + Send>>(1);
+            std::thread::Builder::new()
+                .name("forge-server validate".into())
+                .spawn(move || {
+                    for job in rx {
+                        job();
+                        release_sketches();
+                    }
+                })
+                .map_err(|e| Refusal::Invalid { why: e.to_string() })?;
+            self.worker = Some(tx);
+        }
+        Ok(self.worker.as_ref().expect("made"))
+    }
+}
+
+/// Frees the sketches forge-lang's runs on this thread kept (`forge_keep`: a sketch with a named
+/// entity is an `Rc` cycle, which a run never frees; the app lets them go between builds,
+/// forge-render's `plat::release_sketches`). The server must too, on every thread that runs
+/// forge-lang, between runs: without it each op kept its sketches for good (the load soak: 38 KB
+/// of resident memory per op, linear, for ever; the kept list is a thread-local with no
+/// destructor, so not even a thread's end frees it).
+fn release_sketches() {
+    for x in forge_keep::take_all() {
+        if let Ok(sk) = x.downcast::<std::cell::RefCell<forge_lang::sketch::Sk>>() {
+            let named = std::mem::take(&mut sk.borrow_mut().named);
+            drop(named);
+        }
+    }
 }
 
 /// Abandoned validations the whole server allows still running.
@@ -453,27 +504,31 @@ impl Check for Timed {
             self.all.clone(),
             state.clone(),
         );
-        std::thread::Builder::new()
-            .name("forge-server validate".into())
-            .spawn(move || {
-                let r = catch_unwind(AssertUnwindSafe(|| {
-                    forge_sync::validate(&head, counts.as_ref(), &op, dir, root)
-                }))
-                .unwrap_or_else(|_| {
-                    Err(Refusal::Invalid {
-                        why: "validation failed".into(),
-                    })
-                });
-                if st
-                    .compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst)
-                    .is_err()
-                {
-                    gone.fetch_sub(1, Ordering::SeqCst);
-                    all.fetch_sub(1, Ordering::SeqCst);
-                }
-                let _ = tx.send(r);
-            })
-            .map_err(|e| Refusal::Invalid { why: e.to_string() })?;
+        let job: Box<dyn FnOnce() + Send> = Box::new(move || {
+            let r = catch_unwind(AssertUnwindSafe(|| {
+                forge_sync::validate(&head, counts.as_ref(), &op, dir, root)
+            }))
+            .unwrap_or_else(|_| {
+                Err(Refusal::Invalid {
+                    why: "validation failed".into(),
+                })
+            });
+            if st
+                .compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst)
+                .is_err()
+            {
+                gone.fetch_sub(1, Ordering::SeqCst);
+                all.fetch_sub(1, Ordering::SeqCst);
+            }
+            let _ = tx.send(r);
+        });
+        if self.worker()?.send(job).is_err() {
+            // (the worker died: a panic outside the catch) a new one next time
+            self.worker = None;
+            return Err(Refusal::Invalid {
+                why: "validation failed".into(),
+            });
+        }
         match rx.recv_timeout(VALIDATE_BUDGET) {
             Ok(r) => r,
             Err(_) => {
@@ -489,6 +544,8 @@ impl Check for Timed {
                 }
                 self.abandoned.fetch_add(1, Ordering::SeqCst);
                 self.all.fetch_add(1, Ordering::SeqCst);
+                // that thread is busy with the abandoned run: the next op gets a new one
+                self.worker = None;
                 Err(Refusal::Invalid {
                     why: format!("checking this edit took over {} s", VALIDATE_BUDGET.as_secs()),
                 })
@@ -801,11 +858,12 @@ fn connection(
     slot.authenticated();
     r.set_max(UP_MAX);
     let _ = r.stream().set_read_timeout(Some(IDLE));
-    let (otx, orx) = sync_channel::<(Out, usize)>(65536);
-    let bytes = Arc::new(AtomicUsize::new(0));
+    let (otx, orx) = std::sync::mpsc::channel::<(Out, usize)>();
+    let (bytes, msgs) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
     let out = Outbox {
         tx: otx,
         bytes: bytes.clone(),
+        msgs: msgs.clone(),
     };
     let writer = std::thread::Builder::new()
         .name(format!("forge-server write {conn}"))
@@ -820,6 +878,7 @@ fn connection(
                     }
                 };
                 bytes.fetch_sub(n, Ordering::SeqCst);
+                msgs.fetch_sub(1, Ordering::SeqCst);
                 if !ok {
                     break;
                 }
@@ -1303,6 +1362,7 @@ fn open_doc(shared: &Shared, doc: &str) -> Result<Room, String> {
     seq.checker = Box::new(Timed {
         abandoned: mine,
         all: shared.abandoned_all.clone(),
+        worker: None,
     });
     Ok(Room::new(seq))
 }
@@ -1394,6 +1454,8 @@ impl Actor {
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
             }
             self.idle();
+            // (rebase, inverse and the open's replay run forge-lang here too)
+            release_sketches();
         }
     }
 
@@ -1603,6 +1665,7 @@ impl Actor {
                         }))
                         .ok()
                         .flatten();
+                        release_sketches();
                         // in time: this side frees the slot (late: the actor already did)
                         if st
                             .compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst)
