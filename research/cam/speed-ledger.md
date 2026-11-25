@@ -199,6 +199,41 @@ checked. TRAIN-CONDUCTOR expects a row in any CAM speed PR that moves outputs.
   - The harness certification sweep (identical on all 28 parts).
 
 
+## Correctness changes that cost speed
+
+Speed given up for good, to fix a path that met material it should not. Each row says what was
+wrong, what the fix costs, and the guard that keeps it fixed.
+
+### The hops' map and adaptive's descents never below material (TOOLPATH-QUALITY)
+
+- **What.** Branch `cam/hop-map-under`, two commits.
+  - 5d6d6976: `HeightMap::sweep_under` and `lower_voids_under` (engage.rs). A cell is lowered
+    only where one tool position covers it whole, or where it lies wholly in a void. The hops
+    (hop.rs, lib.rs `hop_links`) use them.
+  - c12b0131: adaptive's `retract_link` descends at the link feed only where `descent_meets`
+    finds no material within the tool's disk. That check rebuilds the stock round the target from
+    the op's start and every move swept since, conservatively, on a grid of an eighth of the
+    map's cell. Elsewhere the descent runs at the plunge feed.
+- **Why.** Both maps lowered a cell by its centre, so a skin finer than half a cell was invisible.
+  - A hop's down-ramp at F9999 grazed such a skin: boss_adaptive, hex 1.50 against fz 0.129, on
+    CAM-CORE's pass-start branch.
+  - On main, adaptive's link-feed descents grazed them full depth: deep_islands, and rptu3/4/5
+    adaptive and zigzag.
+- **Costs.** Against main (50af9c42), default time model:
+  - Cycle time: 20 ops move −0.2 to +1.6 %, +0.6 % in all. The largest are deep_islands adaptive
+    +1.6 % and rptu5 zigzag +1.3 %.
+  - Generation, adaptive: +1.5 % on deep_islands (10.0 → 10.1 s), +0.3 % on deep_boss.
+  - The 14–22 % blanket alternative (every descent near material at the plunge feed) was measured
+    and not taken.
+- **Sound.**
+  - The maps only ever stand higher than before, so a hop or descent judged clear now is clear.
+  - Every certificate is unchanged on all harness parts and examples.
+  - boss_adaptive's chip guard passes (hex 0.060).
+- **Pinned by.**
+  - guards.rs: no rapid, and no feed piece at 5000 mm/min or more, meets material on any part.
+  - engage.rs's property tests: a lowered cell holds nothing above it, for flat, bull and ball
+    tools, on lines and ramps; void cells lie wholly inside.
+
 ## Temporary safety exceptions
 
 Speed given up on purpose, for safety, until a named condition is met. Each row says what was
