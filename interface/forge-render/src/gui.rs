@@ -2375,16 +2375,20 @@ impl Gui {
         let mut renamed: Option<(Arc<crate::fg::AnchorView>, Arc<crate::fg::AnchorView>)> = None;
         let msgs = s.poll();
         // a SERVED part: collaborators' text, and what the link has to say
-        if s.sync.is_some() {
-            if let Some(n) = s.sync_note.take() {
-                self.shell.status = n;
-            }
-            if std::mem::take(&mut s.sync_changed)
-                && let Some(p) = &mut self.shell.fg
-            {
-                p.source = s.src.clone();
-                p.dirty = s.dirty();
-            }
+        // (said whether or not a link is live: a pause's reason most of all)
+        if let Some(n) = s.sync_note.take() {
+            self.shell.status = n;
+        }
+        if std::mem::take(&mut s.sync_changed)
+            && let Some(p) = &mut self.shell.fg
+        {
+            p.source = s.src.clone();
+            p.dirty = s.dirty();
+        }
+        if let Some(p) = &mut self.shell.fg
+            && p.sync_paused != s.sync_paused
+        {
+            p.sync_paused = s.sync_paused.clone();
         }
         for m in msgs {
             let b = match m {

@@ -53,13 +53,25 @@ fn until(ss: &mut [&mut Session], what: &str, done: impl Fn(&[&mut Session]) -> 
         }
         assert!(
             t0.elapsed() < Duration::from_secs(30),
-            "timed out waiting for {what}"
+            "timed out waiting for {what}: {:?}",
+            ss.iter()
+                .map(|s| (
+                    s.served(),
+                    s.sync.is_some(),
+                    s.sync_paused.clone(),
+                    s.sync_note.clone()
+                ))
+                .collect::<Vec<_>>()
         );
         std::thread::sleep(Duration::from_millis(2));
     }
 }
 
 fn synced(ss: &[&mut Session]) -> bool {
+    // (a first open attaches once the server's text is seen to be the file's)
+    if ss.iter().any(|s| s.sync.is_none()) {
+        return false;
+    }
     let l: Vec<_> = ss.iter().map(|s| s.sync.as_ref().unwrap()).collect();
     l.iter().all(|l| l.ready() && l.pending() == 0)
         && l.iter().all(|x| x.seq() == l[0].seq())
@@ -68,32 +80,52 @@ fn synced(ss: &[&mut Session]) -> bool {
 
 #[test]
 fn two_app_sessions_edit_one_served_part() {
+    // the server serves its own folder; the app opens a clone of the project (never the
+    // server's folder: the app refuses it)
+    // each collaborator has a clone of their own
     let root = folder("two");
-    let mut c = forge_server::Config::new(root.clone(), vec![("dev".into(), TOKEN.into())]);
-    c.port = 0;
-    let h = forge_server::start_on(std::net::TcpListener::bind("127.0.0.1:0").unwrap(), c).unwrap();
+    let rb = folder("two-b");
+    let srv = folder("two-srv");
+    let serve = || {
+        let mut c = forge_server::Config::new(srv.clone(), vec![("dev".into(), TOKEN.into())]);
+        c.port = 0;
+        forge_server::start_on(std::net::TcpListener::bind("127.0.0.1:0").unwrap(), c).unwrap()
+    };
+    let h = serve();
+    let both = |name: &str, from: &std::path::Path| {
+        for d in [&root, &rb, &srv] {
+            std::fs::copy(from, d.join("parts").join(name)).unwrap();
+        }
+    };
     // the project only names its remote; the address and token are the user's
-    std::fs::create_dir_all(root.join(".forgecad")).unwrap();
-    std::fs::write(root.join(".forgecad/remote.toml"), "remote = \"lab\"\n").unwrap();
+    for d in [&root, &rb] {
+        std::fs::create_dir_all(d.join(".forgecad")).unwrap();
+        std::fs::write(d.join(".forgecad/remote.toml"), "remote = \"lab\"\n").unwrap();
+    }
     let user = root
         .parent()
         .unwrap()
         .join(format!("forge-served-remotes-{}.toml", std::process::id()));
-    std::fs::write(
-        &user,
-        format!(
-            "[remote.lab]\nurl = \"ws://{}/sync\"\ntoken = \"{TOKEN}\"\n",
-            h.addr
-        ),
-    )
-    .unwrap();
+    let canon = format!(
+        "{}, {}",
+        root.canonicalize().unwrap().display(),
+        rb.canonicalize().unwrap().display()
+    );
+    let remotes = |addr: &std::net::SocketAddr, token: &str| {
+        std::fs::write(
+            &user,
+            format!(
+                "[remote.lab]\nurl = \"ws://{addr}/sync\"\ntoken = \"{token}\"\nprojects = \"{canon}\"\n"
+            ),
+        )
+        .unwrap();
+    };
+    remotes(&h.addr, TOKEN);
     forge_remote::set_user_file(Some(user.clone()));
     let file = root.join("parts/part.fg");
-    let (mut a, mut b) = (open(&file), open(&file));
-    assert!(
-        a.sync.is_some() && b.sync.is_some(),
-        "a SERVED project gets a link"
-    );
+    let file_b = rb.join("parts/part.fg");
+    let (mut a, mut b) = (open(&file), open(&file_b));
+    assert!(a.served() && b.served(), "a SERVED project gets a link");
     until(&mut [&mut a, &mut b], "the snapshots", synced);
 
     // both edit at once through the app's own edit path
@@ -189,7 +221,7 @@ fn two_app_sessions_edit_one_served_part() {
     );
 
     // an assembly reports its placed parts' hash, and it matches the server's own build
-    std::fs::copy(t_repo().join("examples/unified/hinged_box.fg"), root.join("parts/box.fg")).unwrap();
+    both("box.fg", &t_repo().join("examples/unified/hinged_box.fg"));
     let mut asm = open(&root.join("parts/box.fg"));
     let checks = h.stats.lock().unwrap().hash_checks;
     let t0 = Instant::now();
@@ -197,7 +229,14 @@ fn two_app_sessions_edit_one_served_part() {
     while h.stats.lock().unwrap().hash_checks <= checks {
         for m in asm.poll() {
             if let Msg::Built(b) = m {
-                built_ok.push((b.seq, b.ok, b.checked, b.inspect.as_ref().map(|i| (i.asm.is_some(), i.placed.len(), i.bodies.len()))));
+                built_ok.push((
+                    b.seq,
+                    b.ok,
+                    b.checked,
+                    b.inspect
+                        .as_ref()
+                        .map(|i| (i.asm.is_some(), i.placed.len(), i.bodies.len())),
+                ));
             }
         }
         assert!(t0.elapsed() < Duration::from_secs(60), "asm builds: {built_ok:?}");
@@ -209,16 +248,83 @@ fn two_app_sessions_edit_one_served_part() {
         );
         std::thread::sleep(Duration::from_millis(5));
     }
-    assert_eq!(h.stats.lock().unwrap().divergences, 0, "the app's assembly hash is the server's");
+    assert_eq!(
+        h.stats.lock().unwrap().divergences,
+        0,
+        "the app's assembly hash is the server's"
+    );
     drop(asm);
+
+    // clients review H2(c): a Save of a served part is the app's own write, not a hand edit
+    until(&mut [&mut a, &mut b], "settled", synced);
+    a.save().unwrap();
+    for _ in 0..30 {
+        a.poll();
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert!(
+        a.sync.is_some() && a.sync_paused.is_none(),
+        "a Save did not pause: {:?}",
+        a.sync_paused
+    );
+
+    // H2(a): an edit unacked when the app closes (the server is down) is kept beside the file,
+    // and sent when the part opens again: the server commits it once
+    h.stop();
+    b.apply(Op::SetParam {
+        param: ParamKey::parse("w").unwrap(),
+        value: lit(73.0),
+    })
+    .unwrap();
+    for _ in 0..5 {
+        b.poll();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(
+        b.sync.is_some(),
+        "b paused: {:?} {:?}",
+        b.sync_paused,
+        b.sync_note
+    );
+    assert_eq!(b.sync.as_ref().unwrap().pending(), 1);
+    drop(b);
+    let pending = rb.join(".forgecad/sync/part.fg.pending");
+    let pending = if pending.exists() {
+        pending
+    } else {
+        std::fs::read_dir(rb.join(".forgecad/sync"))
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .find(|p| p.to_string_lossy().ends_with("part.fg.pending"))
+            .expect("the pending ops were kept")
+    };
+    let kept = std::fs::read_to_string(&pending).unwrap();
+    let back = forge_sync::Client::restore("parts/part.fg", TOKEN, &kept).expect("a saved client");
+    assert_eq!(back.pending().len(), 1, "kept: the op");
+    let h = serve();
+    remotes(&h.addr, TOKEN);
+    let mut b = open(&file_b);
+    until(&mut [&mut b], "the kept op, committed", |ss| {
+        ss[0].sync.as_ref().is_some_and(|l| l.ready() && l.pending() == 0)
+            && ss[0].src.contains("shared w = 73")
+    });
+    assert_eq!(
+        h.stats.lock().unwrap().committed,
+        1,
+        "committed once, on the restarted server"
+    );
+    drop(a); // linked to the stopped server
+    let (mut a, file) = (b, file_b.clone());
 
     // the served file follows the server's text...
     let file_now = || std::fs::read_to_string(&file).unwrap();
     let t0 = Instant::now();
     while file_now() != a.src {
-        assert!(t0.elapsed() < Duration::from_secs(10), "the file never took the server's text");
+        assert!(
+            t0.elapsed() < Duration::from_secs(10),
+            "the file never took the server's text"
+        );
         a.poll();
-        b.poll();
         std::thread::sleep(Duration::from_millis(20));
     }
     // ...and a hand edit to it pauses syncing, the edit kept, never written over
@@ -226,16 +332,89 @@ fn two_app_sessions_edit_one_served_part() {
     std::fs::write(&file, &hand).unwrap();
     let t0 = Instant::now();
     while a.sync.is_some() {
-        assert!(t0.elapsed() < Duration::from_secs(10), "a hand edit was never noticed");
+        assert!(
+            t0.elapsed() < Duration::from_secs(10),
+            "a hand edit was never noticed"
+        );
         a.poll();
         std::thread::sleep(Duration::from_millis(20));
     }
-    assert!(a.sync_note.as_deref().is_some_and(|n| n.contains("edited outside")), "{:?}", a.sync_note);
+    assert!(
+        a.sync_paused
+            .as_deref()
+            .is_some_and(|n| n.contains("edited outside")),
+        "{:?}",
+        a.sync_paused
+    );
     assert_eq!(file_now(), hand, "the hand edit is kept");
+    // M1: the editor shows the kept file now, so a Save cannot write the server's text over it
+    assert_eq!(a.src, hand);
     // reopening it now: still paused (the mark says the file is not what the app wrote)
     let again = open(&file);
-    assert!(again.sync.is_none() && again.sync_note.is_some());
+    assert!(!again.served() && again.sync_paused.is_some());
+
+    // clients review H1: a first open (no mark: another machine, a fresh clone) of a file whose
+    // text is not the server's is not attached, and the file is never written over
+    both("box2.fg", &t_repo().join("examples/unified/hinged_box.fg"));
+    let mut first = open(&root.join("parts/box2.fg"));
+    until(&mut [&mut first], "box2 attached", |ss| ss[0].sync.is_some());
+    drop(first);
+    let theirs = std::fs::read_to_string(root.join("parts/box2.fg")).unwrap();
+    let mine = format!("{theirs}# made before the project was served\n");
+    std::fs::write(root.join("parts/box2.fg"), &mine).unwrap();
+    for e in std::fs::read_dir(root.join(".forgecad/sync")).unwrap() {
+        let p = e.unwrap().path();
+        if p.to_string_lossy().contains("box2") {
+            std::fs::remove_file(p).unwrap();
+        }
+    }
+    let mut fresh = open(&root.join("parts/box2.fg"));
+    until(&mut [&mut fresh], "the first open's check", |ss| !ss[0].served());
+    assert!(
+        fresh
+            .sync_paused
+            .as_deref()
+            .is_some_and(|n| n.contains("differs from the server")),
+        "{:?}",
+        fresh.sync_paused
+    );
+    std::thread::sleep(Duration::from_millis(1200));
+    fresh.poll();
+    assert_eq!(
+        std::fs::read_to_string(root.join("parts/box2.fg")).unwrap(),
+        mine,
+        "never written over"
+    );
+    assert_eq!(fresh.src, mine);
+
+    // H2(b): a Hello the server refuses (a bad token) pauses syncing and says why; the link
+    // does not reconnect for ever behind the user's back
+    remotes(&h.addr, "0123456789abcdef-wrong");
+    let mut refused = open(&root.join("parts/box.fg"));
+    until(&mut [&mut refused], "the refusal", |ss| !ss[0].served());
+    assert!(
+        refused
+            .sync_paused
+            .as_deref()
+            .is_some_and(|n| n.contains("refused")),
+        "{:?}",
+        refused.sync_paused
+    );
+    // the server's own folder is refused (docs/hosted.md)
+    std::fs::create_dir_all(srv.join(".forgecad")).unwrap();
+    std::fs::write(srv.join(".forgecad/remote.toml"), "remote = \"lab\"\n").unwrap();
+    let err = Session::open(
+        srv.join("parts/part.fg").to_str().unwrap(),
+        None,
+        Arc::new(|| {}) as Arc<dyn Fn() + Send + Sync>,
+    )
+    .err()
+    .expect("the server's folder is refused");
+    assert!(err.contains("a forge-server serves"), "{err}");
+    forge_remote::set_user_file(None);
     let _ = std::fs::remove_dir_all(&root);
+    let _ = std::fs::remove_dir_all(&srv);
+    let _ = std::fs::remove_dir_all(&rb);
 }
 
 fn t_repo() -> PathBuf {
