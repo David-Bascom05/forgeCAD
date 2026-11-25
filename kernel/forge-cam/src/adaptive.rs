@@ -1708,6 +1708,33 @@ pub fn adaptive(
             });
             at = Some([p[0], p[1], h.retract]);
         }
+        // after every pass and ring: stock left at this level more than a cell inside the region
+        // (the model holds material to a cell, so nearer the walls is the model's rounding, and
+        // the wall pass's), measured on the map as the level left it. G4 lists what is left
+        // whatever its size; the note says so, so nothing is left silently (the next op meets it
+        // at full depth). More than a 2 x 2 block of cells is reported.
+        {
+            let m = &f.map;
+            let mut left = 0.0;
+            for j in 0..m.ny {
+                let y = m.y0 + (j as f64 + 0.5) * m.h;
+                for i in 0..m.nx {
+                    if m.z[j * m.nx + i] > z + f.eps {
+                        let x = m.x0 + (i as f64 + 0.5) * m.h;
+                        if inside(&f.work, x, y) && edge_dist(&f.work, x, y) > m.h {
+                            left += m.h * m.h;
+                        }
+                    }
+                }
+            }
+            if left > 4.0 * m.h * m.h {
+                notes.push(format!(
+                    "adaptive: at z {z:.3} {left:.0} mm² of stock is left uncut after every pass and \
+                     ring (G4 lists it); the next op meets it at full depth: clear() or pocket() \
+                     takes it"
+                ));
+            }
+        }
         above = z;
     }
     let Some(start) = start else {
