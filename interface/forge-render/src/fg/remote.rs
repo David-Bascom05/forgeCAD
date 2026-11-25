@@ -227,6 +227,8 @@ impl Wire for crate::thermo_view::Gfx {
             web,
             print_src: _,
             made: _,
+            key,
+            remote: _,
         } = self;
         steps.put(o);
         draft.put(o);
@@ -253,6 +255,7 @@ impl Wire for crate::thermo_view::Gfx {
         stretch.put(o);
         stretch_range.put(o);
         web.put(o);
+        key.put(o);
     }
     fn take(i: &mut R) -> Option<Self> {
         Some(crate::thermo_view::Gfx {
@@ -281,6 +284,8 @@ impl Wire for crate::thermo_view::Gfx {
             stretch: Wire::take(i)?,
             stretch_range: Wire::take(i)?,
             web: Wire::take(i)?,
+            key: Wire::take(i)?,
+            remote: true,
             ..Default::default()
         })
     }
@@ -300,6 +305,9 @@ choice!(Ask {
     2 => Plane(a0, a1),
     3 => Project(a0, a1),
     4 => Locate(a0, a1),
+    5 => ThermoSim(a0),
+    6 => ThermoHeat(a0, a1),
+    7 => ThermoExport(a0, a1, a2, a3),
 });
 
 choice!(Told {
@@ -308,6 +316,9 @@ choice!(Told {
     2 => Plane(a0),
     3 => Project(a0),
     4 => Located(a0),
+    5 => ThermoSim(a0),
+    6 => ThermoHeat(a0, a1),
+    7 => Bytes(a0),
 });
 
 choice!(Answer {
@@ -666,6 +677,49 @@ pub mod page {
         }
     }
 
+    /// What a message of a mesh `bytes` long costs to write and read in this wasm (the page's
+    /// instance; the worker's is the same code): the mean ms of each over `n` tries, as JSON.
+    /// The copies out of and into wasm memory and the transfer are the page's to time (web/tests).
+    #[wasm_bindgen]
+    pub fn app_build_bench(bytes: u32, n: u32) -> String {
+        use crate::mesh::{Lod, PartMesh};
+        let mesh = PartMesh {
+            center: [0.0; 3],
+            radius: 1.0,
+            lods: vec![Lod {
+                vertices: (0..bytes).map(|i| (i * 7) as u8).collect(),
+                ..Lod::default()
+            }],
+        };
+        let m = ToPage::Msg(
+            1,
+            Msg::Final {
+                seq: 1,
+                mesh,
+                flat: None,
+                mesh_ms: 0.0,
+            },
+        );
+        // n of each timed together: a page that isn't cross-origin isolated has a coarse clock
+        let n = n.max(1);
+        let t = crate::viewer::now_ms();
+        let mut b = vec![];
+        for _ in 0..n {
+            b = to_bytes(&m);
+        }
+        let write = (crate::viewer::now_ms() - t) / n as f64;
+        let t = crate::viewer::now_ms();
+        let mut ok = true;
+        for _ in 0..n {
+            ok &= from_bytes::<ToPage>(&b).is_some();
+        }
+        let read = (crate::viewer::now_ms() - t) / n as f64;
+        format!(
+            "{{\"bytes\":{},\"write_ms\":{write},\"read_ms\":{read},\"ok\":{ok}}}",
+            b.len()
+        )
+    }
+
     /// What crossed so far, as JSON: messages and bytes each way, the largest, the ms spent
     /// writing and reading them on the page.
     #[wasm_bindgen]
@@ -687,7 +741,9 @@ pub mod page {
 pub mod worker {
     use super::{JobW, ToPage, ToWorker};
     use crate::fg::{Gpu, Msg, Reads, Until, Work, Worker};
-    use crate::gui::gui_inspect::{Answer, InspectData, Job, Meshes, Told, handle, tell, wall_found};
+    use crate::gui::gui_inspect::{
+        Answer, Ask, InspectData, Job, Meshes, Told, handle, tell, thermo_tell, wall_found,
+    };
     use crate::wire::{from_bytes, to_bytes};
     use forge_mesh::TriMesh;
     use std::cell::{Cell, RefCell};
@@ -737,6 +793,8 @@ pub mod worker {
         static ASKED: Cell<bool> = const { Cell::new(false) };
         /// The last builds' Inspect data (with their bodies), by number: what the page asks of.
         static BUILDS: RefCell<Vec<Arc<InspectData>>> = const { RefCell::new(Vec::new()) };
+        /// The last builds' thermoform drawings (with their bodies and wall models), by key.
+        static THERMOS: RefCell<Vec<crate::thermo_view::Gfx>> = const { RefCell::new(Vec::new()) };
         static MESHES: RefCell<Meshes> = RefCell::new(Meshes::default());
         static WALK: RefCell<Option<Walk>> = const { RefCell::new(None) };
     }
@@ -750,6 +808,18 @@ pub mod worker {
     /// A build's Inspect data kept (bodies and all) as its message goes to the page.
     fn keep(m: &Msg) {
         let Msg::Built(b) = m else { return };
+        THERMOS.with(|all| {
+            let mut all = all.borrow_mut();
+            for (_, g) in &b.thermos {
+                if !all.iter().any(|x| x.key == g.key) {
+                    all.push(g.clone());
+                }
+            }
+            let n = all.len();
+            if n > KEPT {
+                all.drain(..n - KEPT);
+            }
+        });
         for d in b.inspect.iter().chain(b.asm.iter().map(|a| &a.inspect)) {
             BUILDS.with(|all| {
                 let mut all = all.borrow_mut();
@@ -945,9 +1015,15 @@ pub mod worker {
             ToWorker::Unload(prefix) => forge_dirs::fs::mem::unload(&prefix),
             ToWorker::Job(number, j) => job(number, j),
             ToWorker::Ask(number, a) => {
-                let t = match build(number) {
-                    Some(d) => tell(&d, &a),
-                    None => tell(&InspectData::default(), &a),
+                let t = match &a {
+                    Ask::ThermoSim(k) | Ask::ThermoHeat(k, _) | Ask::ThermoExport(k, ..) => THERMOS.with(|all| {
+                        let all = all.borrow();
+                        thermo_tell(all.iter().find(|g| g.key == *k), &a)
+                    }),
+                    _ => match build(number) {
+                        Some(d) => tell(&d, &a),
+                        None => tell(&InspectData::default(), &a),
+                    },
                 };
                 let t = crossing(t);
                 send(&ToPage::Answer(Answer::Told(number, a, t)));

@@ -883,6 +883,17 @@ pub fn crossable(c: &forge_geom::Curve) -> bool {
     )
 }
 
+choice!(crate::shell::thermo_ui::Export {
+    0 => MouldStep,
+    1 => MouldStl,
+    2 => PartStep,
+    3 => PartStl,
+    4 => TrimDxf,
+    5 => ProcessPdf,
+    6 => ThicknessCsv,
+    7 => DistortionPrint,
+});
+
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use super::super::tests::round;

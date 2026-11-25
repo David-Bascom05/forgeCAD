@@ -61,7 +61,15 @@ pub struct Gfx {
     pub print_src: Option<std::sync::Arc<PrintSrc>>,
     /// What the workers have made and are making.
     pub made: std::sync::Arc<std::sync::Mutex<Made>>,
+    /// Its number where it was made: what the page asks the build worker by.
+    pub key: u64,
+    /// Its bodies, wall model and mould side are the build worker's (the default browser build):
+    /// what's made of them is asked of it.
+    pub remote: bool,
 }
+
+/// Each thermoform drawing its own number where it's made.
+static KEYS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 /// A forming, its trim plane and its trim's box: what a distortion print is made from.
 pub type PrintSrc = (forge_thermo::Stretch, forge_math::Frame, (Point2, Point2));
@@ -177,6 +185,7 @@ pub fn view(o: &ThermoOut, spans: &[forge_lang::build::Span], draft_min: f32) ->
             },
             0.1 * o.t,
         ))),
+        key: KEYS.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
         ..Gfx::default()
     };
     let kg = o.density.map(|d| d * 1e-9);
@@ -773,21 +782,25 @@ impl Gfx {
         // let go before the job starts: in the single-threaded page it runs right here, and takes
         // the same lock (a second lock on one thread panics there)
         drop(m);
+        // the build worker's: made there, of its wall model
+        #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
+        if self.remote {
+            use crate::gui::gui_inspect::{Ask, Told};
+            crate::fg::remote::page::ask_then(
+                0,
+                Ask::ThermoSim(self.key),
+                Box::new(move |t| {
+                    if let Told::ThermoSim(Some(x)) = t {
+                        made.lock().unwrap_or_else(|e| e.into_inner()).sim = Some(x);
+                    }
+                    waker();
+                }),
+            );
+            return;
+        }
         crate::plat::spawn("forge-job", move || {
-            let lod = crate::tess::lod_of_mesh(&mesh, UNPICKED);
-            // the simulated part all over (on the tool and off it), banded as the legend is, by the
-            // model's own wall at each point of the modelled part it was moved from: the modelled
-            // part's colours
-            let mut heat = vec![];
-            if let Some(field) = &field {
-                let tris: Vec<[(Point3, Point3); 3]> = mesh
-                    .triangles
-                    .iter()
-                    .map(|x| x.map(|i| (mesh.positions[i as usize], modelled[i as usize])))
-                    .collect();
-                paint_mesh(&tris, field, range, &mut heat, &mut |_, _| {});
-            }
-            made.lock().unwrap_or_else(|e| e.into_inner()).sim = Some((lod, heat));
+            let got = sim_of(&mesh, &modelled, field.as_deref(), range);
+            made.lock().unwrap_or_else(|e| e.into_inner()).sim = Some(got);
             waker();
         });
     }
@@ -821,6 +834,26 @@ impl Gfx {
         let (range, at, t, made, waker) = (self.range, self.at, self.t, self.made.clone(), waker.clone());
         // let go first, as in `want_sim`
         drop(m);
+        // the build worker's: painted there, of its wall model, on this mesh's level
+        #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
+        if self.remote {
+            use crate::gui::gui_inspect::{Ask, Told};
+            let _ = (field, span, range, at, t);
+            crate::fg::remote::page::ask_then(
+                0,
+                Ask::ThermoHeat(self.key, Box::new(l)),
+                Box::new(move |told| {
+                    if let Told::ThermoHeat(heat, ext) = told {
+                        let mut m = made.lock().unwrap_or_else(|e| e.into_inner());
+                        if m.heat_asked == Some(key) {
+                            m.heat = Some((key, heat, ext));
+                        }
+                    }
+                    waker();
+                }),
+            );
+            return;
+        }
         crate::plat::spawn("forge-job", move || {
             let (heat, ext) = paint(&l, &span, &field, range, at, t);
             let mut m = made.lock().unwrap_or_else(|e| e.into_inner());
@@ -857,6 +890,46 @@ impl Gfx {
             self.want_sim(&waker);
             let _ = rx.recv();
             self.take_made();
+        }
+    }
+}
+
+/// The simulated part's drawing and its colours (`Gfx::want_sim`'s): all over (on the tool and
+/// off it), banded as the legend is, by the model's own wall at each point of the modelled part
+/// it was moved from: the modelled part's colours.
+pub fn sim_of(
+    mesh: &forge_mesh::TriMesh,
+    modelled: &[Point3],
+    field: Option<&forge_thermo::WallField>,
+    range: (f64, f64),
+) -> (Lod, Vec<WorldVert>) {
+    let lod = crate::tess::lod_of_mesh(mesh, UNPICKED);
+    let mut heat = vec![];
+    if let Some(field) = field {
+        let tris: Vec<[(Point3, Point3); 3]> = mesh
+            .triangles
+            .iter()
+            .map(|x| x.map(|i| (mesh.positions[i as usize], modelled[i as usize])))
+            .collect();
+        paint_mesh(&tris, field, range, &mut heat, &mut |_, _| {});
+    }
+    (lod, heat)
+}
+
+impl Gfx {
+    /// The simulated part's drawing and colours, made here of its own wall model (the build
+    /// worker's answer to `Ask::ThermoSim`).
+    pub fn sim_here(&self) -> Option<(Lod, Vec<WorldVert>)> {
+        let (mesh, modelled) = (self.sim_mesh.as_ref()?, self.sim_modelled.as_ref()?);
+        Some(sim_of(mesh, modelled, self.field.as_deref(), self.range))
+    }
+
+    /// The formed part's faces of level `l` painted with the wall (`want_heat`'s, the build
+    /// worker's answer to `Ask::ThermoHeat`).
+    pub fn heat_here(&self, l: &Lod) -> (Vec<WorldVert>, Option<Pins>) {
+        match (&self.field, &self.part_span) {
+            (Some(field), Some(span)) => paint(l, span, field, self.range, self.at, self.t),
+            _ => (vec![], None),
         }
     }
 }

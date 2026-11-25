@@ -147,6 +147,12 @@ impl Gui {
             }
         }
         let Some(p) = &mut self.shell.fg else { return };
+        // an export the build worker made, now written
+        if let Some(said) = EXPORTED.with(|x| x.borrow_mut().take()) {
+            p.thermo.said = Some(said.clone());
+            self.shell.status = said;
+        }
+        let Some(p) = &mut self.shell.fg else { return };
         if let Some((id, e)) = p.thermo.want_export.take() {
             let said = self.thermo_export(&id, e);
             if let Some(p) = &mut self.shell.fg {
@@ -247,7 +253,8 @@ impl Gui {
         Some(crate::thermo_view::compose(full, &hide, &extra))
     }
 
-    /// Writes an export beside the part's file; says what it wrote, or why not.
+    /// Writes an export beside the part's file; says what it wrote, or why not. What's made of
+    /// the build worker's bodies (the default browser build) is made there: said when written.
     fn thermo_export(&self, id: &str, e: Export) -> String {
         let Some(g) = self.fg_walls.first() else {
             return "nothing formed to export".into();
@@ -256,71 +263,130 @@ impl Gui {
             return "save the part first: exports go beside it".into();
         };
         let stem = path.trim_end_matches(".fg").to_string();
-        let (file, bytes): (String, Result<Vec<u8>, String>) = match e {
-            Export::MouldStep | Export::PartStep => {
-                let (body, what) = if e == Export::MouldStep {
-                    (&g.mould, "mould")
-                } else {
-                    (&g.part, "part")
-                };
-                let opts = forge_step::Options {
-                    name: format!("{id}-{what}"),
-                    ..forge_step::Options::default()
-                };
-                (
-                    format!("{stem}-{id}-{what}.step"),
-                    forge_step::export(body, &opts)
-                        .map(|x| x.text.into_bytes())
-                        .map_err(|e| e.to_string()),
+        let file = export_file(&stem, id, e);
+        // the distortion print's artwork, picked here (once there's a forming to print with)
+        if e == Export::DistortionPrint && !g.remote && g.print_src.is_none() {
+            return "Not written: no forming (walls: false)".into();
+        }
+        let art = match e {
+            Export::DistortionPrint => (|| {
+                let art = crate::plat::pick_file(
+                    Some("The artwork, seen along the pull over the trim's box"),
+                    "Image",
+                    &["png", "ppm"],
                 )
-            }
-            Export::MouldStl => (
-                format!("{stem}-{id}-mould.stl"),
-                forge_mesh::tessellate(&g.mould, &forge_mesh::Quality::default())
-                    .map(|m| forge_mesh::stl::to_binary_stl(&m, &format!("{id} mould")))
-                    .map_err(|e| forge_lang::error::words(&e)),
-            ),
-            Export::PartStl => (
-                format!("{stem}-{id}-part-simulated.stl"),
-                g.sim_mesh
-                    .as_ref()
-                    .map(|m| forge_mesh::stl::to_binary_stl(m, &format!("{id} simulated")))
-                    .ok_or_else(|| "no thickness model (walls: false)".to_string()),
-            ),
-            Export::TrimDxf => (format!("{stem}-{id}-trim.dxf"), Ok(dxf(&g.trim).into_bytes())),
-            Export::ProcessPdf => (
-                format!("{stem}-{id}-process.pdf"),
-                Ok(crate::thermo_view::process_pdf(&g.sheet)),
-            ),
-            Export::DistortionPrint => {
-                let file = format!("{stem}-{id}-print.png");
-                let got = (|| {
-                    let src = g.print_src.as_ref().ok_or("no forming (walls: false)")?;
-                    let art = crate::plat::pick_file(
-                        Some("The artwork, seen along the pull over the trim's box"),
-                        "Image",
-                        &["png", "ppm"],
-                    )
-                    .ok_or("no artwork chosen")?;
-                    let bytes = forge_dirs::fs::read(&art).map_err(|e| e.to_string())?;
-                    let image = read_image(&bytes).ok_or("not an 8-bit PNG or a binary PPM")?;
-                    let p = forge_lang::thermo::print_of(&src.0, &src.1, src.2, &image, 0.5)
-                        .ok_or("nothing to print")?;
-                    Ok::<_, String>(write_png(p.width, p.height, &p.rgb))
-                })();
-                (file, got.and_then(|b| b))
-            }
-            Export::ThicknessCsv => {
-                let mut s = String::from("x_mm,y_mm,z_mm,wall_mm\n");
-                for (p, t) in &g.points {
-                    s += &format!("{:.3},{:.3},{:.3},{:.4}\n", p[0], p[1], p[2], t);
-                }
-                (format!("{stem}-{id}-thickness.csv"), Ok(s.into_bytes()))
-            }
+                .ok_or("no artwork chosen")?;
+                forge_dirs::fs::read(&art).map_err(|e| e.to_string())
+            })()
+            .map(Some),
+            _ => Ok(None),
         };
-        match bytes.and_then(|b| forge_dirs::fs::write(&file, b).map_err(|e| e.to_string())) {
-            Ok(()) => format!("Wrote {file}"),
-            Err(why) => format!("Not written: {why}"),
+        let art = match art {
+            Ok(a) => a,
+            Err(why) => return format!("Not written: {why}"),
+        };
+        #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
+        if g.remote
+            && matches!(
+                e,
+                Export::MouldStep | Export::PartStep | Export::MouldStl | Export::DistortionPrint
+            )
+        {
+            use crate::gui::gui_inspect::{Ask, Told};
+            let waker = self.waker.clone();
+            let to = file.clone();
+            crate::fg::remote::page::ask_then(
+                0,
+                Ask::ThermoExport(g.key, id.to_string(), e, art),
+                Box::new(move |t| {
+                    let bytes = match t {
+                        Told::Bytes(b) => b,
+                        _ => Err("the build worker answered something else".into()),
+                    };
+                    EXPORTED.with(|x| *x.borrow_mut() = Some(written(&to, bytes)));
+                    waker();
+                }),
+            );
+            return format!("Exporting {file}…");
+        }
+        written(&file, export_bytes(g, id, e, art))
+    }
+}
+
+thread_local! {
+    /// An export the build worker made, written: what to say.
+    static EXPORTED: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+/// The export written to `file`, in words.
+fn written(file: &str, bytes: Result<Vec<u8>, String>) -> String {
+    match bytes.and_then(|b| forge_dirs::fs::write(file, b).map_err(|e| e.to_string())) {
+        Ok(()) => format!("Wrote {file}"),
+        Err(why) => format!("Not written: {why}"),
+    }
+}
+
+/// An export's file beside the part (`stem`, the part's path less `.fg`).
+fn export_file(stem: &str, id: &str, e: Export) -> String {
+    match e {
+        Export::MouldStep => format!("{stem}-{id}-mould.step"),
+        Export::PartStep => format!("{stem}-{id}-part.step"),
+        Export::MouldStl => format!("{stem}-{id}-mould.stl"),
+        Export::PartStl => format!("{stem}-{id}-part-simulated.stl"),
+        Export::TrimDxf => format!("{stem}-{id}-trim.dxf"),
+        Export::ProcessPdf => format!("{stem}-{id}-process.pdf"),
+        Export::DistortionPrint => format!("{stem}-{id}-print.png"),
+        Export::ThicknessCsv => format!("{stem}-{id}-thickness.csv"),
+    }
+}
+
+/// An export's bytes, made of the thermoform's drawing and bodies (`art`: the distortion print's
+/// artwork's file). The build worker's answer to `Ask::ThermoExport` too.
+pub(crate) fn export_bytes(
+    g: &crate::thermo_view::Gfx,
+    id: &str,
+    e: Export,
+    art: Option<Vec<u8>>,
+) -> Result<Vec<u8>, String> {
+    match e {
+        Export::MouldStep | Export::PartStep => {
+            let (body, what) = if e == Export::MouldStep {
+                (&g.mould, "mould")
+            } else {
+                (&g.part, "part")
+            };
+            let opts = forge_step::Options {
+                name: format!("{id}-{what}"),
+                ..forge_step::Options::default()
+            };
+            forge_step::export(body, &opts)
+                .map(|x| x.text.into_bytes())
+                .map_err(|e| e.to_string())
+        }
+        Export::MouldStl => forge_mesh::tessellate(&g.mould, &forge_mesh::Quality::default())
+            .map(|m| forge_mesh::stl::to_binary_stl(&m, &format!("{id} mould")))
+            .map_err(|e| forge_lang::error::words(&e)),
+        Export::PartStl => g
+            .sim_mesh
+            .as_ref()
+            .map(|m| forge_mesh::stl::to_binary_stl(m, &format!("{id} simulated")))
+            .ok_or_else(|| "no thickness model (walls: false)".to_string()),
+        Export::TrimDxf => Ok(dxf(&g.trim).into_bytes()),
+        Export::ProcessPdf => Ok(crate::thermo_view::process_pdf(&g.sheet)),
+        Export::DistortionPrint => {
+            let src = g.print_src.as_ref().ok_or("no forming (walls: false)")?;
+            let bytes = art.ok_or("no artwork chosen")?;
+            let image = read_image(&bytes).ok_or("not an 8-bit PNG or a binary PPM")?;
+            let p =
+                forge_lang::thermo::print_of(&src.0, &src.1, src.2, &image, 0.5).ok_or("nothing to print")?;
+            write_png(p.width, p.height, &p.rgb)
+        }
+        Export::ThicknessCsv => {
+            let mut s = String::from("x_mm,y_mm,z_mm,wall_mm\n");
+            for (p, t) in &g.points {
+                s += &format!("{:.3},{:.3},{:.3},{:.4}\n", p[0], p[1], p[2], t);
+            }
+            Ok(s.into_bytes())
         }
     }
 }

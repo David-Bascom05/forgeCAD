@@ -515,6 +515,22 @@ impl Gui {
         if filter == Filter::Any {
             return Ok(Some(MPick::Ent(pl, e)));
         }
+        // what was hit is what the filter takes: the pick as it is (as `filtered_on` has it), on
+        // the page at once, wherever the bodies are
+        let same = matches!(
+            (filter, e),
+            (Filter::Faces, Entity::Face(_))
+                | (Filter::Edges, Entity::Edge(_))
+                | (Filter::Points, Entity::Vertex(_))
+        );
+        if same {
+            let there = self
+                .inspector
+                .data
+                .as_ref()
+                .is_some_and(|d| d.brief_at(pl).is_some());
+            return Ok(there.then_some(MPick::Ent(pl, e)));
+        }
         let eye = self.view.as_ref().map(|v| v.nav.camera.eye());
         match self.inspector.ask(Ask::Filtered(filter, pl, e, at, eye))? {
             Told::Pick(p) => Ok(p),
@@ -793,8 +809,8 @@ impl Gui {
         let pick = match hover {
             Some((pl, e)) => match self.filtered(filter, pl, e, at) {
                 Ok(p) => p,
-                // what was under the pointer stays marked till the build worker says
-                Err(Waiting) => return,
+                // the hit itself marked at once, till the build worker says what the filter takes
+                Err(Waiting) => Some(MPick::Ent(pl, e)),
             },
             None => self.shell.origin_hover.map(origin_free),
         };
@@ -1069,6 +1085,12 @@ pub(crate) enum Ask {
     Project(Option<Box<crate::fg::AnchorView>>, Vec<Entity>),
     /// Each interference's place and faces (`gui::locate`): the document's text and folder.
     Locate(String, Option<std::path::PathBuf>),
+    /// A thermoform's simulated part, drawn (`Gfx::want_sim`), by its drawing's key.
+    ThermoSim(u64),
+    /// A thermoform's wall painted on this level of the part's mesh (`Gfx::want_heat`).
+    ThermoHeat(u64, Box<crate::mesh::Lod>),
+    /// A thermoform's export's bytes (`gui_thermo::export_bytes`): its id, which, the artwork.
+    ThermoExport(u64, String, crate::shell::thermo_ui::Export, Option<Vec<u8>>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1078,6 +1100,9 @@ pub(crate) enum Told {
     Plane(Option<(Point3, Vec3)>),
     Project(Result<Vec<(String, crate::shell::sketching::rows::Refd)>, String>),
     Located(Result<Vec<crate::shell::fgasm::Located>, String>),
+    ThermoSim(Option<(crate::mesh::Lod, Vec<crate::origin::WorldVert>)>),
+    ThermoHeat(Vec<crate::origin::WorldVert>, Option<([f32; 3], [f32; 3])>),
+    Bytes(Result<Vec<u8>, String>),
 }
 
 /// Asked of the build worker, not answered yet.
@@ -1109,6 +1134,24 @@ pub(crate) fn tell(d: &InspectData, a: &Ask) -> Told {
             picked,
         )),
         Ask::Locate(src, dir) => Told::Located(super::locate(src, dir.clone(), Some(d))),
+        // a thermoform's: of its drawing where it was made (`thermo_tell`)
+        Ask::ThermoSim(_) | Ask::ThermoHeat(..) | Ask::ThermoExport(..) => thermo_tell(None, a),
+    }
+}
+
+/// A thermoform's question, of its drawing `g` (where its bodies and wall model are).
+pub(crate) fn thermo_tell(g: Option<&crate::thermo_view::Gfx>, a: &Ask) -> Told {
+    match a {
+        Ask::ThermoSim(_) => Told::ThermoSim(g.and_then(|g| g.sim_here())),
+        Ask::ThermoHeat(_, l) => {
+            let (heat, ext) = g.map_or((vec![], None), |g| g.heat_here(l));
+            Told::ThermoHeat(heat, ext)
+        }
+        Ask::ThermoExport(_, id, e, art) => Told::Bytes(match g {
+            Some(g) => super::gui_thermo::export_bytes(g, id, *e, art.clone()),
+            None => Err("the thermoform's drawing is gone (rebuilt): export again".into()),
+        }),
+        _ => tell(&InspectData::default(), a),
     }
 }
 
