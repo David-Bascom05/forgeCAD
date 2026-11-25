@@ -488,6 +488,8 @@ fn run(addr: &str, path: &str, shared: &Mutex<Shared>, stop: &AtomicBool, waker:
                     s.events.extend(ev);
                     s.flush();
                     drop(s);
+                    // the client applied the op here (forge-lang): its sketches let go
+                    forge_sync::release_sketches();
                     if stopped {
                         stop.store(true, Ordering::SeqCst);
                     }

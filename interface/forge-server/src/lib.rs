@@ -445,28 +445,13 @@ impl Timed {
                 .spawn(move || {
                     for job in rx {
                         job();
-                        release_sketches();
+                        forge_sync::release_sketches();
                     }
                 })
                 .map_err(|e| Refusal::Invalid { why: e.to_string() })?;
             self.worker = Some(tx);
         }
         Ok(self.worker.as_ref().expect("made"))
-    }
-}
-
-/// Frees the sketches forge-lang's runs on this thread kept (`forge_keep`: a sketch with a named
-/// entity is an `Rc` cycle, which a run never frees; the app lets them go between builds,
-/// forge-render's `plat::release_sketches`). The server must too, on every thread that runs
-/// forge-lang, between runs: without it each op kept its sketches for good (the load soak: 38 KB
-/// of resident memory per op, linear, for ever; the kept list is a thread-local with no
-/// destructor, so not even a thread's end frees it).
-fn release_sketches() {
-    for x in forge_keep::take_all() {
-        if let Ok(sk) = x.downcast::<std::cell::RefCell<forge_lang::sketch::Sk>>() {
-            let named = std::mem::take(&mut sk.borrow_mut().named);
-            drop(named);
-        }
     }
 }
 
@@ -1455,7 +1440,7 @@ impl Actor {
             }
             self.idle();
             // (rebase, inverse and the open's replay run forge-lang here too)
-            release_sketches();
+            forge_sync::release_sketches();
         }
     }
 
@@ -1665,7 +1650,7 @@ impl Actor {
                         }))
                         .ok()
                         .flatten();
-                        release_sketches();
+                        forge_sync::release_sketches();
                         // in time: this side frees the slot (late: the actor already did)
                         if st
                             .compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst)

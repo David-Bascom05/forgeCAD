@@ -215,6 +215,22 @@ impl Store for MemStore {
     }
 }
 
+/// Frees the sketches forge-lang's runs on this thread kept (`forge_keep`: a sketch with a
+/// named entity is an `Rc` cycle, which a run never frees; the app lets them go between builds,
+/// forge-render's `plat::release_sketches`). A host that runs forge-lang on a thread of its own
+/// (the server's actors and validations, forge-remote's connection, which applies every op it
+/// receives) must call it there between runs, or every op keeps its sketches for good (the
+/// server's load soak: 38 KB per op, linear; the kept list is a thread-local with no destructor,
+/// so a thread's end frees nothing).
+pub fn release_sketches() {
+    for x in forge_keep::take_all() {
+        if let Ok(sk) = x.downcast::<std::cell::RefCell<forge_lang::sketch::Sk>>() {
+            let named = std::mem::take(&mut sk.borrow_mut().named);
+            drop(named);
+        }
+    }
+}
+
 /// The hash of a document's text (FNV-1a, 64 bits): every Ack and Applied carries the server's,
 /// so a client whose text differs knows at once.
 pub fn text_hash(t: &str) -> u64 {

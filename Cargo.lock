@@ -612,7 +612,6 @@ dependencies = [
  "forge-agent",
  "forge-git",
  "forge-history",
- "forge-keep",
  "forge-lang",
  "forge-remote",
  "forge-server",
@@ -676,6 +675,7 @@ name = "forge-sync"
 version = "0.1.0"
 dependencies = [
  "forge-agent",
+ "forge-keep",
  "forge-lang",
  "forge-math",
  "forge-topo",
