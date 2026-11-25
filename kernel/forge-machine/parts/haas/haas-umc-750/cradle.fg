@@ -1,13 +1,23 @@
-# haas-umc-750 trunnion cradle (unpublished, conservative)
+# haas-umc-750 trunnion cradle (measured on Haas's model)
 # frame: the machine's base frame at the home pose (forgecad Haas approximation).
-shared x0 = -309
-shared y0 = -269
-shared z0 = -239
-shared lx = 618
-shared ly = 538
-shared lz = 178
+shared x0 = -224
+shared y0 = -419
+shared z0 = -359
+shared lx = 448
+shared ly = 788
+shared lz = 303
 
 sketch plan(on: offset(xy, z0)) {
   outline = rect(corner: (x0, y0), size: (lx, ly))
 }
 block = extrude(plan, lz)
+shared mx1 = -109
+shared my1 = -469
+shared mz1 = -169
+shared ml1 = 218
+shared mw1 = 48
+shared mh1 = 288
+sketch more1(on: offset(xy, mz1)) {
+  outline = rect(corner: (mx1, my1), size: (ml1, mw1))
+}
+block1 = extrude(more1, mh1)

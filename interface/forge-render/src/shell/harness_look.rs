@@ -1616,10 +1616,13 @@ pub fn props(ui: &mut Ui, t: &Theme, hs: &[HarnessOut], key: &str, max_h: f32) -
             &sub.join("  ·  "),
             &pills,
         );
+        // at least 80 px of list however short the view (under 350 px tall the bounds crossed
+        // and the clamp panicked: a wire's properties in a short window crashed the app)
+        let list_h = (max_h - 150.0).max(80.0);
         let out = egui::ScrollArea::vertical()
             .id_salt("harness-props-body")
-            .max_height(max_h - 150.0)
-            .min_scrolled_height((props_height(ui.ctx()) - 150.0).clamp(80.0, max_h - 150.0))
+            .max_height(list_h)
+            .min_scrolled_height((props_height(ui.ctx()) - 150.0).clamp(80.0, list_h))
             .auto_shrink([false, true])
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing.y = 2.0;

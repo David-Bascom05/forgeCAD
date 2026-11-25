@@ -54,7 +54,7 @@ name = "S1"
 link = "Z"
 kind = "milling"
 axis = [0, 0, 1]
-nose = [381, 203, 610]
+nose = [381, 211.6, 610]
 rpm = [1, 8100]
 curve_rpm = [0, 1753.4, 8100]
 curve_kw = [0, 22.4, 22.4]
@@ -68,7 +68,7 @@ max_tool_kg = 5.4
 name = "spindle"
 kind = "tool"
 link = "Z"
-at = [381, 203, 610]
+at = [381, 211.6, 610]
 dir = [0, 0, -1]
 [[machine.mount]]
 name = "table"
@@ -82,20 +82,60 @@ name = "table"
 link = "X"
 part = "parts/haas/haas-vf-2/table.fg"
 [[machine.body.box]]
-min = [-457, -178, -90]
-max = [457, 178, 0]
+min = [-674, -201, -210]
+max = [674, 201, 0]
 [[machine.body]]
 name = "head"
 link = "Z"
 part = "parts/haas/haas-vf-2/head.fg"
 [[machine.body.cyl]]
-base = [381, 203, 610]
+base = [381, 211.6, 610]
 axis = [0, 0, 1]
-r = 95
-h = 160
+r = 70
+h = 70
 [[machine.body.box]]
-min = [191, 13, 770]
-max = [571, 623, 1190]
+min = [176, 96, 680]
+max = [700, 674, 1070]
+[[machine.body]]
+name = "saddle"
+link = "Y"
+part = "parts/haas/haas-vf-2/saddle.fg"
+ignore = ["table", "base"]
+[[machine.body.box]]
+min = [-397, -198, -345.44]
+max = [397, 198, -91]
+[[machine.body]]
+name = "base"
+link = "base"
+part = "parts/haas/haas-vf-2/base.fg"
+ignore = ["saddle", "column"]
+[[machine.body.box]]
+min = [-457, -238, -889]
+max = [457, 1223, -346.44]
+[[machine.body]]
+name = "column"
+link = "base"
+part = "parts/haas/haas-vf-2/column.fg"
+ignore = ["head", "base"]
+[[machine.body.box]]
+min = [81, 623, -345.44]
+max = [681, 1223, 1455.42]
+[[machine.body]]
+name = "enclosure"
+link = "base"
+part = "parts/haas/haas-vf-2/enclosure.fg"
+check = false
+[[machine.body.box]]
+min = [-1192.53, -727.44, -889]
+max = [1954.53, 1523, 1455.42]
+[[machine.body]]
+name = "waycovers"
+link = "base"
+part = "parts/haas/haas-vf-2/waycovers.fg"
+check = false
+[[machine.body.box]]
+min = [-397, -604, -345.44]
+max = [397, 623, -315.44]
 [[machine.cite]]
 path = "machine.coolants"
 status = "published"
@@ -220,7 +260,7 @@ status = "published"
 source = "https://machinetoolindex.com/machines/haas-vf-2"
 taken = "2026-11-23"
 value = "Spindle Nose to Table (max): 24 in (610 mm); Spindle Nose to Table (min): 4 in (102 mm)"
-note = "nose height at Z = 0 published (max = min + Z travel); x, y: unpublished: the travel is taken as centred on the table/platter (the spindle is over the table centre at mid-travel); a real machine's offset of a few tens of mm moves every envelope"
+note = "nose height at Z = 0 published (max = min + Z travel); x, y: measured on https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-vf-2 (Haas solid model VF-2_STEP__1_2023.step) at home: (381, 211.6)"
 [[machine.cite]]
 path = "spindle.S1.max"
 status = "estimate"
@@ -257,7 +297,7 @@ status = "published"
 source = "https://machinetoolindex.com/machines/haas-vf-2"
 taken = "2026-11-23"
 value = "Spindle Nose to Table (max): 24 in (610 mm)"
-note = "gauge point taken at the spindle nose face (the taper gauge line is a few mm inside: unmodelled); x, y: unpublished: the travel is taken as centred on the table/platter (the spindle is over the table centre at mid-travel); a real machine's offset of a few tens of mm moves every envelope"
+note = "gauge point taken at the spindle nose face (the taper gauge line is a few mm inside: unmodelled); x, y: measured on https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-vf-2 (Haas solid model VF-2_STEP__1_2023.step) at home: (381, 211.6)"
 [[machine.cite]]
 path = "mount.table.at"
 status = "published"
@@ -273,12 +313,51 @@ taken = "2026-11-23"
 value = "Table Size: 36 × 14 in (914 × 356 mm)"
 [[machine.cite]]
 path = "body.table"
-status = "estimate"
-basis = "thickness 90 mm unpublished (only the top surface and outline matter for tool collisions)"
+status = "published"
+source = "https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-vf-2 (Haas solid model VF-2_STEP__1_2023.step)"
+taken = "2026-11-24"
+value = "table casting with its drive bracket: [-674.0, -201.0, -210.0] .. [674.0, 201.0, 0.0] mm, measured on the model"
 [[machine.cite]]
 path = "body.head"
-status = "unknown"
-basis = "no head dimensions published: nose cylinder r 95 mm x 160 mm and a housing 380 x 610 x 420 mm chosen larger than a 40-taper nose (errs large: a short tool deep in a pocket may report a hit the real nose would clear)"
+status = "published"
+source = "https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-vf-2 (Haas solid model VF-2_STEP__1_2023.step)"
+taken = "2026-11-24"
+value = "nose r 70 x 70 mm and housing [176.0, 96.0, 680.0] .. [700.0, 674.0, 1070.0] mm, measured on the model"
+[[machine.cite]]
+path = "body.saddle"
+status = "estimate"
+source = "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=3"
+taken = "2026-11-24"
+value = "21.4in [544mm] (front view, right; leader to top of base sheet metal)"
+basis = "the saddle is not dimensioned on the layout drawing: a box under the table from the base top (21.4in [544mm] above the floor; floor = table top - 35in (889mm)) to the table underside, 794 x 396 mm (inside the table outline in X, 20 mm past it in Y)"
+[[machine.cite]]
+path = "body.base"
+status = "estimate"
+source = "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=3"
+taken = "2026-11-24"
+value = "21.4in [544mm] (front view, right; leader to top of base sheet metal)"
+basis = "published: the base top 543.56 mm and the table top 889 mm above the floor; its plan size is not dimensioned: the table length in X, from the table's front edge to behind the column in Y"
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+source = "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=3"
+taken = "2026-11-24"
+value = "92.3in [2345mm] WINDOW (Height Breakdown, front view; highest enclosure sheet-metal level dimensioned)"
+basis = "the column is not dimensioned: 600 x 600 mm behind the head housing (whose back face it carries), from the base top to the enclosure window height (2344.42 mm above the floor), over the spindle's mid-travel X. Its front face is behind the table's farthest +Y travel"
+[[machine.cite]]
+path = "body.enclosure"
+status = "estimate"
+source = "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=1"
+taken = "2026-11-24"
+value = "123.9in [3147mm] OPERATING WIDTH (Installed Dimensions, plan view incl. chip conveyor); 88.6in [2249mm] OPERATING DEPTH; 92.3in [2345mm] WINDOW (Height Breakdown, front view; highest enclosure sheet-metal level dimensioned)"
+basis = "published: the operating width and depth and the enclosure window height; its placement around the table is not dimensioned: centred on the spindle's mid-travel X, its back 300 mm behind the column. An outline, not the sheet metal: display only"
+[[machine.cite]]
+path = "body.waycovers"
+status = "estimate"
+source = "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=3"
+taken = "2026-11-24"
+value = "21.4in [544mm] (front view, right; leader to top of base sheet metal)"
+basis = "not dimensioned: a 30 mm layer on the base top over the saddle's whole Y travel, the saddle's width. The covers telescope with Y; drawn at full extent, display only"
 
 # ---------------------------------------------------------------------------------------------
 [[machine]]
@@ -2470,7 +2549,7 @@ parent = "base"
 side = "table"
 type = "rotary"
 axis = [0, -1, 0]
-pivot = [0, 0, -150]
+pivot = [0, 0, 51.2]
 range = [-35, 120]
 home = 0
 rapid = 3000
@@ -2533,24 +2612,33 @@ link = "B"
 part = "parts/haas/haas-umc-750/cradle.fg"
 ignore = ["platter", "support-l", "support-r"]
 [[machine.body.box]]
-min = [-310, -270, -240]
-max = [310, 270, -60]
+min = [-225, -420, -360]
+max = [225, 370, -55]
+[[machine.body.box]]
+min = [-110, -470, -170]
+max = [110, -420, 120]
 [[machine.body]]
 name = "support-l"
 link = "base"
 part = "parts/haas/haas-umc-750/support-l.fg"
 ignore = ["cradle"]
 [[machine.body.box]]
-min = [-160, -410, -550]
-max = [160, -270, 40]
+min = [-160, -560, -360]
+max = [160, -470, 120]
 [[machine.body]]
 name = "support-r"
 link = "base"
 part = "parts/haas/haas-umc-750/support-r.fg"
 ignore = ["cradle"]
 [[machine.body.box]]
-min = [-160, 270, -550]
-max = [160, 410, 40]
+min = [-270, 400, -320]
+max = [270, 560, 290]
+[[machine.body.box]]
+min = [-270, 370, -320]
+max = [270, 400, 130]
+[[machine.body.box]]
+min = [-270, 560, -320]
+max = [270, 675, 310]
 [[machine.body]]
 name = "head"
 link = "Z"
@@ -2558,11 +2646,38 @@ part = "parts/haas/haas-umc-750/head.fg"
 [[machine.body.cyl]]
 base = [381, 254, 610]
 axis = [0, 0, 1]
-r = 95
-h = 160
+r = 70
+h = 45
 [[machine.body.box]]
-min = [191, 64, 770]
-max = [571, 674, 1190]
+min = [217, -35, 655]
+max = [496, 395, 800]
+[[machine.body.box]]
+min = [202, -35, 800]
+max = [560, 507, 2143]
+[[machine.body]]
+name = "base"
+link = "base"
+part = "parts/haas/haas-umc-750/base.fg"
+ignore = ["support-l", "support-r", "column"]
+[[machine.body.box]]
+min = [-781, -500, -900]
+max = [781, 1274, -551]
+[[machine.body]]
+name = "column"
+link = "X"
+part = "parts/haas/haas-umc-750/column.fg"
+ignore = ["head", "base"]
+[[machine.body.box]]
+min = [-47, 539, 500]
+max = [803, 1319, 2212]
+[[machine.body]]
+name = "enclosure"
+link = "base"
+part = "parts/haas/haas-umc-750/enclosure.fg"
+check = false
+[[machine.body.box]]
+min = [-1422.4, -1151.2, -900]
+max = [1422.4, 1719, 2148]
 [[machine.cite]]
 path = "machine.coolants"
 status = "published"
@@ -2702,8 +2817,11 @@ status = "unknown"
 basis = "no rotary feed limit published; taken equal to the rapid (errs permissive)"
 [[machine.cite]]
 path = "joint.B.pivot"
-status = "unknown"
-basis = "the tilt axis height under the platter is unpublished (Haas sets it per machine as MRZP, settings 254-257 / 300-305); 150 mm below the platter top is a stand-in. Collision verdicts at B != 0 depend on it"
+status = "published"
+source = "https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-umc-750 (Haas solid model rpl_modular_umc-750_09-2026 1.STEP)"
+taken = "2026-11-24"
+value = "the B shaft's axis 51.2 mm above the platter top, measured on the model"
+note = "a machine's own MRZP (settings 254-257 / 300-305) is the value to probe and use"
 [[machine.cite]]
 path = "joint.B.axis"
 status = "estimate"
@@ -2818,28 +2936,51 @@ status = "estimate"
 basis = "platter thickness 60 mm unpublished"
 [[machine.cite]]
 path = "body.cradle"
-status = "unknown"
-basis = "cradle size unpublished: a box under the platter, wider than it by 60 mm a side, down to 90 mm under the tilt axis (stand-in)"
+status = "published"
+source = "https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-umc-750 (Haas solid model rpl_modular_umc-750_09-2026 1.STEP)"
+taken = "2026-11-24"
+value = "the cradle hung under the platter between its B shaft and drive: [-225.0, -420.0, -360.0] .. [225.0, 370.0, -55.0] mm and its shaft-end hub [[[-110.0, -470.0, -170.0], [110.0, -420.0, 120.0]]] at B = 0, measured on the model"
 [[machine.cite]]
 path = "body.support-l"
-status = "unknown"
-basis = "trunnion supports unpublished: 140 mm thick boxes at the ends of the B axis, to 40 mm above the platter top (stand-in)"
+status = "published"
+source = "https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-umc-750 (Haas solid model rpl_modular_umc-750_09-2026 1.STEP)"
+taken = "2026-11-24"
+value = "the shaft-side support tower (base casting): [-160.0, -560.0, -360.0] .. [160.0, -470.0, 120.0] mm, measured on the model"
 [[machine.cite]]
 path = "body.support-r"
-status = "unknown"
-basis = "trunnion supports unpublished: 140 mm thick boxes at the ends of the B axis, to 40 mm above the platter top (stand-in)"
+status = "published"
+source = "https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-umc-750 (Haas solid model rpl_modular_umc-750_09-2026 1.STEP)"
+taken = "2026-11-24"
+value = "the B drive housing: [-270.0, 400.0, -320.0] .. [270.0, 560.0, 290.0] mm, measured on the model"
 [[machine.cite]]
 path = "body.head"
+status = "published"
+source = "https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-umc-750 (Haas solid model rpl_modular_umc-750_09-2026 1.STEP)"
+taken = "2026-11-24"
+value = "nose r 70 x 45 mm, housing [217.0, -35.0, 655.0] .. [496.0, 395.0, 800.0] mm and above it [[[202.0, -35.0, 800.0], [560.0, 507.0, 2143.0]]] with its Z ram, measured on the model (its head moved to the record's home: the model stands at Z 319 mm below it)"
+[[machine.cite]]
+path = "body.base"
 status = "unknown"
-basis = "no head dimensions published; the VMC head stand-in (errs large)"
-
-# ---------------------------------------------------------------------------------------------
-
+basis = "the platter's height above the floor is unpublished (the layout drawing gives the overall height 120\" (3048 mm) Max Spindle Height but no platter or base height): a 350 mm slab under the trunnion supports, under the whole column X travel (stand-in)"
+[[machine.cite]]
+path = "body.column"
+status = "published"
+source = "https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-umc-750 (Haas solid model rpl_modular_umc-750_09-2026 1.STEP)"
+taken = "2026-11-24"
+value = "the X carriage carrying Y and Z: [-47.0, 539.0, 500.0] .. [803.0, 1319.0, 2212.0] mm at home, measured on the model"
+[[machine.cite]]
+path = "body.enclosure"
+status = "estimate"
+source = "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=1"
+taken = "2026-11-24"
+value = "112\" (2845 mm) (plan, machine without chip conveyor); 113\" (2870 mm) (plan, front to rear; also 113\" (2870 mm) in Machine Clearance Dimensions p2); 120\" (3048 mm) Max Spindle Height"
+basis = "published: the width without the conveyor, the depth and the overall height; the floor's height under the platter is unpublished, so the outline stands on the base stand-in's bottom, 400 mm behind the column. An outline, not the sheet metal: display only"
 [[machine.cite]]
 path = "zones"
 status = "unknown"
 basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
 
+# ---------------------------------------------------------------------------------------------
 [[machine]]
 name = "haas-st-10"
 kind = "lathe"
@@ -3040,14 +3181,12 @@ basis = "chuck length 110 mm and a 5 mm radial margin for jaws are unpublished s
 path = "body.turret"
 status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
-
-# ---------------------------------------------------------------------------------------------
-
 [[machine.cite]]
 path = "zones"
 status = "unknown"
 basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
 
+# ---------------------------------------------------------------------------------------------
 [[machine]]
 name = "haas-st-20"
 kind = "lathe"
@@ -3248,14 +3387,12 @@ basis = "chuck length 110 mm and a 5 mm radial margin for jaws are unpublished s
 path = "body.turret"
 status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
-
-# ---------------------------------------------------------------------------------------------
-
 [[machine.cite]]
 path = "zones"
 status = "unknown"
 basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
 
+# ---------------------------------------------------------------------------------------------
 [[machine]]
 name = "haas-st-30"
 kind = "lathe"
@@ -3456,14 +3593,12 @@ basis = "chuck length 110 mm and a 5 mm radial margin for jaws are unpublished s
 path = "body.turret"
 status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
-
-# ---------------------------------------------------------------------------------------------
-
 [[machine.cite]]
 path = "zones"
 status = "unknown"
 basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
 
+# ---------------------------------------------------------------------------------------------
 [[machine]]
 name = "haas-st-10y"
 kind = "mill-turn"
@@ -3762,14 +3897,12 @@ basis = "chuck length 110 mm and a 5 mm radial margin for jaws are unpublished s
 path = "body.turret"
 status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
-
-# ---------------------------------------------------------------------------------------------
-
 [[machine.cite]]
 path = "zones"
 status = "unknown"
 basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
 
+# ---------------------------------------------------------------------------------------------
 [[machine]]
 name = "haas-st-20y"
 kind = "mill-turn"
@@ -4068,14 +4201,12 @@ basis = "chuck length 110 mm and a 5 mm radial margin for jaws are unpublished s
 path = "body.turret"
 status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
-
-# ---------------------------------------------------------------------------------------------
-
 [[machine.cite]]
 path = "zones"
 status = "unknown"
 basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
 
+# ---------------------------------------------------------------------------------------------
 [[machine]]
 name = "haas-st-30y"
 kind = "mill-turn"
@@ -4374,14 +4505,12 @@ basis = "chuck length 110 mm and a 5 mm radial margin for jaws are unpublished s
 path = "body.turret"
 status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
-
-# ---------------------------------------------------------------------------------------------
-
 [[machine.cite]]
 path = "zones"
 status = "unknown"
 basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
 
+# ---------------------------------------------------------------------------------------------
 [[machine]]
 name = "haas-ds-30y"
 kind = "mill-turn"
@@ -4807,14 +4936,12 @@ basis = "length and jaw margin unpublished stand-ins"
 path = "body.turret"
 status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
-
-# ---------------------------------------------------------------------------------------------
-
 [[machine.cite]]
 path = "zones"
 status = "unknown"
 basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
 
+# ---------------------------------------------------------------------------------------------
 [[machine]]
 name = "haas-vf-1"
 kind = "vmc3"
@@ -7991,14 +8118,12 @@ basis = "trunnion supports unpublished: 140 mm thick boxes at the ends of the B 
 path = "body.head"
 status = "unknown"
 basis = "no head dimensions published; the VMC head stand-in (errs large)"
-
-# ---------------------------------------------------------------------------------------------
-
 [[machine.cite]]
 path = "zones"
 status = "unknown"
 basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
 
+# ---------------------------------------------------------------------------------------------
 [[machine]]
 name = "haas-umc-750ss"
 kind = "table-table"
@@ -8374,14 +8499,12 @@ basis = "trunnion supports unpublished: 140 mm thick boxes at the ends of the B 
 path = "body.head"
 status = "unknown"
 basis = "no head dimensions published; the VMC head stand-in (errs large)"
-
-# ---------------------------------------------------------------------------------------------
-
 [[machine.cite]]
 path = "zones"
 status = "unknown"
 basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
 
+# ---------------------------------------------------------------------------------------------
 [[machine]]
 name = "haas-umc-1000"
 kind = "table-table"
@@ -8750,14 +8873,12 @@ basis = "trunnion supports unpublished: 140 mm thick boxes at the ends of the B 
 path = "body.head"
 status = "unknown"
 basis = "no head dimensions published; the VMC head stand-in (errs large)"
-
-# ---------------------------------------------------------------------------------------------
-
 [[machine.cite]]
 path = "zones"
 status = "unknown"
 basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
 
+# ---------------------------------------------------------------------------------------------
 [[machine]]
 name = "haas-st-15"
 kind = "lathe"
@@ -8958,14 +9079,12 @@ basis = "chuck length 110 mm and a 5 mm radial margin for jaws are unpublished s
 path = "body.turret"
 status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
-
-# ---------------------------------------------------------------------------------------------
-
 [[machine.cite]]
 path = "zones"
 status = "unknown"
 basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
 
+# ---------------------------------------------------------------------------------------------
 [[machine]]
 name = "haas-st-25"
 kind = "lathe"
@@ -9166,14 +9285,12 @@ basis = "chuck length 110 mm and a 5 mm radial margin for jaws are unpublished s
 path = "body.turret"
 status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
-
-# ---------------------------------------------------------------------------------------------
-
 [[machine.cite]]
 path = "zones"
 status = "unknown"
 basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
 
+# ---------------------------------------------------------------------------------------------
 [[machine]]
 name = "haas-st-35"
 kind = "lathe"
@@ -9374,14 +9491,12 @@ basis = "chuck length 110 mm and a 5 mm radial margin for jaws are unpublished s
 path = "body.turret"
 status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
-
-# ---------------------------------------------------------------------------------------------
-
 [[machine.cite]]
 path = "zones"
 status = "unknown"
 basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
 
+# ---------------------------------------------------------------------------------------------
 [[machine]]
 name = "haas-st-40"
 kind = "lathe"
@@ -9582,14 +9697,12 @@ basis = "chuck length 110 mm and a 5 mm radial margin for jaws are unpublished s
 path = "body.turret"
 status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
-
-# ---------------------------------------------------------------------------------------------
-
 [[machine.cite]]
 path = "zones"
 status = "unknown"
 basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
 
+# ---------------------------------------------------------------------------------------------
 [[machine]]
 name = "haas-tl-1"
 kind = "lathe"
@@ -9789,14 +9902,12 @@ basis = "chuck length 110 mm and a 5 mm radial margin for jaws are unpublished s
 path = "body.turret"
 status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
-
-# ---------------------------------------------------------------------------------------------
-
 [[machine.cite]]
 path = "zones"
 status = "unknown"
 basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
 
+# ---------------------------------------------------------------------------------------------
 [[machine]]
 name = "haas-tl-2"
 kind = "lathe"
@@ -9996,9 +10107,7 @@ basis = "chuck length 110 mm and a 5 mm radial margin for jaws are unpublished s
 path = "body.turret"
 status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
-
 [[machine.cite]]
 path = "zones"
 status = "unknown"
 basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
-

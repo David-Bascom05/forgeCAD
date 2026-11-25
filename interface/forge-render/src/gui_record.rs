@@ -664,7 +664,7 @@ fn deliver(path: &str, bytes: &[u8]) {
 }
 
 /// The file's folder in the system's file manager.
-fn reveal(file: &str) {
+pub(super) fn reveal(file: &str) {
     #[cfg(not(target_arch = "wasm32"))]
     {
         let dir = std::path::Path::new(file)
