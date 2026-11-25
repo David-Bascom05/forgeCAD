@@ -736,19 +736,43 @@ impl std::fmt::Debug for Sk {
 #[path = "sketch_whole.rs"]
 mod whole;
 
+/// Frees the sketches forge-lang's runs on this thread kept (`forge_keep`). A sketch with a named
+/// entity is an `Rc` cycle (its `named` holds `Value::Ent`s of itself), so a run never frees one
+/// itself (the speed gate's builds do what they did); every host that runs forge-lang must call
+/// this between runs, never during one, on the thread that ran them, or each run keeps its
+/// sketches for good (5.5 KB a run of a small part natively, ~30 KB an edit in the browser; the
+/// hosted server's load soak: 38 KB an op). The one copy: forge-render, `forgecad serve` and
+/// forge-sync all call it. About 5,500 instructions a run of a small one-sketch part.
+#[inline(never)]
+pub fn release_sketches() {
+    for x in forge_keep::take_all() {
+        if let Ok(sk) = x.downcast::<std::cell::RefCell<Sk>>() {
+            let named = std::mem::take(&mut sk.borrow_mut().named);
+            drop(named);
+        }
+    }
+}
+
+/// Releases this thread's kept sketches when dropped (`release_sketches`): held by a thread that
+/// runs forge-lang for its whole life (a worker, a server's actor), so its end frees what its
+/// last runs kept too (the kept list is a thread-local with no destructor: a thread's end alone
+/// frees nothing).
+#[must_use = "it releases when dropped"]
+pub struct ReleaseOnDrop;
+
+impl Drop for ReleaseOnDrop {
+    fn drop(&mut self) {
+        release_sketches();
+    }
+}
+
 #[cfg(test)]
 mod release {
     use crate::eval::{Eval, Value};
 
-    /// The app's release between builds (forge-render's `plat::release_sketches`, the CLI
-    /// server's), done here as they do it.
+    /// The hosts' release between builds.
     fn release() {
-        for x in forge_keep::take_all() {
-            if let Ok(sk) = x.downcast::<std::cell::RefCell<super::Sk>>() {
-                let named = std::mem::take(&mut sk.borrow_mut().named);
-                drop(named);
-            }
-        }
+        super::release_sketches();
     }
 
     /// A sketch's named entities read through it for as long as its run's values are used

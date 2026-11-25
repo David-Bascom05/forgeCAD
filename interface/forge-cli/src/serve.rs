@@ -717,12 +717,7 @@ fn tool(t: &Tool) -> Json {
 /// till it exits, as every process did before. Its own cost: the freeing a run paid before, about
 /// 5,500 instructions a run of a small one-sketch part.
 fn release_sketches() {
-    for x in forge_keep::take_all() {
-        if let Ok(sk) = x.downcast::<std::cell::RefCell<forge_lang::sketch::Sk>>() {
-            let named = std::mem::take(&mut sk.borrow_mut().named);
-            drop(named);
-        }
-    }
+    forge_lang::release_sketches();
 }
 
 #[cfg(test)]
