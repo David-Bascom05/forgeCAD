@@ -332,6 +332,9 @@ const WORDS: &[&str] = &[
     "jaw_kind",
     "taper",
     "model",
+    "replaces",
+    "model_file",
+    "model_rot",
 ];
 
 fn bad(rec: &str, field: &str, why: impl Into<String>) -> WhError {
@@ -602,11 +605,13 @@ impl Record {
                 prims,
             });
         }
-        if kind == Kind::Custom && bodies.is_empty() {
+        // a custom fixture's bodies come from boxes it lists, or from a model of it (a STEP,
+        // IGES or .fg file of the user's, compiled to the checker's faces)
+        if kind == Kind::Custom && bodies.is_empty() && text(t, "model_file").is_none() {
             return Err(WhError::Missing {
                 record: rec,
                 field: "body".into(),
-                fix: "a custom fixture gives its bodies: [[workholding.body]] with [[workholding.body.box]] min/max (its seat at z = 0)".into(),
+                fix: "a custom fixture gives its bodies: model_file = \"PATH\" (a STEP, IGES or .fg of it, beside the document), or [[workholding.body]] with [[workholding.body.box]] min/max (its seat at z = 0)".into(),
             });
         }
         let s = |k: &str| text(t, k).unwrap_or("").to_string();

@@ -200,6 +200,8 @@ enum V {
     Sketch(usize, String),
     Stock(StockSpec),
     Vise(ViseSpec),
+    /// A workholding library device placed by its model: `workholding("NAME", at:, turn:)`.
+    Hold(HoldSpec),
     /// Soft jaws: their index, and the jaws as a part.
     Jaws(usize, usize),
     /// A height of the model: the plane of a horizontal face of part `part` (`f.base.end`) at
@@ -212,6 +214,16 @@ enum V {
     },
     #[allow(dead_code)]
     Op(usize),
+}
+
+#[derive(Clone, Debug)]
+struct HoldSpec {
+    name: String,
+    /// Where the model's own origin goes in the part frame.
+    at: [f64; 3],
+    /// Quarter turns about z (`turn: 90` is one).
+    quarters: i32,
+    clearance: f64,
 }
 
 #[derive(Clone, Debug)]
@@ -1257,6 +1269,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
     ("tube", &["d", "id", "margin", "below"]),
     ("solid", &["#0"]),
     ("vise", &["#0", "across", "clamp", "parallel", "clearance"]),
+    ("workholding", &["#0", "at", "turn", "clearance"]),
     ("probe", &["#0", "t", "ball", "length", "stem", "body"]),
     (
         "probe_wcs",
@@ -1958,6 +1971,34 @@ impl Cam {
                         _ => Err("solid(\"STOCK.fg\"): the stock as its own part file".into()),
                     };
                 }
+                if fname == "workholding" {
+                    let a = self.named_of("workholding", args, env)?;
+                    let name = match a.get("#0") {
+                        Some(V::Str(s)) => s.clone(),
+                        _ => {
+                            return Err(
+                                "workholding(\"NAME\", at: (X, Y, Z), turn: DEG, clearance: MM): a device of the workholding library, placed by its model".into(),
+                            );
+                        }
+                    };
+                    let at = match a.get("at") {
+                        None => [0.0; 3],
+                        Some(v) => tuple3(v).ok_or("workholding(.., at: (X, Y, Z)): where its model's origin goes, in the part's frame")?,
+                    };
+                    let turn = get_num(&a, "turn", Some(0.0))?;
+                    let q = turn / 90.0;
+                    if q.fract() != 0.0 {
+                        return Err(format!(
+                            "workholding(.., turn: {turn}): a whole number of quarter turns (0, 90, 180, 270)"
+                        ));
+                    }
+                    return Ok(V::Hold(HoldSpec {
+                        name,
+                        at,
+                        quarters: q as i32,
+                        clearance: get_num(&a, "clearance", Some(1.0))?,
+                    }));
+                }
                 if fname == "vise" {
                     let a = self.named_of("vise", args, env)?;
                     let name = match a.get("#0") {
@@ -1970,7 +2011,7 @@ impl Cam {
                         }
                     };
                     if self.wh.get(&name).is_err()
-                        && !VISE_SUCCESSOR.iter().any(|(f, _)| *f == name)
+                        && successor(&self.wh, &name).is_none()
                         && self.lib.vise(&name).is_err()
                     {
                         let near = match self.wh.get(&name) {
@@ -2368,9 +2409,10 @@ fn get_str(m: &BTreeMap<String, V>, k: &str, default: Option<&str>) -> Result<St
 }
 
 /// The workholding library a document sees: the built-in set (read once, shared), with the
-/// project's `cam/workholding/*.toml` beside the document on top when there are any (a file that
-/// does not read leaves the built-in set; `vise(..)` then names what it cannot find).
-fn workholding_library(dir: &Path) -> std::sync::Arc<forge_workholding::Library> {
+/// project's `cam/workholding/*.toml` beside the document on top when there are any. A project
+/// file that does not read leaves the built-in set, and says why (the second value), so a
+/// document never silently loses the user's own records.
+fn workholding_library(dir: &Path) -> (std::sync::Arc<forge_workholding::Library>, Option<String>) {
     static BUILTIN: std::sync::OnceLock<std::sync::Arc<forge_workholding::Library>> =
         std::sync::OnceLock::new();
     let b = BUILTIN
@@ -2379,11 +2421,18 @@ fn workholding_library(dir: &Path) -> std::sync::Arc<forge_workholding::Library>
     let pdir = dir.join("cam").join("workholding");
     if forge_dirs::fs::exists(&pdir) {
         let mut l = (*b).clone();
-        if l.add_dir(&pdir).is_ok() {
-            return std::sync::Arc::new(l);
-        }
+        return match l.add_dir(&pdir) {
+            Ok(_) => (std::sync::Arc::new(l), None),
+            Err(e) => (
+                b,
+                Some(format!(
+                    "the project's workholding records ({}) do not read, so only the built-in ones are used: {e:?}",
+                    pdir.display()
+                )),
+            ),
+        };
     }
-    b
+    (b, None)
 }
 
 /// A library vise placed on the setup's stock (forge_workholding::mill::vise) as forge-cam's
@@ -2426,9 +2475,14 @@ fn library_vise(
     ))
 }
 
-/// Old forge-tooling vise names and their workholding-library successors (same jaw width,
-/// height and thickness and the same opening; the successor adds the body under the jaws).
-const VISE_SUCCESSOR: &[(&str, &str)] = &[("generic-vise-150", "standin-vise-150")];
+/// The workholding record that takes an old forge-tooling name's place: the one whose
+/// `replaces` word is that name (the data says which; no name is written here).
+fn successor<'a>(wh: &'a forge_workholding::Library, name: &str) -> Option<&'a forge_workholding::Record> {
+    wh.records
+        .iter()
+        .map(|(r, _)| r)
+        .find(|r| r.words.get("replaces").is_some_and(|x| x == name))
+}
 
 /// Runs a machining document (its file's directory finds the part) on the built-in library.
 pub fn run(src: &str, dir: &Path) -> Cam {
@@ -2454,6 +2508,7 @@ pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
 
 /// `run_with_library` on a shared library (copied where the project's files add to it).
 fn run_shared(src: &str, dir: &Path, lib: std::sync::Arc<Library>) -> Cam {
+    let (wh_lib, wh_why) = workholding_library(dir);
     let mut cam = Cam {
         leftover: vec![],
         leftover_done: false,
@@ -2470,9 +2525,12 @@ fn run_shared(src: &str, dir: &Path, lib: std::sync::Arc<Library>) -> Cam {
         programs: vec![],
         lib,
         jaws: vec![],
-        wh: workholding_library(dir),
+        wh: wh_lib,
         frames: BTreeMap::new(),
     };
+    if let Some(w) = wh_why {
+        cam.warnings.push(w);
+    }
     let prog = match syntax::parse(src) {
         Ok(p) => p,
         Err(e) => {
@@ -3138,13 +3196,22 @@ impl Cam {
                             }
                         }
                     }
+                    Some(V::Hold(h)) => {
+                        let h = h.clone();
+                        Some(self.hold_fixture(&h, dir)?)
+                    }
                     Some(V::Jaws(j, _)) => {
                         if from.is_none() {
                             return Err("fixture: soft jaws hold the part as an earlier setup left it: give `from: SETUP`".into());
                         }
                         Some(self.jaws[*j].fixture.clone())
                     }
-                    Some(_) => return Err("fixture: vise(\"NAME\", across:, clamp:)".into()),
+                    Some(_) => {
+                        return Err(
+                            "fixture: vise(\"NAME\", across:, clamp:), workholding(\"NAME\", at:, turn:), or soft jaws"
+                                .into(),
+                        );
+                    }
                 };
                 let clear = stock.max[2] + get_num(a, "clear", Some(10.0))?;
                 let retract = stock.max[2] + get_num(a, "retract", Some(3.0))?;
@@ -3322,6 +3389,154 @@ impl Cam {
         }
     }
 
+    /// A workholding device placed by its model (`workholding("NAME", at:, turn:)`): a record of
+    /// the library (built in, or the project's `cam/workholding/*.toml`) whose bodies are a
+    /// maker's model (`model`), the user's own file (`model_file`: a STEP, IGES or `.fg` beside
+    /// the document, compiled to the checker's faces here, once per content), or a custom
+    /// record's own boxes (the user's description of it). Checked against those, never a stand-in.
+    fn hold_fixture(&mut self, h: &HoldSpec, dir: &Path) -> Result<forge_cam::fixture::Fixture, String> {
+        let r = match self.wh.get(&h.name) {
+            Ok(r) => r.clone(),
+            Err(forge_workholding::WhError::Unknown { near, .. }) => {
+                return Err(format!(
+                    "workholding(\"{}\"): no such device in the workholding library; near: {}",
+                    h.name,
+                    near.join(", ")
+                ));
+            }
+            Err(e) => return Err(format!("workholding(\"{}\"): {e:?}", h.name)),
+        };
+        let pose = forge_workholding::Pose::quarter_z(h.quarters, h.at);
+        let placed = if let Some(mn) = r.words.get("model") {
+            let m = forge_workholding::model::get(mn)
+                .ok_or_else(|| format!("workholding(\"{}\"): its model `{mn}` is not built in", h.name))?;
+            forge_workholding::mill::model_fixture(&h.name, &r, m, &pose)
+        } else if let Some(file) = r.words.get("model_file") {
+            let m = self.import_model(&r, file, dir)?;
+            forge_workholding::mill::model_fixture(&h.name, &r, m, &pose)
+        } else if r.kind == forge_workholding::Kind::Custom {
+            forge_workholding::mill::custom(&h.name, &r, &pose, vec![])
+        } else {
+            return Err(format!(
+                "workholding(\"{}\"): a {} with no model of its bodies: give its record model_file = \"PATH\" (a STEP, IGES or .fg of it), or name a vise with vise(..)",
+                h.name,
+                r.kind.name()
+            ));
+        }
+        .map_err(|e| format!("fixture: {e}"))?;
+        let f = forge_cam::fixture::Fixture::from_workholding(&placed, 0, h.clearance);
+        for e in &f.enveloped {
+            let w = format!("workholding(\"{}\"): {e}: checked against its envelope", h.name);
+            if !self.warnings.contains(&w) {
+                self.warnings.push(w);
+            }
+        }
+        Ok(f)
+    }
+
+    /// The user's own model of a device (`model_file`, beside the document), compiled to the
+    /// checker's faces: once per content (its sha256 names it), kept for the run, and written
+    /// beside the document (`cam/workholding/.compiled/SHA.txt`) so the next run reads it. Its
+    /// solids are one rigid body (a custom fixture does not move; a device that does is a maker's
+    /// model with its bodies said, data/models.toml).
+    fn import_model(
+        &mut self,
+        r: &forge_workholding::Record,
+        file: &str,
+        dir: &Path,
+    ) -> Result<&'static forge_workholding::model::Model, String> {
+        let path = dir.join(file);
+        let bytes = forge_dirs::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        if bytes.starts_with(b"version https://git-lfs.github.com/spec/") {
+            return Err(format!(
+                "{}: a Git LFS pointer, not the model: git lfs pull it",
+                path.display()
+            ));
+        }
+        let mut hsh = forge_git::hash::Sha256::new();
+        hsh.update(&bytes);
+        let sha: String = hsh.finish().iter().map(|b| format!("{b:02x}")).collect();
+        let name = format!("file-{sha}");
+        if let Some(m) = forge_workholding::model::get(&name) {
+            return Ok(m);
+        }
+        let rot =
+            forge_workholding::model::parse_rot(r.words.get("model_rot").map_or("x,y,z", |s| s.as_str()))
+                .ok_or_else(|| format!("{}: model_rot as `x,-z,y`", r.name))?;
+        let role = match r.kind {
+            forge_workholding::Kind::FixturePlate => forge_workholding::Role::Plate,
+            _ => forge_workholding::Role::Other,
+        };
+        let spec = forge_workholding::model::Model {
+            name: name.clone(),
+            opening: 0.0,
+            groups: vec![forge_workholding::model::Group {
+                name: "fixture".into(),
+                role,
+                moves: forge_workholding::model::Moves::Fixed,
+                min: [0.0; 3],
+                max: [0.0; 3],
+                tight_min: [0.0; 3],
+                tight_max: [0.0; 3],
+                mesh: String::new(),
+                solids: vec![],
+            }],
+            check: "",
+            step: file.to_string(),
+            sha256: sha.clone(),
+            how: format!(
+                "{file}: the user's own model of {} (sha256 {sha}), compiled while running",
+                r.name
+            ),
+            rot,
+            origin: [0.0; 3],
+            chord: 0.02,
+        };
+        let cache = dir
+            .join("cam")
+            .join("workholding")
+            .join(".compiled")
+            .join(format!("{sha}.txt"));
+        let text = match forge_dirs::fs::read_to_string(&cache) {
+            Ok(t) if t.starts_with(forge_cam::fixture_model::HEADER) => t,
+            _ => {
+                let cs = forge_workholding_builder::compile::Spec {
+                    rot,
+                    origin: [0.0; 3],
+                    groups: vec![],
+                    chord: spec.chord,
+                };
+                let c = if file.ends_with(".fg") {
+                    let src = String::from_utf8(bytes).map_err(|_| format!("{file}: not text"))?;
+                    let (run, _) = forge_lang::run(
+                        &src,
+                        forge_lang::Options {
+                            dir: path.parent().map(Path::to_path_buf),
+                            ..forge_lang::Options::default()
+                        },
+                        Default::default(),
+                    );
+                    let body = run
+                        .body
+                        .as_ref()
+                        .ok_or_else(|| format!("{file}: it does not build: {:?}", run.errors.first()))?;
+                    forge_workholding_builder::compile::compile_bodies(&[body], &cs)
+                } else {
+                    forge_workholding_builder::compile::compile(&bytes, &cs)
+                }
+                .map_err(|e| format!("{file}: {e}"))?;
+                // kept for the next run; a project that cannot be written to compiles again
+                if let Some(d) = cache.parent() {
+                    let _ = forge_dirs::fs::create_dir_all(d)
+                        .and_then(|_| forge_dirs::fs::write(&cache, &c.text));
+                }
+                c.text
+            }
+        };
+        forge_cam::fixture_model::read(&text).map_err(|e| format!("{file}: {e}"))?;
+        forge_workholding::model::register(spec, text).map_err(|e| format!("{file}: {e:?}"))
+    }
+
     /// The vise a document names: the workholding library's record (a vise or a self-centring
     /// vise), an old forge-tooling name resolved to its library successor (with a warning
     /// saying so), or None when only the old forge-tooling record knows the name (its boxes:
@@ -3338,17 +3553,21 @@ impl Cam {
             }
             return Ok(Some(r.clone()));
         }
-        if let Some((_, to)) = VISE_SUCCESSOR.iter().find(|(from, _)| *from == name)
-            && let Ok(r) = self.wh.get(to)
-        {
-            let w = format!(
-                "vise(\"{name}\") is now the workholding library's {to}: the same jaws and opening, with its body down to the table.{}",
-                if r.standin {
-                    " It's a stand-in: measure your vise."
-                } else {
-                    ""
-                }
-            );
+        if let Some(r) = successor(&self.wh, name) {
+            let to = &r.name;
+            let w = if r.standin {
+                format!(
+                    "vise(\"{name}\") is now the workholding library's {to}: the same jaws and opening, with its body down to the table. It's a stand-in: measure your vise."
+                )
+            } else {
+                format!(
+                    "vise(\"{name}\") is now {to}, {}: its bodies are the maker's own model of it, so the clearance checks are against the real vise and not boxes. Its jaws are {} mm wide and {} high and open to {}; name a vise yourself to hold the part another way.",
+                    r.product,
+                    r.get("jaw_width").unwrap_or(f64::NAN),
+                    r.get("jaw_height").unwrap_or(f64::NAN),
+                    r.get("max_opening").unwrap_or(f64::NAN),
+                )
+            };
             if !self.warnings.contains(&w) {
                 self.warnings.push(w);
             }
@@ -3525,6 +3744,33 @@ impl Cam {
             v.clearance,
         )
         .map_err(|e| format!("soft_jaw: {e}"))?;
+        // the jaws' pocket is the part's own faces; the vise under them is its sizes' boxes
+        // (the soft-jaw path does not place a model yet): a vise that has a model says so, each
+        // body that stands in for its real one named
+        let mut sj = sj;
+        if let Ok(Some(r)) = self.vise_record(&v.name)
+            && let Some(m) = r.words.get("model")
+        {
+            for f in [&mut sj.fixture, &mut sj.hold] {
+                for (n, _) in &f.pieces {
+                    if !n.contains("soft jaw") {
+                        let e = format!(
+                            "{n}: soft jaws on a model vise stand on its sizes' box, not the model {m}"
+                        );
+                        if !f.enveloped.contains(&e) {
+                            f.enveloped.push(e);
+                        }
+                    }
+                }
+            }
+            let w = format!(
+                "soft_jaw(vise(\"{}\")): the jaws' pocket is checked exactly, but the vise under them is its sizes' boxes, not its model {m} (soft jaws on a model vise are not placed by the model yet)",
+                v.name
+            );
+            if !self.warnings.contains(&w) {
+                self.warnings.push(w);
+            }
+        }
         // nothing the earlier setup left above the part's top may lie in the blank: turned over,
         // it would be inside the jaws below the seat, where the part could not go down
         // (softJaw_needs_grip)

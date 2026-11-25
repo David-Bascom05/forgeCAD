@@ -216,7 +216,15 @@ pub fn vise_with(
                     "compile it (forge-workholding-builder's wh_compile)",
                 )
             })?;
-            bodies = model_bodies(m, a, s0 - tb, s1 + tb, mid_o, bed);
+            // the device's frame: x along the clamp axis from the fixed jaw's face, y across
+            // centred, z up from the bed; turned a quarter about z when the jaws close along y
+            let fx = s0 - tb;
+            let pose = if a == 0 {
+                Pose::shift([fx, mid_o, bed])
+            } else {
+                Pose::quarter_z(1, [mid_o, fx, bed])
+            };
+            bodies = model_bodies(m, &pose, (s1 + tb) - fx - m.opening);
             table = bed
                 + m.groups
                     .iter()
@@ -375,34 +383,34 @@ pub fn vise_with(
     })
 }
 
-/// A model's bodies placed: the device's frame (x along the clamp axis from the fixed jaw's face,
-/// y across centred, z up from the bed) turned onto the clamp axis `a` (x, or y by a quarter
-/// turn about z), its fixed jaw's face at `fx` along it, the moving jaw's at `mx`, centred at
-/// `mid` across, the bed at z `bed`. Each body's prims are its own box (an envelope, for drawing
-/// and quick looks); `exact` points the checker at its compiled faces.
-fn model_bodies(m: &crate::model::Model, a: usize, fx: f64, mx: f64, mid: f64, bed: f64) -> Vec<Body> {
+/// A model's bodies placed by `pose` (from the device's own frame into the part frame): each
+/// group as the model says it moves. A group that moves with the jaw is shifted `travel` along
+/// the device's x first; one whose motion the model does not state is placed both ways (fixed,
+/// and with the jaw) so both are checked, once when there is no travel. Each body's prims are
+/// its own box (an envelope, for drawing and quick looks); `exact` points the checker at its
+/// compiled faces. Nothing here knows which model it is.
+pub fn model_bodies(m: &crate::model::Model, pose: &Pose, travel: f64) -> Vec<Body> {
     use crate::model::Moves;
-    let pose = |along: f64| {
-        if a == 0 {
-            Pose::shift([along, mid, bed])
-        } else {
-            // (x, y, z) to (−y, x, z): the device's x along +y
-            Pose::quarter_z(1, [mid, along, bed])
+    let moved = |d: f64| {
+        let s = pose.dir([d, 0.0, 0.0]);
+        Pose {
+            m: pose.m,
+            t: [pose.t[0] + s[0], pose.t[1] + s[1], pose.t[2] + s[2]],
         }
     };
-    let travel = mx - fx - m.opening;
     let mut out = Vec::new();
     for g in &m.groups {
         let ways: Vec<(String, f64)> = match g.moves {
             Moves::Fixed => vec![(g.name.clone(), 0.0)],
             Moves::WithJaw => vec![(g.name.clone(), travel)],
+            Moves::Unknown if travel == 0.0 => vec![(g.name.clone(), 0.0)],
             Moves::Unknown => vec![
                 (format!("{} (fixed)", g.name), 0.0),
                 (format!("{} (with the jaw)", g.name), travel),
             ],
         };
         for (name, d) in ways {
-            let p = pose(fx + d);
+            let p = moved(d);
             let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
             for i in 0..8 {
                 let c = [
@@ -442,6 +450,48 @@ fn model_bodies(m: &crate::model::Model, a: usize, fx: f64, mx: f64, mid: f64, b
         }
     }
     out
+}
+
+/// A device given by a maker's or the user's own model (a plate, a tombstone, a fixture made
+/// for the part, a vise held as one rigid body): its bodies placed by `pose` from the model's
+/// own frame into the part frame, on the table at its own underside. It holds nothing by
+/// itself (`held` empty): what it grips is the job's to say.
+pub fn model_fixture(
+    name: &str,
+    rec: &Record,
+    m: &crate::model::Model,
+    pose: &Pose,
+) -> Result<Placed, WhError> {
+    if m.groups.is_empty() {
+        return Err(refuse(
+            &rec.name,
+            format!("its model {} has no bodies", m.name),
+            "compile it",
+        ));
+    }
+    let bodies = model_bodies(m, pose, 0.0);
+    let bottom = bodies
+        .iter()
+        .map(|b| b.bounds().0[2])
+        .fold(f64::INFINITY, f64::min);
+    let mut notes = vec![format!(
+        "{} {}: its bodies are the model {} ({}): the checker's faces compiled from it",
+        rec.kind.name(),
+        rec.name,
+        m.name,
+        m.step
+    )];
+    if m.groups.iter().any(|g| g.moves == crate::model::Moves::Unknown) {
+        notes.push("bodies whose motion is not stated are checked where the model has them".into());
+    }
+    Ok(Placed {
+        name: name.to_string(),
+        kind: rec.kind,
+        bodies,
+        mount: Mount::Table { z: bottom },
+        held: vec![],
+        notes,
+    })
 }
 
 /// A dovetail fixture (5-axis): the stock's underside carries a dovetail tenon `tenon` wide
