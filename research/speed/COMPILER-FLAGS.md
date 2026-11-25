@@ -47,8 +47,42 @@ On main c135b274, this VM, by FALLBACK:
 - Fat LTO, measured the same way: 2.9% fewer instructions, no quicker on the clock, 66% longer
   builds. Not taken.
 
-Still owed before it lands (points 3 and 4): the wasm determinism compare and the browser gate's
-wall clock. Until those are in, the flag is not judged.
+### Why it is held: crank
+
+The coordinator's bar is faster or neutral on EVERY gate case. Crank fails it, and the failure is
+real, not noise. Pinned to one CPU, 13 to 15 runs interleaved between the two binaries, on the
+shipped x86-64-v3 build:
+
+| case | cgu16 min | cgu1 min | min | median |
+|---|---|---|---|---|
+| crank run | 83.31 ms | 85.91 ms | +3.12% | +3.15% |
+| crank edit | 91.44 ms | 93.87 ms | +2.66% | +1.00% |
+
+What it is NOT, measured on the same source at x86-64-v2 under callgrind (crank's regen alone):
+
+- instructions: 231,937,170 at one unit against 231,957,865 at sixteen — one unit runs 20,695
+  FEWER, −0.009%. The per-function profile is the same, so there is nothing for an `#[inline]`
+  or a cold split to aim at.
+- I1 misses 1,235,608 against 1,231,581 (+0.33%); LLi 307 against 359; D1 349,462 against
+  351,521 (−0.59%); LL 2,463 against 1,798, all negligible against 232 M instructions.
+
+So the cost is in the front end — branch target alignment, the µop cache, code placement — which
+callgrind cannot see and this VM cannot measure (no hardware counters: `perf` reports
+`<not supported>`, which is why the gate uses callgrind at all).
+
+How much of that is simply the layout lottery: an unrelated, unused function added to
+`forge-geom`'s lib.rs and rebuilt at sixteen units moved crank by −0.79% (run) and −1.50% (edit)
+on the minimum. So about 1% of swing comes from code moving at all, and one unit's 3% is larger
+than that but the same kind of effect. (Reducing exactly that lottery is one of the reasons to
+want one unit: a function's code then stops moving when an unrelated item changes elsewhere in
+its crate.)
+
+What would settle it: a machine with hardware counters, to read front-end stalls and branch
+misses for crank's hot loop; or the same pinned comparison on another machine, to see whether
+crank loses there too. Neither is available here.
+
+Still owed before it lands: that, plus the wasm determinism compare and the browser gate's wall
+clock (points 3 and 4). Until then the flag is not judged, and the branch is not queued.
 
 ## A note on the gate's own machinery
 
