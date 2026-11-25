@@ -383,7 +383,7 @@ if (sel["gate"] or a.always_gate) and (not only or "gate" in only):
 ok = all(s["ok"] is not False for s in record["steps"].values())
 pending = [k for k, s in record["steps"].items() if s["ok"] is None]
 record["ok"] = ok
-rec = os.path.join(cache, f"record-{head}.json")
+rec = os.path.join(cache, f"record-{head}" + (f".only-{a.only.replace(',', '-')}" if a.only else "") + ".json")
 json.dump(record, open(rec, "w"), indent=1)
 steps = " ".join(f"{k}:{'ok' if v['ok'] else ('NOT-RUN' if v['ok'] is None else 'FAIL')}"
                  for k, v in record["steps"].items())
