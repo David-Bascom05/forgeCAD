@@ -7,23 +7,23 @@
 //! are a short ring; the head's error counts are kept, so an op's check evaluates only the new
 //! text, not the head again.
 
-use crate::rebase::{rebase, span_op};
-use crate::{Counts, Entry, Refusal, Store, check_limits, inverse::inverse, text_hash};
+use crate::rebase::{rebase_group, span_op};
+use crate::{Counts, Entry, Refusal, Store, check_group, inverse::inverse, text_hash};
 use forge_lang::error::Op;
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-/// How an op is checked on the head before it is appended: by default forge-lang's own check
-/// ([`crate::validate`]) in this thread; a server gives one with a time budget. `counts` are the
-/// head's error counts if known (then the head is not evaluated again); it returns the new text
-/// and its counts.
+/// How a group is checked on the head before it is appended: by default forge-lang's own check
+/// ([`crate::validate`], of the group's result only) in this thread; a server gives one with a
+/// time budget (one budget for the whole group, as for one op). `counts` are the head's error
+/// counts if known (then the head is not evaluated again); it returns the new text and its counts.
 pub trait Check {
     fn check(
         &mut self,
         head: &str,
         counts: Option<&Counts>,
-        op: &Op,
+        ops: &[Op],
         dir: Option<PathBuf>,
         root: Option<PathBuf>,
     ) -> Result<(String, Counts), Refusal>;
@@ -37,11 +37,11 @@ impl Check for Direct {
         &mut self,
         head: &str,
         counts: Option<&Counts>,
-        op: &Op,
+        ops: &[Op],
         dir: Option<PathBuf>,
         root: Option<PathBuf>,
     ) -> Result<(String, Counts), Refusal> {
-        crate::validate(head, counts, op, dir, root)
+        crate::validate(head, counts, ops, dir, root)
     }
 }
 
@@ -198,7 +198,7 @@ impl Sequencer {
                     s.seq()
                 )));
             }
-            let head = forge_lang::edit::apply(&s.head, &e.op).map_err(|err| {
+            let head = crate::apply_all(&s.head, &e.ops).map_err(|err| {
                 std::io::Error::other(format!("{doc}: seq {} does not apply: {}", e.seq, err.kind()))
             })?;
             if text_hash(&head) != e.th {
@@ -307,8 +307,9 @@ impl Sequencer {
         }
     }
 
-    /// Orders `op`, sent by `client` (account `author`) as its op `id`, made on the text at
-    /// `base`: limits, rebase, validation on the head, durable append. Refused: nothing written.
+    /// Orders a group `ops`, sent by `client` (account `author`) as its op `id`, made on the
+    /// text at `base`: limits, rebase, validation of the result on the head, one durable append.
+    /// All or none: refused, nothing is written and the head is as it was.
     pub fn submit(
         &mut self,
         store: &mut dyn Store,
@@ -316,7 +317,7 @@ impl Sequencer {
         client: &str,
         base: u64,
         id: u64,
-        op: &Op,
+        ops: &[Op],
     ) -> Result<Commit, Refusal> {
         if let Some(&seq) = self.in_log.get(&(client.to_string(), id))
             && let Some(e) = self.log.get((seq - self.floor - 1) as usize)
@@ -333,7 +334,7 @@ impl Sequencer {
             // committed before the log's start: the client's snapshot holds it
             return Err(Refusal::AlreadyCommitted { seq: m.seq });
         }
-        let r = self.order(store, author, client, base, id, op);
+        let r = self.order(store, author, client, base, id, ops);
         if r.is_err() {
             self.mark_refused(client, id);
         }
@@ -347,9 +348,9 @@ impl Sequencer {
         client: &str,
         base: u64,
         id: u64,
-        op: &Op,
+        ops: &[Op],
     ) -> Result<Commit, Refusal> {
-        check_limits(op)?;
+        check_group(ops)?;
         let head = self.seq();
         if base > head {
             return Err(Refusal::BadBase { base, head });
@@ -377,22 +378,23 @@ impl Sequencer {
                     .collect()
             }
         };
-        let op = rebase(op, client, since.iter())?;
+        let ops = rebase_group(ops, client, since.iter())?;
         // a span op is valid only on its base: rebase refused it if another author's op landed;
-        // the author's own ops since base moved its bytes too unless there are none
-        if span_op(&op) && !since.is_empty() {
+        // the author's own ops since base moved its bytes too unless there are none (a group's
+        // own earlier ops did not: they are applied here as on the client, in order)
+        if ops.iter().any(span_op) && !since.is_empty() {
             return Err(Refusal::StaleSpan);
         }
         let checked = self.checker.check(
             &self.head,
             self.head_counts.as_ref(),
-            &op,
+            &ops,
             self.dir.clone(),
             self.root.clone(),
         );
         let (text, counts) = match checked {
             Ok(x) => x,
-            Err(r) => return Err(name_the_taker(r, &op, client, &since)),
+            Err(r) => return Err(name_the_taker(r, &ops, client, &since)),
         };
         if text.len() > self.limits.max_text {
             return Err(Refusal::Invalid {
@@ -403,14 +405,14 @@ impl Sequencer {
                 ),
             });
         }
-        let inv = inverse(&self.head, &op, &text);
+        let inv = group_inverse(&self.head, &ops, &text);
         let entry = Entry {
             seq: head + 1,
             author: author.into(),
             client: client.into(),
             id,
             base,
-            op,
+            ops,
             inv,
             th: text_hash(&text),
         };
@@ -469,7 +471,7 @@ impl Sequencer {
 
 /// A NameTaken refusal of an op whose name another author's concurrent op took: the refusal
 /// says which op (seq and author), so the person knows what happened.
-fn name_the_taker(r: Refusal, op: &Op, client: &str, since: &[Entry]) -> Refusal {
+fn name_the_taker(r: Refusal, ops: &[Op], client: &str, since: &[Entry]) -> Refusal {
     let Refusal::Lang { kind, text } = &r else {
         return r;
     };
@@ -481,20 +483,21 @@ fn name_the_taker(r: Refusal, op: &Op, client: &str, since: &[Entry]) -> Refusal
             .map(|p| forge_lang::edit::bound(&p).into_iter().collect())
             .unwrap_or_default()
     };
-    let mine: Vec<String> = match op {
-        Op::Rename { to, .. } => vec![to.clone()],
-        Op::AddFeature { text, .. } => binds(text),
-        _ => vec![],
-    };
-    let taker = since
+    let mine: Vec<String> = ops
         .iter()
-        .rev()
-        .filter(|e| e.client != client)
-        .find(|e| match &e.op {
+        .flat_map(|op| match op {
+            Op::Rename { to, .. } => vec![to.clone()],
+            Op::AddFeature { text, .. } => binds(text),
+            _ => vec![],
+        })
+        .collect();
+    let taker = since.iter().rev().filter(|e| e.client != client).find(|e| {
+        e.ops.iter().any(|x| match x {
             Op::Rename { to, .. } => mine.contains(to),
             Op::AddFeature { text, .. } => binds(text).iter().any(|n| mine.contains(n)),
             _ => false,
-        });
+        })
+    });
     match taker {
         Some(e) => Refusal::Lang {
             kind: kind.clone(),
@@ -502,4 +505,21 @@ fn name_the_taker(r: Refusal, op: &Op, client: &str, since: &[Entry]) -> Refusal
         },
         None => r,
     }
+}
+
+/// A group's exact inverse on `head` (whose result is `after`): each op's inverse on the text it
+/// was applied to, in reverse order; None if any op has none.
+pub fn group_inverse(head: &str, ops: &[Op], after: &str) -> Option<Vec<Op>> {
+    if let [op] = ops {
+        return inverse(head, op, after).map(|x| vec![x]);
+    }
+    let mut t = head.to_string();
+    let mut inv = Vec::with_capacity(ops.len());
+    for op in ops {
+        let next = forge_lang::edit::apply(&t, op).ok()?;
+        inv.push(inverse(&t, op, &next)?);
+        t = next;
+    }
+    inv.reverse();
+    Some(inv)
 }

@@ -6,10 +6,9 @@
 //! edit shows at once (budget B1: no network on the edit path) and every client converges on the
 //! server's text once its ops are acked or refused.
 
-use crate::rebase::rebase;
+use crate::rebase::rebase_group;
 use crate::wire::{Down, Up};
-use crate::{Entry, Refusal, text_hash};
-use forge_lang::edit::apply;
+use crate::{Entry, Refusal, apply_all, text_hash};
 use forge_lang::error::Op;
 
 /// What the host should do after a message (besides sending the client's `outbox`).
@@ -51,11 +50,12 @@ pub enum Event {
     Said(String),
 }
 
+/// A group sent and not yet answered (most are one op).
 #[derive(Clone, Debug)]
 pub struct Pending {
     pub id: u64,
     pub base: u64,
-    pub op: Op,
+    pub ops: Vec<Op>,
 }
 
 pub struct Client {
@@ -72,8 +72,8 @@ pub struct Client {
     recent: Vec<Entry>,
     view: String,
     next_id: u64,
-    /// Own committed ops with an inverse, newest last: (seq, inverse).
-    undo: Vec<(u64, Op)>,
+    /// Own committed groups with an inverse, newest last: (seq, the inverse group).
+    undo: Vec<(u64, Vec<Op>)>,
     /// Messages for the server, in order; the host drains and sends them.
     pub outbox: Vec<Up>,
     /// True until the first Welcome.
@@ -121,7 +121,7 @@ impl Client {
                     Up::Op {
                         base: p.base,
                         id: p.id,
-                        op: p.op.clone(),
+                        ops: p.ops.clone(),
                     }
                     .text(),
                 )
@@ -146,7 +146,7 @@ impl Client {
         if let Some(Json::Arr(ops)) = j.get("ops") {
             for o in ops {
                 match Up::parse(o.str()?) {
-                    Ok(Up::Op { base, id, op }) if id < next => c.pending.push(Pending { base, id, op }),
+                    Ok(Up::Op { base, id, ops }) if id < next => c.pending.push(Pending { base, id, ops }),
                     _ => return None,
                 }
             }
@@ -164,13 +164,13 @@ impl Client {
         self.hello();
     }
 
-    /// Sends an op now if this connection was welcomed (else Welcome sends every pending op).
-    fn send_op(&mut self, base: u64, id: u64, op: &Op) {
+    /// Sends a group now if this connection was welcomed (else Welcome sends every pending one).
+    fn send_op(&mut self, base: u64, id: u64, ops: &[Op]) {
         if self.welcomed {
             self.outbox.push(Up::Op {
                 base,
                 id,
-                op: op.clone(),
+                ops: ops.to_vec(),
             });
         }
     }
@@ -204,13 +204,20 @@ impl Client {
     /// The user's op, already applied and checked by the host on `text()` (the host's edit
     /// path: `apply_checked` succeeded and gave `after`). Queued and sent; returns its id.
     pub fn local(&mut self, op: Op, after: String) -> u64 {
+        self.local_group(vec![op], after)
+    }
+
+    /// The user's group of ops (an apply-all: several edits that stand or fall together),
+    /// already applied in order and its result checked by the host on `text()`, giving `after`.
+    /// Sent as one: the server commits all of them or none. Returns its id.
+    pub fn local_group(&mut self, ops: Vec<Op>, after: String) -> u64 {
         let id = self.next_id;
         self.next_id += 1;
-        self.send_op(self.seq, id, &op);
+        self.send_op(self.seq, id, &ops);
         self.pending.push(Pending {
             id,
             base: self.seq,
-            op,
+            ops,
         });
         self.view = after;
         id
@@ -223,8 +230,18 @@ impl Client {
         Ok(self.local(op, after))
     }
 
-    /// Undo this client's last committed op that has an inverse: the inverse, made on the text
-    /// at that op's seq, rebased by the server like any op (so collaborators' later edits stay).
+    /// Applies `ops` in order on `text()` and checks the result (only the result: a group may
+    /// pass through an invalid text), then [`local_group`](Self::local_group). Refused: why,
+    /// nothing sent.
+    pub fn edit_group(&mut self, ops: Vec<Op>) -> Result<u64, Refusal> {
+        crate::check_group(&ops)?;
+        let (after, _) = crate::validate(&self.view, None, &ops, None, None)?;
+        Ok(self.local_group(ops, after))
+    }
+
+    /// Undo this client's last committed group that has an inverse: the inverse group, made on
+    /// the text at that group's seq, rebased by the server like any group (so collaborators'
+    /// later edits stay; a group's inverse is undone as one too).
     /// None: nothing to undo. The inverse is applied locally at once (Err if it no longer applies
     /// here; it is then not sent).
     pub fn undo(&mut self) -> Option<Result<u64, Refusal>> {
@@ -237,22 +254,27 @@ impl Client {
         }
         let (seq, inv) = self.undo.pop()?;
         // the inverse as it reads now: through others' renames since that seq
-        let op = match rebase(&inv, &self.id, self.recent.iter().filter(|e| e.seq > seq)) {
-            Ok(op) => op,
+        let ops = match rebase_group(&inv, &self.id, self.recent.iter().filter(|e| e.seq > seq)) {
+            Ok(ops) => ops,
             Err(r) => return Some(Err(r)),
         };
-        let checked = forge_lang::edit::apply_checked(&self.view, &op).map_err(|e| Refusal::Lang {
-            kind: e.kind().into(),
-            text: e.text(),
-        });
-        Some(checked.map(|(after, _)| {
+        let checked = match &ops[..] {
+            [op] => forge_lang::edit::apply_checked(&self.view, op)
+                .map(|(after, _)| after)
+                .map_err(|e| Refusal::Lang {
+                    kind: e.kind().into(),
+                    text: e.text(),
+                }),
+            _ => crate::validate(&self.view, None, &ops, None, None).map(|(after, _)| after),
+        };
+        Some(checked.map(|after| {
             let id = self.next_id;
             self.next_id += 1;
-            self.send_op(seq.max(self.seq), id, &op);
+            self.send_op(seq.max(self.seq), id, &ops);
             self.pending.push(Pending {
                 id,
                 base: seq.max(self.seq),
-                op,
+                ops,
             });
             self.view = after;
             id
@@ -296,12 +318,18 @@ impl Client {
                         self.outbox.push(Up::Op {
                             base: p.base,
                             id: p.id,
-                            op: p.op.clone(),
+                            ops: p.ops.clone(),
                         });
                     }
                 }
             }
-            Down::Ack { id, seq, op, inv, th } => {
+            Down::Ack {
+                id,
+                seq,
+                ops,
+                inv,
+                th,
+            } => {
                 let Some(k) = self.pending.iter().position(|p| p.id == id) else {
                     return ev;
                 };
@@ -325,7 +353,7 @@ impl Client {
                     client: self.id.clone(),
                     id,
                     base: p.base,
-                    op,
+                    ops,
                     inv: inv.clone(),
                     th,
                 };
@@ -354,7 +382,7 @@ impl Client {
                     ev.push(Event::Refused { id, refusal });
                 }
             }
-            Down::Applied { seq, author, op, th } => {
+            Down::Applied { seq, author, ops, th } => {
                 if seq <= self.seq {
                     return ev;
                 }
@@ -367,7 +395,7 @@ impl Client {
                     client: format!("other:{author}"),
                     id: 0,
                     base: 0,
-                    op,
+                    ops,
                     inv: None,
                     th,
                 };
@@ -400,7 +428,7 @@ impl Client {
     /// Applies a committed entry to the confirmed text; false if it does not apply or the text's
     /// hash differs from the server's.
     fn commit(&mut self, e: Entry) -> bool {
-        let Ok(t) = apply(&self.confirmed, &e.op) else {
+        let Ok(t) = apply_all(&self.confirmed, &e.ops) else {
             return false;
         };
         if text_hash(&t) != e.th {
@@ -423,14 +451,14 @@ impl Client {
         true
     }
 
-    /// The view: the confirmed text with every pending op rebased as the server will and applied;
-    /// one that no longer applies is skipped (the server will refuse it).
+    /// The view: the confirmed text with every pending group rebased as the server will and
+    /// applied; one that no longer applies is skipped whole (the server will refuse it whole).
     fn replay(&mut self) {
         let mut t = self.confirmed.clone();
         for p in &self.pending {
             let since = self.recent.iter().filter(|e| e.seq > p.base);
-            if let Ok(op) = rebase(&p.op, &self.id, since)
-                && let Ok(x) = apply(&t, &op)
+            if let Ok(ops) = rebase_group(&p.ops, &self.id, since)
+                && let Ok(x) = apply_all(&t, &ops)
             {
                 t = x;
             }

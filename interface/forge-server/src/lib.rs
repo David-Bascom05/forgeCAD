@@ -464,7 +464,7 @@ impl Check for Timed {
         &mut self,
         head: &str,
         counts: Option<&Counts>,
-        op: &Op,
+        ops: &[Op],
         dir: Option<PathBuf>,
         root: Option<PathBuf>,
     ) -> Result<(String, Counts), Refusal> {
@@ -482,17 +482,17 @@ impl Check for Timed {
         // who counts, so a run ending right at the deadline is never counted twice or lost
         let (tx, rx) = std::sync::mpsc::channel();
         let state = Arc::new(AtomicU8::new(0));
-        let (head, counts, op, gone, all, st) = (
+        let (head, counts, ops, gone, all, st) = (
             head.to_string(),
             counts.cloned(),
-            op.clone(),
+            ops.to_vec(),
             self.abandoned.clone(),
             self.all.clone(),
             state.clone(),
         );
         let job: Box<dyn FnOnce() + Send> = Box::new(move || {
             let r = catch_unwind(AssertUnwindSafe(|| {
-                forge_sync::validate(&head, counts.as_ref(), &op, dir, root)
+                forge_sync::validate(&head, counts.as_ref(), &ops, dir, root)
             }))
             .unwrap_or_else(|_| {
                 Err(Refusal::Invalid {
@@ -1515,10 +1515,8 @@ impl Actor {
             DocEv::Up { conn, up: Up::Resync } if !self.resync_now(conn) => {}
             DocEv::Up { conn, up } => {
                 #[cfg(feature = "test-hooks")]
-                if let Up::Op {
-                    op: Op::SetProperty { key, .. },
-                    ..
-                } = &up
+                if let Up::Op { ops, .. } = &up
+                    && let Some(Op::SetProperty { key, .. }) = ops.first()
                     && key == "test_hook_panic"
                 {
                     panic!("test hook: a panic in a document's actor");

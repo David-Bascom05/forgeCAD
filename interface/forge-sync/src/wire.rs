@@ -31,8 +31,9 @@ pub enum Up {
         proto: u32,
         kernel: String,
     },
-    /// An op the client applied locally on top of the server's text at `base`.
-    Op { base: u64, id: u64, op: Op },
+    /// A group of ops the client applied locally, in order, on top of the server's text at
+    /// `base`: committed as one (all or none), under one id. Most groups are one op.
+    Op { base: u64, id: u64, ops: Vec<Op> },
     /// The exact hash of the body the client built at `seq` (divergence detection).
     BuildHash { seq: u64, hash: u64 },
     /// Write the head as a named version (a forge-history commit and tag).
@@ -56,13 +57,13 @@ pub enum Down {
         /// follows (and `text` is empty).
         snap: bool,
     },
-    /// The client's own op `id` committed as `seq` (rebased: `op` is what was applied), with its
-    /// inverse (for undo) and the hash of the text after it.
+    /// The client's own group `id` committed as `seq` (rebased: `ops` is what was applied), with
+    /// its inverse (a group, for undo) and the hash of the text after it.
     Ack {
         id: u64,
         seq: u64,
-        op: Op,
-        inv: Option<Op>,
+        ops: Vec<Op>,
+        inv: Option<Vec<Op>>,
         th: u64,
     },
     /// The client's own op `id` refused; nothing was written.
@@ -70,11 +71,11 @@ pub enum Down {
         id: u64,
         refusal: Refusal,
     },
-    /// Another author's op committed as `seq`.
+    /// Another author's group committed as `seq`.
     Applied {
         seq: u64,
         author: String,
-        op: Op,
+        ops: Vec<Op>,
         th: u64,
     },
     /// A build hash at `seq` differs from the first one reported for it.
@@ -114,8 +115,8 @@ pub fn entry_json(e: &Entry) -> Json {
         ("client", e.client.as_str().into()),
         ("id", num(e.id)),
         ("base", num(e.base)),
-        ("op", e.op.json()),
-        ("inv", e.inv.as_ref().map_or(Json::Null, Op::json)),
+        ("ops", ops_json(&e.ops)),
+        ("inv", e.inv.as_deref().map_or(Json::Null, ops_json)),
         ("th", hex(e.th)),
     ])
 }
@@ -127,13 +128,32 @@ pub fn entry_from(j: &Json) -> Option<Entry> {
         client: s(j, "client")?,
         id: u(j, "id")?,
         base: u(j, "base")?,
-        op: Op::from_json(j.get("op")?)?,
+        // (a log written before groups (PROTOCOL 2) has one op and one inverse per entry)
+        ops: match j.get("ops") {
+            Some(x) => ops_from(x)?,
+            None => vec![Op::from_json(j.get("op")?)?],
+        },
         inv: match j.get("inv")? {
             Json::Null => None,
-            x => Some(Op::from_json(x)?),
+            x if j.get("ops").is_some() => Some(ops_from(x)?),
+            x => Some(vec![Op::from_json(x)?]),
         },
         th: unhex(j.get("th")?)?,
     })
+}
+
+/// A group's ops as the wire and the log write them.
+pub fn ops_json(ops: &[Op]) -> Json {
+    Json::Arr(ops.iter().map(Op::json).collect())
+}
+
+/// A group's ops: 1 to [`crate::MAX_GROUP_OPS`] of them.
+pub fn ops_from(j: &Json) -> Option<Vec<Op>> {
+    let Json::Arr(xs) = j else { return None };
+    if xs.is_empty() || xs.len() > crate::MAX_GROUP_OPS {
+        return None;
+    }
+    xs.iter().map(Op::from_json).collect()
 }
 
 impl Up {
@@ -155,11 +175,11 @@ impl Up {
                 ("proto", num(*proto as u64)),
                 ("kernel", kernel.as_str().into()),
             ]),
-            Up::Op { base, id, op } => Json::obj(vec![
+            Up::Op { base, id, ops } => Json::obj(vec![
                 ("t", "op".into()),
                 ("base", num(*base)),
                 ("id", num(*id)),
-                ("op", op.json()),
+                ("ops", ops_json(ops)),
             ]),
             Up::BuildHash { seq, hash } => Json::obj(vec![
                 ("t", "hash".into()),
@@ -187,7 +207,7 @@ impl Up {
             "op" => Up::Op {
                 base: u(j, "base")?,
                 id: u(j, "id")?,
-                op: Op::from_json(j.get("op")?)?,
+                ops: ops_from(j.get("ops")?)?,
             },
             "hash" => Up::BuildHash {
                 seq: u(j, "seq")?,
@@ -219,12 +239,18 @@ impl Down {
                 ("you", you.as_str().into()),
                 ("snap", (*snap).into()),
             ]),
-            Down::Ack { id, seq, op, inv, th } => Json::obj(vec![
+            Down::Ack {
+                id,
+                seq,
+                ops,
+                inv,
+                th,
+            } => Json::obj(vec![
                 ("t", "ack".into()),
                 ("id", num(*id)),
                 ("seq", num(*seq)),
-                ("op", op.json()),
-                ("inv", inv.as_ref().map_or(Json::Null, Op::json)),
+                ("ops", ops_json(ops)),
+                ("inv", inv.as_deref().map_or(Json::Null, ops_json)),
                 ("th", hex(*th)),
             ]),
             Down::Refused { id, refusal } => Json::obj(vec![
@@ -233,11 +259,11 @@ impl Down {
                 ("kind", refusal.kind().into()),
                 ("text", refusal.text().into()),
             ]),
-            Down::Applied { seq, author, op, th } => Json::obj(vec![
+            Down::Applied { seq, author, ops, th } => Json::obj(vec![
                 ("t", "applied".into()),
                 ("seq", num(*seq)),
                 ("author", author.as_str().into()),
-                ("op", op.json()),
+                ("ops", ops_json(ops)),
                 ("th", hex(*th)),
             ]),
             Down::Diverged {
@@ -278,10 +304,10 @@ impl Down {
             "ack" => Down::Ack {
                 id: u(j, "id")?,
                 seq: u(j, "seq")?,
-                op: Op::from_json(j.get("op")?)?,
+                ops: ops_from(j.get("ops")?)?,
                 inv: match j.get("inv")? {
                     Json::Null => None,
-                    x => Some(Op::from_json(x)?),
+                    x => Some(ops_from(x)?),
                 },
                 th: unhex(j.get("th")?)?,
             },
@@ -292,7 +318,7 @@ impl Down {
             "applied" => Down::Applied {
                 seq: u(j, "seq")?,
                 author: s(j, "author")?,
-                op: Op::from_json(j.get("op")?)?,
+                ops: ops_from(j.get("ops")?)?,
                 th: unhex(j.get("th")?)?,
             },
             "diverged" => Down::Diverged {
@@ -446,21 +472,19 @@ mod tests {
                     dim: Dim::Length,
                 },
             };
-            let m = Up::Op { base: 7, id: 3, op };
+            let m = Up::Op {
+                base: 7,
+                id: 3,
+                ops: vec![op],
+            };
             let back = Up::parse(&m.text()).unwrap();
             match (&m, &back) {
-                (
-                    Up::Op {
-                        op: Op::SetParam { value: a, .. },
-                        ..
-                    },
-                    Up::Op {
-                        op: Op::SetParam { value: b, .. },
-                        ..
-                    },
-                ) => {
-                    assert_eq!(a.value.to_bits(), b.value.to_bits(), "{v}")
-                }
+                (Up::Op { ops: a, .. }, Up::Op { ops: b, .. }) => match (&a[..], &b[..]) {
+                    ([Op::SetParam { value: a, .. }], [Op::SetParam { value: b, .. }]) => {
+                        assert_eq!(a.value.to_bits(), b.value.to_bits(), "{v}")
+                    }
+                    _ => panic!(),
+                },
                 _ => panic!(),
             }
         }
@@ -503,7 +527,12 @@ mod tests {
             Up::Op {
                 base: 1,
                 id: 2,
-                op: op.clone(),
+                ops: vec![op.clone()],
+            },
+            Up::Op {
+                base: 1,
+                id: 3,
+                ops: vec![op.clone(), Op::Suppress { id: "b".into() }],
             },
             Up::BuildHash {
                 seq: 4,
@@ -525,14 +554,14 @@ mod tests {
             Down::Ack {
                 id: 2,
                 seq: 5,
-                op: op.clone(),
-                inv: Some(op.clone()),
+                ops: vec![op.clone(), op.clone()],
+                inv: Some(vec![op.clone()]),
                 th: 1,
             },
             Down::Ack {
                 id: 2,
                 seq: 5,
-                op: op.clone(),
+                ops: vec![op.clone()],
                 inv: None,
                 th: 1,
             },
@@ -543,7 +572,7 @@ mod tests {
             Down::Applied {
                 seq: 6,
                 author: "x".into(),
-                op: op.clone(),
+                ops: vec![op.clone()],
                 th: 0xdead_beef,
             },
             Down::Diverged {

@@ -499,10 +499,10 @@ fn refusals_at_the_door() {
     let bad = forge_sync::Up::Op {
         base: 0,
         id: 1,
-        op: Op::Rename {
+        ops: vec![Op::Rename {
             from: "boss".into(),
             to: "x\ny".into(),
-        },
+        }],
     };
     w.send(&bad.text()).unwrap();
     match r.read() {
