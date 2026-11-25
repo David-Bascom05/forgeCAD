@@ -327,7 +327,7 @@ fn with_diffs(mut c: Conversation) -> Conversation {
             None => {
                 *e = Entry::Note {
                     text: format!(
-                        "{} {file} (+{added}/−{removed}): too large to undo after a resume",
+                        "{} {file} (+{added} −{removed}) · too large to undo after a resume",
                         if *created { "Created" } else { "Changed" }
                     ),
                     error: false,
@@ -340,7 +340,12 @@ fn with_diffs(mut c: Conversation) -> Conversation {
 
 fn entry_json(entry: &Entry) -> Json {
     match entry {
-        Entry::User { text, refs, markup } => Json::obj(vec![
+        Entry::User {
+            text,
+            refs,
+            markup,
+            pictures,
+        } => Json::obj(vec![
             ("type", "user".into()),
             ("text", text.clone().into()),
             ("refs", Json::Arr(refs.iter().cloned().map(Json::from).collect())),
@@ -348,6 +353,7 @@ fn entry_json(entry: &Entry) -> Json {
                 "markup",
                 markup.as_ref().map_or(Json::Null, |m| m.said.clone().into()),
             ),
+            ("pictures", (*pictures as f64).into()),
         ]),
         Entry::Agent { text } => Json::obj(vec![("type", "agent".into()), ("text", text.clone().into())]),
         Entry::Note { text, error } => Json::obj(vec![
@@ -430,6 +436,7 @@ fn entry_from_json(j: &Json) -> Option<Entry> {
                     .map(str::to_string)
                     .collect(),
                 markup: None,
+                pictures: j.get("pictures").and_then(Json::num).map_or(0, |n| n as usize),
             }
         }
         "diff" => Entry::Diff {
@@ -593,6 +600,7 @@ pub fn import_codex_from(
                             text,
                             refs: vec![],
                             markup: None,
+                            pictures: 0,
                         });
                     } else if role == "assistant" {
                         entries.push(Entry::Agent { text });
