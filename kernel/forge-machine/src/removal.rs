@@ -411,8 +411,6 @@ pub fn mill(s: &Setup, tl: &Timeline, min: V3, max: V3, step: f64) -> Result<Mil
     mill_with(s, tl, min, max, step, TipForm::Closed)
 }
 
-/// `mill` with the tip's form chosen (tests check the affine form against the chained one).
-#[doc(hidden)]
 /// One cell's outcome on one move, worked out on its own (`mill_with` applies them in order).
 struct Cell {
     i: usize,
@@ -426,6 +424,8 @@ struct Cell {
     pieces: Vec<(usize, f64, f64)>,
 }
 
+/// `mill` with the tip's form chosen (tests check the affine form against the chained one).
+#[doc(hidden)]
 pub fn mill_with(
     s: &Setup,
     tl: &Timeline,
