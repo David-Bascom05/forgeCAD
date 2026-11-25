@@ -11,6 +11,7 @@ repository.workspace = true
 forge-sync = { path = "../forge-sync" }
 forge-ws = { path = "../forge-ws" }
 forge-lang = { path = "../forge-lang" }
+forge-dirs = { path = "../../kernel/forge-dirs" }
 
 [lints]
 workspace = true

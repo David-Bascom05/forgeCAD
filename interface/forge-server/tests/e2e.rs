@@ -9,7 +9,7 @@
 use forge_lang::error::{Literal, Op, ParamKey};
 use forge_remote::{Remote, Session};
 use forge_server::{Config, StoreKind, start_on};
-use forge_sync::{Event, body_hash};
+use forge_sync::{Event, hash_body};
 use std::net::TcpListener;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, channel};
@@ -78,6 +78,7 @@ fn join(url: &str, k: usize) -> Peer {
     let (tx, rx) = channel();
     let tx = Mutex::new(tx);
     let remote = Remote {
+        name: "e2e".into(),
         url: url.into(),
         token: TOKENS[k].1.into(),
     };
@@ -183,7 +184,8 @@ fn pct(v: &mut [f64], p: f64) -> f64 {
 
 fn hash_of(text: &str) -> u64 {
     let (run, _) = forge_lang::run(text, forge_lang::Options::default(), Default::default());
-    body_hash(&run)
+    // what the app reports: the body's exact bits (the server checks against its own build)
+    run.body.as_ref().map_or(0, hash_body)
 }
 
 #[test]
@@ -305,6 +307,12 @@ fn three_clients_converge_over_sockets_with_a_restart() {
     // 5. a newcomer gets the same head
     let late = join(&url, 1);
     assert_eq!(late.s.text(), head);
+    // the server checks each report against its own build of that seq
+    let t0 = Instant::now();
+    while h.stats.lock().unwrap().hash_checks < 1 {
+        assert!(t0.elapsed() < Duration::from_secs(30), "no hash was checked");
+        std::thread::sleep(Duration::from_millis(10));
+    }
     let stats = h.stats.lock().unwrap().clone();
     assert_eq!(stats.divergences, 0);
     eprintln!(
@@ -316,6 +324,7 @@ fn three_clients_converge_over_sockets_with_a_restart() {
     );
     drop(peers);
     drop(late);
+    h.stop();
 
     // 6. a second server on the same folder reads the log back from disk
     let (url2, _h2) = serve(&root);

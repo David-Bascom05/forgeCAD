@@ -23,7 +23,7 @@ pub mod wire;
 pub use client::{Client, Event};
 pub use rebase::rebase;
 pub use room::{Action, Room};
-pub use sequencer::{Commit, Sequencer};
+pub use sequencer::{Check, Commit, Direct, Limits, Sequencer};
 pub use wire::{Down, Up};
 
 use forge_lang::error::Op;
@@ -174,7 +174,7 @@ pub fn text_hash(t: &str) -> u64 {
 
 /// The exact hash of a build: every vertex's point and every edge's range bit for bit, the
 /// face count, and the kinds of the errors (as tools/speed's `bits` and the determinism gate
-/// hash). A linear pass over the body; clients report it after each build.
+/// hash). A linear pass over the body.
 pub fn body_hash(run: &forge_lang::Run) -> u64 {
     let mut h = forge_math::hash::BitHasher::new();
     for e in &run.errors {
@@ -184,18 +184,24 @@ pub fn body_hash(run: &forge_lang::Run) -> u64 {
     }
     h.u64(run.errors.len() as u64);
     match &run.body {
-        Some(b) => {
-            for v in &b.vertices {
-                h.p3(v.point);
-            }
-            for e in &b.edges {
-                h.f64(e.range.lo);
-                h.f64(e.range.hi);
-            }
-            h.u64(b.faces.len() as u64);
-        }
+        Some(b) => h.u64(hash_body(b)),
         None => h.u64(u64::MAX),
     }
+    h.finish()
+}
+
+/// The exact hash of a body alone (what the app reports after each successful build: it holds
+/// the body, not the run).
+pub fn hash_body(b: &forge_topo::Body) -> u64 {
+    let mut h = forge_math::hash::BitHasher::new();
+    for v in &b.vertices {
+        h.p3(v.point);
+    }
+    for e in &b.edges {
+        h.f64(e.range.lo);
+        h.f64(e.range.hi);
+    }
+    h.u64(b.faces.len() as u64);
     h.finish()
 }
 
@@ -259,4 +265,38 @@ pub fn path_ok(n: &str) -> bool {
         && n.len() <= MAX_NAME
         && n.chars()
             .all(|c| c.is_ascii_alphanumeric() || "_.[],".contains(c))
+}
+
+/// forge-lang's check of an op on `head` (as `edit::apply_checked`, without the reach): applied,
+/// then refused with the first new typed error the result has that `head` had not, counted by
+/// kind. `root` confines what files the evaluation may read (a server passes its project
+/// folder).
+pub fn validate(
+    head: &str,
+    op: &Op,
+    dir: Option<std::path::PathBuf>,
+    root: Option<std::path::PathBuf>,
+) -> Result<String, Refusal> {
+    let lang = |e: forge_lang::error::Error| Refusal::Lang {
+        kind: e.kind().into(),
+        text: e.text(),
+    };
+    let text = forge_lang::edit::apply(head, op).map_err(lang)?;
+    let opts = forge_lang::Options {
+        build: false,
+        dir,
+        root,
+        ..forge_lang::Options::default()
+    };
+    let (before, _) = forge_lang::run(head, opts.clone(), Default::default());
+    let (after, _) = forge_lang::run(&text, opts, Default::default());
+    let count = |r: &forge_lang::Run, k: &str| r.errors.iter().filter(|e| e.kind() == k).count();
+    if let Some(e) = after
+        .errors
+        .iter()
+        .find(|e| count(&after, e.kind()) > count(&before, e.kind()))
+    {
+        return Err(lang(e.clone()));
+    }
+    Ok(text)
 }

@@ -4,7 +4,53 @@
 use crate::rebase::{rebase, span_op};
 use crate::{Entry, Refusal, Store, check_limits, inverse::inverse, text_hash};
 use forge_lang::error::Op;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+/// How an op is checked on the head before it is appended: by default forge-lang's own check
+/// ([`crate::validate`]) in this thread; a server gives one with a time budget.
+pub trait Check {
+    fn check(
+        &mut self,
+        head: &str,
+        op: &Op,
+        dir: Option<PathBuf>,
+        root: Option<PathBuf>,
+    ) -> Result<String, Refusal>;
+}
+
+/// [`crate::validate`], in the caller's thread.
+pub struct Direct;
+
+impl Check for Direct {
+    fn check(
+        &mut self,
+        head: &str,
+        op: &Op,
+        dir: Option<PathBuf>,
+        root: Option<PathBuf>,
+    ) -> Result<String, Refusal> {
+        crate::validate(head, op, dir, root)
+    }
+}
+
+/// What one document may grow to.
+#[derive(Clone, Copy, Debug)]
+pub struct Limits {
+    /// The head text's bytes (below the wire's `MAX_MESSAGE`, so a snapshot always fits).
+    pub max_text: usize,
+    /// Entries in the log (phase 1 keeps the whole log; compaction with snapshots is phase 2).
+    pub max_log: usize,
+}
+
+impl Default for Limits {
+    fn default() -> Limits {
+        Limits {
+            max_text: 4 << 20,
+            max_log: 200_000,
+        }
+    }
+}
 
 /// An op the sequencer committed: the host acks its author and broadcasts it to the others.
 #[derive(Clone, Debug, PartialEq)]
@@ -18,19 +64,17 @@ pub struct Commit {
 pub struct Sequencer {
     pub doc: String,
     /// The folder the document's sibling files are read from while validating (a `part(FILE)`).
-    pub dir: Option<std::path::PathBuf>,
+    pub dir: Option<PathBuf>,
+    /// The project's folder: validation reads no file outside it.
+    pub root: Option<PathBuf>,
+    pub limits: Limits,
+    pub checker: Box<dyn Check + Send>,
     first: String,
     head: String,
     log: Vec<Entry>,
     /// (client, op id) → seq, for idempotent retries.
     seen: HashMap<(String, u64), u64>,
-    /// The first build hash reported at each seq, and by whom (bounded: the latest
-    /// `HASHES_KEPT` seqs).
-    hashes: BTreeMap<u64, (u64, String)>,
 }
-
-/// How many seqs' build hashes are kept for comparison.
-pub const HASHES_KEPT: usize = 4096;
 
 impl Sequencer {
     /// Opens a document from its store, creating it with `text` if it does not exist.
@@ -75,7 +119,9 @@ impl Sequencer {
             head,
             log,
             seen,
-            hashes: BTreeMap::new(),
+            root: None,
+            limits: Limits::default(),
+            checker: Box::new(Direct),
         })
     }
 
@@ -130,13 +176,26 @@ impl Sequencer {
         if span_op(&op) && !since.is_empty() {
             return Err(Refusal::StaleSpan);
         }
-        let (text, _) =
-            forge_lang::edit::apply_checked_in(&self.head, &op, self.dir.clone()).map_err(|e| {
-                Refusal::Lang {
-                    kind: e.kind().into(),
-                    text: e.text(),
-                }
-            })?;
+        if self.log.len() >= self.limits.max_log {
+            return Err(Refusal::Invalid {
+                why: format!(
+                    "this document's log is full ({} ops): it needs compaction (phase 2)",
+                    self.limits.max_log
+                ),
+            });
+        }
+        let text = self
+            .checker
+            .check(&self.head, &op, self.dir.clone(), self.root.clone())?;
+        if text.len() > self.limits.max_text {
+            return Err(Refusal::Invalid {
+                why: format!(
+                    "the document would be {} bytes (at most {})",
+                    text.len(),
+                    self.limits.max_text
+                ),
+            });
+        }
         let inv = inverse(&self.head, &op, &text);
         let entry = Entry {
             seq: head + 1,
@@ -158,24 +217,5 @@ impl Sequencer {
             entry,
             duplicate: false,
         })
-    }
-
-    /// A client's build hash at `seq`: None if it agrees with the first one reported there (or
-    /// is the first), else (the first hash, who reported it).
-    pub fn report_hash(&mut self, client: &str, seq: u64, hash: u64) -> Option<(u64, String)> {
-        if seq > self.seq() {
-            return None;
-        }
-        match self.hashes.get(&seq) {
-            Some((h, by)) if *h != hash => Some((*h, by.clone())),
-            Some(_) => None,
-            None => {
-                self.hashes.insert(seq, (hash, client.into()));
-                while self.hashes.len() > HASHES_KEPT {
-                    self.hashes.pop_first();
-                }
-                None
-            }
-        }
     }
 }

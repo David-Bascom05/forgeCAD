@@ -120,6 +120,8 @@ pub fn accept(
             max,
             part: vec![],
             started: false,
+            fragments: 0,
+            frames: 0,
         },
         Writer {
             w,
@@ -194,6 +196,8 @@ pub fn connect(
             max,
             part: vec![],
             started: false,
+            fragments: 0,
+            frames: 0,
         },
         Writer {
             w,
@@ -380,6 +384,10 @@ pub struct Reader {
     /// A fragmented message so far (a ping may come between its fragments).
     part: Vec<u8>,
     started: bool,
+    /// Fragments of the message being read.
+    fragments: usize,
+    /// Every frame read so far (control frames too): what a rate limit counts.
+    pub frames: u64,
 }
 
 fn bad(why: &str) -> io::Error {
@@ -414,13 +422,25 @@ impl Reader {
                 let mut b = [0u8; 8];
                 self.r.read_exact(&mut b)?;
                 len = u64::from_be_bytes(b);
+                // RFC 6455 §5.2: the most significant bit must be 0
+                if len >> 63 != 0 {
+                    return Err(bad("a 64-bit length with its top bit set"));
+                }
             }
             let control = op & 0x8 != 0;
             if control && (len > 125 || !fin) {
                 return Err(bad("a control frame over 125 bytes or fragmented"));
             }
-            if !control && self.part.len() as u64 + len > self.max as u64 {
+            // no addition that can overflow: the room left under the limit, compared
+            if !control && len > (self.max.saturating_sub(self.part.len())) as u64 {
                 return Err(bad("a message over the limit"));
+            }
+            self.frames += 1;
+            if !control {
+                self.fragments += 1;
+                if self.fragments > MAX_FRAGMENTS {
+                    return Err(bad("a message in too many fragments"));
+                }
             }
             let mut key = [0u8; 4];
             if masked {
@@ -446,6 +466,7 @@ impl Reader {
                     self.part.extend_from_slice(&data);
                     if fin {
                         self.started = false;
+                        self.fragments = 0;
                         let m = std::mem::take(&mut self.part);
                         return String::from_utf8(m)
                             .map(Msg::Text)
@@ -459,7 +480,14 @@ impl Reader {
     pub fn stream(&self) -> &TcpStream {
         self.r.get_ref()
     }
+    /// A new limit on a message's size (small before a peer has authenticated, larger after).
+    pub fn set_max(&mut self, max: usize) {
+        self.max = max;
+    }
 }
+
+/// The most fragments one message may come in (empty continuations are frames too).
+pub const MAX_FRAGMENTS: usize = 64;
 
 #[cfg(test)]
 mod tests {
@@ -512,6 +540,133 @@ mod tests {
         // over the server's limit: it drops the connection
         w.send(&"z".repeat(2000)).unwrap();
         assert!(t.join().unwrap().contains("over the limit"));
+    }
+
+    /// A raw client: the upgrade by hand, then whatever bytes a test wants to send.
+    fn raw(at: &str) -> TcpStream {
+        let mut s = TcpStream::connect(at).unwrap();
+        write!(
+            s,
+            "GET /sync HTTP/1.1\r\nHost: {at}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\
+             Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
+        )
+        .unwrap();
+        let mut r = BufReader::new(s.try_clone().unwrap());
+        assert!(read_head(&mut r).unwrap().starts_with("HTTP/1.1 101"));
+        s
+    }
+
+    /// A server that reads one message (limit `max`) and reports what the read gave.
+    fn server(max: usize) -> (String, std::thread::JoinHandle<String>) {
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let at = l.local_addr().unwrap().to_string();
+        let t = std::thread::spawn(move || {
+            let (s, _) = l.accept().unwrap();
+            let (mut r, _w, _) = accept(s, max, |_| Ok(())).unwrap();
+            let mut out = vec![];
+            loop {
+                match r.read() {
+                    Ok(Msg::Text(t)) => out.push(format!("text {}", t.len())),
+                    Ok(Msg::Ping(_)) => out.push("ping".into()),
+                    Ok(Msg::Close) => {
+                        out.push("close".into());
+                        break;
+                    }
+                    Err(e) => {
+                        out.push(format!("err {e}"));
+                        break;
+                    }
+                }
+            }
+            out.join(", ")
+        });
+        (at, t)
+    }
+
+    fn masked(fin: bool, op: u8, len_bytes: &[u8], payload: &[u8]) -> Vec<u8> {
+        let mut f = vec![if fin { 0x80 } else { 0 } | op];
+        f.extend_from_slice(len_bytes);
+        f[1] |= 0x80;
+        let k = [1, 2, 3, 4];
+        f.extend_from_slice(&k);
+        f.extend(payload.iter().enumerate().map(|(i, b)| b ^ k[i & 3]));
+        f
+    }
+
+    #[test]
+    fn hostile_lengths_are_refused_not_panics() {
+        // the security review's PoC: a fragment, then a continuation claiming u64::MAX bytes
+        let (at, t) = server(1000);
+        let mut s = raw(&at);
+        s.write_all(&masked(false, 0x1, &[3], b"abc")).unwrap();
+        let mut len = vec![127];
+        len.extend_from_slice(&u64::MAX.to_be_bytes());
+        s.write_all(&masked(true, 0x0, &len, b"")).unwrap();
+        let got = t.join().unwrap();
+        assert!(got.contains("top bit"), "{got}");
+        // the largest length without the top bit, after a fragment: over the limit, no overflow
+        let (at, t) = server(1000);
+        let mut s = raw(&at);
+        s.write_all(&masked(false, 0x1, &[3], b"abc")).unwrap();
+        let mut len = vec![127];
+        len.extend_from_slice(&(u64::MAX >> 1).to_be_bytes());
+        s.write_all(&masked(true, 0x0, &len, b"")).unwrap();
+        assert!(t.join().unwrap().contains("over the limit"));
+    }
+
+    #[test]
+    fn framing_rules() {
+        let cases: Vec<(Vec<u8>, &str)> = vec![
+            // fragments joined, a ping between them answered and the message kept
+            (
+                [
+                    masked(false, 0x1, &[2], b"ab"),
+                    masked(true, 0x9, &[1], b"p"),
+                    masked(true, 0x0, &[2], b"cd"),
+                ]
+                .concat(),
+                "ping, text 4",
+            ),
+            // an unmasked client frame
+            (vec![0x81, 0x01, b'x'], "unmasked"),
+            // reserved bits
+            (masked(true, 0x1 | 0x40, &[1], b"x"), "reserved"),
+            // a control frame over 125 bytes, and a fragmented one
+            (masked(true, 0x9, &[126, 0, 126], &[0; 126]), "control"),
+            (masked(false, 0x9, &[1], b"x"), "control"),
+            // a continuation with nothing to continue; a new message inside a fragmented one
+            (masked(true, 0x0, &[1], b"x"), "continuation"),
+            (
+                [masked(false, 0x1, &[1], b"a"), masked(true, 0x1, &[1], b"b")].concat(),
+                "inside",
+            ),
+            // too many (empty) fragments
+            (
+                std::iter::once(masked(false, 0x1, &[0], b""))
+                    .chain(std::iter::repeat_n(masked(false, 0x0, &[0], b""), 80))
+                    .flatten()
+                    .collect(),
+                "too many fragments",
+            ),
+            // not UTF-8; an unknown opcode; the close handshake
+            (masked(true, 0x1, &[2], &[0xff, 0xfe]), "UTF-8"),
+            (masked(true, 0x3, &[1], b"x"), "unknown opcode"),
+            (masked(true, 0x8, &[2], &1000u16.to_be_bytes()), "close"),
+            // oversize in one frame
+            (
+                masked(true, 0x1, &[126, 0x04, 0x00], &[b'a'; 1024]),
+                "over the limit",
+            ),
+        ];
+        for (bytes, want) in cases {
+            let (at, t) = server(1000);
+            let mut s = raw(&at);
+            s.write_all(&bytes).unwrap();
+            // then EOF: a read that wants more ends rather than waits
+            s.shutdown(std::net::Shutdown::Write).unwrap();
+            let got = t.join().unwrap();
+            assert!(got.contains(want), "want {want}: {got}");
+        }
     }
 
     #[test]

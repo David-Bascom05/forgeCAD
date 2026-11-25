@@ -17,15 +17,11 @@ fn sig(author: &str) -> Sig {
     }
 }
 
-/// Writes `text` to the document's file (whole: a fresh temporary file renamed over it).
+/// Writes `text` to the document's file, which must still be the document's one canonical
+/// file (checked again now: the folder may have changed since the document opened), whole.
 fn write_doc(root: &Path, doc: &str, text: &str) -> Result<std::path::PathBuf, String> {
-    let path = root.join(doc);
-    let tmp = path.with_extension(format!("fg.{}.tmp", std::process::id()));
-    std::fs::write(&tmp, text).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, &path).map_err(|e| {
-        let _ = std::fs::remove_file(&tmp);
-        e.to_string()
-    })?;
+    let path = crate::fsx::canonical_doc(root, doc).map_err(str::to_string)?;
+    crate::fsx::put(&path, text.as_bytes()).map_err(|e| e.to_string())?;
     Ok(path)
 }
 

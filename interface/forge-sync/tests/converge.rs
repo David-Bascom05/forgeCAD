@@ -384,3 +384,29 @@ fn reconnect_replays_and_dedups() {
     assert_eq!(sim.clients[0].text(), head);
     assert_eq!(sim.clients[1].text(), head);
 }
+
+#[test]
+fn a_document_cannot_grow_past_its_limits() {
+    let mut store = MemStore::default();
+    let mut seq = Sequencer::open(&mut store, "part.fg", DOC, None).unwrap();
+    seq.limits = forge_sync::Limits {
+        max_text: DOC.len() + 60,
+        max_log: 2,
+    };
+    let add = |k: usize| Op::AddFeature {
+        before: None,
+        text: format!("shared big_{k} = {}", "1".repeat(30)),
+    };
+    assert!(seq.submit(&mut store, "a", "a/c", 0, 1, &add(1)).is_ok());
+    match seq.submit(&mut store, "a", "a/c", 1, 2, &add(2)) {
+        Err(forge_sync::Refusal::Invalid { why }) => assert!(why.contains("bytes"), "{why}"),
+        x => panic!("{x:?}"),
+    }
+    seq.limits.max_text = 1 << 20;
+    assert!(seq.submit(&mut store, "a", "a/c", 1, 3, &add(3)).is_ok());
+    match seq.submit(&mut store, "a", "a/c", 2, 4, &add(4)) {
+        Err(forge_sync::Refusal::Invalid { why }) => assert!(why.contains("log is full"), "{why}"),
+        x => panic!("{x:?}"),
+    }
+    assert_eq!(seq.seq(), 2, "nothing refused was written");
+}

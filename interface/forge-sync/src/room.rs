@@ -9,6 +9,9 @@ use crate::sequencer::Sequencer;
 use crate::wire::{Down, Up};
 use crate::{Refusal, Store};
 
+/// The most entries a joining client is sent one by one; further behind, it gets a snapshot.
+pub const CATCH_UP: u64 = 1024;
+
 /// A connection, by the host's number for it.
 pub type Conn = u64;
 
@@ -32,13 +35,14 @@ pub enum Action {
         author: String,
         conn: Conn,
     },
-    /// A divergence to log (platform, document, seq): never silent.
-    Diverged {
+    /// A client's build hash at `seq`, for the host to check against its own build of the text
+    /// at `seq` (never against another client's word: one client could fake a divergence for
+    /// everyone).
+    CheckHash {
         seq: u64,
-        expected: u64,
-        got: u64,
-        by: String,
-        first: String,
+        hash: u64,
+        author: String,
+        conn: Conn,
     },
 }
 
@@ -62,7 +66,8 @@ impl Room {
         });
         let you = author.to_string();
         let head = self.seq.seq();
-        let Some(seq) = seq.filter(|&s| s <= head) else {
+        // far behind: a snapshot, not a catch-up that could overflow the connection's queue
+        let Some(seq) = seq.filter(|&s| s <= head && head - s <= CATCH_UP) else {
             return vec![(
                 conn,
                 Down::Welcome {
@@ -127,26 +132,20 @@ impl Room {
                 }
                 Err(refusal) => (vec![(conn, Down::Refused { id, refusal })], vec![]),
             },
-            Up::BuildHash { seq, hash } => match self.seq.report_hash(&client, seq, hash) {
-                None => (vec![], vec![]),
-                Some((expected, first)) => {
-                    let d = Down::Diverged {
-                        seq,
-                        expected,
-                        got: hash,
-                        by: client.clone(),
-                    };
-                    let out = self.members.iter().map(|m| (m.conn, d.clone())).collect();
-                    let a = Action::Diverged {
-                        seq,
-                        expected,
-                        got: hash,
-                        by: client,
-                        first,
-                    };
-                    (out, vec![a])
+            Up::BuildHash { seq, hash } => {
+                if seq == 0 || seq > self.seq.seq() {
+                    return (vec![], vec![]);
                 }
-            },
+                (
+                    vec![],
+                    vec![Action::CheckHash {
+                        seq,
+                        hash,
+                        author,
+                        conn,
+                    }],
+                )
+            }
             Up::Version { name } => {
                 if !name
                     .chars()

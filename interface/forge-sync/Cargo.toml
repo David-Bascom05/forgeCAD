@@ -12,6 +12,7 @@ repository.workspace = true
 forge-lang = { path = "../forge-lang" }
 forge-agent = { path = "../forge-agent" }
 forge-math = { path = "../../kernel/forge-math" }
+forge-topo = { path = "../../kernel/forge-topo" }
 
 [lints]
 workspace = true

@@ -593,6 +593,7 @@ dependencies = [
 name = "forge-remote"
 version = "0.1.0"
 dependencies = [
+ "forge-dirs",
  "forge-lang",
  "forge-sync",
  "forge-ws",
@@ -669,6 +670,7 @@ dependencies = [
  "forge-agent",
  "forge-lang",
  "forge-math",
+ "forge-topo",
 ]
 
 [[package]]

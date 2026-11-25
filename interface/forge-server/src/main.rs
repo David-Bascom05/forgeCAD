@@ -1,15 +1,16 @@
 //! `forge-server DIR [--port P] [--bind ADDR] [--token T] [--user NAME:TOKEN]... [--store file|mem]
-//!  [--origin URL]... [--checkpoint SECONDS]`
+//!  [--origin URL]... [--checkpoint SECONDS] [--insecure-lan]`
 //!
 //! Serves the project folder DIR to collaborating clients at `ws://HOST:P/sync`. Phase 1: dev
 //! tokens only (each `--user` is an author name and its token; `--token T` is the user `dev`; with
-//! none, a token is made and printed). Binds 127.0.0.1 unless `--bind` says otherwise.
+//! none, a token is made and printed). Binds 127.0.0.1; another address only with
+//! `--insecure-lan` (phase 1 has no TLS: the token and every op would cross the network in clear).
 
 use forge_server::{Config, StoreKind, random_token, start};
 use std::process::ExitCode;
 
 const USAGE: &str = "forge-server DIR [--port P] [--bind ADDR] [--token T] [--user NAME:TOKEN]... \
-                     [--store file|mem] [--origin URL]... [--checkpoint SECONDS]";
+                     [--store file|mem] [--origin URL]... [--checkpoint SECONDS] [--insecure-lan]";
 
 fn parse(args: &[String]) -> Result<Config, String> {
     let mut it = args.iter();
@@ -37,6 +38,8 @@ fn parse(args: &[String]) -> Result<Config, String> {
                 }
             }
             "--origin" => c.origins.push(val()?),
+            // phase 1 has no TLS: off loopback the token and every op cross the network in clear
+            "--insecure-lan" => c.insecure_lan = true,
             "--checkpoint" => {
                 c.checkpoint_idle =
                     std::time::Duration::from_secs(val()?.parse().map_err(|_| "--checkpoint: seconds")?)

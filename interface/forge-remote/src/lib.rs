@@ -16,17 +16,23 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-/// `.forgecad/remote.toml`: where the project is served.
+/// Where a project is served, from the **user's** configuration (never the project's: a cloned
+/// repository must not be able to send this machine's tokens anywhere).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Remote {
-    /// `ws://HOST:PORT/sync` (phase 1: no TLS, so loopback or a LAN).
+    /// The remote's name, as the project's `.forgecad/remote.toml` names it.
+    pub name: String,
+    /// `ws://HOST:PORT/PATH`: a loopback host, unless the user's entry says `insecure_lan`
+    /// (phase 1 has no TLS: a token sent elsewhere would cross the network in clear).
     pub url: String,
-    /// The dev token (phase 1), or read from the environment variable `token_env` names.
+    /// The dev token (phase 1): the user's file holds it, or a `FORGECAD_*` variable it names.
     pub token: String,
 }
 
-/// The project's remote, if it is SERVED: None for a LOCAL project (no file), Err for a file
-/// that is there but unreadable or wrong (the app says so rather than silently going LOCAL).
+/// The project's remote, if it is SERVED: None for a LOCAL project (no `.forgecad/remote.toml`),
+/// Err for one that is there but cannot be used (said, never silently LOCAL). The project file
+/// may say only `remote = "NAME"`; NAME must be a remote the user configured in
+/// `<config>/forgecad/remotes.toml` (that entry is the user's trust in it).
 pub fn remote(project: &Path) -> Option<Result<Remote, String>> {
     let p = project.join(".forgecad").join("remote.toml");
     let text = match std::fs::read_to_string(&p) {
@@ -34,37 +40,102 @@ pub fn remote(project: &Path) -> Option<Result<Remote, String>> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
         Err(e) => return Some(Err(format!("{}: {e}", p.display()))),
     };
-    Some(parse_remote(&text).map_err(|e| format!("{}: {e}", p.display())))
+    let user = forge_dirs::config().map(|d| d.join("forgecad").join("remotes.toml"));
+    let user_text = user
+        .as_ref()
+        .and_then(|u| std::fs::read_to_string(u).ok())
+        .unwrap_or_default();
+    Some(resolve(&text, &user_text).map_err(|e| format!("{}: {e}", p.display())))
 }
 
-/// The few `key = "value"` lines remote.toml holds (comments and blank lines skipped).
-pub fn parse_remote(text: &str) -> Result<Remote, String> {
-    let mut get = std::collections::HashMap::new();
+/// `key = "value"` lines, grouped by `[section]` (the few TOML forms these files use).
+type Sections = Vec<(String, std::collections::HashMap<String, String>)>;
+
+fn sections(text: &str) -> Result<Sections, String> {
+    let mut out = vec![(String::new(), std::collections::HashMap::new())];
     for (k, line) in text.lines().enumerate() {
         let l = line.trim();
-        if l.is_empty() || l.starts_with('#') || l.starts_with('[') {
+        if l.is_empty() || l.starts_with('#') {
+            continue;
+        }
+        if let Some(h) = l.strip_prefix('[').and_then(|x| x.strip_suffix(']')) {
+            out.push((h.trim().to_string(), Default::default()));
             continue;
         }
         let (key, v) = l
             .split_once('=')
             .ok_or(format!("line {}: key = \"value\"", k + 1))?;
         let v = v.trim();
-        let v = v
-            .strip_prefix('"')
-            .and_then(|x| x.strip_suffix('"'))
-            .ok_or(format!("line {}: a quoted value", k + 1))?;
-        get.insert(key.trim().to_string(), v.to_string());
+        let v = match v {
+            "true" | "false" => v,
+            _ => v
+                .strip_prefix('"')
+                .and_then(|x| x.strip_suffix('"'))
+                .ok_or(format!("line {}: a quoted value", k + 1))?,
+        };
+        out.last_mut()
+            .expect("one")
+            .1
+            .insert(key.trim().to_string(), v.to_string());
     }
-    let url = get.remove("url").ok_or("no url")?;
-    if !url.starts_with("ws://") {
-        return Err(format!("url {url}: ws://HOST:PORT/PATH"));
+    Ok(out)
+}
+
+/// The project's `remote.toml` resolved against the user's `remotes.toml`.
+pub fn resolve(project: &str, user: &str) -> Result<Remote, String> {
+    let proj = sections(project)?;
+    let top = &proj[0].1;
+    if proj.len() > 1 || top.keys().any(|k| k != "remote") {
+        return Err(
+            "a project's remote.toml names a remote and nothing else: remote = \"NAME\" \
+                    (its address and token are the user's, in remotes.toml)"
+                .into(),
+        );
     }
-    let token = match (get.remove("token"), get.remove("token_env")) {
-        (Some(t), _) => t,
-        (None, Some(var)) => std::env::var(&var).map_err(|_| format!("token_env {var} is not set"))?,
-        (None, None) => return Err("no token (token = \"..\" or token_env = \"VAR\")".into()),
+    let name = top.get("remote").ok_or("no remote = \"NAME\"")?.clone();
+    let users = sections(user)?;
+    let want = format!("remote.{name}");
+    let e = users
+        .iter()
+        .find(|(h, _)| *h == want)
+        .map(|x| &x.1)
+        .ok_or(format!(
+            "this project is served by the remote {name:?}, which is not in your remotes.toml: \
+         add [remote.{name}] with its url and token if you trust it"
+        ))?;
+    let url = e.get("url").ok_or(format!("[remote.{name}]: no url"))?.clone();
+    let (host, _) = split_url(&url)?;
+    let insecure = e.get("insecure_lan").is_some_and(|v| v == "true");
+    let bare = host
+        .rsplit_once(':')
+        .map_or(host.as_str(), |x| x.0)
+        .trim_start_matches('[')
+        .trim_end_matches(']');
+    let loopback = bare.eq_ignore_ascii_case("localhost")
+        || bare.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback());
+    if !loopback && !insecure {
+        return Err(format!(
+            "[remote.{name}]: {host} is not this machine, and phase 1 has no TLS: the token would cross the network \
+             in clear (insecure_lan = true to send it anyway)"
+        ));
+    }
+    let token = match (e.get("token"), e.get("token_env")) {
+        (Some(t), _) => t.clone(),
+        (None, Some(var)) if var.starts_with("FORGECAD_") => {
+            std::env::var(var).map_err(|_| format!("[remote.{name}]: {var} is not set"))?
+        }
+        (None, Some(var)) => {
+            return Err(format!(
+                "[remote.{name}]: token_env must name a FORGECAD_ variable, not {var}"
+            ));
+        }
+        (None, None) => {
+            return Err(format!(
+                "[remote.{name}]: no token (token = \"..\" or token_env = \"FORGECAD_..\")"
+            ));
+        }
     };
-    Ok(Remote { url, token })
+    Ok(Remote { name, url, token })
 }
 
 /// (host:port, /path) of a ws:// URL.
@@ -147,6 +218,21 @@ impl Session {
         std::thread::Builder::new()
             .name(format!("forge-remote {doc}"))
             .spawn(move || run(&addr, &path, &s2, &stop2, waker))
+            .map_err(|e| e.to_string())?;
+        // the pinger: a quiet client pings by the clock, never from inside a read
+        let (s3, stop3) = (shared.clone(), stop.clone());
+        std::thread::Builder::new()
+            .name(format!("forge-remote ping {doc}"))
+            .spawn(move || {
+                while !stop3.load(Ordering::SeqCst) {
+                    std::thread::sleep(Duration::from_millis(500));
+                    let mut s = s3.lock().unwrap_or_else(|e| e.into_inner());
+                    if s.connected && s.last_sent.elapsed() >= PING {
+                        s.client.outbox.push(Up::Ping { t: 0.0 });
+                        s.flush();
+                    }
+                }
+            })
             .map_err(|e| e.to_string())?;
         Ok(Session {
             shared,
@@ -252,7 +338,9 @@ fn run(addr: &str, path: &str, shared: &Mutex<Shared>, stop: &AtomicBool, waker:
             continue;
         };
         backoff = Duration::from_millis(50);
-        let _ = r.stream().set_read_timeout(Some(PING));
+        // no read timeout: a timeout in the middle of a frame would leave the framing out of
+        // step (the security review's finding); quiet links are kept alive by the pinger thread,
+        // and a dead one ends in a reset or in the server's idle close
         {
             let mut s = lock();
             s.writer = Some(w);
@@ -281,9 +369,6 @@ fn run(addr: &str, path: &str, shared: &Mutex<Shared>, stop: &AtomicBool, waker:
                     }
                     let closed = ev.iter().any(|e| matches!(e, Event::Closed(_)));
                     s.events.extend(ev);
-                    if s.last_sent.elapsed() >= PING {
-                        s.client.outbox.push(Up::Ping { t: 0.0 });
-                    }
                     s.flush();
                     drop(s);
                     wake();
@@ -294,20 +379,6 @@ fn run(addr: &str, path: &str, shared: &Mutex<Shared>, stop: &AtomicBool, waker:
                 Ok(forge_ws::Msg::Ping(p)) => {
                     if let Some(w) = &mut lock().writer {
                         let _ = w.pong(&p);
-                    }
-                }
-                // a quiet link: ping (the server closes connections idle past its limit)
-                Err(e)
-                    if matches!(
-                        e.kind(),
-                        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
-                    ) =>
-                {
-                    let mut s = lock();
-                    s.client.outbox.push(Up::Ping { t: 0.0 });
-                    s.flush();
-                    if !s.connected {
-                        break;
                     }
                 }
                 Ok(forge_ws::Msg::Close) | Err(_) => break,
@@ -329,14 +400,34 @@ mod tests {
 
     #[test]
     fn remote_toml() {
-        let r = parse_remote("# served\nurl = \"ws://127.0.0.1:7878/sync\"\ntoken = \"abc\"\n").unwrap();
-        assert_eq!(r.url, "ws://127.0.0.1:7878/sync");
+        let user = "[remote.lab]\nurl = \"ws://127.0.0.1:7878/sync\"\ntoken = \"abc\"\n\
+                    [remote.far]\nurl = \"ws://10.0.0.9:7878/sync\"\ntoken = \"abc\"\n\
+                    [remote.envy]\nurl = \"ws://localhost:7878/sync\"\ntoken_env = \"GITHUB_TOKEN\"\n";
+        let r = resolve("remote = \"lab\"\n", user).unwrap();
+        assert_eq!(
+            (r.url.as_str(), r.token.as_str()),
+            ("ws://127.0.0.1:7878/sync", "abc")
+        );
         assert_eq!(
             split_url(&r.url).unwrap(),
             ("127.0.0.1:7878".into(), "/sync".into())
         );
-        assert!(parse_remote("url = \"http://x\"\ntoken = \"a\"").is_err());
-        assert!(parse_remote("url = \"ws://x/sync\"").is_err());
+        // the security review's case: the project cannot choose the address or the token
+        for (proj, why) in [
+            (
+                "url = \"ws://evil.example/sync\"\ntoken_env = \"AWS_SECRET\"\n",
+                "nothing else",
+            ),
+            ("remote = \"lab\"\ntoken = \"x\"\n", "nothing else"),
+            ("remote = \"unknown\"\n", "not in your remotes.toml"),
+            ("remote = \"far\"\n", "not this machine"),
+            ("remote = \"envy\"\n", "FORGECAD_"),
+        ] {
+            let e = resolve(proj, user).unwrap_err();
+            assert!(e.contains(why), "{proj}: {e}");
+        }
+        let lan = user.replace("[remote.far]\n", "[remote.far]\ninsecure_lan = true\n");
+        assert!(resolve("remote = \"far\"\n", &lan).is_ok());
         let d = std::env::temp_dir().join(format!("forge-remote-{}", std::process::id()));
         std::fs::create_dir_all(&d).unwrap();
         assert!(remote(&d).is_none(), "no file: LOCAL");
