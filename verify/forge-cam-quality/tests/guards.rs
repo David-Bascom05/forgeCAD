@@ -9,6 +9,13 @@
 //! - no micro-moves: every adaptive op's mean move (all its moves, links and rapids too) is at
 //!   least the tool's radius and at least the mean move of clear on the same part (adaptive was
 //!   once posted as its 0.75 mm simulation steps: 5,348 blocks where clear has 1,171).
+//! - the engagement cap: an adaptive op's level cutting (its moves at one height; entries, which
+//!   change height, cut a full slot by design) engages the tool no more than its `engagement:`
+//!   cap (60° when not given) plus 5° (the measure's rounding). The ops that break it today are
+//!   listed (`CAP_KNOWN`) with their length over the cap and why: another op over its cap fails,
+//!   as does a listed one got worse; a fix takes its entry off. (Main posted full slotting under
+//!   a 40° cap, unreported, until forge-cam-lang's own warning and this guard.) Measured on the
+//!   chip-load guard's own run, so it costs no measure of its own.
 use forge_cam_quality::{Config, JobQ, measure};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -24,6 +31,97 @@ const UNEQUAL: &[(&str, &str)] = &[
         "closed pockets: clear clears them, adaptive does not take region \"pockets\"",
     ),
 ];
+
+/// Why every listed adaptive op breaks its cap today (2026-11-25, main 50af9c42): the end-of-level
+/// cleanup rings (plain offsets half a diameter apart: 90° by construction) and passes that stall
+/// against a stock corner, leaving their material to the rings. Owners: the pass start, CAM-CORE;
+/// the rings (engagement-limited), TOOLPATH-QUALITY.
+const CAP_WHY: &str =
+    "rings at half a diameter and stalled passes (CAM-CORE pass start; TOOLPATH-QUALITY rings)";
+
+/// (part, op, mm of level cutting over the cap when listed, why). Each comes off with its fix.
+/// Lengths along each move as the measure walks it (a ring posted as one whole-circle arc counts
+/// its whole circumference; deep_islands and rptu4 were first listed from the shorter way round).
+const CAP_KNOWN: &[(&str, &str, f64, &str)] = &[
+    ("boss_adaptive_cam", "rough", 662.0, CAP_WHY),
+    ("deep_boss_n_adaptive_cam", "rough", 893.0, CAP_WHY),
+    ("deep_boss_n_zigzag_cam", "rough", 799.0, CAP_WHY),
+    ("deep_boss_p_adaptive_cam", "rough", 893.0, CAP_WHY),
+    ("deep_boss_p_zigzag_cam", "rough", 799.0, CAP_WHY),
+    ("deep_islands_p_adaptive_cam", "rough", 538.0, CAP_WHY),
+    ("deep_islands_p_zigzag_cam", "rough", 478.0, CAP_WHY),
+    ("deep_open_slot_p_adaptive_cam", "rough", 408.0, CAP_WHY),
+    ("deep_open_slot_p_zigzag_cam", "rough", 328.0, CAP_WHY),
+    ("rptu3_adaptive_cam", "step", 440.0, CAP_WHY),
+    ("rptu3_zigzag_cam", "step", 441.0, CAP_WHY),
+    ("rptu4_adaptive_cam", "step", 772.0, CAP_WHY),
+    ("rptu4_zigzag_cam", "step", 744.0, CAP_WHY),
+    ("rptu5_adaptive_cam", "step", 617.0, CAP_WHY),
+    ("rptu5_zigzag_cam", "step", 636.0, CAP_WHY),
+    ("rptu6_adaptive_cam", "step", 440.0, CAP_WHY),
+    ("rptu6_zigzag_cam", "step", 441.0, CAP_WHY),
+];
+
+/// Each adaptive op of a document and its cap: `NAME = adaptive(.., engagement: N, ..)`.
+fn adaptive_caps(src: &str) -> Vec<(String, f64)> {
+    let mut out = Vec::new();
+    for line in src.lines() {
+        let Some((name, rest)) = line.split_once('=') else {
+            continue;
+        };
+        let rest = rest.trim_start();
+        if !rest.starts_with("adaptive(") {
+            continue;
+        }
+        let cap = rest
+            .split("engagement:")
+            .nth(1)
+            .and_then(|t| {
+                t.trim_start()
+                    .split(|c: char| !(c.is_ascii_digit() || c == '.'))
+                    .next()
+                    .and_then(|n| n.parse::<f64>().ok())
+            })
+            .unwrap_or(60.0);
+        out.push((name.trim().to_string(), cap));
+    }
+    out
+}
+
+/// The engagement-cap guard over measured jobs: what fails it (an unlisted op over its cap, or a
+/// listed one worse than its figure), and every op's figure.
+fn cap_violations(jobs: &[JobQ]) -> (Vec<String>, Vec<String>) {
+    let (mut bad, mut table) = (Vec::new(), Vec::new());
+    for j in jobs {
+        let part = PathBuf::from(&j.file)
+            .file_stem()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let src = std::fs::read_to_string(&j.file).unwrap();
+        for (op, cap) in adaptive_caps(&src) {
+            let over: f64 = j
+                .ops
+                .iter()
+                .filter(|q| q.name == op)
+                .flat_map(|q| q.moves_q.iter())
+                .filter(|m| m.level && m.phi > cap + 5.0)
+                .map(|m| m.len_xy)
+                .sum();
+            table.push(format!("{part}/{op} cap {cap}°: {over:.0} mm over"));
+            match CAP_KNOWN.iter().find(|k| k.0 == part && k.1 == op) {
+                None if over > 0.5 => bad.push(format!(
+                    "{part}/{op}: {over:.0} mm of level cutting over its {cap}° cap (not a known violation)"
+                )),
+                Some(&(_, _, was, why)) if over > was * 1.02 + 1.0 => bad.push(format!(
+                    "{part}/{op}: {over:.0} mm over its {cap}° cap, worse than the {was:.0} mm listed ({why})"
+                )),
+                _ => {}
+            }
+        }
+    }
+    (bad, table)
+}
 
 fn files() -> Vec<PathBuf> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("parts");
@@ -61,6 +159,8 @@ fn measure_all() -> Vec<JobQ> {
 #[test]
 fn chip_load_and_equal_work() {
     let jobs = measure_all();
+    // the engagement cap, on the same measure (asserted last, so the others still report)
+    let (cap_bad, cap_table) = cap_violations(&jobs);
     let mut over = Vec::new();
     // (part, strategy) -> removed, for the parts named NAME_STRATEGY_cam
     let mut work: BTreeMap<String, Vec<(String, f64)>> = BTreeMap::new();
@@ -136,6 +236,12 @@ fn chip_load_and_equal_work() {
         micro.is_empty(),
         "adaptive posts short moves:\n{}",
         micro.join("\n")
+    );
+    assert!(
+        cap_bad.is_empty(),
+        "adaptive over its engagement cap:\n{}\n\nall:\n{}",
+        cap_bad.join("\n"),
+        cap_table.join("\n")
     );
 }
 
