@@ -394,9 +394,30 @@ pub fn section(body: &Body, plane: &Frame) -> Result<Vec<Loop>, String> {
         });
         node.insert(k, i);
     }
+    // a piece shorter than the model's tolerance is a point: its ends, one point refined two
+    // ways (onto an edge and onto a face, apart by up to the edge's tolerance), are one node.
+    // Kept apart, the piece between them could run backwards and break the loop (VF-5/40
+    // #532896: 7.6e-6 long, five open loops)
+    let mut root: Vec<u32> = (0..nodes.len() as u32).collect();
+    fn find(root: &mut [u32], mut i: u32) -> u32 {
+        while root[i as usize] != i {
+            root[i as usize] = root[root[i as usize] as usize];
+            i = root[i as usize];
+        }
+        i
+    }
+    for (a, b, _) in &segs {
+        let (x, y) = (node[a], node[b]);
+        if x != y && nodes[x as usize].distance(nodes[y as usize]) < forge_math::tol::LINEAR {
+            let (rx, ry) = (find(&mut root, x), find(&mut root, y));
+            if rx != ry {
+                root[rx.max(ry) as usize] = rx.min(ry);
+            }
+        }
+    }
     let segs: Vec<(u32, u32, FaceId)> = segs
         .into_iter()
-        .map(|(a, b, f)| (node[&a], node[&b], f))
+        .map(|(a, b, f)| (find(&mut root, node[&a]), find(&mut root, node[&b]), f))
         .filter(|s| s.0 != s.1)
         .collect();
     let mut next: HashMap<u32, Vec<usize>> = HashMap::new();
