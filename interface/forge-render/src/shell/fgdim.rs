@@ -461,7 +461,9 @@ impl Shell {
             .order(egui::Order::Foreground)
             .constrain(false)
             .show(ctx, |ui| {
-                let (row, _) = ui.allocate_exact_size(vec2(FIELD_W + 54.0, 26.0), Sense::hover());
+                // the room right of the field, and the error under it, end at the view's edge
+                let room = (view.right() - at.x - 4.0).max(FIELD_W);
+                let (row, _) = ui.allocate_exact_size(vec2((FIELD_W + 54.0).min(room), 26.0), Sense::hover());
                 let field = Rect::from_min_size(row.min, vec2(FIELD_W, 26.0));
                 ui.painter().rect_filled(field, 4.0, t.surface);
                 let id = egui::Id::unique("fg-dim-text");
@@ -501,7 +503,12 @@ impl Shell {
                             e.value = v.value;
                             acts.push(FgAct::DimCommit(e.ops(v.value)));
                         }
-                        _ => e.error = Some(format!("{} is not a length: type a number, or one with its unit (12 mm, 0.5 in)", e.text.trim())),
+                        _ => {
+                            e.error = Some(format!(
+                                "{} is not a length: type a number, or one with its unit (12 mm, 0.5 in)",
+                                e.text.trim()
+                            ))
+                        }
                     }
                 }
                 // the word sits on its own chip: it may be over the part
@@ -517,8 +524,14 @@ impl Shell {
                     t.ink,
                 );
                 if let Some(why) = &e.error {
-                    let g = ui
-                        .fonts_mut(|f| f.layout(why.clone(), theme::sans(12.0), egui::Color32::WHITE, 280.0));
+                    let g = ui.fonts_mut(|f| {
+                        f.layout(
+                            why.clone(),
+                            theme::sans(12.0),
+                            egui::Color32::WHITE,
+                            280.0f32.min(room - 14.0),
+                        )
+                    });
                     let bx =
                         Rect::from_min_size(field.left_bottom() + vec2(0.0, 4.0), g.size() + vec2(14.0, 8.0));
                     ui.painter().rect_filled(bx, 4.0, t.error);

@@ -3007,6 +3007,12 @@ impl Shell {
             .show_fit(ctx, |ui| {
                 ui.label(egui::RichText::new(format!("From {}", name_of(&nd.model))).font(semi(13.0)));
                 ui.label("Sheet size");
+                // five sizes a row; two in a narrow window (the 480 px pass)
+                let per = if ctx.content_rect().width() < super::theme::NARROW {
+                    2
+                } else {
+                    5
+                };
                 egui::Grid::new("sizes").show(ui, |ui| {
                     for (k, (n, w, h)) in forge_draw::sheet::SIZES.iter().enumerate() {
                         if ui
@@ -3015,19 +3021,19 @@ impl Shell {
                         {
                             nd.size = k;
                         }
-                        if k % 5 == 4 {
+                        if k % per == per - 1 {
                             ui.end_row();
                         }
                     }
                 });
                 if nd.model.ends_with(".fg") {
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         ui.label("Where");
                         ui.selectable_value(&mut nd.in_file, true, "In this file");
                         ui.selectable_value(&mut nd.in_file, false, "A drawing file beside it");
                     });
                 }
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label("Standard");
                     ui.selectable_value(&mut nd.iso, false, "ANSI (ASME Y14.5-2018), third angle");
                     ui.selectable_value(&mut nd.iso, true, "ISO 1101");
