@@ -29,7 +29,7 @@ use crate::body::{Body, CoedgeId, FaceId, LoopId};
 use forge_geom::intcurve::IntCurve;
 use forge_geom::{Curve, CurveGeom, Surface, SurfaceGeom};
 use forge_math::{Point2, Point3, Vec3, dmath};
-use std::sync::Arc as Rc;
+use std::rc::Rc;
 use std::sync::OnceLock;
 
 /// The integrands: volume, first moments (x, y, z), second moments (xx, yy, zz, xy, yz, zx),
@@ -522,36 +522,6 @@ fn exact(s: &Surface, way: &Way) -> bool {
 const SIN_TOUCH: f64 = 1e-2;
 
 /// A way to walk an edge with a smooth parameter.
-/// Where a chord's point last was in a surface's parameters: the next search starts there. As a
-/// `Cell<Option<Point2>>`, but shareable (a face's pieces are worked out on other threads only
-/// where none walks a chord: `Way::stateless`).
-#[derive(Default)]
-struct Near {
-    x: std::sync::atomic::AtomicU64,
-    y: std::sync::atomic::AtomicU64,
-    some: std::sync::atomic::AtomicBool,
-}
-
-impl Near {
-    fn get(&self) -> Option<Point2> {
-        use std::sync::atomic::Ordering::Relaxed;
-        self.some.load(Relaxed).then(|| {
-            Point2::new(
-                f64::from_bits(self.x.load(Relaxed)),
-                f64::from_bits(self.y.load(Relaxed)),
-            )
-        })
-    }
-    fn set(&self, p: Option<Point2>) {
-        use std::sync::atomic::Ordering::Relaxed;
-        if let Some(p) = p {
-            self.x.store(p.x.to_bits(), Relaxed);
-            self.y.store(p.y.to_bits(), Relaxed);
-        }
-        self.some.store(p.is_some(), Relaxed);
-    }
-}
-
 enum Way<'a> {
     Curve(&'a Curve),
     /// The last hair of a curve running into a point where its surfaces touch: there the normals'
@@ -571,10 +541,10 @@ enum Way<'a> {
         knots: Vec<(f64, f64)>,
         /// Where one of the surfaces is procedural (0: a, 1: b), the point is solved in its
         /// parameters (its own implicit value is a search), from the last point's.
-        on: Option<(usize, Near)>,
+        on: Option<(usize, std::cell::Cell<Option<Point2>>)>,
         /// Where each surface's nearest point last was: without a start, a file's spline surface
         /// searches itself whole for every one.
-        near: [Near; 2],
+        near: [std::cell::Cell<Option<Point2>>; 2],
     },
 }
 
@@ -640,12 +610,6 @@ impl Way<'_> {
         }
     }
 
-    /// Whether points along it come out the same whatever was asked of it before (a chord's
-    /// searches start where the last point was).
-    fn stateless(&self) -> bool {
-        !matches!(self, Way::Chord { .. })
-    }
-
     /// The chain's point at chord distance s, and how far off it the curve can be there: a part of
     /// the chain step it falls in.
     fn chain_at(&self, s: f64) -> (Point3, f64) {
@@ -668,7 +632,7 @@ impl Way<'_> {
                 let (start, reach) = self.chain_at(s);
                 let mut p = start;
                 let tight = 4.0 * f64::EPSILON * (1.0 + (p - Point3::ORIGIN).abs_max());
-                let value = |x: &Surface, at: &Near, p: Point3| {
+                let value = |x: &Surface, at: &std::cell::Cell<Option<Point2>>, p: Point3| {
                     if let Surface::Procedural(pr) = x
                         && let Some((f, g, uv)) = pr.value_near(p, at.get())
                     {
@@ -2086,29 +2050,13 @@ const WG: [f64; 4] = [
     0.417_959_183_673_469_4,
 ];
 
-/// A face's inner rule, its own or one shared by the pieces worked out on other threads.
-enum InnerOf<'a> {
-    Own(Inner),
-    Of(&'a Inner),
-}
-
-impl std::ops::Deref for InnerOf<'_> {
-    type Target = Inner;
-    fn deref(&self) -> &Inner {
-        match self {
-            InnerOf::Own(i) => i,
-            InnerOf::Of(i) => i,
-        }
-    }
-}
-
 struct Ctx<'a> {
     s: &'a Surface,
     /// The inner parameter: 0 for u, 1 for v.
     ax: usize,
     a0: f64,
     c: Point3,
-    inner: InnerOf<'a>,
+    inner: Inner,
     /// Whether a point has asked the fit for a value past its box.
     left_fit: std::cell::Cell<bool>,
     rel: f64,
@@ -2163,7 +2111,7 @@ impl Ctx<'_> {
     fn g(&self, a: f64, b: f64) -> (F, F, F) {
         let mut g = [0.0; NF];
         let x = a - self.a0;
-        match *self.inner {
+        match self.inner {
             Inner::Poly(rule) => {
                 let mut q = [0.0; 3];
                 for (k, &(t, w)) in rule.iter().enumerate() {
@@ -2374,34 +2322,9 @@ struct Acc {
     dabs: f64,
 }
 
-/// What a piece adds to its run's sums.
-struct Share {
-    s: F,
-    phi: F,
-    e: F,
-    g: F,
-    dabs: f64,
-    area: f64,
-    db: f64,
-}
-
-impl Share {
-    fn add_to(&self, u: &mut Acc) {
-        for m in 0..NF {
-            u.s[m] += self.s[m];
-            u.phi[m] += self.phi[m];
-            u.e[m] += self.e[m];
-            u.g[m] += self.g[m];
-        }
-        u.dabs += self.dabs;
-        u.area += self.area;
-        u.db += self.db;
-    }
-}
-
-/// A piece's share of its run's sums, or None when its integrand is not resolved and it may
-/// still be made finer.
-fn integrate(cx: &Ctx, pc: &Piece, last: bool) -> Option<Share> {
+/// Adds a piece's share to `u`, or None (adding nothing) when its integrand is not resolved and
+/// it may still be made finer.
+fn integrate(cx: &Ctx, pc: &Piece, u: &mut Acc, last: bool) -> Option<()> {
     let (ax, c) = (cx.ax, cx.c);
     let r = rule(pc.n.len());
     let kr = pc.kr;
@@ -2456,50 +2379,16 @@ fn integrate(cx: &Ctx, pc: &Piece, last: bool) -> Option<Share> {
     if !last && (0..NF).any(|m| est[m] > 0.1 * cx.rel * abs[m] + cx.floor[m]) {
         return None;
     }
-    Some(Share {
-        s: sum,
-        phi: phis,
-        e: std::array::from_fn(|m| e[m] + est[m]),
-        g: abs,
-        dabs,
-        area,
-        db,
-    })
-}
-
-/// A piece's shares, made finer while the face's panels last (from `cx`'s count), in the order the
-/// run adds them: what `face_integrals` does with each piece.
-fn piece_shares(cx: &Ctx, s: &Surface, pc: &Piece, mut add: impl FnMut(Share)) -> Result<(), &'static str> {
-    let mut work = vec![(8u32, None)];
-    while let Some((depth, piece)) = work.pop() {
-        if forge_geom::budget::over() {
-            return Err(TOO_LONG);
-        }
-        let pc = piece.as_ref().unwrap_or(pc);
-        // made finer while the face's budget lasts
-        match integrate(cx, pc, depth == 0 || cx.panels.get() == 0) {
-            Some(sh) => add(sh),
-            None => {
-                cx.panels.set(cx.panels.get().saturating_sub(pc.n.len() / 4));
-                let mut f = finer(s, pc);
-                while let Some(p) = f.pop() {
-                    work.push((depth - 1, Some(p)));
-                }
-            }
-        }
+    for m in 0..NF {
+        u.s[m] += sum[m];
+        u.phi[m] += phis[m];
+        u.e[m] += e[m] + est[m];
+        u.g[m] += abs[m];
     }
-    Ok(())
-}
-
-/// A face of at least this many pieces has them worked out on all cores.
-const PAR_PIECES: usize = 32;
-
-/// What a group of pieces' shares came to, worked out on its own: each piece's shares, the panels
-/// they spent, and whether one asked a fit for a value past its box.
-struct PieceOut {
-    shares: Vec<Vec<Share>>,
-    panels: usize,
-    left_fit: bool,
+    u.dabs += dabs;
+    u.area += area;
+    u.db += db;
+    Some(())
 }
 
 const TOO_LONG: &str = "it would take too long to integrate";
@@ -2612,7 +2501,7 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
         ax,
         a0,
         c,
-        inner: InnerOf::Own(Inner::Adapt),
+        inner: Inner::Adapt,
         left_fit: std::cell::Cell::new(false),
         panels: std::cell::Cell::new(
             20_000 + 20 * loops.iter().flat_map(|l| &l.runs).map(Vec::len).sum::<usize>(),
@@ -2626,11 +2515,11 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
     // F's degree along a, and along b: a polynomial (Some) or trigonometric (None)
     let fourier = match (s, ax) {
         (Surface::Plane(_), _) | (Surface::Cylinder(_), 1) => {
-            cx.inner = InnerOf::Own(Inner::Poly(&GL2));
+            cx.inner = Inner::Poly(&GL2);
             None
         }
         (Surface::Cone(_), 1) => {
-            cx.inner = InnerOf::Own(Inner::Poly(&GL3));
+            cx.inner = Inner::Poly(&GL3);
             None
         }
         (Surface::Cylinder(_), _) => Some((4, Some(3))),
@@ -2639,7 +2528,7 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
         (Surface::Sphere(_) | Surface::Torus(_), _) => Some((5, None)),
         (Surface::Procedural(p), 1) if p.v_degree() == Some(1) => {
             // F is of degree 5d - 1 = 4 in v
-            cx.inner = InnerOf::Own(Inner::Poly(&GL3));
+            cx.inner = Inner::Poly(&GL3);
             None
         }
         (Surface::Procedural(_), _) => None,
@@ -2680,10 +2569,10 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
                 Along::Trig { m, coef }
             }
         };
-        cx.inner = InnerOf::Own(Inner::Fourier { k, along });
+        cx.inner = Inner::Fourier { k, along };
     } else if let Surface::Procedural(p) = s
         && !(ax == 1 && p.swept())
-        && matches!(*cx.inner, Inner::Adapt)
+        && matches!(cx.inner, Inner::Adapt)
         && !loops.is_empty()
     {
         // (a swept surface's sections are dear and its columns along v cheap: Gauss-Kronrod
@@ -2725,7 +2614,7 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
                 })
             });
         if fit {
-            cx.inner = InnerOf::Own(Inner::Cheb(Tiles::new(tiles, all.1), all));
+            cx.inner = Inner::Cheb(Tiles::new(tiles, all.1), all);
         }
     }
     let mut units: Vec<Acc> = Vec::new();
@@ -2733,112 +2622,36 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
     // columns alone: a fit past its box is no answer, and mixing the two does not cancel
     loop {
         units.clear();
-        // every piece, with its run, in order
-        let mut pieces: Vec<(usize, &Piece)> = Vec::new();
-        let mut runs = 0;
         for l in &loops {
             for run in &l.runs {
-                pieces.extend(run.iter().map(|pc| (runs, pc)));
-                runs += 1;
-            }
-        }
-        units.resize_with(runs, Acc::default);
-        // the pieces on all cores, in groups: each chord's pieces one group, in order (a chord's
-        // searches start where its last point was, so it is asked in the order one by one asks
-        // it), each other piece a group of its own. Each group runs with a panel count of its own
-        // that it does not run out; where all of them spend fewer panels than the face has left,
-        // and less than its budget has left (`budget::map_all`), no test of either was true in
-        // any of them, nor one by one: the shares are one by one's, added below in its order.
-        // Else one by one, here.
-        let mut panels = cx.panels.get();
-        let mut groups: Vec<Vec<usize>> = Vec::new();
-        let mut chords: Vec<(usize, &Rc<Way>)> = Vec::new();
-        for (k, (_, pc)) in pieces.iter().enumerate() {
-            if pc.way.stateless() {
-                groups.push(vec![k]);
-            } else if let Some(&(g, _)) = chords.iter().find(|(_, w)| Rc::ptr_eq(w, &pc.way)) {
-                groups[g].push(k);
-            } else {
-                chords.push((groups.len(), &pc.way));
-                groups.push(vec![k]);
-            }
-        }
-        let together = if pieces.len() >= PAR_PIECES && groups.len() > 1 {
-            let (inner, s_, ax, a0, c, rel, floor) = (&*cx.inner, cx.s, cx.ax, cx.a0, cx.c, cx.rel, cx.floor);
-            const OWN: usize = usize::MAX / 2;
-            forge_geom::budget::map_all(
-                groups.len(),
-                |g| {
-                    let own = Ctx {
-                        s: s_,
-                        ax,
-                        a0,
-                        c,
-                        inner: InnerOf::Of(inner),
-                        left_fit: std::cell::Cell::new(false),
-                        rel,
-                        floor,
-                        panels: std::cell::Cell::new(OWN),
-                    };
-                    let mut shares = Vec::with_capacity(groups[g].len());
-                    for &k in &groups[g] {
-                        let mut one = Vec::new();
-                        piece_shares(&own, s, pieces[k].1, |sh| one.push(sh))?;
-                        shares.push(one);
-                    }
-                    Ok::<_, &'static str>(PieceOut {
-                        shares,
-                        panels: OWN - own.panels.get(),
-                        left_fit: own.left_fit.get(),
-                    })
-                },
-                // every group's shares worked out, on fewer panels than the face has left
-                |outs| {
-                    outs.iter().all(Result::is_ok)
-                        && outs
-                            .iter()
-                            .flatten()
-                            .fold(0usize, |t, o| t.saturating_add(o.panels))
-                            < panels
-                },
-            )
-            .map(|outs| {
-                let outs: Vec<PieceOut> = outs.into_iter().flatten().collect();
-                panels -= outs.iter().map(|o| o.panels).sum::<usize>();
-                outs
-            })
-        } else {
-            None
-        };
-        match together {
-            Some(outs) => {
-                // each piece's shares, put back in the pieces' order
-                let mut of: Vec<Vec<Share>> = (0..pieces.len()).map(|_| Vec::new()).collect();
-                for (g, o) in outs.into_iter().enumerate() {
-                    if o.left_fit {
-                        cx.left_fit.set(true);
-                    }
-                    for (&k, sh) in groups[g].iter().zip(o.shares) {
-                        of[k] = sh;
+                let mut u = Acc::default();
+                for pc in run {
+                    let mut work = vec![(8u32, None)];
+                    while let Some((depth, piece)) = work.pop() {
+                        if forge_geom::budget::over() {
+                            return Err(TOO_LONG);
+                        }
+                        let pc = piece.as_ref().unwrap_or(pc);
+                        // made finer while the face's budget lasts
+                        match integrate(&cx, pc, &mut u, depth == 0 || cx.panels.get() == 0) {
+                            Some(()) => {}
+                            None => {
+                                cx.panels.set(cx.panels.get().saturating_sub(pc.n.len() / 4));
+                                let mut f = finer(s, pc);
+                                while let Some(p) = f.pop() {
+                                    work.push((depth - 1, Some(p)));
+                                }
+                            }
+                        }
                     }
                 }
-                for (k, shares) in of.iter().enumerate() {
-                    for sh in shares {
-                        sh.add_to(&mut units[pieces[k].0]);
-                    }
-                }
-                cx.panels.set(panels);
-            }
-            None => {
-                for &(run, pc) in &pieces {
-                    piece_shares(&cx, s, pc, |sh| sh.add_to(&mut units[run]))?;
-                }
+                units.push(u);
             }
         }
-        if !cx.left_fit.get() || !matches!(*cx.inner, Inner::Cheb(..)) {
+        if !cx.left_fit.get() || !matches!(cx.inner, Inner::Cheb(..)) {
             break;
         }
-        cx.inner = InnerOf::Own(Inner::Adapt);
+        cx.inner = Inner::Adapt;
         cx.panels
             .set(20_000 + 20 * loops.iter().flat_map(|l| &l.runs).map(Vec::len).sum::<usize>());
     }

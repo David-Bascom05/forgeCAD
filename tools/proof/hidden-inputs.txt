@@ -461,10 +461,6 @@ speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|use std::sy
 speed (cache answering a function of its own key)  @ forge-geom/src/blend.rs|static|static SEEN: Box<[Seen; 256]> = Box::new(
 speed (cache answering a function of its own key)  @ forge-geom/src/blend.rs|static|static SEEN: Box<[Seen]> = (0..1usize << BITS)
 speed (cache answering a function of its own key)  @ forge-geom/src/blend.rs|thread_local|thread_local! {  x 2
-no-output (mass::Near: a chord way's last point, its next search's start, as the Cell it was; one thread asks a chord at a time: a face's pieces go to other threads by chord, each chord's in its order, Way::stateless)  @ forge-topo/src/mass.rs|atomic|some: std::sync::atomic::AtomicBool,
-no-output (mass::Near, as above)  @ forge-topo/src/mass.rs|atomic|x: std::sync::atomic::AtomicU64,
-no-output (mass::Near, as above)  @ forge-topo/src/mass.rs|atomic|y: std::sync::atomic::AtomicU64,
-no-output (mass face_integrals: which pieces walk one chord, so its pieces share a thread in their order; only the scheduling, the shares added in the pieces' order)  @ forge-topo/src/mass.rs|pointer|} else if let Some(&(g, _)) = chords.iter().find(|(_, w)| Rc::ptr_eq(w, &pc.way)) {
 no-output (budget::map_until: what finished items spent, read to give each item started after a budget of what is left less that; an answer is taken only where the spends summed in item order stay below what was left, which no scheduling changes, else the item runs again one by one: the answers are one by one's at any thread count or order; map_answers_as_one_by_one)  @ forge-geom/src/budget.rs|atomic|let done = AtomicU64::new(0);  x 2
 no-output (budget::map_until and each_within (map_prefix, map_all), as above)  @ forge-geom/src/budget.rs|atomic|use std::sync::atomic::{AtomicU64, Ordering};  x 2
 no-output (a read's limit, held by budget::scoped and cleared when it goes, unwinding too; a_read_that_panics_leaves_no_limit_behind)  @ forge-geom/src/budget.rs|static|static LEFT: Cell<u64> = const { Cell::new(u64::MAX) };
