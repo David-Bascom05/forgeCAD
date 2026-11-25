@@ -11,12 +11,13 @@
 mod common;
 use forge_cam::engage::{HeightMap, Profile};
 use forge_cam::ops::PMove;
+use forge_math::ipow::Powi as _;
 use std::path::Path;
 
 /// Sweeps a → b in pieces of at most 2 mm: the model visits a segment's whole box, so a long
 /// diagonal link or rapid would visit most of it for nothing; the pieces sweep the same.
 fn sweep_short(map: &mut HeightMap, a: [f64; 3], b: [f64; 3], prof: &Profile) {
-    let l = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+    let l = ((b[0] - a[0]).ipow(2) + (b[1] - a[1]).ipow(2)).sqrt();
     let n = (l / 2.0).ceil().max(1.0) as usize;
     let mut p = a;
     for k in 1..=n {
@@ -99,7 +100,7 @@ fn left_above(
                     }
                     PMove::Arc { to, c, cw, .. } => {
                         // chords of at most 0.05 mm sag, the height linear in the angle
-                        let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
+                        let r = ((at[0] - c[0]).ipow(2) + (at[1] - c[1]).ipow(2)).sqrt();
                         let a0 = forge_math::dmath::atan2(at[1] - c[1], at[0] - c[0]);
                         let mut a1 = forge_math::dmath::atan2(to[1] - c[1], to[0] - c[0]);
                         if cw {
