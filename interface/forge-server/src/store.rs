@@ -240,6 +240,32 @@ impl FileLogStore {
     }
 }
 
+impl FileLogStore {
+    /// Every entry in `doc`'s log, in order, across its snapshots (the op history: who changed
+    /// what, when). None: no such document. Read only: a torn tail is not cut here.
+    pub fn history(&self, doc: &str) -> io::Result<Option<Vec<Entry>>> {
+        let p = self.path(doc);
+        let bytes = match std::fs::read(&p) {
+            Ok(b) => b,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(e),
+        };
+        let (mut at, mut out) = (0, vec![]);
+        while let Some(r) = record_at(&bytes, at) {
+            let text = std::str::from_utf8(&bytes[r.clone()])
+                .map_err(|_| corrupt(format!("{}: not UTF-8", p.display())))?;
+            let j = read(text).map_err(|e| corrupt(format!("{}: {e}", p.display())))?;
+            if j.get("first").is_none() {
+                out.push(
+                    entry_from(&j).ok_or_else(|| corrupt(format!("{}: a bad entry at {at}", p.display())))?,
+                );
+            }
+            at = r.end;
+        }
+        Ok(Some(out))
+    }
+}
+
 impl Store for FileLogStore {
     fn latest_snapshot(&mut self, doc: &str) -> io::Result<Option<Snapshot>> {
         let got = self.load(doc)?;
