@@ -9,6 +9,7 @@
 //! - `volume_is_translation_invariant`: a closed oriented mesh's `volume()` does not depend on the
 //!   origin (lean `volume_translate`).
 
+use forge_math::ipow::Powi as _;
 use forge_math::rng::Rng;
 use forge_math::{Point3, Vec3};
 use forge_mesh::{Quality, TriMesh, tessellate};
@@ -101,7 +102,7 @@ fn volume_is_translation_invariant() {
             .map(|p| (*p - Point3::ORIGIN).length() + t.length())
             .fold(0.0, f64::max);
         // rounding: each triple product carries a few ulps of scale³
-        let tol = 1e-12 * scale.powi(3) * (m.triangles.len() as f64).sqrt();
+        let tol = 1e-12 * scale.ipow(3) * (m.triangles.len() as f64).sqrt();
         assert!(
             (moved.volume() - v).abs() <= tol,
             "{name}: {} vs {v}",

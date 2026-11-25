@@ -3,6 +3,7 @@
 
 use super::bsdf::*;
 use super::v3::{V3, rand, v3};
+use forge_math::ipow::Powi as _;
 use std::f32::consts::PI;
 use std::sync::OnceLock;
 
@@ -299,6 +300,6 @@ fn fresnel_meets_its_limits() {
     // at normal incidence the closed form ((n - 1)^2 + k^2) / ((n + 1)^2 + k^2)
     let (n, k) = (0.958f32, 6.69f32);
     let al = conductor_reflectance(n, k, 1.0);
-    let want = ((n - 1.0).powi(2) + k * k) / ((n + 1.0).powi(2) + k * k);
+    let want = ((n - 1.0).ipow(2) + k * k) / ((n + 1.0).ipow(2) + k * k);
     assert!((al - want).abs() < 1e-5, "{al} vs {want}");
 }

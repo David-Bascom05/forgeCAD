@@ -12,6 +12,7 @@ use forge_cam_geom::boolean::{Op, boolean, region_of};
 use forge_cam_geom::check::Face;
 use forge_cam_geom::offset::offset;
 use forge_cam_geom::region::{Loop, P2, Region, Seg};
+use forge_math::ipow::Powi as _;
 
 /// A placed fixture: its named boxes, in the part's frame.
 #[derive(Clone, Debug)]
@@ -219,7 +220,7 @@ pub fn area(r: &Region) -> f64 {
             match *s {
                 Seg::Line { a: p, b: q } => a += 0.5 * (p.x * q.y - q.x * p.y),
                 Seg::Arc { a: p, b: q, c, ccw } => {
-                    let rr = ((p.x - c.x).powi(2) + (p.y - c.y).powi(2)).sqrt();
+                    let rr = ((p.x - c.x).ipow(2) + (p.y - c.y).ipow(2)).sqrt();
                     let t0 = forge_math::dmath::atan2(p.y - c.y, p.x - c.x);
                     let t1 = forge_math::dmath::atan2(q.y - c.y, q.x - c.x);
                     let tau = std::f64::consts::TAU;
@@ -247,7 +248,7 @@ fn bbox_of(r: &Region) -> [f64; 4] {
                 b = [b[0].min(p.x), b[1].min(p.y), b[2].max(p.x), b[3].max(p.y)];
             }
             if let Seg::Arc { a, c, .. } = *s {
-                let rr = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+                let rr = ((a.x - c.x).ipow(2) + (a.y - c.y).ipow(2)).sqrt();
                 b = [
                     b[0].min(c.x - rr),
                     b[1].min(c.y - rr),
@@ -500,7 +501,8 @@ impl Fixture {
         }
     }
 
-    /// Every piece's name and box (a shaped piece's box encloses it).
+    /// Every piece's name and box (a shaped piece's box encloses it: each face's enclosure grown
+    /// by its mu, the distance its true place may be from the surface given).
     pub fn boxes(&self) -> Vec<(String, [f64; 3], [f64; 3])> {
         let mut v: Vec<_> = self
             .pieces
@@ -512,8 +514,8 @@ impl Fixture {
             let mut hi = [f64::NEG_INFINITY; 3];
             for f in fs {
                 for k in 0..3 {
-                    lo[k] = lo[k].min(f.bbox[k].lo + f.mu);
-                    hi[k] = hi[k].max(f.bbox[k].hi - f.mu);
+                    lo[k] = lo[k].min(f.bbox[k].lo - f.mu);
+                    hi[k] = hi[k].max(f.bbox[k].hi + f.mu);
                 }
             }
             v.push((n.clone(), lo, hi));
@@ -561,5 +563,51 @@ mod tests {
         ));
         // across y it fits
         assert!(vise("v", V, &wide, 1, 5.0, 6.0, 1.0).is_ok());
+    }
+
+    /// A shaped piece's box (the machine simulation's collision box for it, sim.rs) encloses each
+    /// of its faces grown by the face's mu: a point mu/2 past the face (where the true face may
+    /// be) is inside it, so a tool grazing the jaw there is a contact. It once shrank by mu.
+    #[test]
+    fn a_shaped_pieces_box_encloses_its_faces_grown_by_mu() {
+        use forge_cam_geom::check::{Face, Surf};
+        use forge_cam_geom::ival::Ival;
+        let mu = 0.01;
+        // a jaw's face: x = 10 facing +x over y 0..20, z 0..30
+        let face = Face::new(
+            Surf::Plane {
+                o: [10.0, 0.0, 0.0],
+                u: [0.0, 1.0, 0.0],
+                v: [0.0, 0.0, 1.0],
+            },
+            Ival::new(0.0, 20.0),
+            Ival::new(0.0, 30.0),
+            None,
+            mu,
+            1,
+        );
+        let f = Fixture {
+            name: "soft jaws".into(),
+            pieces: vec![],
+            shaped: vec![("jaw".into(), vec![face.clone()])],
+            jaw_top: 30.0,
+            axis: 0,
+            clearance: 1.0,
+        };
+        let b = f.boxes();
+        assert_eq!(b.len(), 1);
+        let (_, lo, hi) = &b[0];
+        for k in 0..3 {
+            assert!(
+                lo[k] <= face.bbox[k].lo - mu && hi[k] >= face.bbox[k].hi + mu,
+                "{k}: {lo:?} {hi:?}"
+            );
+        }
+        // the face's true place may be mu/2 toward the tool: inside the box
+        let graze = [10.0 + 0.5 * mu, 10.0, 15.0];
+        assert!(
+            (0..3).all(|k| graze[k] >= lo[k] && graze[k] <= hi[k]),
+            "{graze:?} outside {lo:?} {hi:?}"
+        );
     }
 }

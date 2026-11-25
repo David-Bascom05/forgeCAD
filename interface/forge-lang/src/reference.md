@@ -520,10 +520,12 @@ seats = subtract(lower, tools: [bolt, bolt2], keep: true)
 ```
 text(STRING, font: FILE, size: d, depth: d, on: PLANE, at: POINT, cut: false, wrap: R)
 import(FILE, op: "new"|"add"|"cut")
-entity(of: IMPORT, solid: N, id: N)   the face (or edges) a STEP file's entity #id of solid #solid became
+entity(of: IMPORT, solid: N, id: N)   the face (or edges) a STEP file's entity #id (a Parasolid
+                                      file's node index) of solid #solid became
 ```
 
-Files (.ttf/.otf fonts; .step/.stp/.brep/.igs/.iges solids) are found beside the part file;
+Files (.ttf/.otf fonts; .step/.stp/.brep/.igs/.iges and Parasolid .x_t/.x_b solids) are found
+beside the part file;
 a missing, wrong-kind or unreadable one is `File`. Text: the baseline from the point along the
 plane's x, the letters up its y, `depth` along its normal (cut: into the part); `wrap: R` sets
 it round a cylinder about the plane's normal. Members: `T.top` (embossed letter tops),

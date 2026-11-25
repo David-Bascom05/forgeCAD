@@ -9,6 +9,7 @@
 //! LABEL.json, LABEL.md and LABEL/profiles/CASE_CONFIG.csv there.
 use forge_lang::thermo::ThermoOut;
 use forge_lang::{Options, Run};
+use forge_math::ipow::Powi as _;
 use forge_thermo::{Process, Stretch};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -607,7 +608,7 @@ fn score_corner(c: &Case, data: &Path, st: &Stretch, middle: bool) -> Score {
                 let (x, z) = (p[0] as f64, p[2] as f64);
                 x.abs() < w && z < -1e-3 && on(x, z)
             })
-            .map(|p| ((p[0] as f64).abs().powi(2) + (p[2] as f64 - vz).powi(2)).sqrt() / d)
+            .map(|p| ((p[0] as f64).abs().ipow(2) + (p[2] as f64 - vz).ipow(2)).sqrt() / d)
             .min_by(|a, b| a.total_cmp(b))
     };
     let mut sc = Score::default();
@@ -643,7 +644,7 @@ fn score_corner(c: &Case, data: &Path, st: &Stretch, middle: bool) -> Score {
             if !(x > 0.0 && x < w && on(x, z)) {
                 continue;
             }
-            let along = (x * x + (z - vz).powi(2)).sqrt();
+            let along = (x * x + (z - vz).ipow(2)).sqrt();
             if along >= 2.0 * r_end * d && along <= d {
                 we.push((last.ratio[kk] as f64 - forge_math::dmath::powf(along / d, k) / lc) * 100.0);
             }

@@ -13,6 +13,7 @@ use forge_cam_geom::offset::offset;
 use forge_cam_geom::region::{Loop, P2, Region, Seg};
 use forge_cam_geom::tool::{Part, Shape};
 use forge_math::dmath;
+use forge_math::ipow::Powi as _;
 use forge_tooling::Tool;
 
 /// The stock: a box in the part's frame.
@@ -296,7 +297,7 @@ pub fn checker_moves(p: &OpPath) -> Vec<(Move, Phase, usize)> {
                 at = to;
             }
             PMove::Arc { to, c, cw, .. } => {
-                let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
+                let r = ((at[0] - c[0]).ipow(2) + (at[1] - c[1]).ipow(2)).sqrt();
                 let a0 = dmath::atan2(at[1] - c[1], at[0] - c[0]);
                 let mut a1 = dmath::atan2(to[1] - c[1], to[0] - c[0]);
                 let tau = std::f64::consts::TAU;
@@ -1608,12 +1609,40 @@ pub fn pocket_in(
     let s0 = passes[order[0].0][order[0].1].segs[0].start();
     let start = [s0.x, s0.y, h.clear];
     let mut above = top;
-    for z in levels(top, bottom, step) {
+    // one pass a level and no ramp: the next level starts where this one ended, so the tool
+    // goes straight down there (the column the plunge from the retract height would take)
+    // instead of up to the retract height and back
+    let stay = order.len() == 1 && ramp.is_none();
+    let zs = levels(top, bottom, step);
+    let mut carried: Option<forge_cam_geom::region::P2> = None;
+    for (zi, &z) in zs.iter().enumerate() {
         // where the tool is when it stayed down after a pass (each pass ends at its start)
         let mut down: Option<forge_cam_geom::region::P2> = None;
         for &(li, lj, link) in &order {
             let l = &passes[li][lj];
             let s = l.segs[0].start();
+            // (a carried point that is not this pass's start — impossible while the passes are
+            // the same at every level — goes up first, as without staying down)
+            let held = carried.take();
+            if let Some(p) = held.filter(|p| *p != s) {
+                mv.push(PMove::Line {
+                    to: [p.x, p.y, h.retract],
+                    f: feed.0,
+                    phase: Phase::Link,
+                });
+            } else if let Some(p) = held {
+                mv.push(PMove::Line {
+                    to: [p.x, p.y, z],
+                    f: feed.1,
+                    phase: Phase::Plunge,
+                });
+                let point = l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b);
+                if !point {
+                    push_loop(&mut mv, &l.segs, z, feed.0);
+                }
+                down = Some(s);
+                continue;
+            }
             let linked = match down {
                 Some(p) if link => {
                     if p != s {
@@ -1714,11 +1743,15 @@ pub fn pocket_in(
             down = Some(s);
         }
         if let Some(p) = down {
-            mv.push(PMove::Line {
-                to: [p.x, p.y, h.retract],
-                f: feed.0,
-                phase: Phase::Link,
-            });
+            if stay && zi + 1 < zs.len() {
+                carried = Some(p);
+            } else {
+                mv.push(PMove::Line {
+                    to: [p.x, p.y, h.retract],
+                    f: feed.0,
+                    phase: Phase::Link,
+                });
+            }
         }
         above = z;
     }
@@ -1773,7 +1806,7 @@ fn seg_box_dist(a: [f64; 2], b: [f64; 2], lo: [f64; 2], hi: [f64; 2]) -> f64 {
 /// box: at an end, at a point where the arc's normal is along an axis (nearest an edge), on the
 /// ray from c to a corner (nearest the corner), or 0 where it crosses an edge.
 fn arc_box_dist(a: [f64; 2], c: [f64; 2], sw: f64, lo: [f64; 2], hi: [f64; 2]) -> f64 {
-    let rr = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2)).sqrt();
+    let rr = ((a[0] - c[0]).ipow(2) + (a[1] - c[1]).ipow(2)).sqrt();
     let a0 = dmath::atan2(a[1] - c[1], a[0] - c[0]);
     let tau = std::f64::consts::TAU;
     let within = |th: f64| {
@@ -1876,7 +1909,7 @@ fn trim_air(
         let level = to[2] == at[2];
         let (air, len) = match *m {
             PMove::Line { phase, .. } if level && matches!(phase, Phase::Cut | Phase::Link | Phase::Hop) => {
-                let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
+                let l = ((to[0] - at[0]).ipow(2) + (to[1] - at[1]).ipow(2)).sqrt();
                 let again = done.contains(&(key(at), key(to))) || done.contains(&(key(to), key(at)));
                 if phase == Phase::Cut {
                     done.insert((key(at), key(to)));
@@ -1887,7 +1920,7 @@ fn trim_air(
                 )
             }
             PMove::Arc { c, cw, .. } if level => {
-                let rr = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
+                let rr = ((at[0] - c[0]).ipow(2) + (at[1] - c[1]).ipow(2)).sqrt();
                 let a0 = dmath::atan2(at[1] - c[1], at[0] - c[0]);
                 let a1 = dmath::atan2(to[1] - c[1], to[0] - c[0]);
                 let tau = std::f64::consts::TAU;

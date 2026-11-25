@@ -506,6 +506,29 @@ fn pow(x: f64, e: f64) -> Result<f64, String> {
     Ok(if e < 0.0 { 1.0 / r } else { r })
 }
 
+/// The power of ten of `x`'s leading digit, `floor(log10 |x|)`, read off the shortest decimal
+/// that round-trips to `x` (`{:e}`: core's formatting, pure Rust, so the same on every target;
+/// platform libm's `log10` can be an ulp off at a power of ten and flip the floor). 0 for 0 and
+/// for a non-finite `x`.
+pub fn decimal_exponent(x: f64) -> i32 {
+    if x == 0.0 || !x.is_finite() {
+        return 0;
+    }
+    let s = format!("{:e}", x.abs());
+    s.split_once('e').and_then(|(_, e)| e.parse().ok()).unwrap_or(0)
+}
+
+/// `ceil(log10 |x|)` as `decimal_exponent` reads it: the leading power of ten, one more unless
+/// `x` is that power itself (its shortest decimal is `1e{k}`). 0 for 0 and for a non-finite `x`.
+pub fn decimal_exponent_ceil(x: f64) -> i32 {
+    if x == 0.0 || !x.is_finite() {
+        return 0;
+    }
+    let s = format!("{:e}", x.abs());
+    let k = decimal_exponent(x);
+    if s.starts_with("1e") { k } else { k + 1 }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

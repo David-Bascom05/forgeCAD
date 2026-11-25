@@ -6,6 +6,8 @@
 //!   same volume within 0.5 %, so a time compared between them compares the same job (adaptive
 //!   once left 12 % of a level while its time was compared with clear's). Pairs that differ by
 //!   design are listed with the reason.
+//! - no crazy paths (forge_cam_quality::crazy: air, re-cut, links, rapids, retracts) on any part;
+//!   tests/crazy.rs checks the machined examples, a corpus guard each.
 //! - nothing fast meets material: no rapid piece and no feed piece at the link feed (f >=
 //!   FAST_FEED) meets material in the quality model, on any part. A hop's ramp once grazed a skin
 //!   finer than its map's cell at F9999 (hex 12 x fz); its map is conservative now, and this guard
@@ -20,7 +22,8 @@
 //!   as does a listed one got worse; a fix takes its entry off. (Main posted full slotting under
 //!   a 40° cap, unreported, until forge-cam-lang's own warning and this guard.) Measured on the
 //!   chip-load guard's own run, so it costs no measure of its own.
-use forge_cam_quality::{Config, JobQ, measure};
+use forge_cam_quality::{Config, JobQ, crazy, measure};
+use forge_math::ipow::Powi as _;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -167,6 +170,7 @@ fn chip_load_and_equal_work() {
     let (cap_bad, cap_table) = cap_violations(&jobs);
     let mut over = Vec::new();
     let mut fast = Vec::new();
+    let mut crazy_bad = Vec::new();
     // (part, strategy) -> removed, for the parts named NAME_STRATEGY_cam
     let mut work: BTreeMap<String, Vec<(String, f64)>> = BTreeMap::new();
     // part -> (strategy, op, mean move, tool radius), the clearing ops
@@ -178,6 +182,9 @@ fn chip_load_and_equal_work() {
             .to_string_lossy()
             .into_owned();
         assert!(j.errors.is_empty(), "{stem}: {:?}", j.errors);
+        // no crazy paths (forge_cam_quality::crazy), in this one measure of the parts
+        let (c_bad, _) = crazy::check(&stem, &j.ops);
+        crazy_bad.extend(c_bad);
         for q in &j.ops {
             if q.rapid_cuts > 0 || q.fast_cuts > 0 {
                 fast.push(format!(
@@ -213,6 +220,7 @@ fn chip_load_and_equal_work() {
     }
     assert!(over.is_empty(), "chip load over its target:\n{}", over.join("\n"));
     assert!(fast.is_empty(), "fast moves meet material:\n{}", fast.join("\n"));
+    assert!(crazy_bad.is_empty(), "crazy paths:\n{}", crazy_bad.join("\n"));
     let mut unequal = Vec::new();
     for (part, v) in &work {
         if v.len() < 2 || UNEQUAL.iter().any(|(p, _)| p == part) {
@@ -277,7 +285,7 @@ fn adaptive_cutting_moves_not_micro() {
                 for m in &p.moves {
                     let (to, len) = match *m {
                         PMove::Line { to, phase, .. } => {
-                            let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
+                            let l = ((to[0] - at[0]).ipow(2) + (to[1] - at[1]).ipow(2)).sqrt();
                             (
                                 to,
                                 if phase == Phase::Cut && (to[2] - at[2]).abs() < 1e-9 {
@@ -292,7 +300,7 @@ fn adaptive_cutting_moves_not_micro() {
                             let _ = c;
                             (
                                 to,
-                                Some(((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt()),
+                                Some(((to[0] - at[0]).ipow(2) + (to[1] - at[1]).ipow(2)).sqrt()),
                             )
                         }
                         PMove::Rapid { to } => (to, None),

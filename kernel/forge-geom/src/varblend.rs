@@ -3055,6 +3055,7 @@ mod tests {
     use super::*;
     use crate::curve::Curve;
     use crate::surface::{Cone, Cylinder, Plane, Sphere};
+    use forge_math::ipow::Powi as _;
     use forge_math::rng::Rng;
 
     fn plane(o: Point3, n: Vec3) -> Surface {
@@ -3254,7 +3255,7 @@ mod tests {
             let uv = rand_uv(&mut r, &cs[0].blend);
             let p = Procedural::deriv(&*cs[0].blend, uv).p;
             // axis x = z = 2 along y
-            let d = ((p.x - 2.0).powi(2) + (p.z - 2.0).powi(2)).sqrt();
+            let d = ((p.x - 2.0).ipow(2) + (p.z - 2.0).ipow(2)).sqrt();
             assert!((d - 2.0).abs() < 1e-10, "{d}");
             // linear radius: a circular cone about the spine (r, s, r), r = 2 + s / 5
             let b = &cs[1].blend;
@@ -3278,7 +3279,7 @@ mod tests {
         for _ in 0..200 {
             let p = Procedural::deriv(&**b, rand_uv(&mut r, b)).p;
             let rho = (p.x * p.x + p.y * p.y).sqrt();
-            let d = ((rho - 11.5).powi(2) + (p.z - 1.5).powi(2)).sqrt();
+            let d = ((rho - 11.5).ipow(2) + (p.z - 1.5).ipow(2)).sqrt();
             assert!((d - 1.5).abs() < 1e-10, "{d}");
         }
     }

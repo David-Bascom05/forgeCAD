@@ -11,6 +11,12 @@ pub(crate) trait Placed: Sized {
     /// Shown, and whether this was its unseen sizing pass.
     fn show_sizing<R>(self, ctx: &Context, add: impl FnOnce(&mut Ui) -> R) -> (Self::Out<R>, bool);
 
+    /// Shown as `show` would be, with the fitting `show_sizing` does (a window: inside the app,
+    /// and a sheet across the bottom of a narrow one).
+    fn show_fit<R>(self, ctx: &Context, add: impl FnOnce(&mut Ui) -> R) -> Self::Out<R> {
+        self.show_sizing(ctx, add).0
+    }
+
     /// Shown, keeping what it names in `places` only when it's drawn where it's seen.
     fn show_placed<R>(
         self,
@@ -32,7 +38,20 @@ impl Placed for egui::Window<'_> {
 
     fn show_sizing<R>(self, ctx: &Context, add: impl FnOnce(&mut Ui) -> R) -> (Self::Out<R>, bool) {
         let mut sizing = false;
-        let r = self.show(ctx, |ui| {
+        // every window the shell opens fits the window it's in (UX-LEAD, the UI audit's 480 px
+        // pass): no bigger than the dialog area less a margin, and kept inside it. (A scroll
+        // area here collapsed the auto-sized dialogs: a window too wide for a narrow window
+        // gets its own narrow layout, theme::NARROW.)
+        let area = super::dialog_area(ctx).shrink(8.0);
+        let mut w = self.max_size(area.size()).constrain_to(area);
+        // a narrow window: a sheet across the bottom, not where it would sit at 1400 (UX-LEAD)
+        if ctx.content_rect().width() < super::theme::NARROW {
+            let margin = ctx.global_style().spacing.window_margin.sum().x;
+            w = w
+                .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, 0.0))
+                .min_width(area.width() - margin);
+        }
+        let r = w.show(ctx, |ui| {
             sizing = ui.is_sizing_pass();
             add(ui)
         });

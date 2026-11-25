@@ -17,6 +17,7 @@
 //! - a punch or die: forge-brake's exact section swept along each of its segments.
 use crate::machine_mesh::{Tris, prims_tris};
 use forge_machine::def::Prim;
+use forge_math::ipow::Powi as _;
 
 /// What a part is made of, for its appearance (data/appearances.toml).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -138,7 +139,7 @@ impl Preview {
 }
 
 fn dist(a: [f64; 3], b: [f64; 3]) -> f64 {
-    ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)).sqrt()
+    ((a[0] - b[0]).ipow(2) + (a[1] - b[1]).ipow(2) + (a[2] - b[2]).ipow(2)).sqrt()
 }
 
 /// A line as dashes (each a 2-point polyline), dash and gap `step` long.

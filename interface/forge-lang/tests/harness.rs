@@ -6,6 +6,7 @@ use forge_lang::asm::Issue;
 use forge_lang::error::{Error, Warning};
 use forge_lang::harness::{self, HarnessOut, HarnessProblem};
 use forge_lang::{Options, Run};
+use forge_math::ipow::Powi as _;
 use std::path::{Path, PathBuf};
 
 const HEADER: &str = include_str!("../../../examples/harness/header.fg");
@@ -117,7 +118,7 @@ fn the_example_routes_with_every_term_and_no_notes() {
     // the spec: worked-out resistance, a voltage drop where a current is given
     let p18 = h.types.iter().find(|t| t.name == "p18").unwrap();
     assert_eq!(p18.get("spec"), "UL 1015");
-    let area = std::f64::consts::PI / 4.0 * forge_harness::awg_d(18.0).powi(2);
+    let area = std::f64::consts::PI / 4.0 * forge_harness::awg_d(18.0).ipow(2);
     assert!((p18.ohm_km.unwrap() - 1000.0 / 58.0 / area).abs() < 1e-9 && p18.ohm_worked);
     let w1 = &h.wires[0];
     let len = w1.routed.as_ref().unwrap().length;

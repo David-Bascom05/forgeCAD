@@ -3,6 +3,7 @@
 
 use crate::error::{Error, ParamKey};
 use crate::syntax::Span;
+use forge_math::ipow::Powi as _;
 use std::collections::BTreeSet;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -381,7 +382,7 @@ pub fn pow(a: &Num, b: &Num, span: Span) -> R<Num> {
         },
     };
     Ok(Num {
-        v: a.v.powi(n),
+        v: a.v.ipow(n),
         dim,
         src: Src::join(&a.src, &b.src),
     })

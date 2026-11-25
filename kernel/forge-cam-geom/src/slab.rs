@@ -1015,6 +1015,7 @@ pub fn certify_path(
 #[cfg(test)]
 mod gap_tests {
     use super::*;
+    use forge_math::ipow::Powi as _;
 
     /// A trim arc whose stored ends lie off its circle (by an exaggerated 1e-3 here, ~1e-11 in
     /// practice): the trim is the circle's arc plus the radial pieces to the ends. From points
@@ -1078,7 +1079,7 @@ mod gap_tests {
             // so compare against their least less the samples' spacing)
             let mut m = f64::INFINITY;
             for p in &pts {
-                m = m.min(((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2)).sqrt());
+                m = m.min(((p[0] - q[0]).ipow(2) + (p[1] - q[1]).ipow(2)).sqrt());
             }
             let spacing = std::f64::consts::FRAC_PI_2 / 4000.0 + g / 100.0;
             assert!(d.lo <= m + spacing, "q {q:?}: lo {} vs trim {m}", d.lo);

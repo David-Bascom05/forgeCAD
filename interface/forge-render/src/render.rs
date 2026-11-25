@@ -5,6 +5,7 @@ use crate::camera::{Camera, View};
 use crate::mesh::{EdgeRange, FaceRange, PartMesh, SEGMENT, VERTEX};
 use crate::scene::Scene;
 use crate::viewer::now_ms;
+use forge_math::ipow::Powi as _;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -31,6 +32,8 @@ pub const FACE_COLOURS: usize = 1 << 15;
 const SELECTED_BIT: u32 = 1 << 31;
 /// A mark's placement's next bit: Measure's second selection.
 const SECOND_BIT: u32 = 1 << 30;
+/// A marked edge in the warning colour (the border of a face the view could not draw).
+const WARN_BIT: u32 = 1 << 29;
 const GLOBALS: usize = LOOK_AT + LOOK_WORDS * 16;
 /// Where the look's numbers start in the globals, after the overlay's text (render.wgsl's `hover`
 /// on), and how many vec4s.
@@ -316,6 +319,8 @@ pub struct Mark {
     pub selected: bool,
     /// Measure's second selection, drawn in its own colour.
     pub second: bool,
+    /// Drawn in the warning colour: the border of a face the view could not draw.
+    pub warn: bool,
 }
 
 /// A face of a placement and the colour it is drawn in (straight alpha over the surface).
@@ -2574,7 +2579,7 @@ impl Renderer {
             (c.map(|v| v - r), c.map(|v| v + r))
         });
         let reach = (0..3)
-            .map(|k| (hi[k] - lo[k]).powi(2))
+            .map(|k| (hi[k] - lo[k]).ipow(2))
             .sum::<f32>()
             .sqrt()
             .max(1e-3);
@@ -3282,7 +3287,8 @@ impl Renderer {
             .map(|m| {
                 (m.placement
                     | if m.selected { SELECTED_BIT } else { 0 }
-                    | if m.second { SECOND_BIT } else { 0 })
+                    | if m.second { SECOND_BIT } else { 0 }
+                    | if m.warn { WARN_BIT } else { 0 })
                 .to_le_bytes()
             })
             .collect();
@@ -3723,7 +3729,7 @@ fn edge_length(l: &crate::mesh::Lod, e: &EdgeRange) -> f32 {
     (e.first..e.first + e.count)
         .map(|s| {
             let (a, b) = (at(s, 0), at(s, 16));
-            (0..3).map(|k| (a[k] - b[k]).powi(2)).sum::<f32>().sqrt()
+            (0..3).map(|k| (a[k] - b[k]).ipow(2)).sum::<f32>().sqrt()
         })
         .sum()
 }

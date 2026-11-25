@@ -1652,7 +1652,7 @@ impl FgTool {
                 if file.is_empty() {
                     return Err(ToolError::NoForgeForm {
                         tool: "Import",
-                        why: "no file: put a .step, .brep or .iges file beside the part and choose it".into(),
+                        why: "no file: put a .step, .x_t, .x_b, .brep or .iges file beside the part and choose it".into(),
                     });
                 }
                 let op = match self.choice("Output") {

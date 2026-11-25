@@ -53,6 +53,8 @@ pub struct Stats {
     pub split: usize,
     pub kept: usize,
     pub exact_evals: u64,
+    /// The exact-real refinement's work (`Ctx::refined_bits`).
+    pub refined_bits: u64,
 }
 
 type Offsets = Result<(Vec<OLoop>, Stats), OffsetError>;
@@ -233,6 +235,7 @@ fn offset_anew(rg: &Region, r: f64) -> Offsets {
         k += 1;
     }
     st.exact_evals = cx.exact_evals;
+    st.refined_bits = cx.refined_bits;
     Ok((out, st))
 }
 

@@ -25,6 +25,7 @@ use forge_cam_geom::ival::Ival;
 use forge_cam_geom::offset::offset;
 use forge_cam_geom::region::{Loop, Region, Seg};
 use forge_math::dmath;
+use forge_math::ipow::Powi as _;
 
 /// The work holding: a three-jaw chuck's envelope as it turns (a region of revolution).
 #[derive(Clone, Debug, PartialEq)]
@@ -302,7 +303,7 @@ fn meet_vertical(s: &Seg, x: f64, out: &mut Vec<f64>) {
             }
         }
         Seg::Arc { a, b, c, ccw } => {
-            let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+            let r = ((a.x - c.x).ipow(2) + (a.y - c.y).ipow(2)).sqrt();
             let dx = x - c.x;
             if dx.abs() > r {
                 return;
@@ -643,7 +644,7 @@ fn clip_above(s: &Seg, z0: f64) -> Option<(Seg, bool)> {
             Some((Seg::Line { a, b: p }, true))
         }
         Seg::Arc { a, c, ccw, .. } => {
-            let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+            let r = ((a.x - c.x).ipow(2) + (a.y - c.y).ipow(2)).sqrt();
             let dz = z0 - c.y;
             if dz.abs() > r {
                 return Some((*s, false));
@@ -1555,7 +1556,7 @@ pub const SUB: f64 = 2.0;
 fn pieces(mv: &Move) -> Vec<(Move, [f64; 2], [f64; 2], f64)> {
     match *mv {
         Move::Line { a, b } => {
-            let l = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+            let l = ((b[0] - a[0]).ipow(2) + (b[1] - a[1]).ipow(2)).sqrt();
             let n = (l / SUB).ceil().max(1.0) as usize;
             let mut v = Vec::new();
             let mut prev = a;
@@ -1572,8 +1573,8 @@ fn pieces(mv: &Move) -> Vec<(Move, [f64; 2], [f64; 2], f64)> {
             v
         }
         Move::Arc { a, b, c, ccw } => {
-            let r = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2)).sqrt();
-            let rb = ((b[0] - c[0]).powi(2) + (b[1] - c[1]).powi(2)).sqrt();
+            let r = ((a[0] - c[0]).ipow(2) + (a[1] - c[1]).ipow(2)).sqrt();
+            let rb = ((b[0] - c[0]).ipow(2) + (b[1] - c[1]).ipow(2)).sqrt();
             let ang = |p: [f64; 2]| dmath::atan2(p[1] - c[1], p[0] - c[0]);
             let (t0, mut t1) = (ang(a), ang(b));
             if ccw {
@@ -1599,7 +1600,7 @@ fn pieces(mv: &Move) -> Vec<(Move, [f64; 2], [f64; 2], f64)> {
                 } else {
                     [c[0] + r * dmath::cos(t), c[1] + r * dmath::sin(t)]
                 };
-                let half = 0.5 * ((p[0] - prev[0]).powi(2) + (p[1] - prev[1]).powi(2)).sqrt();
+                let half = 0.5 * ((p[0] - prev[0]).ipow(2) + (p[1] - prev[1]).ipow(2)).sqrt();
                 let rm = r.max(rb);
                 // the sagitta, the radius mismatch at the ends, and a relative margin for the
                 // f64 points on the circle

@@ -6,6 +6,7 @@ use super::theme::{mono, sans};
 use super::{Action, Shell};
 use crate::shell::placed::Placed;
 use egui::{Color32, Pos2, Rect, Sense, Stroke, vec2};
+use forge_math::ipow::Powi as _;
 use forge_math::{Frame, Point2};
 use forge_sketch::{Entity, Status};
 use std::collections::HashMap;
@@ -941,12 +942,12 @@ impl SketchMode {
                     let (dx, dy) = (q.x - p.x, q.y - p.y);
                     let l = (dx * dx + dy * dy).max(1e-12);
                     let t = (((at.0 - p.x) * dx + (at.1 - p.y) * dy) / l).clamp(0.0, 1.0);
-                    ((p.x + dx * t - at.0).powi(2) + (p.y + dy * t - at.1).powi(2)).sqrt()
+                    ((p.x + dx * t - at.0).ipow(2) + (p.y + dy * t - at.1).ipow(2)).sqrt()
                 }
                 Some(Entity::Circle { center, .. } | Entity::Arc { center, .. }) => {
                     let c = g.point(center);
                     let r = g.radius(*id);
-                    (((c.x - at.0).powi(2) + (c.y - at.1).powi(2)).sqrt() - r).abs()
+                    (((c.x - at.0).ipow(2) + (c.y - at.1).ipow(2)).sqrt() - r).abs()
                 }
                 Some(Entity::Spline { .. } | Entity::Ellipse { .. }) => g
                     .spline_samples(*id, 96)
@@ -956,7 +957,7 @@ impl SketchMode {
                         let (dx, dy) = (q.x - p.x, q.y - p.y);
                         let l = (dx * dx + dy * dy).max(1e-12);
                         let t = (((at.0 - p.x) * dx + (at.1 - p.y) * dy) / l).clamp(0.0, 1.0);
-                        ((p.x + dx * t - at.0).powi(2) + (p.y + dy * t - at.1).powi(2)).sqrt()
+                        ((p.x + dx * t - at.0).ipow(2) + (p.y + dy * t - at.1).ipow(2)).sqrt()
                     })
                     .fold(f64::MAX, f64::min),
                 _ => continue,
@@ -973,7 +974,7 @@ impl SketchMode {
         let near = self
             .points()
             .into_iter()
-            .map(|(n, p)| (((p.0 - at.0).powi(2) + (p.1 - at.1).powi(2)).sqrt(), n, p))
+            .map(|(n, p)| (((p.0 - at.0).ipow(2) + (p.1 - at.1).ipow(2)).sqrt(), n, p))
             .filter(|c| c.0 < reach)
             .min_by(|a, b| a.0.total_cmp(&b.0));
         match near {
@@ -1044,7 +1045,7 @@ impl SketchMode {
 
     /// What's under a place: a point of the sketch, a line's middle, or nothing, with the rows it takes.
     fn snap(&self, at: (f64, f64), reach: f64) -> Option<Snap> {
-        let d = |p: (f64, f64)| ((p.0 - at.0).powi(2) + (p.1 - at.1).powi(2)).sqrt();
+        let d = |p: (f64, f64)| ((p.0 - at.0).ipow(2) + (p.1 - at.1).ipow(2)).sqrt();
         let near = self
             .points()
             .into_iter()
@@ -1088,14 +1089,14 @@ impl SketchMode {
                 }) => {
                     let (a, b) = if ccw { (start, end) } else { (end, start) };
                     let (c, a, b) = (s.solved.point(center), s.solved.point(a), s.solved.point(b));
-                    let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+                    let r = ((a.x - c.x).ipow(2) + (a.y - c.y).ipow(2)).sqrt();
                     (c, r, Some((a, b)))
                 }
                 _ => continue,
             };
             let (vx, vy) = (c.x - from.0, c.y - from.1);
             let dist = (vx * vx + vy * vy).sqrt();
-            let off_rim = (((at.0 - c.x).powi(2) + (at.1 - c.y).powi(2)).sqrt() - r).abs();
+            let off_rim = (((at.0 - c.x).ipow(2) + (at.1 - c.y).ipow(2)).sqrt() - r).abs();
             if dist <= r + 1e-9 || off_rim > reach {
                 continue;
             }
@@ -1107,7 +1108,7 @@ impl SketchMode {
                     (vy * cos + side * vx * sin) / dist,
                 );
                 let t = (from.0 + way.0 * leg, from.1 + way.1 * leg);
-                let gap = ((t.0 - at.0).powi(2) + (t.1 - at.1).powi(2)).sqrt();
+                let gap = ((t.0 - at.0).ipow(2) + (t.1 - at.1).ipow(2)).sqrt();
                 if gap > TANGENT_REACH * reach {
                     continue;
                 }
@@ -1364,7 +1365,7 @@ impl SketchMode {
                 let c = self.pick_at[0];
                 let free = snapped.as_ref().map_or(at, |s| s.1);
                 let r = self.locked(0, Want::Len).map_or(
-                    tidy(((free.0 - c.0).powi(2) + (free.1 - c.1).powi(2)).sqrt()),
+                    tidy(((free.0 - c.0).ipow(2) + (free.1 - c.1).ipow(2)).sqrt()),
                     |v| v / 2.0,
                 );
                 let name = self.next_name('c');
@@ -1395,7 +1396,7 @@ impl SketchMode {
             }
             (SkTool::Arc, 2) => {
                 let (c, st) = (self.pick_at[0], self.pick_at[1]);
-                let radius = ((st.0 - c.0).powi(2) + (st.1 - c.1).powi(2)).sqrt();
+                let radius = ((st.0 - c.0).ipow(2) + (st.1 - c.1).ipow(2)).sqrt();
                 let t0 = forge_math::dmath::atan2(st.1 - c.1, st.0 - c.0);
                 let free = snapped.as_ref().map_or(at, |s| s.1);
                 let mut t1 = forge_math::dmath::atan2(free.1 - c.1, free.0 - c.0);
@@ -1548,7 +1549,7 @@ impl SketchMode {
             SkTool::Spline | SkTool::SplineCv => {
                 // its first point again closes it, once it has a shape
                 if self.pick_at.len() >= 3
-                    && ((self.pick_at[0].0 - at.0).powi(2) + (self.pick_at[0].1 - at.1).powi(2)).sqrt()
+                    && ((self.pick_at[0].0 - at.0).ipow(2) + (self.pick_at[0].1 - at.1).ipow(2)).sqrt()
                         < reach
                 {
                     self.finish_spline(true);
@@ -1599,7 +1600,7 @@ impl SketchMode {
             let (p, q) = sk::line(s, &e).ok()?;
             Some((
                 (D::Dist, vec![Ref::to(&e)]),
-                ((p.x - q.x).powi(2) + (p.y - q.y).powi(2)).sqrt(),
+                ((p.x - q.x).ipow(2) + (p.y - q.y).ipow(2)).sqrt(),
             ))
         } else {
             let (_, id) = s.names.iter().find(|n| n.0 == e)?;
@@ -1791,7 +1792,7 @@ impl SketchMode {
                 let (c, a, b) = (q.point(center), q.point(from), q.point(to));
                 let t0 = forge_math::dmath::atan2(a.y - c.y, a.x - c.x);
                 let t1 = forge_math::dmath::atan2(b.y - c.y, b.x - c.x);
-                let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+                let r = ((a.x - c.x).ipow(2) + (a.y - c.y).ipow(2)).sqrt();
                 around(c, r, t0, (t1 - t0).rem_euclid(core::f64::consts::TAU))
             }
             Some(Entity::Point { .. }) => {
@@ -1955,7 +1956,9 @@ impl Shell {
                 .iter()
                 .fold((f64::MAX, f64::MIN), |a, c| (a.0.min(c.1), a.1.max(c.1)));
             let want = 18.0 * mm_per_pt;
-            let base = 10f64.powi(want.log10().floor() as i32);
+            // the drawn grid's spacing only (no snap reads it): never saved
+            #[allow(clippy::disallowed_methods)]
+            let base = 10f64.ipow(want.log10().floor() as i32);
             let step = [1.0, 2.0, 5.0, 10.0]
                 .into_iter()
                 .map(|m| m * base)
@@ -2044,7 +2047,7 @@ impl Shell {
                     }) => {
                         let (from, to) = if ccw { (start, end) } else { (end, start) };
                         let (c, a, b) = (g.point(center), g.point(from), g.point(to));
-                        let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+                        let r = ((a.x - c.x).ipow(2) + (a.y - c.y).ipow(2)).sqrt();
                         let t0 = forge_math::dmath::atan2(a.y - c.y, a.x - c.x);
                         let mut t1 = forge_math::dmath::atan2(b.y - c.y, b.x - c.x);
                         if t1 <= t0 {
@@ -2579,13 +2582,14 @@ impl Shell {
                 m.more.placing,
             )
         });
-        self.status = match m.solved.as_ref().map(|s| sk::freedom(s).0) {
+        let own = match m.solved.as_ref().map(|s| sk::freedom(s).0) {
             _ if asks.is_some() => asks.unwrap_or_default().to_string(),
             _ if drawing.is_some() => drawing.unwrap_or_default().to_string(),
             Some(0) => "Fully constrained".to_string(),
             Some(n) => format!("{n} degrees of freedom"),
             None => String::new(),
         };
+        self.state_status(ctx, own);
         self.sketch_options(ctx, &mut m);
         if let Some(e) = &m.error {
             let g = ctx.fonts_mut(|f| f.layout(e.clone(), sans(12.0), Color32::WHITE, 420.0));

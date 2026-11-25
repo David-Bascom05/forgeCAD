@@ -5,6 +5,7 @@ use forge_cam_geom::check::{Face, Move, Surf};
 use forge_cam_geom::drop::{Column, Gap, drop, drop_decide, drop_general, gap_clear, gap_move};
 use forge_cam_geom::ival::Ival;
 use forge_cam_geom::tool::{Cutter, assemble};
+use forge_math::ipow::Powi as _;
 
 struct Rng(u64);
 impl Rng {
@@ -219,7 +220,7 @@ fn sampled(col: &Column, f: &Face, x: f64, y: f64, n: usize) -> f64 {
             let q = f.q.lo + (f.q.hi - f.q.lo) * j as f64 / n as f64;
             let pt = f.surf.eval(Ival::pt(p), Ival::pt(q));
             let (px, py, pz) = (pt[0].mid(), pt[1].mid(), pt[2].mid());
-            let rho = ((px - x).powi(2) + (py - y).powi(2)).sqrt();
+            let rho = ((px - x).ipow(2) + (py - y).ipow(2)).sqrt();
             if rho > col.r {
                 continue;
             }
@@ -239,7 +240,7 @@ fn sampled_gap(col: &Column, f: &Face, x: f64, y: f64, z: f64, n: usize) -> f64 
             let q = f.q.lo + (f.q.hi - f.q.lo) * j as f64 / n as f64;
             let pt = f.surf.eval(Ival::pt(p), Ival::pt(q));
             let (px, py, pz) = (pt[0].mid(), pt[1].mid(), pt[2].mid());
-            let rho = ((px - x).powi(2) + (py - y).powi(2)).sqrt();
+            let rho = ((px - x).ipow(2) + (py - y).ipow(2)).sqrt();
             if rho > col.r {
                 continue;
             }
@@ -645,7 +646,7 @@ fn sampled_gap_in(col: &Column, f: &Face, x: f64, y: f64, z: f64, n: usize) -> f
             }
             let pt = f.surf.eval(Ival::pt(p), Ival::pt(q));
             let (px, py, pz) = (pt[0].mid(), pt[1].mid(), pt[2].mid());
-            let rho = ((px - x).powi(2) + (py - y).powi(2)).sqrt();
+            let rho = ((px - x).ipow(2) + (py - y).ipow(2)).sqrt();
             if rho > col.r {
                 continue;
             }
