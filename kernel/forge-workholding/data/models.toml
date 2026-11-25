@@ -13,7 +13,7 @@
 name = "haas-05-0404"
 step = "haas-tooling/05-0404/05-0404.STEP"
 sha256 = "21af355a572df8ef225eb419c4a873836edc0f4704f39c1f0398997be2300cbc"
-how = "Haas Tooling 05-0404 (its metric twin 05-0213 is the same file): 6 in Single-Station CrossOver Fixed-Jaw Vise, 9 in Opening, Flange Style, Haas Workholding by Kurt (https://www.haastooling.com/p/05-0404, read 2026-11-25); the model from David's haas-tooling-step upload (34adf0c7), a SolidWorks 2020 part of 17 solids named by Kurt part numbers. Origin: the fixed jaw plate's (D60-315) face at x = -72.05979872039758 and its underside at y = 70.45959 (the model's y is up); the moving plate's (D60-7) face at x = 156.54018127960242 (the model fully open)."
+how = "Haas Tooling 05-0404 (its metric twin 05-0213 is the same file): 6 in Single-Station CrossOver Fixed-Jaw Vise, 9 in Opening, Flange Style, Haas Workholding by Kurt (https://www.haastooling.com/p/05-0404, read 2026-11-25); the model from David's haas-tooling-step upload (34adf0c7), a SolidWorks 2020 part of 17 solids named by Kurt part numbers. Origin: the fixed jaw plate's (D60-315) face at x = -72.05979872039758 and its underside at y = 70.45959 (the model's y is up); the moving plate's (D60-7) face at x = 156.54018127960242 (the model drawn 228.60 open, under its 230.6 range)."
 rot = "x,-z,y"
 origin = [-72.05979872039758, 70.45959, 0.0]
 opening = 228.59998000000002
@@ -52,3 +52,47 @@ role = "other"
 moves = "unknown"
 solids = [9, 16, 15]
 mesh = "haas-tooling/05-0404/drive.stl"
+
+[[model]]
+name = "haas-05-0405"
+step = "haas-tooling/05-0405/05-0405.STEP"
+sha256 = "09f08b7f047f3ef04186e41e4137f18ca5d8d153983f9bcdcf799b428d44c9ca"
+how = "Haas Tooling 05-0405 (its metric twin 05-0209 is the same file): 4 in Single-Station CrossOver Fixed-Jaw Vise, 6-1/2 in Opening, Flange Style, Haas Workholding by Kurt (https://www.haastooling.com/p/05-0405, read 2026-11-25); the model from David's haas-tooling-step upload (34acf0c7), a part of 20 solids named by Kurt part numbers, the same family as haas-05-0404 (the -315 plate is the fixed jaw's, the -7 plate the moving jaw's). Origin: the fixed jaw plate's (D40-315) face at x = -51.15558999999998 and the jaw plates' underside at y = 57.615656582 (the model's y is up); the moving plate's (D40-7) face at x = 75.84438999999989 (the model drawn 127.0 open, not at its full 165.1). A fixed body's group (base or fixed jaw) is by its place and part number and does not change any check: both are fixed."
+rot = "x,-z,y"
+origin = [-51.15558999999998, 57.615656582, 0.0]
+opening = 126.99997999999988
+chord = 0.02
+
+[[group]]
+model = "haas-05-0405"
+name = "base"
+role = "base"
+moves = "fixed"
+solids = [18, 15, 9, 13, 14, 17]
+mesh = "haas-tooling/05-0405/base.stl"
+
+[[group]]
+model = "haas-05-0405"
+name = "fixed jaw"
+role = "fixed_jaw"
+moves = "fixed"
+solids = [19, 12, 1, 6, 8, 16]
+mesh = "haas-tooling/05-0405/fixed-jaw.stl"
+
+[[group]]
+model = "haas-05-0405"
+name = "moving jaw"
+role = "moving_jaw"
+moves = "with_jaw"
+solids = [7, 0, 2, 4]
+mesh = "haas-tooling/05-0405/moving-jaw.stl"
+
+# the screw (3400V-5A), DX4-3, 3400v-224 and the set screw: the model does not say whether they
+# travel with the moving jaw, so they are placed both ways and both are checked
+[[group]]
+model = "haas-05-0405"
+name = "drive"
+role = "other"
+moves = "unknown"
+solids = [11, 10, 3, 5]
+mesh = "haas-tooling/05-0405/drive.stl"

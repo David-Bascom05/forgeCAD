@@ -7,7 +7,7 @@
 //! forge-workholding check 1
 //! group NAME
 //! box x0 y0 z0 x1 y1 z1       (its faces' boxes' hull: what the checker sees)
-//! tight x0 y0 z0 x1 y1 z1     (its solids' own box: the body itself, for drawing)
+//! tight x0 y0 z0 x1 y1 z1     (its own box, mesh grown by the chord: the body, for drawing)
 //! P ox oy oz ux uy uz vx vy vz p0 p1 q0 q1 mu [L a0 a1 b0 b1 | A a0 a1 b0 b1 c0 c1 r ccw]...
 //! C|K|S|T ox oy oz xx xy xz yx yy yz ax ay az PARAMS.. p0 p1 q0 q1 mu
 //! X ox oy oz ux uy uz vx vy vz mu

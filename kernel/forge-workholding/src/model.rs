@@ -45,8 +45,8 @@ pub struct Group {
     /// it can reach past the body itself).
     pub min: V3,
     pub max: V3,
-    /// Its solids' own box in the device's frame (the body itself: its envelope for drawing and
-    /// for the device's height and mount).
+    /// Its own box in the device's frame (its mesh grown by the chord, so the body is inside
+    /// it): its envelope for drawing, and the device's height and where it sits on the table.
     pub tight_min: V3,
     pub tight_max: V3,
     /// Its drawn mesh (an STL in the device's frame), relative to data/models/ (Git LFS).
@@ -110,6 +110,7 @@ fn group_box(text: &str, group: &str, key: &str) -> Option<(V3, V3)> {
 fn check_text(name: &str) -> Option<&'static str> {
     match name {
         "haas-05-0404" => Some(include_str!("../data/check/haas-05-0404.txt")),
+        "haas-05-0405" => Some(include_str!("../data/check/haas-05-0405.txt")),
         _ => None,
     }
 }

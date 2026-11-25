@@ -46,7 +46,7 @@ pub struct Compiled {
     pub text: String,
     /// Each group's faces' box in the device's frame: (name, min, max).
     pub boxes: Vec<(String, [f64; 3], [f64; 3])>,
-    /// Each group's solids' own box in the device's frame (the body itself).
+    /// Each group's own box in the device's frame (its mesh grown by the chord: the body).
     pub tight: Vec<(String, [f64; 3], [f64; 3])>,
     /// Each group's triangles for drawing (the device's frame), as a binary STL.
     pub stl: Vec<(String, Vec<u8>)>,
@@ -130,18 +130,6 @@ pub fn compile(step: &[u8], spec: &Spec) -> Result<Compiled, String> {
                 return Err(format!("solid {si} is in two groups"));
             }
             let body = &s.body;
-            // the solids' own box, in the device's frame (a signed permutation maps a box
-            // to a box, so its two opposite corners give it)
-            for f in body.face_ids() {
-                let b = body.face_box(f);
-                for c in [[b.x.lo, b.y.lo, b.z.lo], [b.x.hi, b.y.hi, b.z.hi]] {
-                    let w = r(c);
-                    for k in 0..3 {
-                        tlo[k] = tlo[k].min(w[k] + shift[k]);
-                        thi[k] = thi[k].max(w[k] + shift[k]);
-                    }
-                }
-            }
             let mut left = std::collections::BTreeSet::new();
             let mut fs = Vec::new();
             for (k, f) in body.face_ids().enumerate() {
@@ -170,10 +158,19 @@ pub fn compile(step: &[u8], spec: &Spec) -> Result<Compiled, String> {
                     let p = m.positions[i as usize];
                     [p.x, p.y, p.z]
                 });
-                draw.push([a, b, cc].map(|p| {
+                let t = [a, b, cc].map(|p| {
                     let w = r(p);
                     [w[0] + shift[0], w[1] + shift[1], w[2] + shift[2]]
-                }));
+                });
+                // the body's own box: its mesh's corners, every one on the body within the
+                // chord, grown by the chord so the box holds the body itself
+                for v in t {
+                    for k in 0..3 {
+                        tlo[k] = tlo[k].min(v[k] - spec.chord);
+                        thi[k] = thi[k].max(v[k] + spec.chord);
+                    }
+                }
+                draw.push(t);
                 if left.contains(f) {
                     fs.push(fixture_model::triangle(a, b, cc, mu, 0));
                     c.triangles += 1;
