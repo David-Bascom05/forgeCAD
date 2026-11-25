@@ -41,6 +41,8 @@ forge-agent = { path = "../forge-agent" }
 forge-keep = { path = "../forge-keep" }
 forge-wall = { path = "../forge-wall" }
 forge-lang = { path = "../forge-lang" }
+# hosted collaboration: the protocol (both hosts); a LOCAL project never runs it
+forge-sync = { path = "../forge-sync" }
 forge-urdf = { path = "../forge-urdf" }
 forge-bend-lang = { path = "../forge-bend-lang" }
 forge-harness = { path = "../../kernel/forge-harness" }
@@ -99,6 +101,8 @@ zune-core = { version = "=0.5.3", default-features = false, features = ["std"] }
 # the desktop's own: file dialogs, egui on a window, the Agent tab's OpenAI-compatible endpoints
 # and their keys in the Secret Service
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# a SERVED project's connection (its own thread and socket)
+forge-remote = { path = "../forge-remote" }
 rfd = { version = "=0.17.2", default-features = false, features = ["xdg-portal", "pollster"] }
 egui-winit = { version = "=0.37.0", default-features = false, features = ["wayland", "x11", "smithay-clipboard"] }
 ureq = { version = "=3.5.0", default-features = false, features = ["rustls"] }
@@ -129,3 +133,7 @@ zbus-secret-service-keyring-store = { version = "=1.0.1", features = ["crypto-ru
 apple-native-keyring-store = { version = "=1.0.2", features = ["keychain"] }
 [target.'cfg(windows)'.dependencies]
 windows-native-keyring-store = "=1.1.0"
+
+[dev-dependencies]
+forge-server = { path = "../forge-server" }
+forge-remote = { path = "../forge-remote" }

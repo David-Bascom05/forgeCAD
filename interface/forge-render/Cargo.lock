@@ -1387,6 +1387,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-remote"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-lang",
+ "forge-sync",
+ "forge-ws",
+]
+
+[[package]]
 name = "forge-render"
 version = "0.1.0"
 dependencies = [
@@ -1423,9 +1433,12 @@ dependencies = [
  "forge-ops",
  "forge-par",
  "forge-post",
+ "forge-remote",
+ "forge-server",
  "forge-sheet",
  "forge-sketch",
  "forge-step",
+ "forge-sync",
  "forge-thermo",
  "forge-tooling",
  "forge-tooling-builder",
@@ -1454,6 +1467,18 @@ dependencies = [
  "zbus-secret-service-keyring-store",
  "zune-core",
  "zune-jpeg",
+]
+
+[[package]]
+name = "forge-server"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-git",
+ "forge-history",
+ "forge-lang",
+ "forge-sync",
+ "forge-ws",
 ]
 
 [[package]]
@@ -1488,6 +1513,16 @@ dependencies = [
  "forge-geom",
  "forge-math",
  "forge-mesh",
+ "forge-topo",
+]
+
+[[package]]
+name = "forge-sync"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-lang",
+ "forge-math",
  "forge-topo",
 ]
 
@@ -1617,6 +1652,13 @@ dependencies = [
  "forge-dirs",
  "forge-library",
  "forge-workholding",
+]
+
+[[package]]
+name = "forge-ws"
+version = "0.1.0"
+dependencies = [
+ "forge-git",
 ]
 
 [[package]]

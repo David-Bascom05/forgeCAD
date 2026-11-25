@@ -1782,6 +1782,15 @@ pub struct Session {
     /// In the single-threaded browser build, the worker itself and its queue: stepped by `poll`.
     #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
     worker: Box<(Worker, Receiver<Work>)>,
+    /// A SERVED part's link to the server (None: LOCAL, today's path exactly).
+    pub sync: Option<Box<dyn crate::sync_link::Link>>,
+    /// Builds of the server's own text: (this session's build seq, the server's seq), for the
+    /// body hash each reports.
+    sync_builds: Vec<(u64, u64)>,
+    /// Something the link has to say (a refused op, a divergence): the app shows it.
+    pub sync_note: Option<String>,
+    /// The text changed from the server since the app last looked.
+    pub sync_changed: bool,
 }
 
 impl Drop for Session {
@@ -1878,6 +1887,10 @@ impl Session {
             until,
             #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
             worker,
+            sync: None,
+            sync_builds: vec![],
+            sync_note: None,
+            sync_changed: false,
         };
         s.rebuild();
         s
@@ -1885,7 +1898,64 @@ impl Session {
 
     pub fn open(path: &str, gpu: Option<Gpu>, waker: Arc<dyn Fn() + Send + Sync>) -> Result<Session, String> {
         let src = forge_dirs::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
-        Ok(Session::new(Some(path.to_string()), src, gpu, waker))
+        // LOCAL or SERVED: looked at once, here (a broken remote.toml is said, never ignored)
+        let link = crate::sync_link::open(path, waker.clone()).transpose()?;
+        let mut s = Session::new(Some(path.to_string()), src, gpu, waker);
+        if link.is_some() {
+            s.sync = link;
+            // the server's history is the undo: the file's own log is not used
+            s.undo.clear();
+            s.redo.clear();
+        }
+        Ok(s)
+    }
+
+    /// A SERVED part: the link's news since the last poll (text from collaborators, refusals,
+    /// divergences), and the body hashes of builds of the server's text.
+    fn sync_poll(&mut self, got: &[Msg]) {
+        let Some(l) = &self.sync else { return };
+        for e in l.poll() {
+            match e {
+                forge_sync::Event::Changed => {}
+                forge_sync::Event::Refused { refusal, .. } => {
+                    self.sync_note = Some(format!("Not shared: {}: {}", refusal.kind(), refusal.text()));
+                }
+                forge_sync::Event::TextDiverged { seq } => {
+                    self.sync_note = Some(format!("Text differed from the server's at {seq}: reloading it"));
+                }
+                forge_sync::Event::BuildDiverged { seq, by, .. } => {
+                    self.sync_note = Some(format!("DIVERGENCE: {by} built different geometry at {seq} (reported)"));
+                }
+                forge_sync::Event::Versioned { name, seq, .. } => {
+                    self.sync_note = Some(format!("Version {name} written (at {seq})"));
+                }
+                forge_sync::Event::Closed(why) => self.sync_note = Some(format!("Server: {why}")),
+                forge_sync::Event::Rtt(_) => {}
+            }
+        }
+        let text = l.text();
+        if l.ready() && text != self.src {
+            // a collaborator's op (or one of ours refused): the server's text, not an undo step
+            self.src = text;
+            self.saved = self.src.clone();
+            self.previewing = false;
+            self.sync_changed = true;
+            self.rebuild();
+        }
+        for m in got {
+            if let Msg::Built(b) = m
+                && b.ok
+                && let Some(k) = self.sync_builds.iter().position(|x| x.0 == b.seq)
+            {
+                let server_seq = self.sync_builds[k].1;
+                self.sync_builds.drain(..=k);
+                if let Some(body) = b.inspect.as_ref().and_then(|i| i.bodies.first())
+                    && let Some(l) = &self.sync
+                {
+                    l.built(server_seq, forge_sync::hash_body(body));
+                }
+            }
+        }
     }
 
     /// Its view made again from scratch, on this GPU: after it was let go while the tab was idle.
@@ -1904,6 +1974,16 @@ impl Session {
     pub fn rebuild(&mut self) -> u64 {
         self.seq += 1;
         self.sent_at.push((self.seq, Instant::now()));
+        if let Some(l) = &self.sync
+            && l.pending() == 0
+            && l.ready()
+        {
+            // a build of exactly the server's text at its seq: its hash is reported
+            self.sync_builds.push((self.seq, l.seq()));
+            if self.sync_builds.len() > 64 {
+                self.sync_builds.remove(0);
+            }
+        }
         let _ = self
             .jobs
             .send(Work::Text((self.seq, self.src.clone(), self.overlap)));
@@ -1931,6 +2011,9 @@ impl Session {
             }
         }
         let got: Vec<Msg> = self.built.try_iter().collect();
+        if self.sync.is_some() {
+            self.sync_poll(&got);
+        }
         for m in &got {
             match m {
                 Msg::Built(b) => {
@@ -1994,7 +2077,10 @@ impl Session {
             .and_then(|f| forge_dirs::fs::canonicalize(f).ok())
             .and_then(|f| f.parent().map(|d| d.to_path_buf()));
         let (text, reach) = edit::apply_checked_in(&self.src, &op, dir)?;
-        self.set_text(text);
+        if let Some(l) = &self.sync {
+            l.local(op.clone(), text.clone());
+        }
+        self.take_text(text);
         self.ops.push(op);
         Ok(reach)
     }
@@ -2002,7 +2088,12 @@ impl Session {
     /// Several ops as one edit, one undo step: refused whole if the result wouldn't check.
     pub fn apply_all(&mut self, ops: Vec<Op>) -> Result<(), Error> {
         let text = edit::apply_all_checked(&self.src, &ops)?;
-        self.set_text(text);
+        if let Some(l) = &self.sync {
+            for op in &ops {
+                l.local(op.clone(), text.clone());
+            }
+        }
+        self.take_text(text);
         self.ops.extend(ops);
         Ok(())
     }
@@ -2022,7 +2113,20 @@ impl Session {
         self.seq
     }
 
+    /// A text that is not a typed op's (a refactor, units, a reload, a merge): in a SERVED part
+    /// only typed ops are shared in phase 1 (DESIGN.md §15.4: hand edits become ops or SetText
+    /// in phase 4), so it is refused there and said.
     fn set_text(&mut self, text: String) {
+        if self.sync.is_some() {
+            if text != self.src {
+                self.sync_note = Some("In a served project only typed edits are shared yet: this one was not made".into());
+            }
+            return;
+        }
+        self.take_text(text);
+    }
+
+    fn take_text(&mut self, text: String) {
         self.previewing = false;
         let old = std::mem::replace(&mut self.src, text);
         self.undo.push(old);
@@ -2061,6 +2165,21 @@ impl Session {
     }
 
     pub fn undo(&mut self) -> bool {
+        if let Some(l) = &self.sync {
+            // hosted undo: the inverse of this user's last op, others' edits kept
+            return match l.undo() {
+                None => false,
+                Some(Ok(())) => {
+                    self.src = l.text();
+                    self.rebuild();
+                    true
+                }
+                Some(Err(why)) => {
+                    self.sync_note = Some(format!("Undo: {why}"));
+                    false
+                }
+            };
+        }
         let Some(prev) = self.undo.pop() else { return false };
         self.redo.push(std::mem::replace(&mut self.src, prev));
         self.rebuild();
@@ -2068,6 +2187,9 @@ impl Session {
     }
 
     pub fn redo(&mut self) -> bool {
+        if self.sync.is_some() {
+            return false;
+        }
         let Some(next) = self.redo.pop() else { return false };
         self.undo.push(std::mem::replace(&mut self.src, next));
         self.rebuild();

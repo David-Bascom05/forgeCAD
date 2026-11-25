@@ -40,12 +40,25 @@ pub fn remote(project: &Path) -> Option<Result<Remote, String>> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
         Err(e) => return Some(Err(format!("{}: {e}", p.display()))),
     };
-    let user = forge_dirs::config().map(|d| d.join("forgecad").join("remotes.toml"));
+    let user = user_file();
     let user_text = user
         .as_ref()
         .and_then(|u| std::fs::read_to_string(u).ok())
         .unwrap_or_default();
     Some(resolve(&text, &user_text).map_err(|e| format!("{}: {e}", p.display())))
+}
+
+static USER_FILE: std::sync::Mutex<Option<std::path::PathBuf>> = std::sync::Mutex::new(None);
+
+/// The user's remotes file: `<config>/forgecad/remotes.toml`, or the one [`set_user_file`] named.
+pub fn user_file() -> Option<std::path::PathBuf> {
+    let set = USER_FILE.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    set.or_else(|| forge_dirs::config().map(|d| d.join("forgecad").join("remotes.toml")))
+}
+
+/// Uses `path` as the user's remotes file in this process (tests; an app setting).
+pub fn set_user_file(path: Option<std::path::PathBuf>) {
+    *USER_FILE.lock().unwrap_or_else(|e| e.into_inner()) = path;
 }
 
 /// `key = "value"` lines, grouped by `[section]` (the few TOML forms these files use).

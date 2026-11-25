@@ -2354,7 +2354,20 @@ impl Gui {
         let mut posed = None;
         // the anchors a selection was of, and those of the body now
         let mut renamed: Option<(Arc<crate::fg::AnchorView>, Arc<crate::fg::AnchorView>)> = None;
-        for m in s.poll() {
+        let msgs = s.poll();
+        // a SERVED part: collaborators' text, and what the link has to say
+        if s.sync.is_some() {
+            if let Some(n) = s.sync_note.take() {
+                self.shell.status = n;
+            }
+            if std::mem::take(&mut s.sync_changed)
+                && let Some(p) = &mut self.shell.fg
+            {
+                p.source = s.src.clone();
+                p.dirty = s.dirty();
+            }
+        }
+        for m in msgs {
             let b = match m {
                 crate::fg::Msg::Built(b) => *b,
                 crate::fg::Msg::Posed { poses, .. } => {
