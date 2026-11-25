@@ -1037,3 +1037,43 @@ fn the_narrow_channel_example_collides_as_its_header_says() {
         );
     }
 }
+
+/// A hem in a reply: a vendor tooling with an acute pair and a flattening pair (roles from the
+/// file); the hem's bend is two steps, its pre-bend then its flattening, each saying its stroke,
+/// the flattening on the flattening tools.
+#[test]
+fn a_hem_is_answered_as_a_pre_bend_and_a_flattening() {
+    let d = forge_dirs::temp_dir().join(format!("fg-bendsim-hem-{}", forge_dirs::process_id()));
+    std::fs::create_dir_all(&d).unwrap();
+    std::fs::write(
+        d.join("hemming.json"),
+        r#"{"base": "std-eu", "id": "hemming",
+  "punches": [
+    {"id": "acute-30", "kind": "acute", "height": 100, "tip_radius": 0.4, "tip_angle": 30, "tip_height": 25, "width": 20, "max_load": 400, "segments": [{"length": 200}]},
+    {"id": "flat-top", "role": "flatten", "height": 100, "tip_radius": 0, "tip_angle": 90, "tip_height": 10, "width": 40, "segments": [{"length": 200}]}
+  ],
+  "dies": [
+    {"id": "v8-30", "v": 8, "angle": 30, "shoulder_radius": 0.6, "height": 60, "width": 30, "max_load": 300, "segments": [{"length": 200}]},
+    {"id": "flat-bottom", "role": "flatten", "v": 6, "angle": 88, "shoulder_radius": 0.6, "height": 60, "width": 60, "segments": [{"length": 200}]}
+  ]}"#,
+    )
+    .unwrap();
+    let src = "shared t = 1\nshared r = 1\nshared k = ratio(0.4)\n\
+sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (120, 20))\n}\n\
+base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
+lip = hem(base.edge(plan.outline[0]), kind: \"open\", gap: t, length: 10)\n";
+    let ask = forge_lang::bendsim::parse(&["tooling", "hemming.json"].map(String::from)).unwrap();
+    let a = ask_src(src, Some(d.clone()), None, &ask);
+    assert!(a.ok, "{}", a.text);
+    assert_eq!(a.json.get("feasible"), Some(&Json::Bool(true)), "{}", a.text);
+    let steps = arr(&a.json, "steps");
+    let strokes: Vec<&str> = steps
+        .iter()
+        .filter_map(|s| s.get("stroke").and_then(Json::str))
+        .collect();
+    assert_eq!(strokes, ["pre-bend", "flatten"], "{}", a.text);
+    assert_eq!(steps[0].get("punch").and_then(Json::str), Some("acute-30"));
+    assert_eq!(steps[1].get("punch").and_then(Json::str), Some("flat-top"));
+    assert_eq!(steps[1].get("die").and_then(Json::str), Some("flat-bottom"));
+    assert_eq!(steps[0].get("bend"), steps[1].get("bend"));
+}

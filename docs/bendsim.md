@@ -128,6 +128,8 @@ z up from the die's top.
 | `tonnage` | air-bending force (1.42 UTS t² / V per metre) vs the press, or kN/m vs a tool |
 | `withdraw` | (warning) the punch coming back up past the sprung part |
 | `handling` | (warning) least distance, the part carried through the operator's move into the step, to every body of the press, vs `clearance` |
+| `tool_rating` | the sheet's thickness vs a tool's published `max_thickness` (only where the maker gives one) |
+| `no_flattening` | a hem's pre-bend passes, but no punch and die on the press flatten it (count of passing flattening setups vs 1) |
 
 `handling`: every step after the first. The move is the planned one: lift off the die, pull out
 towards the operator until the part's sphere is in front of every body, turn there, push in, set
@@ -197,3 +199,20 @@ and fixes, as `cause`), `NoSheet`, `NoSuchSheet` (`sheets`), `NoSuchTooling` (`i
 findings in the DFM report's Item shape: `rule` (the words above), `severity` (violation, warning,
 refused for a blocked bend), `feature` (the flange), `measured`, `limit`, `sense`, `unit`,
 `location {anchor, at: null}`, `data {step, punch, die, tool, phase, phi_deg, at_press}`, `fixes`.
+
+## Hems
+
+A hem's bend is made in two steps, each saying its `stroke`: `pre-bend`, an air bend to 30 degrees
+included (WILA: "The first step when creating a hem is to make a 30° bend"), on tools whose `role`
+bends; then at once `flatten`, the part's base flat on a flat die and the leg closed to the hem's
+turn by a flat face coming down on the part's highest point. Every other step's `stroke` is `bend`.
+The flattening is checked for its stroke, the open height over the pre-bent leg, the tools'
+segments and ratings, the part on itself (but the hem's own two layers: their gap is the sheet's)
+and every tool through the stroke; its force is not checked (the makers' flattening tables are
+read, their columns not yet confirmed). A pre-bend's punch radius is not held to the hem's: the
+tool sets the pre-bend's, the flattening closes it. The flattening has no backgauge stop.
+
+Tools carry a `role` in a tooling file: `bend` (the default), `flatten` (a flat punch face or a
+flat die), `hem` (a combination die: a V for the pre-bend beside a pad that flattens; not yet
+simulated), `offset` with its `z`; and an optional `max_thickness`. The published figures read so
+far are in research/bendsim/tools/hems-data.md.
