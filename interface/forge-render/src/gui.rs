@@ -2361,6 +2361,8 @@ impl Gui {
                     posed = poses.or(posed);
                     continue;
                 }
+                // stopped: the last build stays on screen
+                crate::fg::Msg::Cancelled { .. } => continue,
                 crate::fg::Msg::Warm(d) => {
                     // the faces as they are: the live set's start, not shown
                     if let Some(r) = self

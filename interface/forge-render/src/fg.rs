@@ -118,6 +118,31 @@ enum Work {
 /// The browser's end of part, shared with the build thread: the statement builds stop after.
 type Until = Arc<std::sync::Mutex<Option<String>>>;
 
+/// The build running on the worker, shared with the session: its text's number, the watch on
+/// its budgeted ops (`forge_geom::budget::watched`) and when it began. A newer text, a close or
+/// Cancel stops it: its op refuses within a slice of work, and the build is answered
+/// `Msg::Cancelled`, nothing of it shown or kept.
+type Running = Arc<std::sync::Mutex<Option<(u64, Arc<forge_geom::budget::Watch>, Instant)>>>;
+
+/// While it lives, `seq`'s build is the running one; gone, none is (unless a newer took the slot).
+struct RunningNow(Running, u64);
+
+impl RunningNow {
+    fn start(r: &Running, seq: u64, w: Arc<forge_geom::budget::Watch>) -> RunningNow {
+        *r.lock().unwrap_or_else(|e| e.into_inner()) = Some((seq, w, Instant::now()));
+        RunningNow(r.clone(), seq)
+    }
+}
+
+impl Drop for RunningNow {
+    fn drop(&mut self) {
+        let mut r = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        if r.as_ref().is_some_and(|x| x.0 == self.1) {
+            *r = None;
+        }
+    }
+}
+
 /// A placement's rows from a pose: the frame's axes as columns, its origin last.
 pub fn rows_of(f: &forge_math::Frame) -> crate::scene::Rows {
     let (x, y, z, o) = (f.x().get(), f.y().get(), f.z().get(), f.origin);
@@ -711,6 +736,10 @@ pub enum Msg {
         flat: Option<PartMesh>,
         mesh_ms: f64,
     },
+    /// A build stopped before it was done (a newer text, Cancel): nothing of it is shown or kept.
+    Cancelled {
+        seq: u64,
+    },
     /// Drives set in the kept solve: each occurrence's pose (the last build's order), or None
     /// when they need a build; and the solve's time.
     Posed {
@@ -921,6 +950,8 @@ struct Worker {
     stop: Arc<AtomicBool>,
     /// The browser's end of part (what a build stops after: `Options::until`).
     until: Until,
+    /// The build running, for the session to stop and show the progress of.
+    running: Running,
     cache: Cache,
     mesher: Mesher,
     /// An assembly's meshes by part content, and the placements' meshes last shown.
@@ -944,7 +975,7 @@ impl Worker {
         gpus: Receiver<Gpu>,
         out: Sender<Msg>,
         gpu: Option<Gpu>,
-        (waker, stop, until): (Arc<dyn Fn() + Send + Sync>, Arc<AtomicBool>, Until),
+        (waker, stop, until, running): (Arc<dyn Fn() + Send + Sync>, Arc<AtomicBool>, Until, Running),
         #[cfg(not(target_arch = "wasm32"))] to_mesh: Sender<Whole>,
     ) -> Worker {
         // a thermoform's forming and simulated part go to disk behind the edit, not before it shows
@@ -959,6 +990,7 @@ impl Worker {
             waker,
             stop,
             until,
+            running,
             cache: Cache::default(),
             mesher: Mesher::default(),
             asm_meshes: AsmMeshes::default(),
@@ -976,6 +1008,11 @@ impl Worker {
         let ok = self.out.send(m).is_ok();
         (self.waker)();
         ok
+    }
+
+    /// `seq`'s build was stopped: said, and nothing of it shown.
+    fn cancelled(&self, seq: u64) -> bool {
+        !self.stop.load(Ordering::SeqCst) && self.send(Msg::Cancelled { seq })
     }
 
     /// A body to mesh whole: natively on the mesher's thread (the latest only), in the browser
@@ -1041,6 +1078,10 @@ impl Worker {
         let Some(Work::Text(job)) = text.map(|t| all.swap_remove(t)) else {
             return true;
         };
+        // its budgeted ops watched: a newer text, a close or Cancel stops them
+        let halt = forge_geom::budget::Watch::new();
+        let _running = RunningNow::start(&self.running, job.0, halt.clone());
+        let _watched = forge_geom::budget::watched(halt.clone());
         let t = Instant::now();
         let upto = self.until.lock().unwrap_or_else(|e| e.into_inner()).clone();
         // what the anchors were found for: the text, and where the part was rolled back to
@@ -1066,6 +1107,9 @@ impl Worker {
             self.cache = c;
             if self.stop.load(Ordering::SeqCst) {
                 return false;
+            }
+            if halt.stopped() {
+                return self.cancelled(job.0);
             }
             let build_ms = t.elapsed().as_secs_f64() * 1e3;
             let t = Instant::now();
@@ -1137,6 +1181,9 @@ impl Worker {
             };
             let (shape, c) = forge_lang::run(&job.1, quick, std::mem::take(&mut self.cache));
             self.cache = c;
+            if halt.stopped() {
+                return None;
+            }
             let b = shape.body.as_ref()?;
             let (mesh, flat) = whole(b, flat_body(&shape).as_ref());
             if shape.stage != 0 {
@@ -1144,6 +1191,9 @@ impl Worker {
             }
             Some((mesh, flat))
         });
+        if halt.stopped() {
+            return self.cancelled(job.0);
+        }
         if opening && let Some((mesh, flat)) = before {
             let quick = Options {
                 build: false,
@@ -1211,6 +1261,11 @@ impl Worker {
             let (run, c) = forge_lang::run(&job.1, opts, std::mem::take(&mut self.cache));
             let all = watch.done();
             note_deps(&self.deps, &all);
+            if halt.stopped() {
+                // (the cache keeps only what was made before the stop: `Builder::into_cache`)
+                self.cache = c;
+                return self.cancelled(job.0);
+            }
             let read = opening.then_some(all);
             let anchors = run
                 .anchors
@@ -1365,9 +1420,15 @@ fn work_threaded(
     (jobs, gpus): (Receiver<Work>, Receiver<Gpu>),
     out: Sender<Msg>,
     gpu: Option<Gpu>,
-    (waker, stop, until): (Arc<dyn Fn() + Send + Sync>, Arc<AtomicBool>, Until),
+    (waker, stop, until, running): (Arc<dyn Fn() + Send + Sync>, Arc<AtomicBool>, Until, Running),
 ) {
-    let mut w = Worker::new((dir, file, deps), gpus, out, gpu, (waker, stop.clone(), until));
+    let mut w = Worker::new(
+        (dir, file, deps),
+        gpus,
+        out,
+        gpu,
+        (waker, stop.clone(), until, running),
+    );
     loop {
         let first = match w.next.take() {
             Some(x) => x,
@@ -1393,7 +1454,7 @@ fn work(
     (jobs, gpus): (Receiver<Work>, Receiver<Gpu>),
     out: Sender<Msg>,
     gpu: Option<Gpu>,
-    (waker, stop, until): (Arc<dyn Fn() + Send + Sync>, Arc<AtomicBool>, Until),
+    (waker, stop, until, running): (Arc<dyn Fn() + Send + Sync>, Arc<AtomicBool>, Until, Running),
 ) {
     let (to_mesh, bodies) = channel::<Whole>();
     let mesher_thread = {
@@ -1408,7 +1469,7 @@ fn work(
         gpus,
         out,
         gpu,
-        (waker, stop.clone(), until),
+        (waker, stop.clone(), until, running),
         to_mesh,
     );
     loop {
@@ -1777,6 +1838,10 @@ pub struct Session {
     pub previewing: bool,
     /// Tells its build thread to stop: set when the document closes.
     stop: Arc<AtomicBool>,
+    /// The build running on its thread: stopped by a newer text, a close or Cancel.
+    running: Running,
+    /// The last build Cancel stopped (not one a newer text did), till a build comes back.
+    pub cancelled: Option<u64>,
     /// The browser's end of part: the statement builds stop after (None: the whole part).
     until: Until,
     /// In the single-threaded browser build, the worker itself and its queue: stepped by `poll`.
@@ -1786,8 +1851,10 @@ pub struct Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
-        // its thread finishes the build it's in, does no GPU work after, and ends
+        // its thread stops the build it's in within a slice of work, does no GPU work after, and
+        // ends
         self.stop.store(true, Ordering::SeqCst);
+        self.halt_running(u64::MAX);
     }
 }
 
@@ -1811,13 +1878,23 @@ impl Session {
         let flag = stop.clone();
         let until = Arc::new(std::sync::Mutex::new(None));
         let upto = until.clone();
+        let running = Running::default();
+        let run_slot = running.clone();
         #[cfg(not(target_arch = "wasm32"))]
         {
             let h = std::thread::Builder::new()
                 .name("forge-fg".into())
                 .spawn({
                     let (file, deps) = (path.clone(), deps.clone());
-                    move || work((dir, file, deps), (rx, gpu_rx), tx, gpu, (waker, flag, upto))
+                    move || {
+                        work(
+                            (dir, file, deps),
+                            (rx, gpu_rx),
+                            tx,
+                            gpu,
+                            (waker, flag, upto, run_slot),
+                        )
+                    }
                 })
                 .expect("a thread");
             let mut b = BUILDERS.lock().unwrap_or_else(|e| e.into_inner());
@@ -1830,7 +1907,13 @@ impl Session {
         {
             let (file, deps) = (path.clone(), deps.clone());
             crate::plat::spawn("forge-fg", move || {
-                work_threaded((dir, file, deps), (rx, gpu_rx), tx, gpu, (waker, flag, upto))
+                work_threaded(
+                    (dir, file, deps),
+                    (rx, gpu_rx),
+                    tx,
+                    gpu,
+                    (waker, flag, upto, run_slot),
+                )
             });
         }
         // the browser's one thread: the worker steps when the host polls (see `poll`)
@@ -1841,7 +1924,7 @@ impl Session {
                 gpu_rx,
                 tx,
                 gpu,
-                (waker, flag, upto),
+                (waker, flag, upto, run_slot),
             ),
             rx,
         ));
@@ -1875,6 +1958,8 @@ impl Session {
             changed: 0,
             previewing: false,
             stop,
+            running,
+            cancelled: None,
             until,
             #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
             worker,
@@ -1903,6 +1988,7 @@ impl Session {
     /// Builds the text as it stands (through the warm stages).
     pub fn rebuild(&mut self) -> u64 {
         self.seq += 1;
+        self.halt_running(self.seq);
         self.sent_at.push((self.seq, Instant::now()));
         let _ = self
             .jobs
@@ -1919,6 +2005,35 @@ impl Session {
         self.previewing = true;
         let _ = self.jobs.send(Work::Drive(self.seq, drives));
         self.seq
+    }
+
+    /// Stops the running build if it is older than text `seq` (a newer text, the session's end):
+    /// its budgeted op refuses within a slice of work, and it comes back `Msg::Cancelled`.
+    fn halt_running(&self, seq: u64) {
+        if let Some((s, w, _)) = &*self.running.lock().unwrap_or_else(|e| e.into_inner())
+            && *s < seq
+        {
+            w.stop();
+        }
+    }
+
+    /// Cancel: stops the running build, the last shown staying on screen.
+    pub fn cancel(&mut self) {
+        if let Some((s, w, _)) = &*self.running.lock().unwrap_or_else(|e| e.into_inner()) {
+            w.stop();
+            self.cancelled = Some(*s);
+        }
+    }
+
+    /// The running build's progress: how long it has run, and its budgeted work so far as a
+    /// share of one op's budget (`forge_geom::budget::OP`), which a build of several ops can pass.
+    pub fn progress(&self) -> Option<(f64, f64)> {
+        let r = self.running.lock().unwrap_or_else(|e| e.into_inner());
+        let (_, w, t) = r.as_ref()?;
+        Some((
+            t.elapsed().as_secs_f64(),
+            w.spent() as f64 / forge_geom::budget::OP as f64,
+        ))
     }
 
     /// What the worker has finished.
@@ -1966,6 +2081,11 @@ impl Session {
                     self.sent_at.retain(|s| s.0 > *seq);
                 }
                 Msg::Warm(_) => {}
+                Msg::Cancelled { seq } => {
+                    // done with: nothing of it comes (a newer text's build is still to)
+                    self.done = self.done.max(*seq);
+                    self.sent_at.retain(|s| s.0 > *seq);
+                }
             }
         }
         got
@@ -2013,6 +2133,7 @@ impl Session {
         let text = ops.and_then(|o| edit::apply_all_checked(&self.src, o).ok());
         self.previewing = text.is_some();
         self.seq += 1;
+        self.halt_running(self.seq);
         self.sent_at.push((self.seq, Instant::now()));
         let _ = self.jobs.send(Work::Text((
             self.seq,

@@ -220,7 +220,8 @@ impl std::fmt::Display for BoolError {
 pub(crate) fn budgeted<T>(f: impl FnOnce() -> R<T>) -> R<T> {
     let _b = forge_geom::budget::scoped(forge_geom::budget::OP);
     let r = f();
-    if forge_geom::budget::over() {
+    // (on any of its threads: one that ran dry cut its part of the work short)
+    if forge_geom::budget::exhausted() {
         return Err(BoolError::TooLong);
     }
     r

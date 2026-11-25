@@ -402,6 +402,9 @@ pub struct Builder {
     /// The datum of the last feature pushed, a work feature placed as it was pushed: what
     /// `work::work` would work out again (`take_datum`).
     datum: Option<(usize, forge_model::work::Datum)>,
+    /// The first stage made after this run was stopped (`forge_geom::budget::stopped`, a newer
+    /// edit's): it and those after may have been cut short, so the next run keeps none of them.
+    stopped_at: Option<usize>,
 }
 
 impl Builder {
@@ -414,6 +417,7 @@ impl Builder {
             origins: vec![],
             sketches: HashMap::new(),
             datum: None,
+            stopped_at: None,
             cache,
             reuse: true,
             hosted: false,
@@ -443,7 +447,8 @@ impl Builder {
         }
         let t = make();
         self.remade += 1;
-        if self.building {
+        // (made after a stop: not kept, it may have been cut short)
+        if self.building && !forge_geom::budget::stopped() {
             self.memo.insert(key, Rc::new(t.clone()));
         }
         t
@@ -463,12 +468,21 @@ impl Builder {
     /// Keeps `t` under `key`, as `memo` keeps what it made.
     pub fn memo_keep<T: 'static>(&mut self, key: String, t: T) {
         self.remade += 1;
-        if self.building {
+        if self.building && !forge_geom::budget::stopped() {
             self.memo.insert(key, Rc::new(t));
         }
     }
 
-    pub fn into_cache(self) -> Cache {
+    pub fn into_cache(mut self) -> Cache {
+        // a stopped run's history up to the first stage made after the stop: the next run builds
+        // that again, not taking a stage an op cut short refused or made otherwise
+        if let Some(n) = self.stopped_at {
+            self.features.truncate(n);
+            self.ids.truncate(n);
+            self.stages.truncate(n);
+            self.steps.truncate(n);
+            self.origins.truncate(n);
+        }
         // this run's memo entries, and as many of the ones before it as there is room for: an edit
         // taken back finds its work done
         // (which of the old ones stay: by key, not by a hash's order, so it is the same every run)
@@ -527,6 +541,9 @@ impl Builder {
     }
 
     pub fn keep_measure(&mut self, m: crate::Measure) {
+        if forge_geom::budget::stopped() {
+            return;
+        }
         if let Some(st) = self.stages.last() {
             let kept = &mut self.cache.measured;
             kept.retain(|(s, _)| !Rc::ptr_eq(s, st));
@@ -733,6 +750,12 @@ impl Builder {
 
     /// Keeps the stage just made as the last feature's step (unless it is not keyed).
     fn keep(&mut self, keyable: bool, id: u64) {
+        // made after a stop: kept nowhere (`stopped_at`), whatever it is
+        let stopped = forge_geom::budget::stopped();
+        if stopped && self.stopped_at.is_none() {
+            self.stopped_at = Some(self.stages.len() - 1);
+        }
+        let keyable = keyable && !stopped;
         let step = keyable.then(|| {
             Rc::new(Step {
                 before: self.before(),

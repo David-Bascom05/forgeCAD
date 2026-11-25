@@ -3834,7 +3834,10 @@ pub fn finish(
                         continue;
                     }
                     let x = Arc::new(load_sub(&text, parent.clone(), fence.clone()));
-                    cache.subs.insert(ck, x.clone());
+                    // (made after a stop: not kept, it may have been cut short)
+                    if !forge_geom::budget::stopped() {
+                        cache.subs.insert(ck, x.clone());
+                    }
                     x
                 }
             };
@@ -4007,9 +4010,12 @@ pub fn finish(
         });
         (l.clone(), mine)
     });
+    let stopped = forge_geom::budget::stopped();
     for ((ck, _), (l, mine)) in missing.into_iter().zip(built) {
         t.built += mine as usize;
-        cache.parts.insert(ck, l);
+        if !stopped {
+            cache.parts.insert(ck, l);
+        }
     }
     for (file, (refs, bodies)) in &want {
         // named as the document wrote it, never by its real path
@@ -4082,7 +4088,9 @@ pub fn finish(
                         &bodies,
                         (opts.cosmetic_threads, opts.meshes, opts.comp_anchors),
                     ));
-                    cache.parts.insert(ck, l.clone());
+                    if !forge_geom::budget::stopped() {
+                        cache.parts.insert(ck, l.clone());
+                    }
                     t.built += 1;
                     l
                 }
