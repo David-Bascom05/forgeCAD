@@ -35,17 +35,24 @@ use crate::check::{Face, Move, Surf, V3, Verdict};
 use crate::ival::Ival;
 use crate::tool::{Body, PSeg};
 
-/// The capsule containing a body: core from (0, 0, zc) to (0, 0, z1), radius rho.
+/// The capsule containing a body: the points within rho of its core, the solid cylinder of
+/// radius `a` about the axis from (0, 0, zc) to (0, 0, z1). `a` = 0: the core is the axis
+/// segment (a ball cutter's capsule); `a` > 0, a disc capsule: a bull-nose cutter (radius R,
+/// corner r) is exactly the points within r of the cylinder of radius R − r from z0 + r up.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Capsule {
     pub zc: f64,
     pub z1: f64,
     pub rho: f64,
+    pub a: f64,
 }
 
 /// Whether (r, z) in the (ρ, z) half-plane is proven within c.rho of the core segment: beside the
 /// core (zc ≤ z ≤ z1) an exact comparison r ≤ ρ; beyond its ends, r² + dz² ≤ ρ² in intervals.
 fn within(c: &Capsule, r: f64, z: f64) -> bool {
+    if c.a > 0.0 {
+        return within_disc(c, r, z);
+    }
     if z >= c.zc && z <= c.z1 {
         return r.abs() <= c.rho;
     }
@@ -57,6 +64,46 @@ fn within(c: &Capsule, r: f64, z: f64) -> bool {
     Ival::pt(r).sqr().add(dz.sqr()).hi <= Ival::pt(c.rho).sqr().lo
 }
 
+/// x − y when it is exact (Knuth's two-sum: its rounding error is computed exactly and is 0),
+/// else None.
+fn exact_diff(x: f64, y: f64) -> Option<f64> {
+    let s = x - y;
+    let ny = -y;
+    let bv = s - x;
+    let av = s - bv;
+    let e = (x - av) + (ny - bv);
+    (s.is_finite() && e == 0.0).then_some(s)
+}
+
+/// `within` for a disc capsule: (r, z)'s distance to the core's half-section, the rectangle
+/// [0, a] × [zc, z1], proven at most rho. Beside the rectangle (zc ≤ z ≤ z1, or |r| ≤ a) the
+/// distance is one difference, compared exactly where it is exact (a bull-nose's profile lies
+/// on its capsule's boundary: an interval's widening would refuse it); at its corners
+/// (max(|r| − a, 0))² + dz² ≤ rho² in intervals.
+fn within_disc(c: &Capsule, r: f64, z: f64) -> bool {
+    let r = r.abs();
+    let beside_z = z >= c.zc && z <= c.z1;
+    if beside_z && r <= c.a {
+        return true;
+    }
+    if beside_z {
+        return match exact_diff(r, c.a) {
+            Some(d) => d <= c.rho,
+            None => Ival::pt(r).sub(Ival::pt(c.a)).hi <= c.rho,
+        };
+    }
+    let dz = if z < c.zc { (c.zc, z) } else { (z, c.z1) };
+    if r <= c.a {
+        return match exact_diff(dz.0, dz.1) {
+            Some(d) => d <= c.rho,
+            None => Ival::pt(dz.0).sub(Ival::pt(dz.1)).hi <= c.rho,
+        };
+    }
+    let dr = Ival::pt(r).sub(Ival::pt(c.a));
+    let dzi = Ival::pt(dz.0).sub(Ival::pt(dz.1));
+    dr.sqr().add(dzi.sqr()).hi <= Ival::pt(c.rho).sqr().lo
+}
+
 /// The capsule of a body, when its whole chain lies within its largest radius of the axis
 /// segment from z0 + rmax to z1 (a ball end mill's cutter body; not a flat or bull nose).
 pub fn capsule(b: &Body) -> Option<Capsule> {
@@ -65,7 +112,20 @@ pub fn capsule(b: &Body) -> Option<Capsule> {
         zc: b.z0 + b.rmax,
         z1: b.z1,
         rho: b.rmax,
+        a: 0.0,
     };
+    // (the `old-closed-form` feature: a ball's capsule only, as before)
+    axis_capsule(b, c).or_else(|| {
+        if cfg!(feature = "old-closed-form") {
+            None
+        } else {
+            disc_capsule(b)
+        }
+    })
+}
+
+/// A body within the axis capsule `c` (every piece checked), or None.
+fn axis_capsule(b: &Body, c: Capsule) -> Option<Capsule> {
     if !(c.zc <= c.z1 && c.rho > 0.0) {
         return None;
     }
@@ -84,6 +144,41 @@ pub fn capsule(b: &Body) -> Option<Capsule> {
             }
         }
         i += 1;
+    }
+    Some(c)
+}
+
+/// A disc capsule for a body with a corner arc off the axis (a bull-nose): radius rho the
+/// arc's, core radius a its centre's distance from the axis, from the centre's height up; every
+/// piece proven within it (a line by its ends: the distance to the core, a convex set, is convex
+/// along it; an arc by its centre in the core and its radius at most rho). None otherwise.
+fn disc_capsule(b: &Body) -> Option<Capsule> {
+    let (ac, r) = b.chain.iter().find_map(|s| match *s {
+        PSeg::Arc { c, r, .. } if c[0] > 0.0 => Some((c, r)),
+        _ => None,
+    })?;
+    let c = Capsule {
+        zc: ac[1],
+        z1: b.z1,
+        rho: r,
+        a: ac[0],
+    };
+    if !(c.zc <= c.z1 && c.rho > 0.0 && c.a > 0.0 && c.a.is_finite()) {
+        return None;
+    }
+    for s in &b.chain {
+        match *s {
+            PSeg::Line { a, b: e } => {
+                if !within_disc(&c, a[0], a[1]) || !within_disc(&c, e[0], e[1]) {
+                    return None;
+                }
+            }
+            PSeg::Arc { c: k, r, .. } => {
+                if !(k[0] >= 0.0 && k[0] <= c.a && k[1] >= c.zc && k[1] <= c.z1 && r <= c.rho) {
+                    return None;
+                }
+            }
+        }
     }
     Some(c)
 }
@@ -289,6 +384,69 @@ pub(crate) fn shell(q_lo: f64, q_hi: f64, s_lo: f64, s_hi: f64) -> Option<f64> {
     })
 }
 
+/// `shell` for a disc capsule against a cylinder about the line through the origin along `ax`:
+/// P is P0 (the parallelogram `q` is of) swept by the horizontal disc of radius a. Each point of
+/// P is within a of P0, so its distance to the axis lies in [d_min(P0) − a, d_max(P0) + a]; and
+/// for the unit k = â × h (h = ẑ × â, horizontal, ⊥ â), k ⊥ â, so a point's distance to the axis
+/// is at least |w·k|, linear over P: its range is P0's corners' (a parallelogram's extremes are
+/// at corners) widened by the disc's reach along k, a·|k_xy|. The larger of the two lower
+/// bounds is one. (A horizontal axis: k is vertical, the disc adds nothing, and the bound is
+/// the core's height over or under the axis: tight for a cutter riding over the cylinder.)
+fn disc_shell(q: &Quad, ai: [Ival; 3], a: f64, s_lo: f64, s_hi: f64) -> Option<f64> {
+    let (q_lo, q_hi) = (q.min_lo()?, q.max_hi()?);
+    if !(q_lo.is_finite() && q_hi.is_finite() && s_lo.is_finite() && s_hi.is_finite()) {
+        return None;
+    }
+    let ai_ = Ival::pt(a);
+    let mut dmin = Ival::pt(q_lo).sqrt().sub(ai_).lo;
+    let dmax = Ival::pt(q_hi).sqrt().add(ai_).hi;
+    // h = ẑ × ax, k = ax × h
+    let h = [ai[1].neg(), ai[0], Ival::pt(0.0)];
+    let k = [
+        ai[1].mul(h[2]).sub(ai[2].mul(h[1])),
+        ai[2].mul(h[0]).sub(ai[0].mul(h[2])),
+        ai[0].mul(h[1]).sub(ai[1].mul(h[0])),
+    ];
+    let kk = dot(k, k).sqrt();
+    if kk.lo > 0.0 {
+        let kxy = k[0].sqr().add(k[1].sqr()).sqrt();
+        let reach = ai_.mul(kxy).div(kk);
+        let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+        let mut j = 0;
+        while j < 4 {
+            let (s, t) = CORNERS[j];
+            j += 1;
+            let w = add(add(q.w0, scl(q.d, Ival::pt(s))), scl(q.e, Ival::pt(t)));
+            let v = dot(w, k).div(kk);
+            if !(fin(v) && fin(reach)) {
+                return None;
+            }
+            lo = lo.min(v.lo);
+            hi = hi.max(v.hi);
+        }
+        let lo = Ival::pt(lo).sub(Ival::pt(reach.hi)).lo;
+        let hi = Ival::pt(hi).add(Ival::pt(reach.hi)).hi;
+        let vmin = if lo > 0.0 {
+            lo
+        } else if hi < 0.0 {
+            -hi
+        } else {
+            0.0
+        };
+        if vmin > dmin {
+            dmin = vmin;
+        }
+    }
+    let dmin = if dmin > 0.0 { dmin } else { 0.0 };
+    Some(if dmin > s_hi {
+        Ival::pt(dmin).sub(Ival::pt(s_hi)).lo.max(0.0)
+    } else if dmax < s_lo {
+        Ival::pt(s_lo).sub(Ival::pt(dmax)).lo.max(0.0)
+    } else {
+        0.0
+    })
+}
+
 /// The proven lower bound on min sd_body over the face's full surface and the line a → b, or
 /// None when no closed form applies.
 pub fn lower(c: &Capsule, f: &Face, a: V3, b: V3) -> Option<f64> {
@@ -339,7 +497,11 @@ pub fn lower(c: &Capsule, f: &Face, a: V3, b: V3) -> Option<f64> {
             let rhi = ri.mul(Ival::pt(khi));
             let rlo2 = ri.mul(Ival::pt(klo)).sqr().sub(rhi.mul(along).sqr());
             let rlo = if rlo2.lo > 0.0 { rlo2.sqrt().lo } else { 0.0 };
-            shell(q.min_lo()?, q.max_hi()?, rlo, rhi.hi)?
+            if c.a > 0.0 {
+                disc_shell(&q, ai, c.a, rlo, rhi.hi)?
+            } else {
+                shell(q.min_lo()?, q.max_hi()?, rlo, rhi.hi)?
+            }
         }
         Surf::Plane { o, u, v } => {
             let (ui, vi) = (iv(u), iv(v));
@@ -367,6 +529,17 @@ pub fn lower(c: &Capsule, f: &Face, a: V3, b: V3) -> Option<f64> {
                 lo = lo.min(h.lo);
                 hi = hi.max(h.hi);
             }
+            // a disc capsule: P is the parallelogram swept by the horizontal disc of radius a,
+            // whose points reach a·|n_xy|/|n| either way along the normal
+            if c.a > 0.0 {
+                let nxy = n[0].sqr().add(n[1].sqr()).sqrt();
+                let w = Ival::pt(c.a).mul(nxy).div(nn);
+                if !fin(w) {
+                    return None;
+                }
+                lo = Ival::pt(lo).sub(Ival::pt(w.hi)).lo;
+                hi = Ival::pt(hi).add(Ival::pt(w.hi)).hi;
+            }
             if lo > 0.0 {
                 lo
             } else if hi < 0.0 {
@@ -377,6 +550,19 @@ pub fn lower(c: &Capsule, f: &Face, a: V3, b: V3) -> Option<f64> {
         }
         // tori and cones: contact_rev.rs
         Surf::Torus { o, .. } | Surf::Cone { o, .. } => crate::contact_rev::dist(f, sub(base, iv(o)), d, e)?,
+    };
+    // a disc capsule's P is the parallelogram P0 above swept by the horizontal disc of radius
+    // a: every point of P is within a of P0, so dist(F, P) ≥ dist(F, P0) − a (planes take the
+    // disc exactly, above)
+    let dist = if c.a > 0.0 && !matches!(f.surf, Surf::Plane { .. } | Surf::Cyl { .. }) {
+        Ival::pt(dist).sub(Ival::pt(c.a)).lo
+    } else if c.a > 0.0 && dist <= 0.0 {
+        // FALLBACK's review: the plane and cylinder arms take the disc exactly, but where the
+        // face passes through P they give 0, and a face point inside P is as deep as its own
+        // depth there, up to a (P lies in a slab of thickness 2a), so a + rho inside the body
+        -c.a
+    } else {
+        dist
     };
     Some(Ival::pt(dist).sub(Ival::pt(c.rho)).lo)
 }
@@ -428,6 +614,7 @@ fn inputs_ok(c: &Capsule, f: &Face, a: V3, b: V3) -> bool {
         && small(c.zc)
         && small(c.z1)
         && small(c.rho)
+        && small(c.a)
         && small(f.mu)
         && small(f.p.lo)
         && small(f.p.hi)
@@ -600,16 +787,359 @@ mod tests {
     /// minimum sampled densely.
     #[test]
     fn never_above_the_true_minimum() {
-        let b = ball(6.0);
+        let closes = never_above(&ball(6.0), 0x9e3779b97f4a7c15u64, 0..150);
+        assert!(closes > 15, "{closes}");
+    }
+
+    /// The same for a bull-nose cutter (its disc capsule): the bound never exceeds the sampled
+    /// true minimum, and never clears where the branch and bound finds a Hit.
+    /// (Its 150 cases in ten tests of 15, each replaying the same seeded sequence: the same
+    /// cases, side by side; this one also counts the closed form's clears over all 150.)
+    #[test]
+    #[cfg(not(feature = "old-closed-form"))]
+    fn a_bull_noses_bound_is_never_above_the_true_minimum() {
+        let closes = never_above(&bull_10_1(), 0x2545f4914f6cdd1du64, 0..15);
+        assert!(closes > 15, "{closes}");
+    }
+
+    fn bull_10_1() -> Body {
+        assemble(&Cutter::Bull { d: 10.0, re: 1.0 }, 30.0, 10.0, 40.0, None)
+            .unwrap()
+            .bodies[0]
+            .clone()
+    }
+
+    macro_rules! bull_never_above_cases {
+        ($($name:ident: $range:expr;)*) => {$(
+            /// `a_bull_noses_bound_is_never_above_the_true_minimum`'s cases in this range.
+            #[test]
+            #[cfg(not(feature = "old-closed-form"))]
+            fn $name() {
+                never_above(&bull_10_1(), 0x2545f4914f6cdd1du64, $range);
+            }
+        )*};
+    }
+    bull_never_above_cases! {
+        a_bull_noses_bound_is_never_above_the_true_minimum_15: 15..30;
+        a_bull_noses_bound_is_never_above_the_true_minimum_30: 30..45;
+        a_bull_noses_bound_is_never_above_the_true_minimum_45: 45..60;
+        a_bull_noses_bound_is_never_above_the_true_minimum_60: 60..75;
+        a_bull_noses_bound_is_never_above_the_true_minimum_75: 75..90;
+        a_bull_noses_bound_is_never_above_the_true_minimum_90: 90..105;
+        a_bull_noses_bound_is_never_above_the_true_minimum_105: 105..120;
+        a_bull_noses_bound_is_never_above_the_true_minimum_120: 120..135;
+        a_bull_noses_bound_is_never_above_the_true_minimum_135: 135..150;
+    }
+
+    /// A bull-nose's body has a disc capsule: its corner's radius, its corner centre's distance
+    /// from the axis as the core's radius, from the corner centre's height up.
+    #[test]
+    #[cfg(not(feature = "old-closed-form"))]
+    fn a_bull_nose_has_a_disc_capsule() {
+        let b = assemble(&Cutter::Bull { d: 10.0, re: 1.0 }, 30.0, 10.0, 40.0, None)
+            .unwrap()
+            .bodies[0]
+            .clone();
         let c = capsule(&b).unwrap();
-        let mut seed = 0x9e3779b97f4a7c15u64;
+        assert_eq!((c.zc, c.rho, c.a), (b.z0 + 1.0, 1.0, 4.0));
+    }
+
+    /// FALLBACK's independent review of the disc capsule (cam/speed-bull): the bound never
+    /// exceeds the true minimum, on the cases the branch's own sweep leaves out (a vertical-axis
+    /// cylinder, a torus, a cone) and on near-touching poses, with the body sampled as it is.
+    #[test]
+    #[cfg(not(feature = "old-closed-form"))]
+    fn review_a_disc_capsules_bound_never_exceeds_the_truth() {
+        // (its 400 poses in five tests of 80, each replaying the same seeded sequence; this one
+        // also checks that over 100 of all 400 had a closed form)
+        review_sweep(0..80);
+    }
+
+    macro_rules! review_sweep_cases {
+        ($($name:ident: $range:expr;)*) => {$(
+            /// `review_a_disc_capsules_bound_never_exceeds_the_truth`'s poses in this range.
+            #[test]
+            #[cfg(not(feature = "old-closed-form"))]
+            fn $name() {
+                review_sweep($range);
+            }
+        )*};
+    }
+    review_sweep_cases! {
+        review_a_disc_capsules_bound_never_exceeds_the_truth_80: 80..160;
+        review_a_disc_capsules_bound_never_exceeds_the_truth_160: 160..240;
+        review_a_disc_capsules_bound_never_exceeds_the_truth_240: 240..320;
+        review_a_disc_capsules_bound_never_exceeds_the_truth_320: 320..400;
+    }
+
+    /// The review's poses in `range` checked against the sampled truth; every pose drawn (the
+    /// same sequence whatever the range), and over 100 of all of them must have a closed form.
+    #[cfg(not(feature = "old-closed-form"))]
+    fn review_sweep(range: std::ops::Range<usize>) {
+        let b = assemble(&Cutter::Bull { d: 10.0, re: 1.0 }, 30.0, 10.0, 40.0, None)
+            .unwrap()
+            .bodies[0]
+            .clone();
+        let c = capsule(&b).unwrap();
+        let mut seed = 0x853c49e6748fea9bu64;
         let mut rnd = || {
             seed ^= seed << 13;
             seed ^= seed >> 7;
             seed ^= seed << 17;
             (seed >> 11) as f64 / (1u64 << 53) as f64
         };
-        let mut agreed = 0;
+        let mut worst = f64::INFINITY;
+        let mut cases = 0;
+        for k in 0..400 {
+            let f = match k % 5 {
+                // a bore wall: the cylinder's axis along z, the tool inside it
+                0 => Face::new(
+                    Surf::Cyl {
+                        o: [0.0, 0.0, 0.0],
+                        x: [1.0, 0.0, 0.0],
+                        y: [0.0, 1.0, 0.0],
+                        ax: [0.0, 0.0, 1.0],
+                        r: 5.0 + rnd() * 10.0,
+                    },
+                    Ival::new(-3.2, 3.2),
+                    Ival::new(-30.0, 30.0),
+                    None,
+                    0.0,
+                    1,
+                ),
+                // a cylinder lying along y, the tool riding over or beside it
+                1 => Face::new(
+                    Surf::Cyl {
+                        o: [rnd() * 6.0 - 3.0, 0.0, -4.0],
+                        x: [0.0, 0.0, 1.0],
+                        y: [1.0, 0.0, 0.0],
+                        ax: [0.0, 1.0, 0.0],
+                        r: 2.0 + rnd() * 8.0,
+                    },
+                    Ival::new(-3.2, 3.2),
+                    Ival::new(-25.0, 25.0),
+                    None,
+                    0.0,
+                    1,
+                ),
+                2 => Face::new(
+                    Surf::Torus {
+                        o: [rnd() * 4.0 - 2.0, rnd() * 4.0 - 2.0, -3.0],
+                        x: [1.0, 0.0, 0.0],
+                        y: [0.0, 1.0, 0.0],
+                        ax: [0.0, 0.0, 1.0],
+                        big: 8.0 + rnd() * 6.0,
+                        r: 1.0 + rnd() * 3.0,
+                        cm: 1.0,
+                        sm: 0.0,
+                    },
+                    Ival::new(-3.2, 3.2),
+                    Ival::new(-3.2, 3.2),
+                    None,
+                    0.0,
+                    3,
+                ),
+                3 => Face::new(
+                    Surf::Cone {
+                        o: [rnd() * 4.0 - 2.0, rnd() * 4.0 - 2.0, -12.0],
+                        x: [1.0, 0.0, 0.0],
+                        y: [0.0, 1.0, 0.0],
+                        ax: [0.0, 0.0, 1.0],
+                        r0: 3.0 + rnd() * 6.0,
+                        k: 0.3 + rnd() * 0.5,
+                    },
+                    Ival::new(-3.2, 3.2),
+                    Ival::new(0.0, 14.0),
+                    None,
+                    0.0,
+                    4,
+                ),
+                // a steep plane, where the disc reaches furthest along the normal
+                _ => Face::new(
+                    Surf::Plane {
+                        o: [0.0, 0.0, rnd() * 4.0 - 2.0],
+                        u: [rnd() * 0.4 + 0.8, 0.0, rnd() * 3.0 - 1.5],
+                        v: [0.0, 1.0, rnd() * 3.0 - 1.5],
+                    },
+                    Ival::new(-30.0, 30.0),
+                    Ival::new(-30.0, 30.0),
+                    None,
+                    0.0,
+                    2,
+                ),
+            };
+            // poses from far to just touching
+            let a = [rnd() * 16.0 - 8.0, rnd() * 16.0 - 8.0, rnd() * 18.0 - 2.0];
+            let bb = [
+                a[0] + rnd() * 8.0 - 4.0,
+                a[1] + rnd() * 8.0 - 4.0,
+                a[2] + rnd() * 5.0 - 2.5,
+            ];
+            let Some(lo) = lower(&c, &f, a, bb) else { continue };
+            cases += 1;
+            if !range.contains(&k) {
+                continue;
+            }
+            let mut tmin = f64::INFINITY;
+            let n = 40;
+            for i in 0..=n {
+                for j in 0..=n {
+                    let p = f.p.lo + (f.p.hi - f.p.lo) * i as f64 / n as f64;
+                    let q = f.q.lo + (f.q.hi - f.q.lo) * j as f64 / n as f64;
+                    let y = f.surf.eval(Ival::pt(p), Ival::pt(q));
+                    let y = [y[0].mid(), y[1].mid(), y[2].mid()];
+                    for m in 0..=20 {
+                        let s = m as f64 / 20.0;
+                        let g = [
+                            a[0] + (bb[0] - a[0]) * s,
+                            a[1] + (bb[1] - a[1]) * s,
+                            a[2] + (bb[2] - a[2]) * s,
+                        ];
+                        let sd = b
+                            .sd(
+                                Ival::pt(y[0] - g[0]),
+                                Ival::pt(y[1] - g[1]),
+                                Ival::pt(y[2] - g[2]),
+                            )
+                            .mid();
+                        if sd < tmin {
+                            tmin = sd;
+                        }
+                    }
+                }
+            }
+            assert!(
+                lo <= tmin + 1e-9,
+                "case {k} ({:?}): bound {lo} over the sampled truth {tmin}",
+                f.surf
+            );
+            worst = worst.min(tmin - lo);
+        }
+        assert!(cases > 100, "only {cases} cases had a closed form");
+        assert!(worst >= -1e-9, "worst slack {worst}");
+    }
+
+    /// FALLBACK's review: the straddle case (the arm's own value 0) floors the bound at -rho,
+    /// but a face point can lie up to `a` deep in the core, so `a + rho` deep in the body. With
+    /// a negative limit (limit = stock to leave - inner tolerance) `clear` then clears a gouge.
+    /// The second review's cases, through the gouge certifier itself (`check::certify`, which
+    /// takes the closed form first): a bull-nose with a corner smaller than the tolerance
+    /// (re 0.02, limit −0.05) whose core crosses a plane, and a cylinder, is never certified
+    /// Clear (the true minima are −2.02 and −3.0 mm). Before the −(a + ρ) floor both came out
+    /// Clear { −0.02 } with no cells searched.
+    #[test]
+    #[cfg(not(feature = "old-closed-form"))]
+    fn review_a_small_corner_bull_through_a_face_is_never_certified() {
+        use crate::check::certify;
+        let b = assemble(&Cutter::Bull { d: 10.0, re: 0.02 }, 30.0, 10.0, 40.0, None)
+            .unwrap()
+            .bodies[0]
+            .clone();
+        let mv = Move::Line {
+            a: [0.0, 0.0, 0.0],
+            b: [1.0, 0.0, 0.3],
+        };
+        let plane = Face::new(
+            Surf::Plane {
+                o: [0.0, 0.0, 2.0],
+                u: [1.0, 0.0, 0.01],
+                v: [0.0, 1.0, 0.0],
+            },
+            Ival::new(-30.0, 30.0),
+            Ival::new(-30.0, 30.0),
+            None,
+            0.0,
+            1,
+        );
+        let cyl = Face::new(
+            Surf::Cyl {
+                o: [0.0, 0.0, 2.0],
+                x: [0.0, 1.0, 0.0],
+                y: [0.0, 0.0, 1.0],
+                ax: [1.0, 0.0, 0.0],
+                r: 1.0,
+            },
+            Ival::new(-1.0, 1.0),
+            Ival::new(-20.0, 20.0),
+            None,
+            0.0,
+            2,
+        );
+        for (what, f) in [("plane", &plane), ("cylinder", &cyl)] {
+            let lo = lower(&capsule(&b).unwrap(), f, [0.0, 0.0, 0.0], [1.0, 0.0, 0.3]).unwrap();
+            assert!(lo <= -2.0, "{what}: the bound {lo} is above the true minimum");
+            let (v, _) = certify(&b, f, &mv, -0.05, 0.01, 20_000);
+            assert!(
+                !matches!(v, Verdict::Clear { .. }),
+                "{what}: a gouge certified Clear: {v:?}"
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(not(feature = "old-closed-form"))]
+    fn review_a_straddling_disc_capsule_clears_a_gouge() {
+        let b = assemble(&Cutter::Bull { d: 10.0, re: 1.0 }, 30.0, 10.0, 40.0, None)
+            .unwrap()
+            .bodies[0]
+            .clone();
+        let c = capsule(&b).unwrap();
+        // a bore wall of radius 5.04, the tool axis 4.87 off its axis: the body (radius 5) is
+        // most of the way through the wall
+        let f = Face::new(
+            Surf::Cyl {
+                o: [0.0, 0.0, 0.0],
+                x: [1.0, 0.0, 0.0],
+                y: [0.0, 1.0, 0.0],
+                ax: [0.0, 0.0, 1.0],
+                r: 5.04,
+            },
+            Ival::new(-3.2, 3.2),
+            Ival::new(-30.0, 30.0),
+            None,
+            0.0,
+            1,
+        );
+        let a = [4.87, 0.0, 2.0];
+        let lo = lower(&c, &f, a, a).unwrap();
+        // the sampled truth over the face and the still move
+        let mut tmin = f64::INFINITY;
+        for i in 0..=200 {
+            for j in 0..=40 {
+                let p = f.p.lo + (f.p.hi - f.p.lo) * i as f64 / 200.0;
+                let q = f.q.lo + (f.q.hi - f.q.lo) * j as f64 / 40.0;
+                let y = f.surf.eval(Ival::pt(p), Ival::pt(q));
+                let sd = b
+                    .sd(
+                        Ival::pt(y[0].mid() - a[0]),
+                        Ival::pt(y[1].mid() - a[1]),
+                        Ival::pt(y[2].mid() - a[2]),
+                    )
+                    .mid();
+                tmin = tmin.min(sd);
+            }
+        }
+        println!("bound {lo}, sampled truth {tmin}, rho {} a {}", c.rho, c.a);
+        // the public decision: a roughing limit of one corner radius of gouge
+        let v = clear(&b, &f, &Move::Line { a, b: a }, -1.5);
+        println!("clear(limit -1.5) = {v:?}");
+        assert!(lo <= tmin + 1e-9, "bound {lo} over the truth {tmin}");
+        assert!(v.is_none(), "cleared a gouge of {tmin}: {v:?}");
+    }
+
+    /// The cases in `range` checked densely; every case drawn (the same sequence whatever the
+    /// range). Returns how many of all the cases the closed form clears (lo ≥ 0).
+    fn never_above(b: &Body, seed0: u64, range: std::ops::Range<usize>) -> usize {
+        let b = b.clone();
+        let c = capsule(&b).unwrap();
+        let mut seed = seed0;
+        let mut rnd = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed >> 11) as f64 / (1u64 << 53) as f64
+        };
+        let mut closes = 0;
         let mut k = 0;
         while k < 150 {
             let kind = k % 3;
@@ -652,6 +1182,13 @@ mod tests {
                 a[2] + rnd() * 4.0 - 2.0,
             ];
             let lo = lower(&c, &f, a, bb).unwrap();
+            if lo >= 0.0 {
+                closes += 1;
+            }
+            if !range.contains(&k) {
+                k += 1;
+                continue;
+            }
             // dense sample of the true minimum over the face (its parameter box) and the move
             let mut tmin = f64::INFINITY;
             let n = 24;
@@ -694,11 +1231,10 @@ mod tests {
                     !matches!(v, Verdict::Hit { .. }),
                     "k={k}: closed form clears at {lo}, B&B hits: {v:?}"
                 );
-                agreed += 1;
             }
             k += 1;
         }
-        assert!(agreed > 15, "{agreed}");
+        closes
     }
 
     /// A level arc cleared by its chords is never cleared above its true minimum (dense

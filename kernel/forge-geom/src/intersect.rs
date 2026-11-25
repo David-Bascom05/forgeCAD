@@ -816,12 +816,16 @@ pub(crate) fn subdivide_stretches(
     subdivide_pieces(c, range, s, near, stack)
 }
 
+/// A piece of the range being searched, `(lo, hi, speed bound, g at lo, g at hi)`, its ends' g
+/// where the search already has them.
+type Piece = (f64, f64, f64, Option<f64>, Option<f64>);
+
 fn subdivide_pieces(
     c: &Curve,
     range: Interval,
     s: &Surface,
     near: Option<Box3>,
-    mut stack: Vec<(f64, f64, f64)>,
+    stack: Vec<(f64, f64, f64)>,
 ) -> CurveSurface {
     let g = |t: f64| s.implicit(c.eval(t));
     let off = |p: Point3| {
@@ -834,36 +838,49 @@ fn subdivide_pieces(
     // the Lipschitz bound until its pieces are that small: past a budget, a piece 1/4096 of the
     // range is kept only where the surface's sign changes across it
     let (mut budget, coarse) = (100_000usize, range.width() / 4096.0);
-    let mut leaves: Vec<(f64, f64)> = Vec::new();
-    while let Some((a, b, lip)) = stack.pop() {
+    // each piece with g at its ends where already known: a kept piece's middle is its halves'
+    // shared end, so the leaves' ends below are mostly values the search worked out on its way
+    // down (the same g, at the same t: the same value), not to be worked out again
+    let known = |t: f64, v: Option<f64>| v.unwrap_or_else(|| g(t));
+    let mut stack: Vec<Piece> = stack
+        .into_iter()
+        .map(|(a, b, lip)| (a, b, lip, None, None))
+        .collect();
+    let mut leaves: Vec<(f64, f64, Option<f64>, Option<f64>)> = Vec::new();
+    while let Some((a, b, lip, ga, gb)) = stack.pop() {
         let m = 0.5 * (a + b);
         let p = c.eval(m);
         let reach = lip * 0.5 * (b - a) + tol::LINEAR;
-        if off(p) > reach || s.implicit(p).abs() > reach {
+        if off(p) > reach {
+            continue;
+        }
+        let gm = s.implicit(p);
+        if gm.abs() > reach {
             continue;
         }
         budget = budget.saturating_sub(1);
         if budget == 0 && b - a <= coarse && b - a > tol::LINEAR / lip {
-            if (g(a) < 0.0) != (g(b) < 0.0) {
-                leaves.push((a, b));
+            let (va, vb) = (known(a, ga), known(b, gb));
+            if (va < 0.0) != (vb < 0.0) {
+                leaves.push((a, b, Some(va), Some(vb)));
             }
             continue;
         }
         if b - a <= tol::LINEAR / lip {
-            leaves.push((a, b));
+            leaves.push((a, b, ga, gb));
             if leaves.len() > 20_000 {
                 return CurveSurface::Overlap;
             }
             continue;
         }
         // right half first so the left half pops first: leaves come out in order
-        stack.push((m, b, lip));
-        stack.push((a, m, lip));
+        stack.push((m, b, lip, Some(gm), gb));
+        stack.push((a, m, lip, ga, Some(gm)));
     }
     let mut hits = Vec::new();
     let mut i = 0;
     while i < leaves.len() {
-        let (lo, mut hi) = leaves[i];
+        let (lo, mut hi) = (leaves[i].0, leaves[i].1);
         let mut j = i + 1;
         while j < leaves.len() && leaves[j].0 <= hi {
             hi = leaves[j].1;
@@ -872,13 +889,14 @@ fn subdivide_pieces(
         // sign changes across the group's leaf boundaries
         let mut marks: Vec<f64> = vec![lo];
         marks.extend(leaves[i..j].iter().map(|l| l.1));
-        let vals: Vec<f64> = marks.iter().map(|&t| g(t)).collect();
+        let mut vals: Vec<f64> = vec![known(lo, leaves[i].2)];
+        vals.extend(leaves[i..j].iter().map(|l| known(l.1, l.3)));
         let changes: Vec<usize> = (1..vals.len())
             .filter(|&k| (vals[k - 1] < 0.0) != (vals[k] < 0.0))
             .collect();
         if changes.len() % 2 == 1 {
             let k = changes[0];
-            let t = bisect_sign(&g, marks[k - 1], marks[k]);
+            let t = bisect_sign_from(&g, marks[k - 1], marks[k], vals[k - 1], vals[k]);
             hits.push(CurveHit {
                 t,
                 point: c.eval(t),
@@ -935,10 +953,16 @@ fn chain_pieces(ic: &crate::intcurve::IntCurve, range: Interval, s: &Surface) ->
     out
 }
 
-fn bisect_sign(g: &impl Fn(f64) -> f64, mut a: f64, mut b: f64) -> f64 {
+/// Where `g` changes sign between `a` and `b`.
+#[cfg(test)]
+fn bisect_sign(g: &impl Fn(f64) -> f64, a: f64, b: f64) -> f64 {
+    bisect_sign_from(g, a, b, g(a), g(b))
+}
+
+/// Where `g` changes sign between `a` and `b`, given its values there.
+fn bisect_sign_from(g: &impl Fn(f64) -> f64, mut a: f64, mut b: f64, mut fa: f64, mut fb: f64) -> f64 {
     // Illinois: secant steps, the kept end's value halved when an end stays twice. Over a leaf a
     // surface's value along a curve is all but straight, so two or three steps reach rounding.
-    let (mut fa, mut fb) = (g(a), g(b));
     // an end on the surface is the crossing: a chain's sample that lies on it, say
     if fb.abs() <= 1e-13 {
         return b;
@@ -1340,6 +1364,72 @@ mod tests {
     use crate::testing::*;
     use forge_math::rng::Rng;
     use forge_math::{Point2, dmath};
+
+    /// The subdivision reuses g at a leaf's ends from the search's own evaluations, which is
+    /// right only if a traced curve's point at t is the same whichever evaluation of the curve it
+    /// is: a procedural face's curve sets its parameter hints on its first evaluation, and its
+    /// very first one, before them, could take another way. Pinned on fresh curves (each t the
+    /// curve's first evaluation ever) round a screw face cut by a plane: the first point is the
+    /// later one, bit for bit, and the search's answer on a fresh curve is a warmed curve's.
+    #[test]
+    fn a_traced_curves_first_evaluation_is_its_later_ones() {
+        use crate::screw::{Screw, Section};
+        let sec = |a: (f64, f64), b: (f64, f64)| Section::Line {
+            a: Point2::new(a.0, a.1),
+            b: Point2::new(b.0, b.1),
+        };
+        let loop_ = [
+            sec((8.0, -1.0), (11.0, -1.0)),
+            sec((11.0, -1.0), (11.0, 1.0)),
+            sec((11.0, 1.0), (8.0, 1.0)),
+            sec((8.0, 1.0), (8.0, -1.0)),
+        ];
+        let faces = Screw::loop_faces(
+            Frame::WORLD,
+            &loop_,
+            0.0,
+            0.8,
+            Interval::new(0.0, 4.0 * dmath::PI),
+        )
+        .expect("a screw");
+        let cut = Surface::Plane(Plane::new(Frame::from_z(
+            Point3::new(0.0, 0.0, 3.0),
+            Vec3::new(0.2, 0.1, 1.0).normalize().unwrap(),
+        )));
+        let region = Box3::from_points([Point3::new(-15.0, -15.0, -5.0), Point3::new(15.0, 15.0, 15.0)]);
+        let across = Surface::Plane(Plane::new(Frame::from_z(Point3::new(0.0, 0.0, 0.0), UnitVec3::X)));
+        let mut seen = 0;
+        for face in faces {
+            let s = face.surface();
+            let fresh = || crate::intcurve::trace(&s, &cut, region).unwrap_or_default();
+            let n = fresh().len();
+            for k in 0..n {
+                let hi = fresh()[k].domain_hi();
+                for i in 0..8 {
+                    let t = hi * (i as f64 + 0.37) / 8.0;
+                    let c = Curve::Intersection(std::sync::Arc::new(fresh().swap_remove(k)));
+                    let first = across.implicit(c.eval(t));
+                    let again = across.implicit(c.eval(t));
+                    assert_eq!(first.to_bits(), again.to_bits(), "curve {k} t {t}");
+                    seen += 1;
+                }
+                let range = Interval::new(0.0, hi);
+                let cold = Curve::Intersection(std::sync::Arc::new(fresh().swap_remove(k)));
+                let warm = Curve::Intersection(std::sync::Arc::new(fresh().swap_remove(k)));
+                let _ = warm.eval(0.5 * hi);
+                let key = |r: CurveSurface| match r {
+                    CurveSurface::Hits(h) => h.iter().map(|h| (h.t.to_bits(), h.point)).collect::<Vec<_>>(),
+                    _ => Vec::new(),
+                };
+                assert_eq!(
+                    key(curve_surface(&cold, range, &across)),
+                    key(curve_surface(&warm, range, &across)),
+                    "curve {k}"
+                );
+            }
+        }
+        assert!(seen > 0, "the cut found no curve");
+    }
 
     /// A line within ANGULAR of parallel to a plane, over a long range: decided over the range,
     /// not at its origin (B1, research/kernel-audit/tilt-wrong-ok.md).

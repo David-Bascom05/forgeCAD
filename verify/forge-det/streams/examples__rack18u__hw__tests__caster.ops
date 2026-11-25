@@ -1,0 +1,7 @@
+{"doc":"examples/rack18u/hw/tests/caster.fg"}
+{"op":"SetParam","param":"z_plate","value":{"value":-3.1500000000000004,"dim":"Length"}}
+{"op":"SetParam","param":"size_m8","value":{"value":8.4,"dim":"Length"}}
+{"op":"SetParam","param":"min_m8","value":{"value":7.098,"dim":"Length"}}
+{"op":"Rename","from":"plate","to":"plate_r"}
+{"op":"MoveFeature","id":"at_bolt","before":null}
+{"op":"ReplaceFeature","id":"m8","text":"m8 = fit_rule(external_thread, internal_thread, size: size_m8, min_engagement: min_m8)\n"}

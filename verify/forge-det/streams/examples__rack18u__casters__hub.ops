@@ -1,0 +1,5 @@
+{"doc":"examples/rack18u/casters/hub.fg"}
+{"op":"SetParam","param":"ro","value":{"value":33.6,"dim":"Length"}}
+{"op":"SetParam","param":"hw","value":{"value":16.8,"dim":"Length"}}
+{"op":"SetParam","param":"hl","value":{"value":18.900000000000002,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}

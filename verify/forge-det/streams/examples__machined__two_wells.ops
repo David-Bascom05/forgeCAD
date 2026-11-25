@@ -1,0 +1,7 @@
+{"doc":"examples/machined/two_wells.fg"}
+{"op":"SetParam","param":"L","value":{"value":63,"dim":"Length"}}
+{"op":"SetParam","param":"W","value":{"value":42,"dim":"Length"}}
+{"op":"SetParam","param":"t","value":{"value":12.600000000000001,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"MoveFeature","id":"deep","before":null}
+{"op":"ReplaceFeature","id":"shal","text":"shal = cut(pk.sw, 5)\n"}

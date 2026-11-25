@@ -1,0 +1,5 @@
+{"doc":"examples/rack18u/casters/spacer.fg"}
+{"op":"SetParam","param":"ri","value":{"value":4.305,"dim":"Length"}}
+{"op":"SetParam","param":"ro","value":{"value":6.300000000000001,"dim":"Length"}}
+{"op":"SetParam","param":"h","value":{"value":15.435,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}

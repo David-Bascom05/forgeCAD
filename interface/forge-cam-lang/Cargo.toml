@@ -11,6 +11,7 @@ repository.workspace = true
 forge-dirs = { path = "../../kernel/forge-dirs" }
 # machines as data and the posted text simulated on them (the app's machine simulation)
 forge-machine = { path = "../../kernel/forge-machine" }
+forge-machine-lang = { path = "../forge-machine-lang" }
 forge-lang = { path = "../forge-lang" }
 forge-agent = { path = "../forge-agent" }
 forge-cam = { path = "../../kernel/forge-cam" }
@@ -18,6 +19,9 @@ forge-cam-geom = { path = "../../kernel/forge-cam-geom" }
 forge-cam-3d = { path = "../../kernel/forge-cam-3d" }
 forge-memo = { path = "../../kernel/forge-memo" }
 forge-tooling = { path = "../../kernel/forge-tooling" }
+forge-workholding = { path = "../../kernel/forge-workholding" }
+forge-workholding-builder = { path = "../forge-workholding-builder" }
+forge-git = { path = "../../kernel/forge-git" }
 forge-material = { path = "../../kernel/forge-material" }
 # tool instances as a library kind (cam/tool-instances/ at the project and user levels)
 forge-library = { path = "../forge-library" }
@@ -29,6 +33,8 @@ forge-sketch = { path = "../../kernel/forge-sketch" }
 [dev-dependencies]
 # cam_bench (research/cam-speed) times the turning documents on their own path
 forge-turn-lang = { path = "../forge-turn-lang" }
+# workholding_any's own fixture, exported from a part as a user's STEP
+forge-step = { path = "../../kernel/forge-step" }
 
 [lints]
 workspace = true

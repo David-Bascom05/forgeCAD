@@ -1,0 +1,3 @@
+{"doc":"examples/rack18u/panels/probes/strike_frames.fg"}
+{"op":"Rename","from":"prt","to":"prt_r"}
+{"op":"MoveFeature","id":"j1","before":null}

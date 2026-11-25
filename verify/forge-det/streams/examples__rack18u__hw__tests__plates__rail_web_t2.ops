@@ -1,0 +1,5 @@
+{"doc":"examples/rack18u/hw/tests/plates/rail_web_t2.fg"}
+{"op":"SetParam","param":"t","value":{"value":1.974,"dim":"Length"}}
+{"op":"SetParam","param":"dh","value":{"value":6.93,"dim":"Length"}}
+{"op":"SetParam","param":"w","value":{"value":31.5,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}

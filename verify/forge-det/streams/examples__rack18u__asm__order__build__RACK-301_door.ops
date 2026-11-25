@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/asm/order/build/RACK-301_door.fg"}
+{"op":"SetParam","param":"t3","value":{"value":3.1710000000000003,"dim":"Length"}}
+{"op":"SetParam","param":"t2","value":{"value":1.974,"dim":"Length"}}
+{"op":"SetParam","param":"t1","value":{"value":1.596,"dim":"Length"}}
+{"op":"Rename","from":"ref","to":"ref_r"}
+{"op":"ReplaceFeature","id":"outer","text":"sketch outer(on: offset(plan.plane, -t1)) {\n  lc = pt(h_l, -k_l)\n  for i in 0..3 {\n    st = pt(h_l + r_st * cos(a_st[i]), -(k_l + r_st * sin(a_st[i])))\n  }\n  up = line((0, 0), (0, -xl), construction: true)\n  down = line((0, 0), (0, xl), construction: true)\n}\n"}

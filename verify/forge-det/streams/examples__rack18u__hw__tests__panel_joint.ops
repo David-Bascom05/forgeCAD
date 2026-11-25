@@ -1,0 +1,7 @@
+{"doc":"examples/rack18u/hw/tests/panel_joint.fg"}
+{"op":"SetParam","param":"z_lower","value":{"value":0.5,"dim":"Length"}}
+{"op":"SetParam","param":"size_m5","value":{"value":5.25,"dim":"Length"}}
+{"op":"SetParam","param":"min_m5","value":{"value":5.25,"dim":"Length"}}
+{"op":"Rename","from":"lower","to":"lower_r"}
+{"op":"MoveFeature","id":"at_scr","before":null}
+{"op":"ReplaceFeature","id":"m5","text":"m5 = fit_rule(external_thread, internal_thread, size: size_m5, min_engagement: min_m5)\n"}

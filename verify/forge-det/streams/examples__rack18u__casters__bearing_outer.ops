@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/casters/bearing_outer.fg"}
+{"op":"SetParam","param":"ro","value":{"value":11.55,"dim":"Length"}}
+{"op":"SetParam","param":"rl","value":{"value":9.171225000000002,"dim":"Length"}}
+{"op":"SetParam","param":"rs","value":{"value":10.185,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}
+{"op":"ReplaceFeature","id":"groove","text":"groove = revolve(gs.g, axis: gs.zax, cut: true)\n"}

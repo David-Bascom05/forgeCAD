@@ -10,6 +10,9 @@ repository.workspace = true
 # forge-num's interval rules without the exact-zero rule (`forge-num/ival-strict`), for one train's
 # comparison: a build feature, never a runtime switch.
 ival-strict = ["forge-num/ival-strict"]
+# the closed forms as they were before the bull-nose ones (contact::disc_capsule, drop::bull_section):
+# kept for one train as the rewrite's way back (research/cam/speed-ledger.md)
+old-closed-form = []
 
 [dependencies]
 # the exact numbers (Nat, the exact reals, Ival): one implementation, shared with forge-math

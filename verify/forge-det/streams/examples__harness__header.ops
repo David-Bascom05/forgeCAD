@@ -1,0 +1,5 @@
+{"doc":"examples/harness/header.fg"}
+{"op":"SetParam","param":"pitch","value":{"value":2.6670000000000003,"dim":"Length"}}
+{"op":"SetParam","param":"w","value":{"value":8.4,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"ReplaceFeature","id":"holes","text":"holes = hole(at: top.p, d: hd, depth: hdepth)\n"}

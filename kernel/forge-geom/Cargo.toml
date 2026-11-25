@@ -21,6 +21,10 @@ certified_trace = []
 # only (forge-lang's `node-mend-off`, .github/workflows/node-mutation.yml), which checks that
 # fg_mcp's plate is refused again
 node-mend-off = []
+# an ellipse's closest point by the old sampling (64 samples of the distance's slope, each sign
+# change bisected), not the exact critical points (curve.rs `ellipse_square`): kept one train, for
+# the differential test and to go back
+ellipse-foot-sampled = []
 
 [lints]
 workspace = true

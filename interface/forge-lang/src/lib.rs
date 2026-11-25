@@ -19,6 +19,7 @@ pub mod drawing;
 pub mod edit;
 pub mod edit_ops;
 pub mod error;
+pub mod expect_words;
 pub mod eval;
 pub mod explode;
 pub mod export;
@@ -46,6 +47,8 @@ pub mod robot;
 pub mod shapes;
 pub mod sheet;
 pub mod sketch;
+/// Every host that runs forge-lang frees what its runs kept, between runs (`sketch::release_sketches`).
+pub use sketch::{ReleaseOnDrop, release_sketches};
 pub mod sketch_text;
 pub mod stdparts;
 pub mod store;

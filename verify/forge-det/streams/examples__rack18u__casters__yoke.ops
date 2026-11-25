@@ -1,0 +1,5 @@
+{"doc":"examples/rack18u/casters/yoke.fg"}
+{"op":"SetParam","param":"rk","value":{"value":5.460000000000001,"dim":"Length"}}
+{"op":"SetParam","param":"rh","value":{"value":30.450000000000003,"dim":"Length"}}
+{"op":"SetParam","param":"rsi","value":{"value":27.825000000000003,"dim":"Length"}}
+{"op":"Rename","from":"ref","to":"ref_r"}

@@ -1,0 +1,6 @@
+{"doc":"examples/unified/hinged_box.fg"}
+{"op":"SetParam","param":"W","value":{"value":84,"dim":"Length"}}
+{"op":"SetParam","param":"D","value":{"value":63,"dim":"Length"}}
+{"op":"SetParam","param":"H","value":{"value":42,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"ReplaceFeature","id":"hinge","text":"hinge = revolute(lid.hp, base.hp, turn: open, limit: (lo, hi))\n"}

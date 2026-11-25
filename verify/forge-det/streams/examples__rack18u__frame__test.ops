@@ -1,0 +1,7 @@
+{"doc":"examples/rack18u/frame/test.fg"}
+{"op":"SetParam","param":"rail_front","value":{"value":105,"dim":"Length"}}
+{"op":"SetParam","param":"rail_rear","value":{"value":761.25,"dim":"Length"}}
+{"op":"SetParam","param":"t2","value":{"value":1.974,"dim":"Length"}}
+{"op":"Rename","from":"base_pan","to":"base_pan_r"}
+{"op":"MoveFeature","id":"m6_thread","before":null}
+{"op":"ReplaceFeature","id":"fh_press","text":"fh_press = fit_rule(\"../hw/pem_fh_m6_20.fg\", \"post.fg\")\n"}

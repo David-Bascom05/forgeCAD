@@ -3,7 +3,7 @@
 # frame: the machine's base frame at the home pose.
 shared c0x = 0
 shared c0y = 0
-shared c0z0 = -99.5
+shared c0z0 = -99
 shared c0r = 126.5
 shared c0h = 99
 

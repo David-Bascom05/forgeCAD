@@ -1,0 +1,5 @@
+{"doc":"examples/rack18u/casters/envelope_ref.fg"}
+{"op":"SetParam","param":"ri","value":{"value":93.97500000000001,"dim":"Length"}}
+{"op":"SetParam","param":"ro","value":{"value":99.75,"dim":"Length"}}
+{"op":"SetParam","param":"z0","value":{"value":1.05,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}

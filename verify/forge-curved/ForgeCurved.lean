@@ -67,3 +67,4 @@ import ForgeCurved.PifNear
 import ForgeCurved.PlaceMerge
 import ForgeCurved.BlendNode
 import ForgeCurved.ScrewFlip
+import ForgeCurved.EllipseFoot

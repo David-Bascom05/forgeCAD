@@ -1,0 +1,6 @@
+{"doc":"examples/harness/robot_loom.fg"}
+{"op":"SetParam","param":"out","value":{"value":21,"dim":"Length"}}
+{"op":"SetParam","param":"out_ctrl","value":{"value":47.25,"dim":"Length"}}
+{"op":"SetParam","param":"od18","value":{"value":2.52,"dim":"Length"}}
+{"op":"Rename","from":"plate","to":"plate_r"}
+{"op":"MoveFeature","id":"on_mb","before":null}

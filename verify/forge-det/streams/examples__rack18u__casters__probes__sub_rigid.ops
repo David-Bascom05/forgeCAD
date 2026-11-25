@@ -1,0 +1,5 @@
+{"doc":"examples/rack18u/casters/probes/sub_rigid.fg"}
+{"op":"SetParam","param":"roll","value":{"value":31.499999999999996,"dim":"Angle"}}
+{"op":"Rename","from":"axle","to":"axle_r"}
+{"op":"MoveFeature","id":"ring_in","before":null}
+{"op":"ReplaceFeature","id":"ring_out","text":"ring_out = fastened(brg.outer.ax, wheel_part.a)\n"}

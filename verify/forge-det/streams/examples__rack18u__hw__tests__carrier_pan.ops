@@ -1,0 +1,7 @@
+{"doc":"examples/rack18u/hw/tests/carrier_pan.fg"}
+{"op":"SetParam","param":"z_pan","value":{"value":0.5,"dim":"Length"}}
+{"op":"SetParam","param":"size_m6","value":{"value":6.300000000000001,"dim":"Length"}}
+{"op":"SetParam","param":"min_m6","value":{"value":5.4915,"dim":"Length"}}
+{"op":"Rename","from":"pan","to":"pan_r"}
+{"op":"MoveFeature","id":"at_scr","before":null}
+{"op":"ReplaceFeature","id":"m6","text":"m6 = fit_rule(external_thread, internal_thread, size: size_m6, min_engagement: min_m6)\n"}

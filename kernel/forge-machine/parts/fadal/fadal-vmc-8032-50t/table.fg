@@ -2,7 +2,7 @@
 # frame: the machine's base frame at the home pose (forgecad Haas approximation).
 shared x0 = -1034.05
 shared y0 = -380
-shared z0 = -99
+shared z0 = -98
 shared lx = 2068.1
 shared ly = 760
 shared lz = 98

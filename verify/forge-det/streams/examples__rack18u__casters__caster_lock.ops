@@ -1,0 +1,7 @@
+{"doc":"examples/rack18u/casters/caster_lock.fg"}
+{"op":"SetParam","param":"ru","value":{"value":26.25,"dim":"Length"}}
+{"op":"SetParam","param":"zu","value":{"value":5.649,"dim":"Length"}}
+{"op":"SetParam","param":"au","value":{"value":15.749999999999998,"dim":"Angle"}}
+{"op":"Rename","from":"plate","to":"plate_r"}
+{"op":"MoveFeature","id":"f_shoe","before":null}
+{"op":"ReplaceFeature","id":"m8_rule","text":"m8_rule = fit_rule(external_thread, internal_thread, size: m8, min_engagement: m8_min)\n"}

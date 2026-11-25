@@ -299,6 +299,9 @@ pub struct Issue {
     /// From the last checked build, kept while the new build's checks run (an assembly's shape
     /// comes first): shown as "checking…", replaced when they are done.
     pub stale: bool,
+    /// What a person may want under the text, shown on hover: a failed expect's line as written
+    /// (`expect interferences = 0`), its text being in words.
+    pub detail: Option<String>,
 }
 
 /// What the browser and the dialogs ask of the host.
@@ -1791,9 +1794,14 @@ impl Shell {
                 ),
                 _ => (is.text.clone(), None),
             };
-            let row = ui.label(egui::RichText::new(text).font(sans(12.0)).color(if is.stale { t.ink2 } else { t.ink }));
+            let said = ui.label(egui::RichText::new(text).font(sans(12.0)).color(if is.stale { t.ink2 } else { t.ink }));
+            places.push((format!("fg:issue-text:{i}"), said.rect));
+            // the kernel's reason for a failed exact intersection, else the line as written under
+            // the words (a failed expect's `expect interferences = 0`)
             if let Some(why) = why {
-                row.on_hover_text(why.as_str());
+                said.on_hover_text(why.as_str());
+            } else if let Some(d) = &is.detail {
+                said.on_hover_text(egui::RichText::new(d).font(mono(12.0)));
             }
             if !is.fixes.is_empty() || is.asm.is_some() {
                 ui.add_space(2.0);

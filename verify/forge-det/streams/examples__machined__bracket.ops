@@ -1,0 +1,6 @@
+{"doc":"examples/machined/bracket.fg"}
+{"op":"SetParam","param":"L","value":{"value":73.5,"dim":"Length"}}
+{"op":"SetParam","param":"H","value":{"value":47.25,"dim":"Length"}}
+{"op":"SetParam","param":"t","value":{"value":14.700000000000001,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"ReplaceFeature","id":"bore_h","text":"bore_h = hole(at: hs.c, d: bore, depth: thru)\n"}

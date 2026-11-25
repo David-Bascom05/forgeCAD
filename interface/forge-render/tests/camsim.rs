@@ -908,3 +908,285 @@ fn the_detail_window_is_fine_and_quick() {
     let coarse = sim.stock_shown().unwrap().0.cell;
     assert!(coarse > 4.0 * cell, "finer than the whole grid ({coarse})");
 }
+
+/// The flange on the Haas VF-2, held in a vise (`vise` given) and placed by `at` (the setup's
+/// own work offset, e.g. ", at: (-381, -203, -400)"; empty: none, so the sim places it).
+fn flange_on_vf2(at: &str, vise: bool) -> Sim {
+    let dir = machined();
+    let holding = if vise {
+        ", fixture: vise(\"generic-vise-150\", across: \"y\", clamp: 3)"
+    } else {
+        ""
+    };
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg"))
+        .unwrap()
+        .replace("machine(\"generic-vmc3\")", "machine(\"haas-vf-2\")")
+        .replace("post: \"fanuc\"", "post: \"haas\"")
+        // 6 below the part, 3 of it in the jaws: the profile's 0.5 mm break-through stays 2.5
+        // above them
+        .replace("below: 3)", "below: 6)")
+        .replace(", at: (0, 0, -250))", &format!("{at}{holding})"));
+    Sim::open(&src, &dir)
+}
+
+/// The vise on the VF-2 (David: "why no vise? it's floating"): with no `at:` the sim seats the
+/// vise's base (the workholding library's table plane) on the table, measured against the
+/// table the machine checks (its record's envelope, at the run's start, in the part's frame;
+/// the drawn part sits 1 mm inside it, reported to CAM-MACHINE: what's drawn is to be what's
+/// checked), and derives the work offset from that; the stock
+/// sits between the jaws, its bottom gripped below their top; the posted path lines up with
+/// the part in the vise (the tool's tip on it at every feed). Given that offset as `at:`, the
+/// same; given one that leaves the vise off the table, a check says by how much.
+#[test]
+fn the_vise_sits_on_the_vf2s_table() {
+    use forge_machine::kin;
+    let sim = flange_on_vf2("", true);
+    assert!(
+        sim.cam.ok,
+        "{:?} {:?}",
+        sim.cam.errors,
+        sim.markers.iter().map(|m| &m.text).collect::<Vec<_>>()
+    );
+    let mv = sim.machines[0].as_ref().expect("the VF-2 runs it");
+    let run = &mv.run;
+    assert!(!run.wcs_given);
+    let (lo, hi) = run.holding.expect("the vise");
+    assert!(run.seat.unwrap().abs() < 1e-9, "seated: {:?}", run.seat);
+    assert!(
+        !mv.markers.iter().any(|m| m.rule == "workholding_off_table"),
+        "{:?}",
+        mv.markers.iter().map(|m| &m.text).collect::<Vec<_>>()
+    );
+    // the table as checked: its top under the vise's footprint, in the document's part frame
+    let def = &run.def;
+    let q = mv.q_at(0.0);
+    let pose = kin::pose(def, &q);
+    let w = mv.to_part(&q);
+    let table = def
+        .bodies
+        .iter()
+        .find(|b| b.name.contains("table"))
+        .expect("a table body");
+    let m = w.then(kin::link(def, &pose, &table.link));
+    let tris = forge_render::machine_mesh::prims_tris(&table.prims);
+    let top = tris
+        .pos
+        .iter()
+        .map(|p| m.apply(*p))
+        .filter(|p| p[0] >= lo[0] - 1.0 && p[0] <= hi[0] + 1.0 && p[1] >= lo[1] - 1.0 && p[1] <= hi[1] + 1.0)
+        .map(|p| p[2])
+        .fold(f64::NEG_INFINITY, f64::max);
+    let top = if top.is_finite() {
+        top
+    } else {
+        // the footprint holds no vertex of the table (its top is one big face): the highest
+        tris.pos
+            .iter()
+            .map(|p| m.apply(*p)[2])
+            .fold(f64::NEG_INFINITY, f64::max)
+    };
+    assert!(
+        (top - lo[2]).abs() < 0.05,
+        "the vise's base at z {:.3}, the table's top at {top:.3}",
+        lo[2]
+    );
+    // the stock between the jaws, gripped
+    let s = &sim.setups[0];
+    let jaw = |n: &str| s.fixture.iter().find(|f| f.0 == n).unwrap().clone();
+    let (fixed, moving) = (jaw("fixed jaw"), jaw("moving jaw"));
+    // drawn as checked, coloured by the library's roles: the base is the device's body
+    let body: Vec<&str> = s
+        .fixture
+        .iter()
+        .zip(&s.fixture_body)
+        .filter(|(_, b)| **b)
+        .map(|(f, _)| f.0.as_str())
+        .collect();
+    assert_eq!(
+        body,
+        ["base"],
+        "{:?}",
+        s.fixture.iter().map(|f| &f.0).collect::<Vec<_>>()
+    );
+    let k = (0..2)
+        .find(|&k| (fixed.2[k] - s.stock.min[k]).abs() < 1e-6)
+        .expect("the fixed jaw on a side of the stock");
+    assert!(
+        (moving.1[k] - s.stock.max[k]).abs() < 1e-6,
+        "the moving jaw on the other"
+    );
+    assert!(s.stock.min[2] < fixed.2[2] && s.stock.min[2] >= lo[2]);
+    // the posted path on the part in the vise: every feed's tip in the document's frame
+    let ends: Vec<[f64; 3]> = sim.tl.segs.iter().map(|g| g.b).collect();
+    for g in mv.tl.segs.iter().filter(|g| g.kind != Kind::Rapid) {
+        let d = ends
+            .iter()
+            .map(|e| (0..3).map(|k| (e[k] - g.b[k]).ipow(2)).sum::<f64>().sqrt())
+            .fold(f64::INFINITY, f64::min);
+        assert!(d < 1e-6, "a machine motion ends {d} from the posted path");
+    }
+    // the offset it derived, given as the setup's own: seated the same
+    // (the work offset is per control letter, in the control's order)
+    let axis = |l: char| {
+        let k = run.control.letters.iter().position(|c| *c == l).unwrap();
+        run.wcs[k]
+    };
+    let (wx, wy, wz) = (axis('X'), axis('Y'), axis('Z'));
+    let at = format!(", at: ({wx}, {wy}, {wz})");
+    let given = flange_on_vf2(&at, true);
+    let g = given.machines[0]
+        .as_ref()
+        .unwrap_or_else(|e| panic!("{at}: {e}; {:?} {:?}", given.cam.errors, given.cam.warnings));
+    assert!(g.run.wcs_given);
+    assert!(g.run.seat.unwrap().abs() < 1e-6, "{at}: {:?}", g.run.seat);
+    // one that leaves it in the air: said, by how much
+    let high = format!(", at: ({wx}, {wy}, {})", wz + 2.5);
+    let off = flange_on_vf2(&high, true);
+    let o = off.machines[0].as_ref().unwrap();
+    let m = o
+        .markers
+        .iter()
+        .find(|m| m.rule == "workholding_off_table")
+        .expect("the vise off the table, said");
+    assert!((o.run.seat.unwrap() - 2.5).abs() < 1e-6, "{:?}", o.run.seat);
+    assert!(m.text.contains("2.50 mm above the table"), "{}", m.text);
+    // no workholding: nothing seated, nothing made up (the view says the part is unclamped)
+    let bare = flange_on_vf2("", false);
+    let b = bare.machines[0].as_ref().unwrap();
+    assert!(b.run.holding.is_none() && b.run.seat.is_none());
+}
+
+/// What's drawn is what's checked (David): for every body of every built-in machine, the
+/// source the simulation draws it from against the one the collision check takes
+/// (camsim::machine::sources: its real part where forge_machine_lang::real_trees compiled it,
+/// else its record's primitives). A body drawn from one and checked by another is a gap,
+/// counted here and listed. The count may only fall; a body drawn that the check leaves out entirely is a gap
+/// too. The workholding is drawn from the boxes the run checks (the vise test).
+#[test]
+fn what_is_drawn_against_what_is_checked() {
+    use forge_render::camsim::machine::{Source, sources};
+    let mut gaps = vec![];
+    let mut bodies = 0;
+    for def in forge_machine::library::builtin() {
+        for b in sources(&def, false) {
+            bodies += 1;
+            // one source: both the record's part, both its primitives, or neither
+            let same = match (&b.drawn, &b.checked) {
+                (Source::Part(a), Source::Part(c)) => a == c,
+                (Source::Prims, Source::Prims) | (Source::None, Source::None) => true,
+                _ => false,
+            };
+            if !same {
+                gaps.push(format!(
+                    "{} {}: drawn {:?}, checked {:?}",
+                    def.name, b.body, b.drawn, b.checked
+                ));
+            }
+        }
+    }
+    eprintln!(
+        "{} of {bodies} bodies drawn from other than what is checked:",
+        gaps.len()
+    );
+    for g in &gaps {
+        eprintln!("  {g}");
+    }
+    // every body the check takes is drawn (nothing checked unseen)
+    for def in forge_machine::library::builtin() {
+        for b in sources(&def, false) {
+            assert!(
+                b.checked == Source::None || b.drawn != Source::None,
+                "{} {}: checked but not drawn",
+                def.name,
+                b.body
+            );
+        }
+    }
+    // the ratchet: lower it as gaps close, never raise it. 1170 of 1170 on 2026-11-25 (each body
+    // drawn from its `.fg` part, checked by its record's primitives); 3 with CAM-MACHINE's real
+    // trees (machines/real-collision): the display-only bodies (`check = false`: the Haas
+    // enclosures, whose parts are solid blocks, and the VF-2's way covers), drawn, not checked
+    const GAPS_AT_MOST: usize = 3;
+    assert!(gaps.len() <= GAPS_AT_MOST, "{} gaps", gaps.len());
+}
+
+/// Any workholding, not one vise (David: "do not over fit to one haas vise; collision should
+/// use any vise geometry including custom imports"): a plate of the user's own, a STEP in their
+/// project (cam/workholding/mine.toml, `fixture: workholding("my-plate", at: ..)`), in no
+/// catalogue. The simulation draws it from the mesh its compile wrote, and that mesh and the
+/// faces certification checks are one compile (forge_cam::fixture::body_source): the same
+/// file, and their boxes agree. The machine run still checks the fixture's boxes (the box
+/// about its faces): counted, as a gap, until it takes the faces too.
+#[test]
+fn a_fixture_of_the_users_own_is_drawn_as_it_is_checked() {
+    use forge_render::camsim::machine::{Source, holding_sources};
+    let d = forge_dirs::temp_dir().join(format!("fg-camsim-hold-{}", forge_dirs::process_id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(d.join("cam/workholding")).unwrap();
+    std::fs::copy(machined().join("flange.fg"), d.join("flange.fg")).unwrap();
+    // a plate 400 square, 20 thick, its top at z = 0, a bolt hole through it, as a STEP
+    let plate = "shared L = 400\nshared W = 400\nshared T = 20\nparam bolt.d = 12\nparam top.hx = 150\n\nsketch plan(on: xy) {\n  outline = rect(corner: (-L / 2, -W / 2), size: (L, W))\n}\nplate = extrude(plan, T)\nsketch top(on: plate.end) {\n  h = pt(hx, hx)\n}\nbolt = hole(at: top.h, d: d, depth: thru)\n";
+    let (run, _) = forge_lang::run(plate, forge_lang::Options::default(), Default::default());
+    assert!(run.ok(), "{:?}", run.errors);
+    let step = forge_step::export(run.body.as_ref().unwrap(), &forge_step::Options::default()).unwrap();
+    std::fs::write(d.join("my-plate.step"), step.text).unwrap();
+    std::fs::write(
+        d.join("cam/workholding/mine.toml"),
+        "[[workholding]]\nname = \"my-plate\"\nkind = \"custom\"\nvendor = \"me\"\nproduct = \"a plate of my own\"\nmodel_file = \"my-plate.step\"\n",
+    )
+    .unwrap();
+    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2)), origin: \"top-center\", tol: 0.01, fixture: workholding(\"my-plate\", at: (0, 0, -20)))\nskim = facing(op1, tool: t1, to: 19.95, step: 1)\nprog = program(op1, post: \"fanuc\")\n";
+    let sim = Sim::open(src, &d);
+    assert!(sim.cam.ok, "{:?} {:?}", sim.cam.errors, sim.cam.warnings);
+    let f = sim.cam.setup_view(0).unwrap().fixture.unwrap();
+    let placed = f.placed.as_ref().expect("a placed device");
+    let s = &sim.setups[0];
+    assert_eq!(s.holding.len(), placed.bodies.len());
+    let mut gaps = 0;
+    for (b, hb) in placed.bodies.iter().zip(&s.holding) {
+        let (mesh, faces) = forge_cam::fixture::body_source(b).expect("a model body");
+        let mesh = mesh.expect("its compile's mesh, written beside its faces");
+        let faces = faces.unwrap();
+        assert!(!faces.is_empty());
+        // drawn: the simulation's part is that mesh, read and posed
+        let (part, m, t) = hb.part.as_ref().expect("drawn from its mesh");
+        assert_eq!(std::path::Path::new(part), mesh.as_path(), "{}", b.name);
+        let tr = forge_render::camsim::machine::holding_part(part).expect("the mesh reads");
+        let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+        for v in &tr.pos {
+            for k in 0..3 {
+                let x = m[k][0] * v[0] + m[k][1] * v[1] + m[k][2] * v[2] + t[k];
+                lo[k] = lo[k].min(x);
+                hi[k] = hi[k].max(x);
+            }
+        }
+        // checked: the faces' box, the same within their own error
+        let (mut flo, mut fhi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+        for fc in &faces {
+            for k in 0..3 {
+                flo[k] = flo[k].min(fc.bbox[k].lo + fc.mu);
+                fhi[k] = fhi[k].max(fc.bbox[k].hi - fc.mu);
+            }
+        }
+        for k in 0..3 {
+            assert!(
+                (lo[k] - flo[k]).abs() < 0.05 && (hi[k] - fhi[k]).abs() < 0.05,
+                "{} axis {k}: drawn {lo:?}..{hi:?}, checked {flo:?}..{fhi:?}",
+                b.name
+            );
+        }
+        // the plate where the setup put it: its underside on the table at z = -20, its top at 0
+        assert!(hi[2].abs() < 0.05 && (lo[2] + 20.0).abs() < 0.05, "{lo:?} {hi:?}");
+        // the machine run checks this body by the box about its faces: a gap, counted below
+        gaps += 1;
+    }
+    // the machine run's side: drawn from the mesh, checked by the box about its faces
+    let src = holding_sources(f);
+    assert!(
+        src.iter()
+            .all(|b| matches!(b.drawn, Source::Model(_)) && b.checked == Source::Boxes),
+        "{src:?}"
+    );
+    const HOLDING_GAPS_AT_MOST: usize = 1;
+    assert!(gaps <= HOLDING_GAPS_AT_MOST, "{gaps}");
+}

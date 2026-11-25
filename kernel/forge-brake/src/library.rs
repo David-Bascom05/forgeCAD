@@ -2,7 +2,7 @@
 //! (Promecam-style) set and an American set, each with straight, gooseneck and acute punches, a
 //! range of V dies and a press. Ids are `SET/TOOL`.
 use crate::tooling::{
-    Backgauge, Beam, Die, Finger, Press, Punch, PunchKind, Relief, Segment, Springback, Style, Tooling,
+    Backgauge, Beam, Die, Finger, Press, Punch, PunchKind, Relief, Role, Segment, Springback, Style, Tooling,
 };
 use forge_math::dmath;
 
@@ -76,6 +76,8 @@ fn punch(
         },
         max_load: Some(max_load),
         drawn_width: None,
+        role: Role::Bend,
+        max_thickness: None,
     }
 }
 
@@ -106,6 +108,8 @@ fn die(
             us_segments()
         },
         max_load: Some(max_load),
+        role: Role::Bend,
+        max_thickness: None,
     }
 }
 

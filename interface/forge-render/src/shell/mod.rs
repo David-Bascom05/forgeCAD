@@ -1673,6 +1673,9 @@ impl Shell {
         // Settings, the modal over everything (not while it takes a key for a command)
         } else if self.prefs.open && self.prefs.capture.is_none() {
             self.prefs.open = false;
+        } else if let Some(b) = self.sheet.bend_sim.as_mut().filter(|b| b.pending_replace.is_some()) {
+            // the bend simulation's re-plan question: Esc is Keep mine (UX-LEAD)
+            b.pending_replace = None;
         } else if let Some(w) = self.cam.as_mut().filter(|w| w.escape_level()) {
             // the Manufacture workspace: its dialog, else its floating window
             w.escape();

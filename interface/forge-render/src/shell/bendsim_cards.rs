@@ -27,6 +27,8 @@ pub fn punch_title(r: &PunchRec) -> String {
 /// A die's name as its maker gives it, with its V: "Trumpf OW200/K 86° die V16".
 pub fn die_title(r: &DieRec) -> String {
     match &r.die {
+        // the angle once: a maker's name that already says it ("EV004 30°") is not given it twice
+        Ok(d) if r.prov.name.contains('°') => format!("{} {} die V{}", r.prov.maker, r.prov.name, num(d.v)),
         Ok(d) => format!(
             "{} {} {:.0}° die V{}",
             r.prov.maker,
@@ -52,7 +54,37 @@ pub fn tool_title(cat: Option<&fb::catalog::Catalog>, id: &str, punch: bool) -> 
             c.dies.iter().find(|r| r.id == id).map(die_title)
         }
     });
-    found.unwrap_or_else(|| id.to_string())
+    // a tool the library has no record of (a stand-in set's): its key in words, as tool_short
+    found.unwrap_or_else(|| tool_short(cat, id, punch))
+}
+
+/// A tool's short name, the library's own designation (UX-LEAD: one name per tool, the same as
+/// the panel's title gives it): "OW202/S punch", "EV004 30° die"; from the id when the library has
+/// none.
+pub fn tool_short(cat: Option<&fb::catalog::Catalog>, id: &str, punch: bool) -> String {
+    let found = cat.and_then(|c| {
+        if punch {
+            c.punches.iter().find(|r| r.id == id).map(|r| format!("{} punch", r.prov.name))
+        } else {
+            c.dies.iter().find(|r| r.id == id).map(|r| match &r.die {
+                Ok(_) if r.prov.name.contains('°') => format!("{} die", r.prov.name),
+                Ok(d) => format!("{} {:.0}° die", r.prov.name, d.angle.to_degrees()),
+                Err(_) => format!("{} die", r.prov.name),
+            })
+        }
+    });
+    found.unwrap_or_else(|| {
+        format!("{} {}", super::bendsim_env::tool_words(id), if punch { "punch" } else { "die" })
+    })
+}
+
+/// A length along the bed with a true minus (U+2212), as the glyphs expect for numbers: "−50".
+pub fn signed_mm(x: f64) -> String {
+    if x < -0.5 {
+        format!("\u{2212}{:.0}", -x)
+    } else {
+        format!("{:.0}", x.abs())
+    }
 }
 
 /// A scene body's name in words: "punch:trumpf/OW200-S/body" is "Trumpf OW200/K gooseneck
@@ -82,25 +114,59 @@ pub fn body_words(cat: Option<&fb::catalog::Catalog>, name: &str) -> String {
 
 /// A check's name as an engineer says it (its key on hover).
 pub fn rule_label(r: fb::Rule) -> &'static str {
-    use fb::Rule::*;
-    match r {
-        ToolCollision => "Tool collision",
-        ClosesOnPunch => "Closes on punch",
-        SelfCollision => "Part on itself",
-        MinFlange => "Minimum flange",
-        VTooNarrow => "V too narrow",
-        VDepth => "V depth",
-        DieAngle => "Die angle",
-        PunchAngle => "Punch angle",
-        PunchRadius => "Punch radius",
-        BackgaugeReach => "Backgauge reach",
-        OpenHeight => "Open height",
-        Stroke => "Stroke",
-        BedLength => "Bed length",
-        Segments => "Stack segments",
-        Tonnage => "Tonnage",
-        Withdraw => "Punch withdrawal",
-        Handling => "Operator handling",
+    // by the rule's word, not its variant: a rule the simulator adds reads as its word until it
+    // is named here (BENDSIM-TOOLS adds rules on their own branch)
+    match r.word() {
+        "tool_collision" => "Tool collision",
+        "closes_on_punch" => "Closes on punch",
+        "self_collision" => "Part on itself",
+        "min_flange" => "Minimum flange",
+        "v_too_narrow" => "V too narrow",
+        "v_depth" => "V depth",
+        "die_angle" => "Die angle",
+        "punch_angle" => "Punch angle",
+        "punch_radius" => "Punch radius",
+        "backgauge_reach" => "Backgauge reach",
+        "open_height" => "Open height",
+        "stroke" => "Stroke",
+        "bed_length" => "Bed length",
+        "segments" => "Stack segments",
+        "tonnage" => "Tonnage",
+        "withdraw" => "Punch withdrawal",
+        "handling" => "Operator handling",
+        "tool_rating" => "Tool rating",
+        "no_flattening" => "No flattening tool",
+        "offset" => "Offset",
+        w => w,
+    }
+}
+
+/// What a failed check means, as a clause ("it closes on the punch"; UX-LEAD).
+pub fn rule_failed(r: fb::Rule) -> &'static str {
+    // by the rule's word, not its variant: a rule the simulator adds reads as its word until it
+    // is named here (BENDSIM-TOOLS adds rules on their own branch)
+    match r.word() {
+        "tool_collision" => "it hits a tool",
+        "closes_on_punch" => "it closes on the punch",
+        "self_collision" => "the part meets itself",
+        "min_flange" => "a flange is shorter than the die allows",
+        "v_too_narrow" => "the V is too narrow for it",
+        "v_depth" => "the V is not deep enough",
+        "die_angle" => "the die's angle is too open for the turn",
+        "punch_angle" => "the punch's angle is too open for the turn",
+        "punch_radius" => "the punch's radius is larger than the bend's",
+        "backgauge_reach" => "the backgauge cannot reach a stop",
+        "open_height" => "the tools leave no room under the open height",
+        "stroke" => "the ram's stroke is too short",
+        "bed_length" => "it does not fit the bed",
+        "segments" => "no stack of segments covers it",
+        "tonnage" => "it needs more force than the press or tools give",
+        "withdraw" => "the punch cannot be withdrawn",
+        "handling" => "the operator's move is not clear",
+        "tool_rating" => "the sheet is thicker than the tool is rated for",
+        "no_flattening" => "no mounted tool can flatten the hem",
+        "offset" => "the offset does not fit the tool",
+        w => w,
     }
 }
 
@@ -298,4 +364,16 @@ pub fn step_pictures(sim: &Sim) -> Vec<Picture> {
             ]
         })
         .collect()
+}
+
+#[cfg(test)]
+mod rule_words_tests {
+    /// Every rule the simulator has today is named in words (none falls through to its key).
+    #[test]
+    fn every_rule_is_named() {
+        for r in forge_brake::Rule::ALL {
+            assert_ne!(super::rule_label(r), r.word(), "{r:?}");
+            assert_ne!(super::rule_failed(r), r.word(), "{r:?}");
+        }
+    }
 }

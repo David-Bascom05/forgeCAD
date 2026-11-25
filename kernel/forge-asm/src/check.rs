@@ -120,10 +120,94 @@ struct Bvh {
 
 const LEAF: usize = 4;
 
+/// `Bvh::new` by median selection (false: by sorting, as before).
+const SELECT_SPLIT: bool = true;
+
 impl Bvh {
     /// Median splits on the widest axis of the centres; ties by index, so the tree depends on the
-    /// boxes only.
+    /// boxes only. Each split selects the median (`select_nth_unstable_by`) under that total
+    /// order rather than sorting: the halves hold the same items either way, so the tree is the
+    /// same; a leaf's items are then put in its parent's order, as the parent's sort left them.
+    /// The same tree up to the sign of zero in inner nodes' boxes: an inner box is the hull of its
+    /// items in another order, and min/max of 0.0 and -0.0 depend on the order. Equal values, so
+    /// no box test answers differently; leaf boxes are the same bits (same items, same order).
     fn new(boxes: &[Box3]) -> Bvh {
+        if !SELECT_SPLIT {
+            return Bvh::new_sorted(boxes);
+        }
+        let mut b = Bvh {
+            nodes: Vec::new(),
+            items: (0..boxes.len()).collect(),
+        };
+        if boxes.is_empty() {
+            return b;
+        }
+        let centres: Vec<Point3> = boxes.iter().map(Box3::center).collect();
+        let order = |axis: usize| {
+            let centres = &centres;
+            move |p: &usize, q: &usize| centres[*p][axis].total_cmp(&centres[*q][axis]).then(p.cmp(q))
+        };
+        b.nodes.push(Node {
+            bbox: Box3::EMPTY,
+            lo: 0,
+            hi: boxes.len(),
+            leaf: true,
+        });
+        // (node, the axis its parent split on: the root has none)
+        let mut stack = vec![(0usize, None::<usize>)];
+        while let Some((n, parent_axis)) = stack.pop() {
+            let (lo, hi) = (b.nodes[n].lo, b.nodes[n].hi);
+            let mut bb = Box3::EMPTY;
+            let mut cb = Box3::EMPTY;
+            for &i in &b.items[lo..hi] {
+                bb = bb.hull(&boxes[i]);
+                cb.include(centres[i]);
+            }
+            b.nodes[n].bbox = bb;
+            if hi - lo <= LEAF {
+                if let Some(axis) = parent_axis {
+                    b.items[lo..hi].sort_by(order(axis));
+                }
+                continue;
+            }
+            let w = [cb.x.width(), cb.y.width(), cb.z.width()];
+            let axis = if w[0] >= w[1] && w[0] >= w[2] {
+                0
+            } else if w[1] >= w[2] {
+                1
+            } else {
+                2
+            };
+            let mid = (lo + hi) / 2;
+            b.items[lo..hi].select_nth_unstable_by(mid - lo, order(axis));
+            let l = b.nodes.len();
+            b.nodes.push(Node {
+                bbox: Box3::EMPTY,
+                lo,
+                hi: mid,
+                leaf: true,
+            });
+            b.nodes.push(Node {
+                bbox: Box3::EMPTY,
+                lo: mid,
+                hi,
+                leaf: true,
+            });
+            b.nodes[n] = Node {
+                bbox: bb,
+                lo: l,
+                hi: l + 1,
+                leaf: false,
+            };
+            stack.push((l + 1, Some(axis)));
+            stack.push((l, Some(axis)));
+        }
+        b
+    }
+
+    /// The tree by a full sort at every split (before `new` selected the median), for the test
+    /// that the two agree.
+    fn new_sorted(boxes: &[Box3]) -> Bvh {
         let mut b = Bvh {
             nodes: Vec::new(),
             items: (0..boxes.len()).collect(),
@@ -561,6 +645,11 @@ fn narrow(a: &PartMesh, b: &PartMesh, rel: &Frame, depth: f64) -> Narrow {
     if hit {
         return Narrow::Cross;
     }
+    enclosed(a, b, rel, depth)
+}
+
+/// After a walk found no crossing: Inside when a face of one lies inside the other, else Clear.
+fn enclosed(a: &PartMesh, b: &PartMesh, rel: &Frame, depth: f64) -> Narrow {
     // no clean crossing: a face of one may still lie inside the other (one inside the other, or
     // surfaces that cross only along coincident feature edges). In the shared region, the sampled
     // mesh's triangles farther than `depth` from the tested mesh's surface fall into connected
@@ -590,7 +679,14 @@ fn narrow(a: &PartMesh, b: &PartMesh, rel: &Frame, depth: f64) -> Narrow {
             .iter()
             .map(|&t| other.tri(t).map(|p| map.point_to_world(p)))
             .collect();
-        let far: Vec<bool> = placed.iter().map(|tri| !near_surface(m, tri, depth)).collect();
+        let far: Vec<bool> = if two_walks() {
+            placed.iter().map(|tri| !near_surface(m, tri, depth)).collect()
+        } else {
+            near_all(m, other, &found, &placed, depth)
+                .into_iter()
+                .map(|n| !n)
+                .collect()
+        };
         // a triangle that comes near the surface may still reach deep through it (a coarse face
         // whose edge lies on the other's face): its own centre is a sample, as a piece of one
         let near = (0..found.len()).filter(|&k| !far[k]).map(|k| vec![k]);
@@ -611,6 +707,216 @@ fn narrow(a: &PartMesh, b: &PartMesh, rel: &Frame, depth: f64) -> Narrow {
         }
     }
     Narrow::Clear
+}
+
+/// One mesh's positions and BVH node boxes taken into another frame, each only when first asked
+/// for (the same `point_to_world` and `moved_box` as `Placed`, so the same bits).
+struct Lazy<'a> {
+    m: &'a PartMesh,
+    rel: Frame,
+    pos: Vec<Option<Point3>>,
+    boxes: Vec<Option<Box3>>,
+}
+
+impl<'a> Lazy<'a> {
+    fn new(m: &'a PartMesh, rel: Frame) -> Lazy<'a> {
+        Lazy {
+            m,
+            rel,
+            pos: Vec::new(),
+            boxes: Vec::new(),
+        }
+    }
+    fn node_box(&mut self, n: usize) -> Box3 {
+        if self.boxes.is_empty() {
+            self.boxes = vec![None; self.m.bvh().nodes.len()];
+        }
+        *self.boxes[n].get_or_insert_with(|| moved_box(&self.m.bvh().nodes[n].bbox, &self.rel))
+    }
+    fn tri(&mut self, t: usize) -> [Point3; 3] {
+        if self.pos.is_empty() {
+            self.pos = vec![None; self.m.positions.len()];
+        }
+        self.m.triangles[t].map(|i| {
+            let i = i as usize;
+            *self.pos[i].get_or_insert_with(|| self.rel.point_to_world(self.m.positions[i]))
+        })
+    }
+}
+
+/// A walk keeps a node pair unless its box gap is greater than the reach: exactly the walks'
+/// own `if gap > reach { continue }`, NaN included (kept).
+fn unpruned(gap: f64, reach: f64) -> bool {
+    gap.partial_cmp(&reach) != Some(std::cmp::Ordering::Greater)
+}
+
+/// `narrow`, and whether the meshes come within `depth` (`distance(a, b, rel, depth).is_some()`,
+/// wanted only when the answer is Clear), from one walk over the node pairs either test visits.
+/// Each test sees exactly the node pairs, leaf pairs and triangle coordinates its own walk would
+/// (its own pruning carried down the pair tree, its own frame: `narrow` places the smaller mesh
+/// in the larger's frame, `distance` places B in A's), so both answers are those of the two
+/// walks, bit for bit; neither depends on visiting order (any crossing; any pair within reach).
+fn narrow_near(a: &PartMesh, b: &PartMesh, rel: &Frame, depth: f64) -> (Narrow, bool) {
+    let swap = b.positions.len() > a.positions.len();
+    let inv = rel.inverse();
+    let (ba, bb) = (a.bvh(), b.bvh());
+    // B in A's frame (distance's, and narrow's unless swapped); A in B's (narrow's when swapped)
+    let mut b_in_a = Lazy::new(b, *rel);
+    let mut a_in_b = Lazy::new(a, inv);
+    let mut near = false;
+    if !ba.nodes.is_empty() && !bb.nodes.is_empty() {
+        // (node of A, node of B, crossing test still on, near test still on)
+        let mut stack = vec![(0usize, 0usize, true, true)];
+        while let Some((na, nb, mut c, mut d)) = stack.pop() {
+            d &= !near;
+            let (x, y) = (&ba.nodes[na], &bb.nodes[nb]);
+            if d || (c && !swap) {
+                let g = box_gap(&x.bbox, &b_in_a.node_box(nb));
+                d &= unpruned(g, depth);
+                c &= swap || unpruned(g, 0.0);
+            }
+            if c && swap {
+                c = unpruned(box_gap(&y.bbox, &a_in_b.node_box(na)), 0.0);
+            }
+            if !c && !d {
+                continue;
+            }
+            match (x.leaf, y.leaf) {
+                (true, true) => {
+                    for &ta in &ba.items[x.lo..x.hi] {
+                        for &tb in &bb.items[y.lo..y.hi] {
+                            if c {
+                                let hit = if swap {
+                                    crosses(&b.tri(tb), b.sharp()[tb], &a_in_b.tri(ta), a.sharp()[ta], depth)
+                                } else {
+                                    crosses(&a.tri(ta), a.sharp()[ta], &b_in_a.tri(tb), b.sharp()[tb], depth)
+                                };
+                                if hit {
+                                    return (Narrow::Cross, true);
+                                }
+                            }
+                            if d && !near && tri_distance(&a.tri(ta), &b_in_a.tri(tb)).0 <= depth {
+                                near = true;
+                            }
+                        }
+                    }
+                }
+                (false, true) => {
+                    stack.push((x.hi, nb, c, d));
+                    stack.push((x.lo, nb, c, d));
+                }
+                (true, false) => {
+                    stack.push((na, y.hi, c, d));
+                    stack.push((na, y.lo, c, d));
+                }
+                (false, false) => {
+                    stack.push((x.hi, y.hi, c, d));
+                    stack.push((x.hi, y.lo, c, d));
+                    stack.push((x.lo, y.hi, c, d));
+                    stack.push((x.lo, y.lo, c, d));
+                }
+            }
+        }
+    }
+    let r = if swap {
+        enclosed(b, a, &inv, depth)
+    } else {
+        enclosed(a, b, rel, depth)
+    };
+    match r {
+        Narrow::Clear => (Narrow::Clear, near),
+        r => (r, true),
+    }
+}
+
+/// `near_surface(m, ts[k], depth)` for each k, where `ts[k]` is triangle `found[k]` of `other`
+/// placed in `m`'s frame: one walk of `m`'s tree against `other`'s tree with each node's box
+/// refitted to the boxes of the `ts` under it (the very boxes `near_surface` takes; nodes with
+/// none dropped). Bit for bit the same: either answers "some triangle i of `m` has box_gap(box
+/// i, box t) <= depth and tri_distance <= depth" (a node's box holds its items' boxes, and
+/// box_gap never grows as a box grows, so neither walk's pruning drops such an i), and the leaf
+/// test is the same expression.
+fn near_all(m: &PartMesh, other: &PartMesh, found: &[usize], ts: &[[Point3; 3]], depth: f64) -> Vec<bool> {
+    let mut near = vec![false; ts.len()];
+    let (bm, bo) = (m.bvh(), other.bvh());
+    if bm.nodes.is_empty() || ts.is_empty() {
+        return near;
+    }
+    let boxes: Vec<Box3> = ts.iter().map(|t| Box3::from_points(*t)).collect();
+    let mut at = vec![u32::MAX; other.triangles.len()];
+    for (k, &t) in found.iter().enumerate() {
+        at[t] = k as u32;
+    }
+    // children come after their parent, so one pass from the end refits bottom-up
+    let mut fit = vec![Box3::EMPTY; bo.nodes.len()];
+    let mut some = vec![false; bo.nodes.len()];
+    for n in (0..bo.nodes.len()).rev() {
+        let node = &bo.nodes[n];
+        let (mut b, mut any) = (Box3::EMPTY, false);
+        if node.leaf {
+            for &t in &bo.items[node.lo..node.hi] {
+                if at[t] != u32::MAX {
+                    b = b.hull(&boxes[at[t] as usize]);
+                    any = true;
+                }
+            }
+        } else {
+            for c in [node.lo, node.hi] {
+                if some[c] {
+                    b = b.hull(&fit[c]);
+                    any = true;
+                }
+            }
+        }
+        fit[n] = b;
+        some[n] = any;
+    }
+    let mut left = ts.len();
+    let mut stack = vec![(0usize, 0usize)];
+    while let Some((nm, no)) = stack.pop() {
+        let (x, y) = (&bm.nodes[nm], &bo.nodes[no]);
+        if !some[no] || box_gap(&x.bbox, &fit[no]) > depth {
+            continue;
+        }
+        match (x.leaf, y.leaf) {
+            (true, true) => {
+                for &t in &bo.items[y.lo..y.hi] {
+                    let k = at[t];
+                    if k == u32::MAX || near[k as usize] {
+                        continue;
+                    }
+                    let k = k as usize;
+                    for &i in &bm.items[x.lo..x.hi] {
+                        if box_gap(&m.tri_boxes()[i], &boxes[k]) <= depth
+                            && tri_distance(&m.tri(i), &ts[k]).0 <= depth
+                        {
+                            near[k] = true;
+                            left -= 1;
+                            if left == 0 {
+                                return near;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            (false, true) => {
+                stack.push((x.hi, no));
+                stack.push((x.lo, no));
+            }
+            (true, false) => {
+                stack.push((nm, y.hi));
+                stack.push((nm, y.lo));
+            }
+            (false, false) => {
+                stack.push((x.hi, y.hi));
+                stack.push((x.hi, y.lo));
+                stack.push((x.lo, y.hi));
+                stack.push((x.lo, y.lo));
+            }
+        }
+    }
+    near
 }
 
 /// True when some triangle of `m` comes within `depth` of `t` (in `m`'s frame).
@@ -683,14 +989,37 @@ pub type NarrowKey = (u128, u128, [u64; 9]);
 
 /// Narrow-phase answers by both meshes' content and their relative pose (the depth follows from
 /// the meshes), kept across checkers: a re-solve that moved nothing tests nothing.
-static NARROWS: std::sync::Mutex<Option<std::collections::HashMap<NarrowKey, Narrow>>> =
-    std::sync::Mutex::new(None);
+/// With each, whether the meshes come within that depth (None: not known; known whenever the
+/// answer is not Clear).
+/// A narrow answer and, with it, whether the meshes come within the depth (None: not known).
+type NarrowAnswer = (Narrow, Option<bool>);
+type NarrowMemo = std::collections::HashMap<NarrowKey, NarrowAnswer>;
+static NARROWS: std::sync::Mutex<Option<NarrowMemo>> = std::sync::Mutex::new(None);
+
+/// The narrow phase's old two walks (the crossing test, then the near test by `distance_kept`)
+/// and per-triangle `near_surface`, as before `narrow_near` and `near_all`: built only with the
+/// `two-walks` feature, kept one train so a comparison build can check the new ones against them.
+fn two_walks() -> bool {
+    cfg!(feature = "two-walks")
+}
+
+fn narrow_code(r: Narrow, near: Option<bool>) -> u8 {
+    match (r, near) {
+        (Narrow::Clear, None) => 0,
+        (Narrow::Cross, _) => 1,
+        (Narrow::Inside, _) => 2,
+        (Narrow::Clear, Some(true)) => 3,
+        (Narrow::Clear, Some(false)) => 4,
+    }
+}
 
 pub type Gap = Option<(f64, Point3, Point3)>;
 /// Both meshes' content, the relative pose's bits and the limit's.
 pub type GapKey = (u128, u128, [u64; 9], u64);
 
-/// Mesh distances and narrow-phase answers (0 clear, 1 cross, 2 inside): pure functions of the
+/// Mesh distances and narrow-phase answers (0 clear, 1 cross, 2 inside, 3 clear but within the
+/// depth, 4 clear and not within it; 0 says nothing of the depth, and a reader that knows only
+/// 0 to 2 skips 3 and 4): pure functions of the
 /// meshes' content and their pose, so they may be kept anywhere and given back to any process
 /// of the same kernel.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -719,12 +1048,17 @@ pub fn teach(l: &Learned) {
         let m = m.get_or_insert_with(Default::default);
         for (k, n) in &l.narrows {
             let n = match n {
-                0 => Narrow::Clear,
-                1 => Narrow::Cross,
-                2 => Narrow::Inside,
+                0 => (Narrow::Clear, None),
+                1 => (Narrow::Cross, Some(true)),
+                2 => (Narrow::Inside, Some(true)),
+                3 => (Narrow::Clear, Some(true)),
+                4 => (Narrow::Clear, Some(false)),
                 _ => continue,
             };
-            m.insert(*k, n);
+            // never forget a known depth answer for an unknown one
+            if n.1.is_some() || !m.contains_key(k) {
+                m.insert(*k, n);
+            }
         }
     }
     if let Ok(mut m) = VOLUMES.lock() {
@@ -743,6 +1077,9 @@ fn fresh(f: impl FnOnce(&mut Learned)) {
 
 /// Mesh distances worked out in this process, by both meshes' content, the relative pose and
 /// the limit: what `distance` would answer, bit for bit.
+/// Since `narrow_near`, the interference check no longer fills this (nor `Learned::gaps`) for its
+/// Clear pairs: their near answer is kept in NARROWS (codes 3/4) instead, and a clearance asked
+/// later computes its gap on demand, the same answer as before.
 static GAPS: std::sync::Mutex<Option<std::collections::HashMap<GapKey, Gap>>> = std::sync::Mutex::new(None);
 
 fn gap_key(a: &PartMesh, b: &PartMesh, rel: &Frame, limit: f64) -> GapKey {
@@ -955,6 +1292,9 @@ pub fn rigid_copy(b: &forge_topo::Body, f: &Frame) -> forge_topo::Body {
                         };
                         let (s, t) = (vert(edge.start), vert(edge.end));
                         let e = out.add_edge(edge.curve.transformed(f), edge.range, s, t, edge.name);
+                        // a file's edge keeps the tolerance it was read with: the copy's booleans
+                        // (interference) must not take it for an edge made here
+                        out.edges[e.index()].tol = edge.tol;
                         emap[co.edge.index()] = Some(e);
                         e
                     }
@@ -967,6 +1307,12 @@ pub fn rigid_copy(b: &forge_topo::Body, f: &Frame) -> forge_topo::Body {
     for &w in &b.split {
         out.note_split(w);
     }
+    // what is true of the part is true of its copy: read from a file (meshed with its tolerances),
+    // its placement, and what the reader could not check or left out
+    out.from_file = b.from_file;
+    out.unplaced = b.unplaced;
+    out.unverified.clone_from(&b.unverified);
+    out.left_out.clone_from(&b.left_out);
     out
 }
 
@@ -1377,21 +1723,37 @@ impl<P: Parts, E: Exact> Checker<P, E> {
                 occ[y].mesh.as_deref().expect("boxed"),
             )
         };
-        let tested: Vec<(NarrowKey, Option<Narrow>)> = todo
+        let two = two_walks();
+        let reach_of = |k: usize| {
+            let (ma, mb) = meshes(k);
+            ma.tolerance + mb.tolerance + tol::LINEAR
+        };
+        let tested: Vec<(NarrowKey, Option<NarrowAnswer>)> = todo
             .iter()
             .map(|&k| {
                 let (ma, mb) = meshes(k);
                 let nk = (ma.content(), mb.content(), keyed[k].0.2);
-                let known = NARROWS.lock().ok().and_then(|m| m.as_ref()?.get(&nk).copied());
+                let mut known = NARROWS.lock().ok().and_then(|m| m.as_ref()?.get(&nk).copied());
+                // a Clear kept without its depth answer: the distance kept for it, if any
+                if let Some((Narrow::Clear, None)) = known
+                    && !two
+                {
+                    known = known_gap(&gap_key(ma, mb, &keyed[k].1, reach_of(k)))
+                        .map(|g| (Narrow::Clear, Some(g.is_some())));
+                }
                 (nk, known)
             })
             .collect();
         let fresh: Vec<usize> = (0..todo.len()).filter(|&t| tested[t].1.is_none()).collect();
-        let made = par(fresh.len(), self.threads, |f| {
+        let made: Vec<(Narrow, Option<bool>)> = par(fresh.len(), self.threads, |f| {
             let k = todo[fresh[f]];
             let (ma, mb) = meshes(k);
-            let depth = ma.tolerance + mb.tolerance + tol::LINEAR;
-            narrow(ma, mb, &keyed[k].1, depth)
+            if two {
+                (narrow(ma, mb, &keyed[k].1, reach_of(k)), None)
+            } else {
+                let (r, near) = narrow_near(ma, mb, &keyed[k].1, reach_of(k));
+                (r, Some(near))
+            }
         });
         if let Ok(mut m) = NARROWS.lock() {
             let m = m.get_or_insert_with(Default::default);
@@ -1404,21 +1766,17 @@ impl<P: Parts, E: Exact> Checker<P, E> {
         }
         self::fresh(|l| {
             for (f, r) in fresh.iter().zip(&made) {
-                let n = match r {
-                    Narrow::Clear => 0,
-                    Narrow::Cross => 1,
-                    Narrow::Inside => 2,
-                };
-                l.narrows.push((tested[*f].0, n));
+                l.narrows.push((tested[*f].0, narrow_code(r.0, r.1)));
             }
         });
         let mut made = made.into_iter();
-        let narrowed: Vec<Narrow> = tested
+        let answered: Vec<(Narrow, Option<bool>)> = tested
             .iter()
             .map(|t| {
                 t.1.unwrap_or_else(|| made.next().expect("one made per fresh pair"))
             })
             .collect();
+        let narrowed: Vec<Narrow> = answered.iter().map(|a| a.0).collect();
         let fit_at: BTreeMap<(&Path, &Path), usize> = fits
             .iter()
             .enumerate()
@@ -1449,8 +1807,11 @@ impl<P: Parts, E: Exact> Checker<P, E> {
         let near: Vec<bool> = par(todo.len(), self.threads, |t| {
             let k = todo[t];
             let (ma, mb) = meshes(k);
-            let reach = ma.tolerance + mb.tolerance + tol::LINEAR;
-            narrowed[t] != Narrow::Clear || distance_kept(ma, mb, &keyed[k].1, reach).is_some()
+            match answered[t] {
+                (Narrow::Clear, Some(near)) => near,
+                (Narrow::Clear, None) => distance_kept(ma, mb, &keyed[k].1, reach_of(k)).is_some(),
+                _ => true,
+            }
         });
         let confirm: Vec<usize> = todo
             .iter()
@@ -1917,6 +2278,268 @@ mod narrow_tests {
                 narrow_every_centre(&big, &small, &f, d),
                 "at {o:?} turned {a}"
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod one_walk_tests {
+    use super::*;
+
+    fn boxm(lo: [f64; 3], hi: [f64; 3], n: usize) -> (Vec<Point3>, Vec<[u32; 3]>) {
+        let mut pos: Vec<Point3> = Vec::new();
+        let mut tris: Vec<[u32; 3]> = Vec::new();
+        let size = [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]];
+        for (ax, side, u, w) in [
+            (0, 1.0, 1, 2),
+            (0, 0.0, 2, 1),
+            (1, 1.0, 2, 0),
+            (1, 0.0, 0, 2),
+            (2, 1.0, 0, 1),
+            (2, 0.0, 1, 0),
+        ] {
+            let base = pos.len() as u32;
+            for i in 0..=n {
+                for j in 0..=n {
+                    let mut c = lo;
+                    c[ax] += side * size[ax];
+                    c[u] += size[u] * i as f64 / n as f64;
+                    c[w] += size[w] * j as f64 / n as f64;
+                    pos.push(Point3::new(c[0], c[1], c[2]));
+                }
+            }
+            let id = |i: usize, j: usize| base + (i * (n + 1) + j) as u32;
+            for i in 0..n {
+                for j in 0..n {
+                    tris.push([id(i, j), id(i + 1, j), id(i + 1, j + 1)]);
+                    tris.push([id(i, j), id(i + 1, j + 1), id(i, j + 1)]);
+                }
+            }
+        }
+        (pos, tris)
+    }
+
+    fn mesh(parts: &[([f64; 3], [f64; 3], usize)], tol: f64) -> PartMesh {
+        let (mut pos, mut tris) = (Vec::new(), Vec::new());
+        for &(lo, hi, n) in parts {
+            let (p, t) = boxm(lo, hi, n);
+            let base = pos.len() as u32;
+            pos.extend(p);
+            tris.extend(t.into_iter().map(|t| t.map(|i| i + base)));
+        }
+        PartMesh::new(pos, tris, tol)
+    }
+
+    /// A comb: a spine and four teeth (not convex: its hull holds much that it does not).
+    fn comb(n: usize, tol: f64) -> PartMesh {
+        let mut parts = vec![([0.0, 0.0, 0.0], [4.0, 0.5, 1.0], n)];
+        for k in 0..4 {
+            let x = k as f64;
+            parts.push(([x, 0.5, 0.0], [x + 0.4, 3.0, 1.0], n));
+        }
+        mesh(&parts, tol)
+    }
+
+    fn pose(x: f64, y: f64, z: f64, turn: f64) -> Frame {
+        Frame::WORLD
+            .rotated_about_z(turn)
+            .with_origin(Point3::new(x, y, z))
+    }
+
+    /// The one walk answers what the two walks answer, case by case.
+    fn same(a: &PartMesh, b: &PartMesh, rel: &Frame, seen: &mut [usize; 4]) {
+        let depth = a.tolerance + b.tolerance + tol::LINEAR;
+        let r = narrow(a, b, rel, depth);
+        let near = r != Narrow::Clear || distance(a, b, rel, depth).is_some();
+        let got = narrow_near(a, b, rel, depth);
+        assert_eq!((got.0, got.1), (r, near), "rel {rel:?}");
+        seen[match (r, near) {
+            (Narrow::Cross, _) => 0,
+            (Narrow::Inside, _) => 1,
+            (Narrow::Clear, true) => 2,
+            (Narrow::Clear, false) => 3,
+        }] += 1;
+    }
+
+    #[test]
+    fn one_walk_answers_as_the_two_walks_on_boxes() {
+        let tol = 1e-3;
+        let depth = 2.0 * tol + tol::LINEAR;
+        let big = mesh(&[([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 3)], tol);
+        let fine = mesh(&[([0.0, 0.0, 0.0], [0.5, 0.5, 0.5], 6)], tol);
+        let mut seen = [0; 4];
+        // gaps along x from deep overlap through touching, just inside and just outside the depth
+        let gaps = [
+            -0.4,
+            -depth,
+            -1e-9,
+            0.0,
+            1e-12,
+            0.5 * depth,
+            depth * (1.0 - 1e-12),
+            depth,
+            depth * (1.0 + 1e-12),
+            depth * (1.0 + 1e-9),
+            2.0 * depth,
+            0.3,
+        ];
+        for (a, b) in [(&big, &fine), (&fine, &big), (&big, &big)] {
+            let wa = a.bounds().x.hi;
+            for &g in &gaps {
+                for turn in [0.0, 1e-9, 0.25, std::f64::consts::FRAC_PI_2] {
+                    for dy in [0.0, 0.25, 0.9999] {
+                        same(a, b, &pose(wa + g, dy, 0.0, turn), &mut seen);
+                    }
+                }
+            }
+            // nested: the small one inside the big one, and centred on it
+            same(a, b, &pose(0.25, 0.25, 0.25, 0.0), &mut seen);
+            same(a, b, &pose(0.25, 0.25, 0.25, 0.3), &mut seen);
+        }
+        assert!(seen.iter().all(|&n| n > 0), "every answer met: {seen:?}");
+    }
+
+    /// near_all answers near_surface triangle by triangle: another mesh's triangles (all, or
+    /// a subset) placed across, along and just inside and outside the depth of a comb's faces,
+    /// edges and corners.
+    #[test]
+    fn near_all_answers_as_near_surface() {
+        let tol = 2e-3;
+        let depth = 2.0 * tol + tol::LINEAR;
+        let others = [comb(3, tol), mesh(&[([0.0, 0.0, 0.0], [0.3, 0.2, 0.5], 4)], tol)];
+        let mut checked = (0, 0);
+        for m in [
+            comb(2, tol),
+            comb(5, tol),
+            mesh(&[([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 1)], tol),
+        ] {
+            for other in &others {
+                for i in 0..60 {
+                    let t = i as f64;
+                    let f = |k: f64| (t * k).fract();
+                    let z = match i % 4 {
+                        0 => 1.0 + depth,
+                        1 => 1.0 + depth * (1.0 + 1e-12),
+                        2 => 1.0 + depth * (1.0 - 1e-12),
+                        _ => 1.4 * f(0.271) - 0.2,
+                    };
+                    let rel = pose(
+                        4.4 * f(0.377) - 0.5,
+                        3.4 * f(0.513) - 0.5,
+                        z,
+                        if i % 2 == 0 { 0.0 } else { 6.0 * f(0.19) },
+                    );
+                    let all: Vec<usize> = (0..other.triangles.len()).collect();
+                    let some: Vec<usize> = all.iter().copied().filter(|t| (t * 7 + i) % 3 != 0).collect();
+                    for found in [all, some, vec![], vec![0]] {
+                        let ts: Vec<[Point3; 3]> = found
+                            .iter()
+                            .map(|&t| other.tri(t).map(|p| rel.point_to_world(p)))
+                            .collect();
+                        let want: Vec<bool> = ts.iter().map(|t| near_surface(&m, t, depth)).collect();
+                        assert_eq!(near_all(&m, other, &found, &ts, depth), want, "pose {i}");
+                        checked.0 += want.iter().filter(|&&n| n).count();
+                        checked.1 += want.iter().filter(|&&n| !n).count();
+                    }
+                }
+            }
+        }
+        assert!(checked.0 > 100 && checked.1 > 100, "{checked:?}");
+    }
+
+    #[test]
+    fn one_walk_answers_as_the_two_walks_on_combs() {
+        let tol = 2e-3;
+        let a = comb(2, tol);
+        let b = comb(4, tol);
+        let pin = mesh(&[([0.0, 0.0, 0.0], [0.4, 0.4, 0.8], 5)], tol);
+        let mut seen = [0; 4];
+        for (m, n) in [(&a, &b), (&b, &a), (&a, &pin), (&pin, &b)] {
+            for i in 0..40 {
+                let t = i as f64;
+                // teeth between teeth, a tooth on a tooth, and the depth's edge between teeth
+                let x = 0.4 + 0.3 * (t * 0.37).fract() + if i % 5 == 0 { 0.6 - 0.4 } else { 0.0 };
+                let y = 0.5 + 2.5 * (t * 0.61).fract();
+                let z = if i % 3 == 0 {
+                    1.0 + tol * (i % 4) as f64
+                } else {
+                    0.0
+                };
+                let turn = if i % 4 == 0 {
+                    0.0
+                } else {
+                    std::f64::consts::PI * (t * 0.13).fract()
+                };
+                same(m, n, &pose(x, y, z, turn), &mut seen);
+                // the pin between two teeth, just within or past the depth of the left one
+                let d = 2.0 * tol + tol::LINEAR;
+                for e in [
+                    -1e-12,
+                    0.0,
+                    1e-12,
+                    0.5 * d,
+                    d * (1.0 - 1e-12),
+                    d,
+                    d * (1.0 + 1e-12),
+                ] {
+                    same(m, n, &pose(0.4 + e, 1.0, 0.0, 0.0), &mut seen);
+                }
+            }
+        }
+        assert!(seen[0] > 0 && seen[2] > 0 && seen[3] > 0, "{seen:?}");
+    }
+}
+
+#[cfg(test)]
+mod bvh_select_tests {
+    use super::*;
+
+    /// Selecting medians builds the very tree sorting built: same nodes, boxes, items and order,
+    /// with many tied centres (the index decides ties) and the leaf sizes around LEAF.
+    #[test]
+    fn select_split_builds_the_sorted_tree() {
+        let mut seed = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        for n in (0..40).chain([63, 64, 65, 100, 257, 1000, 4099]) {
+            // grid 0: every coordinate 0.0 or -0.0 (mixed signs of zero)
+            for grid in [0.0, 1.0, 4.0, 1e9] {
+                let boxes: Vec<Box3> = (0..n)
+                    .map(|_| {
+                        let mut c = [0.0; 3];
+                        for v in &mut c {
+                            *v = if grid == 0.0 {
+                                if next() % 2 == 0 { 0.0 } else { -0.0 }
+                            } else {
+                                ((next() % 1000) as f64 / 1000.0 * grid).floor() / grid
+                            };
+                        }
+                        let r = (next() % 7) as f64 * 0.01;
+                        Box3::from_points([
+                            Point3::new(c[0] - r, c[1], c[2] - r),
+                            Point3::new(c[0] + r, c[1] + 2.0 * r, c[2]),
+                        ])
+                    })
+                    .collect();
+                let (x, y) = (Bvh::new(&boxes), Bvh::new_sorted(&boxes));
+                assert_eq!(x.items, y.items, "n {n} grid {grid}");
+                assert_eq!(x.nodes.len(), y.nodes.len());
+                for (p, q) in x.nodes.iter().zip(&y.nodes) {
+                    assert_eq!((p.lo, p.hi, p.leaf), (q.lo, q.hi, q.leaf));
+                    let ends = |b: &Box3| [b.x.lo, b.x.hi, b.y.lo, b.y.hi, b.z.lo, b.z.hi];
+                    if p.leaf {
+                        // same items in the same order: the same bits
+                        assert_eq!(ends(&p.bbox).map(f64::to_bits), ends(&q.bbox).map(f64::to_bits));
+                    } else {
+                        // equal values (the sign of a zero may differ)
+                        assert_eq!(ends(&p.bbox), ends(&q.bbox), "n {n} grid {grid}");
+                    }
+                }
+            }
         }
     }
 }

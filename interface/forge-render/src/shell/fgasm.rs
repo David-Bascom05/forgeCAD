@@ -3615,6 +3615,7 @@ mod tests {
             feature: None,
             asm: Some(i),
             stale: false,
+            detail: None,
         };
         let f = issue_flags(&[
             issue(

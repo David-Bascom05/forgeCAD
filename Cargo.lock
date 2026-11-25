@@ -46,6 +46,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-bb"
+version = "0.1.0"
+
+[[package]]
 name = "forge-bench"
 version = "0.1.0"
 dependencies = [
@@ -88,6 +92,7 @@ version = "0.1.0"
 name = "forge-brake"
 version = "0.1.0"
 dependencies = [
+ "forge-bb",
  "forge-math",
  "forge-mesh",
  "forge-ops",
@@ -114,6 +119,7 @@ dependencies = [
  "forge-post",
  "forge-tooling",
  "forge-topo",
+ "forge-workholding",
 ]
 
 [[package]]
@@ -153,17 +159,22 @@ dependencies = [
  "forge-cam-3d",
  "forge-cam-geom",
  "forge-dirs",
+ "forge-git",
  "forge-lang",
  "forge-library",
  "forge-machine",
+ "forge-machine-lang",
  "forge-material",
  "forge-math",
  "forge-memo",
  "forge-model",
  "forge-post",
  "forge-sketch",
+ "forge-step",
  "forge-tooling",
  "forge-turn-lang",
+ "forge-workholding",
+ "forge-workholding-builder",
 ]
 
 [[package]]
@@ -235,6 +246,17 @@ dependencies = [
  "forge-mesh",
  "forge-model",
  "forge-ops",
+ "forge-topo",
+]
+
+[[package]]
+name = "forge-det"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-lang",
+ "forge-math",
+ "forge-mesh",
  "forge-topo",
 ]
 
@@ -440,6 +462,8 @@ dependencies = [
  "forge-machine-builder",
  "forge-math",
  "forge-mesh",
+ "forge-topo",
+ "forge-workholding-builder",
 ]
 
 [[package]]
@@ -649,6 +673,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-stress"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-asm",
+ "forge-bool",
+ "forge-geom",
+ "forge-math",
+ "forge-mesh",
+ "forge-ops",
+ "forge-step",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-thermo"
 version = "0.1.0"
 dependencies = [
@@ -787,19 +826,27 @@ dependencies = [
  "forge-cam",
  "forge-cam-geom",
  "forge-dirs",
+ "forge-git",
  "forge-lang",
  "forge-math",
  "forge-mesh",
  "forge-post",
  "forge-tooling",
+ "forge-workholding-builder",
 ]
 
 [[package]]
 name = "forge-workholding-builder"
 version = "0.1.0"
 dependencies = [
+ "forge-cam",
+ "forge-cam-geom",
  "forge-dirs",
  "forge-library",
+ "forge-math",
+ "forge-mesh",
+ "forge-step",
+ "forge-topo",
  "forge-workholding",
 ]
 

@@ -1,0 +1,7 @@
+{"doc":"examples/thermoform/tray.fg"}
+{"op":"SetParam","param":"t","value":{"value":1.5750000000000002,"dim":"Length"}}
+{"op":"SetParam","param":"W","value":{"value":210,"dim":"Length"}}
+{"op":"SetParam","param":"L","value":{"value":126,"dim":"Length"}}
+{"op":"Rename","from":"footprint","to":"footprint_r"}
+{"op":"MoveFeature","id":"rim","before":null}
+{"op":"ReplaceFeature","id":"part","text":"part = thermoform(tray, t: t, material: \"PETG\", tool: \"female\", flange: lip)\n"}

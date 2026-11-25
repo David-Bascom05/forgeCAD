@@ -377,6 +377,12 @@ fn rules_just_pass_and_just_fail() {
         let mut t = tl.clone();
         t.press.open_height -= oh.value - oh.limit - d;
         assert_eq!(rule_of(&part, &t, su, 0.0, Rule::OpenHeight, None).pass, pass);
+        // the clamps' heights unknown: room left is not checked, none left fails all the same
+        // (the clamps only take room)
+        t.press.unchecked.push("open_height".into());
+        let c = rule_of(&part, &t, su, 0.0, Rule::OpenHeight, None);
+        assert_eq!(c.unchecked.is_some(), pass, "{c:?}");
+        assert!(pass || !c.pass, "{c:?}");
     }
     let len = rule_of(&part, &tl, su, 0.0, Rule::BedLength, None).value;
     assert!((len - 60.0).abs() < 1e-6, "{len}");
@@ -444,6 +450,28 @@ fn clearances_just_pass_and_just_fail() {
     let mut t = tl.clone();
     t.clearance = lower - 0.01;
     assert!(measure(&t).pass);
+    // between a limit that passes and one a real point is under (halved till then): proven
+    // within the resolution of the limit, not at it, and no point under it: Near (David), a mild
+    // warning, not a pass
+    let (mut lo, mut hi) = (lower - 0.01, upper + 0.01);
+    let mut c = measure(&t);
+    for _ in 0..40 {
+        t.clearance = 0.5 * (lo + hi);
+        c = measure(&t);
+        match (c.pass, c.near) {
+            (_, Some(_)) => break,
+            (true, None) => lo = t.clearance,
+            (false, None) => hi = c.value.min(t.clearance),
+        }
+    }
+    assert!(
+        !c.pass
+            && c.near.is_some()
+            && c.severity == forge_brake::Severity::Warning
+            && c.bound
+                .is_some_and(|b| b < t.clearance && b >= t.clearance - c.near.unwrap()),
+        "{c:?}"
+    );
     t.clearance = upper + 0.01;
     let c = measure(&t);
     assert!(!c.pass && c.value < t.clearance && c.certified, "{c:?}");
@@ -563,4 +591,295 @@ fn a_kept_verdict_answers_only_its_own_search() {
         }
     }
     assert!(compared > 100, "{compared}");
+}
+
+/// The planner's closed-form screen gives every setup the verdict the simulation's own rules do:
+/// the first of the die's angle, the punch's angle and its radius that fails, or none. Over both
+/// standard sets, every bend of three parts (an L with a 60 degree return, a channel, a return-lip
+/// box) at its overbend.
+#[test]
+fn the_screen_is_the_simulations_verdict() {
+    let mut l = ell(30.0);
+    l.flange(WallId(1), 2, deg(-60.0), 20.0).unwrap();
+    let parts = [l, channel(100.0, 200.0, 30.0), boxed(80.0, 60.0, 25.0)];
+    let rules = [Rule::DieAngle, Rule::PunchAngle, Rule::PunchRadius];
+    let mut screened = 0;
+    for s in &parts {
+        let m = Model::new(s).unwrap();
+        for tl in [library::std_eu(), library::std_us()] {
+            for j in 0..m.bends.len() {
+                let ob = tl.overbend(None, m.bends[j].theta);
+                for punch in 0..tl.punches.len() {
+                    for die in 0..tl.dies.len() {
+                        for rotate in [false, true] {
+                            let su = Setup { punch, die, rotate };
+                            let ctx = StepCtx::new(&m, &tl, &vec![false; m.bends.len()], j, su, ob);
+                            let (checks, _, _) = ctx.rules(None);
+                            let sim = checks
+                                .iter()
+                                .find(|c| rules.contains(&c.rule) && !c.pass)
+                                .map(|c| c.rule);
+                            let got = forge_brake::plan::screen(&m, &tl, j, su, ob);
+                            assert_eq!(got, sim, "bend {j} {} {}", tl.punches[punch].id, tl.dies[die].id);
+                            screened += usize::from(got.is_some());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // the standard sets' acute tools and 88 degree dies: some setups are screened out
+    assert!(screened > 0);
+}
+
+/// The screen changes no plan: on the standard set, a return-lip box and a channel are planned
+/// with the same order and tools as setups simulated one by one would give, and fewer setups are
+/// simulated than there are setups tried.
+#[test]
+fn screened_setups_are_named_not_simulated() {
+    let s = boxed(80.0, 60.0, 25.0);
+    let m = Model::new(&s).unwrap();
+    let tl = library::std_eu();
+    let p = plan(&m, &tl, &Options::default());
+    assert!(p.feasible);
+    let tried: usize = p.steps.iter().map(|st| st.rejected.len() + 1).sum();
+    let named = p
+        .steps
+        .iter()
+        .flat_map(|st| st.rejected.iter())
+        .filter(|r| matches!(r.3, Rule::DieAngle | Rule::PunchAngle | Rule::PunchRadius))
+        .count();
+    // a screened setup is still in `rejected` with its rule
+    assert!(p.explored + named >= tried, "{} {named} {tried}", p.explored);
+}
+
+/// Stage bending: every station on the bed, none overlapping another's stacks, each step at the
+/// station holding its punch and die, the program feasible with all of them on the press (every
+/// step's checks with the others' tools), the part at a station off its neighbours' stacks when
+/// the layout is not packed tight.
+#[test]
+fn stations_laid_out_along_the_bed() {
+    let s = boxed(80.0, 60.0, 25.0);
+    let m = Model::new(&s).unwrap();
+    let tl = library::std_eu();
+    let st = forge_brake::stage(&m, &tl, &Options::default(), 4).expect("a staged program");
+    assert!(st.plan.feasible);
+    let tt = &st.tooling;
+    assert_eq!(tt.stations.len(), st.stations.len());
+    // one punch and die, but two stacks: the box's last sides stand between its first two, so
+    // want a shorter stack than the first sides' (two stations with the same tools)
+    assert_eq!(tt.stations.len(), 2, "{:?}", tt.stations);
+    assert_eq!(
+        (tt.stations[0].punch, tt.stations[0].die),
+        (tt.stations[1].punch, tt.stations[1].die)
+    );
+    assert!(tt.stations[0].punch_length != tt.stations[1].punch_length);
+    tt.validate().unwrap();
+    let half = 0.5 * tt.press.bed_length;
+    for (k, a) in tt.stations.iter().enumerate() {
+        let wa = 0.5 * a.punch_length.max(a.die_length);
+        assert!(a.y - wa >= -half - 1e-9 && a.y + wa <= half + 1e-9);
+        assert_eq!((a.y / forge_brake::stage::GRID).fract(), 0.0);
+        for b in &tt.stations[k + 1..] {
+            let wb = 0.5 * b.punch_length.max(b.die_length);
+            assert!((a.y - b.y).abs() >= wa + wb, "stacks overlap");
+        }
+    }
+    for (i, step) in st.plan.steps.iter().enumerate() {
+        let k = st.station_of[i];
+        let s = &tt.stations[k];
+        assert_eq!((s.punch, s.die), (step.setup.punch, step.setup.die));
+        assert_eq!(
+            step.station,
+            Some(k),
+            "the simulation works the step at its station"
+        );
+        assert!(step.pass(), "step {i}");
+        assert!(st.stations[k].steps.contains(&i));
+    }
+    if !st.tight {
+        for w in tt.stations.windows(2).zip(st.stations.windows(2)) {
+            let ((a, b), (ua, ub)) = ((&w.0[0], &w.0[1]), (&w.1[0], &w.1[1]));
+            assert!(a.y + ua.reach.1 <= b.y - 0.5 * b.punch_length.max(b.die_length));
+            assert!(b.y + ub.reach.0 >= a.y + 0.5 * a.punch_length.max(a.die_length));
+        }
+    }
+    let shifts = st.station_of.windows(2).filter(|w| w[0] != w[1]).count();
+    assert_eq!(st.shifts, shifts);
+    assert_eq!(st.travel.len(), st.plan.steps.len());
+    for t in &st.travel {
+        assert!(t.approach >= 0.0 && t.work > 0.0 && t.ret >= t.work);
+    }
+}
+
+/// A bend locked to a station (the user's choice) is made there, with that station's tools, at
+/// its place and stacks; the order and every other bend's station are still the planner's; a
+/// lock survives a re-plan (the same options plan the same).
+#[test]
+fn a_locked_bend_is_made_at_its_station() {
+    let s = channel(100.0, 200.0, 30.0);
+    let m = Model::new(&s).unwrap();
+    let mut tl = library::std_eu();
+    let pi = |id: &str| tl.punches.iter().position(|p| p.id == id).unwrap();
+    let di = |id: &str| tl.dies.iter().position(|d| d.id == id).unwrap();
+    let (p85, g88, v12) = (
+        pi("std-eu/P85-R08-H120"),
+        pi("std-eu/G88-R08"),
+        di("std-eu/V12-88"),
+    );
+    tl.stations = vec![
+        forge_brake::tooling::Station {
+            punch: p85,
+            die: v12,
+            y: -600.0,
+            punch_length: 200.0,
+            die_length: 200.0,
+        },
+        forge_brake::tooling::Station {
+            punch: g88,
+            die: v12,
+            y: 600.0,
+            punch_length: 200.0,
+            die_length: 200.0,
+        },
+    ];
+    tl.validate().unwrap();
+    let free = plan(&m, &tl, &Options::default());
+    assert!(free.feasible);
+    // left to itself every bend takes the straight punch: station 1
+    assert!(free.steps.iter().all(|st| st.station == Some(0)));
+    let mut locks = vec![None; m.bends.len()];
+    locks[1] = Some(1);
+    let opts = Options {
+        locks: locks.clone(),
+        ..Options::default()
+    };
+    let p = plan(&m, &tl, &opts);
+    assert!(p.feasible, "{:?}", p.blocking);
+    for st in &p.steps {
+        if st.bend == 1 {
+            assert_eq!(st.station, Some(1));
+            assert_eq!(st.punch, "std-eu/G88-R08");
+        } else {
+            assert_eq!(st.station, Some(0));
+        }
+    }
+    assert_eq!(plan(&m, &tl, &opts), p, "deterministic: a re-plan keeps the lock");
+}
+
+/// The planner a little at a time (`Planner::step`, what a page's frames or a worker drive) gives
+/// the very plan `plan()` gives: stepped one setup at a time and seven at a time. The parts are
+/// split into tests of their own (each within the test-time budget): parts that plan, a box too
+/// deep for its width (refuted), a narrow channel with straight punches only (refuted), a box
+/// searched with a budget too small (cut short), and a stated sequence.
+fn stepped_is_the_plan(s: &Sheet, opts: &Options) {
+    let tl = eu();
+    let m = Model::new(s).unwrap();
+    // the plan whole and the two stepped runs are independent: run side by side
+    let stepped = |n: usize| {
+        let mut pl = forge_brake::Planner::new(&m, &tl, opts);
+        let mut last = 0;
+        let mut ticks = 0;
+        loop {
+            let pr = pl.step(n);
+            assert!(pr.setups_tried >= last && pr.bends_planned <= pr.bends);
+            last = pr.setups_tried;
+            ticks += 1;
+            if pr.done {
+                break;
+            }
+            assert!(ticks < 100_000, "no end");
+        }
+        (pl.plan().expect("done"), ticks)
+    };
+    let (whole, runs) = if cfg!(target_os = "wasi") {
+        // WASI (wasip1) starts no threads: the same runs, one after another
+        let runs: Vec<_> = [1, 7].map(|n| (n, stepped(n))).into();
+        (plan(&m, &tl, opts), runs)
+    } else {
+        std::thread::scope(|sc| {
+            let runs: Vec<_> = [1, 7].map(|n| (n, sc.spawn(move || stepped(n)))).into();
+            let whole = plan(&m, &tl, opts);
+            (
+                whole,
+                runs.into_iter()
+                    .map(|(n, h)| (n, h.join().unwrap()))
+                    .collect::<Vec<_>>(),
+            )
+        })
+    };
+    for (n, (p, ticks)) in runs {
+        assert_eq!(p, whole, "{n} at a time");
+        if opts.sequence.is_none() && n == 1 && m.bends.len() > 1 {
+            assert!(ticks > 1, "stepped, not all at once");
+        }
+    }
+}
+
+#[test]
+fn the_planner_stepped_is_the_plan_on_an_ell() {
+    stepped_is_the_plan(&ell(30.0), &Options::default());
+}
+
+#[test]
+fn the_planner_stepped_is_the_plan_on_a_box() {
+    stepped_is_the_plan(&boxed(80.0, 60.0, 25.0), &Options::default());
+}
+
+#[test]
+fn the_planner_stepped_is_the_plan_on_a_box_too_deep() {
+    stepped_is_the_plan(&boxed(120.0, 40.0, 30.0), &Options::default());
+}
+
+#[test]
+fn the_planner_stepped_is_the_plan_on_a_channel_with_straight_punches() {
+    let tl = eu();
+    let straight: Vec<usize> = (0..tl.punches.len())
+        .filter(|&k| tl.punches[k].kind == PunchKind::Straight)
+        .collect();
+    stepped_is_the_plan(
+        &channel(30.0, 200.0, 60.0),
+        &Options {
+            punches: Some(straight),
+            ..Options::default()
+        },
+    );
+}
+
+#[test]
+fn the_planner_stepped_is_the_plan_cut_short() {
+    stepped_is_the_plan(
+        &boxed(80.0, 60.0, 25.0),
+        &Options {
+            budget: 9,
+            ..Options::default()
+        },
+    );
+}
+
+#[test]
+fn the_planner_stepped_is_the_plan_in_a_stated_sequence() {
+    stepped_is_the_plan(
+        &boxed(80.0, 60.0, 25.0),
+        &Options {
+            sequence: Some(vec![3, 2, 1, 0]),
+            ..Options::default()
+        },
+    );
+}
+
+/// Planning is deterministic: the same question twice, from nothing each time, gives the same
+/// plan and the same ranked programs.
+#[test]
+fn planning_twice_gives_the_same_answer() {
+    let tl = eu();
+    for s in [boxed(80.0, 60.0, 25.0), channel(100.0, 200.0, 30.0)] {
+        let m = Model::new(&s).unwrap();
+        let a = forge_brake::plan_and_programs(&m, &tl, &Options::default(), 5);
+        let b = forge_brake::plan_and_programs(&m, &tl, &Options::default(), 5);
+        assert_eq!(a.0, b.0);
+        assert_eq!(a.1, b.1);
+        // and the plan is plan()'s
+        assert_eq!(a.0, plan(&m, &tl, &Options::default()));
+    }
 }

@@ -1055,6 +1055,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-bb"
+version = "0.1.0"
+
+[[package]]
 name = "forge-bend-lang"
 version = "0.1.0"
 dependencies = [
@@ -1077,6 +1081,7 @@ dependencies = [
 name = "forge-brake"
 version = "0.1.0"
 dependencies = [
+ "forge-bb",
  "forge-math",
  "forge-mesh",
  "forge-ops",
@@ -1103,6 +1108,7 @@ dependencies = [
  "forge-post",
  "forge-tooling",
  "forge-topo",
+ "forge-workholding",
 ]
 
 [[package]]
@@ -1140,9 +1146,11 @@ dependencies = [
  "forge-cam-3d",
  "forge-cam-geom",
  "forge-dirs",
+ "forge-git",
  "forge-lang",
  "forge-library",
  "forge-machine",
+ "forge-machine-lang",
  "forge-material",
  "forge-math",
  "forge-memo",
@@ -1150,6 +1158,8 @@ dependencies = [
  "forge-post",
  "forge-sketch",
  "forge-tooling",
+ "forge-workholding",
+ "forge-workholding-builder",
 ]
 
 [[package]]
@@ -1320,6 +1330,8 @@ dependencies = [
  "forge-machine-builder",
  "forge-math",
  "forge-mesh",
+ "forge-topo",
+ "forge-workholding-builder",
 ]
 
 [[package]]
@@ -1621,8 +1633,14 @@ dependencies = [
 name = "forge-workholding-builder"
 version = "0.1.0"
 dependencies = [
+ "forge-cam",
+ "forge-cam-geom",
  "forge-dirs",
  "forge-library",
+ "forge-math",
+ "forge-mesh",
+ "forge-step",
+ "forge-topo",
  "forge-workholding",
 ]
 

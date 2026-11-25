@@ -25,4 +25,6 @@ disallowed-methods = [
   { path = "f64::tanh", reason = "platform libm" },
   { path = "f64::ln_1p", reason = "platform libm" },
   { path = "f64::exp_m1", reason = "platform libm" },
+  { path = "f64::asinh", reason = "platform libm" },
+  { path = "f64::atanh", reason = "platform libm" },
 ]

@@ -3,7 +3,7 @@
 # frame: the machine's base frame at the home pose.
 shared b0x0 = -217.2
 shared b0y0 = -154
-shared b0z0 = -19.5
+shared b0z0 = -19
 shared b0sx = 231.2
 shared b0sy = 155.6
 shared b0h = 19

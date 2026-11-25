@@ -6,6 +6,12 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+# The narrow phase's old two walks and per-triangle near_surface (before narrow_near and
+# near_all), kept one train for comparison builds only:
+# `cargo build --release -p forge-cli -p forge-asm --features forge-asm/two-walks`.
+two-walks = []
+
 [dependencies]
 forge-math = { path = "../forge-math" }
 forge-geom = { path = "../forge-geom" }

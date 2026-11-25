@@ -1,0 +1,7 @@
+{"doc":"examples/machined/blind_holes.fg"}
+{"op":"SetParam","param":"L","value":{"value":42,"dim":"Length"}}
+{"op":"SetParam","param":"W","value":{"value":31.5,"dim":"Length"}}
+{"op":"SetParam","param":"t","value":{"value":10.5,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"MoveFeature","id":"csk","before":null}
+{"op":"ReplaceFeature","id":"pin","text":"pin = hole(at: top.f, d: d, depth: depth, point: tip, fit: \"H7\")\n"}

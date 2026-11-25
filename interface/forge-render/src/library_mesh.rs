@@ -915,13 +915,19 @@ mod tests {
 mod drawn_tests {
     use super::*;
 
-    /// The sheet's values are the view's: the Haas vise's height (sources disagree) at the first
-    /// cited 110.74 mm, its unpublished jaw thickness at half the jaw height; the press's unknown
-    /// housings at their rule; nothing the record publishes is listed.
+    /// The sheet's values are the view's: a vise's height that its sources disagree on at the
+    /// first cited 110.74 mm, its unpublished jaw thickness at half the jaw height; the press's
+    /// unknown housings at their rule; nothing the record publishes is listed. (A record of its
+    /// own, so the test does not hang on one catalogue entry staying in conflict: the Haas vise
+    /// this was first about has since been settled by its maker's model.)
     #[test]
     fn what_the_view_draws_the_sheet_shows() {
-        let lib = forge_workholding::Library::builtin();
-        let r = lib.get("haas-vise-05-0404").unwrap();
+        let rs = forge_workholding::parse_file(
+            "test",
+            "[[workholding]]\nname = \"test-vise-conflict\"\nkind = \"vise\"\nvendor = \"Test\"\nproduct = \"a vise its sources disagree on\"\nnote = \"height in conflict: the page gives OAH 110.74 but BH 73.03 + JH 44.07 = 117.10\"\nunknown = [\"jaw_thickness\"]\nconflict = [\"height\"]\njaw_width = 150\njaw_height = 44.07\nmax_opening = 230.6\nbody_length = 426.97\nbody_width = 187.73\n[[workholding.cite]]\nfields = [\"jaw_width\", \"jaw_height\", \"max_opening\", \"body_length\", \"body_width\"]\nsource = \"https://example.invalid/test-vise\"\ntaken = \"2026-11-25\"\n",
+        )
+        .unwrap();
+        let r = &rs[0];
         let d = vise_drawn(r);
         let h = d.iter().find(|x| x.key == "height").unwrap();
         assert_eq!((h.value, h.basis), (110.74, Basis::Conflict));
@@ -935,6 +941,10 @@ mod drawn_tests {
         let mark = p.ghosts.iter().find(|g| g.label.starts_with("Height")).unwrap();
         let top = mark.edges.iter().flatten().map(|q| q[2]).fold(f64::MIN, f64::max);
         assert!((top - 110.74).abs() < 1e-9, "{top}");
+        // a record whose model settled them draws them as cited: nothing to list
+        let lib = forge_workholding::Library::builtin();
+        let h = lib.get("haas-vise-05-0404").unwrap();
+        assert!(vise_drawn(h).iter().all(|x| x.key != "height" && x.key != "jaw_thickness"));
 
         let press = forge_brake_builder::templates()
             .into_iter()

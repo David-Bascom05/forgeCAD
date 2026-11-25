@@ -27,6 +27,17 @@ pub struct Fixture {
     pub axis: usize,
     /// The clearance every body of the tool keeps from it.
     pub clearance: f64,
+    /// The plane its base stands on (the machine table), in the part's frame, when known: a
+    /// workholding library device's mount. None for the boxes `vise` makes (they stop at the
+    /// bed's depth and say nothing of the table).
+    pub table_z: Option<f64>,
+    /// Bodies whose maker's model should have given the faces but could not be read: their
+    /// envelope stands in (always empty on a sound build; a caller that must check against the
+    /// real body refuses when it is not).
+    pub enveloped: Vec<String>,
+    /// The workholding library's placement it was made from (its bodies' roles, real parts and
+    /// their poses, for drawing), when it was.
+    pub placed: Option<forge_workholding::Placed>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -182,6 +193,9 @@ pub fn vise(
         jaw_top: top,
         axis,
         clearance,
+        table_z: None,
+        placed: None,
+        enveloped: vec![],
     })
 }
 
@@ -450,6 +464,9 @@ pub fn soft_jaws(
         jaw_top: vtop,
         axis,
         clearance,
+        table_z: None,
+        placed: None,
+        enveloped: vec![],
     };
     let contact = area(band.first().expect("a band"));
     Ok(SoftJaws {
@@ -460,6 +477,9 @@ pub fn soft_jaws(
             jaw_top: top,
             axis,
             clearance,
+            table_z: None,
+            placed: None,
+            enveloped: vec![],
         },
         hold,
         part,
@@ -469,6 +489,164 @@ pub fn soft_jaws(
         top,
         contact,
     })
+}
+
+impl Fixture {
+    /// The fixture a workholding library placement is (research/cam/workholding.md §5): its
+    /// bodies' axis-aligned blocks (keep-outs applied) as named pieces, every other primitive
+    /// (a cylinder, a block at an angle) as a shaped piece of its exact faces; the jaws' top is
+    /// the top of what the device holds (the stock below it is held; a device that holds nothing,
+    /// its lowest point, so nothing is); the table plane is the
+    /// device's mount. The checker sees exactly the library's bodies.
+    pub fn from_workholding(p: &forge_workholding::Placed, axis: usize, clearance: f64) -> Fixture {
+        use forge_workholding::{Mount, Prim, geom::IDENT};
+        let mut pieces = Vec::new();
+        let mut shaped = Vec::new();
+        let mut enveloped = Vec::new();
+        for b in &p.bodies {
+            // a maker's model: its compiled faces, posed, are what the checker keeps the tool
+            // from (the body's prims only envelope them); the keep-out grows them as a box does
+            if let Some(e) = &b.exact {
+                match model_faces(e, b.keepout) {
+                    Ok(fs) => {
+                        shaped.push((b.name.clone(), fs));
+                        continue;
+                    }
+                    // the compiled faces are built into the binary, so this means a mismatched
+                    // build: the body's envelope stands in and the fixture says which, for a
+                    // caller that must have the real faces (`enveloped`)
+                    Err(why) => enveloped.push(format!("{}: {why} ({})", b.name, e.model)),
+                }
+            }
+            for prim in &b.prims {
+                let g = prim.grown(b.keepout);
+                match g {
+                    Prim::Block { o, axes, size } if axes == IDENT => pieces.push((
+                        b.name.clone(),
+                        Stock {
+                            min: o,
+                            max: [o[0] + size[0], o[1] + size[1], o[2] + size[2]],
+                        },
+                    )),
+                    _ => shaped.push((b.name.clone(), g.faces(0, 1e-9))),
+                }
+            }
+        }
+        let jaw_top = p.held.iter().map(|h| h.1[2]).fold(f64::NEG_INFINITY, f64::max);
+        // a device that grips nothing (a plate, the user's own fixture) holds no stock: its jaw
+        // top is its lowest point, so no band of leftover is excused as held by it
+        let jaw_top = if jaw_top.is_finite() {
+            jaw_top
+        } else {
+            let low = p
+                .bodies
+                .iter()
+                .map(|b| b.bounds().0[2])
+                .fold(f64::INFINITY, f64::min);
+            // a device with no bodies at all: the table it stands on (written in the reply and
+            // the clamp report, so finite)
+            if low.is_finite() {
+                low
+            } else {
+                match p.mount {
+                    Mount::Table { z } => z,
+                    _ => 0.0,
+                }
+            }
+        };
+        Fixture {
+            name: p.name.clone(),
+            pieces,
+            shaped,
+            jaw_top,
+            axis,
+            clearance,
+            table_z: match p.mount {
+                Mount::Table { z } => Some(z),
+                _ => None,
+            },
+            placed: Some(p.clone()),
+            enveloped,
+        }
+    }
+}
+
+/// A placed body's drawn mesh (where it has one) and its checked faces (`body_source`).
+pub type BodySource = (Option<std::path::PathBuf>, Result<Vec<Face>, String>);
+
+/// A placed body's two views of one compile, for a drawing that must be what is checked: its
+/// drawn mesh (an STL, `forge_workholding::model::mesh_path`) and the faces the checker keeps the
+/// tool from, posed into the part frame. None for a body with no model (its prims are what it
+/// is, drawn and checked alike).
+pub fn body_source(b: &forge_workholding::Body) -> Option<BodySource> {
+    let e = b.exact.as_ref()?;
+    let mesh = forge_workholding::model::get(&e.model)
+        .and_then(|m| m.groups.iter().find(|g| g.name == e.group))
+        .and_then(forge_workholding::model::mesh_path);
+    Some((mesh, model_faces(e, b.keepout)))
+}
+
+/// A model group's compiled faces (forge_workholding::model), posed into the part frame and
+/// grown by `keepout`: the pose must be a turn by quarters and a shift (exact in f64), as
+/// `model_bodies` makes, so the faces keep their kind.
+fn model_faces(e: &forge_workholding::Exact, keepout: f64) -> Result<Vec<Face>, String> {
+    let m = forge_workholding::model::get(&e.model).ok_or("no such model")?;
+    let rot = rot_of(&e.pose.m).ok_or("the pose is not a turn by quarters")?;
+    let groups = parsed(m)?;
+    let fs = groups
+        .iter()
+        .find(|g| g.0 == e.group)
+        .ok_or("not in the compiled faces")?;
+    Ok(fs
+        .1
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            let mut g = crate::fixture_model::moved(f, &rot, e.pose.t, i as u32);
+            if keepout > 0.0 {
+                g.mu += keepout;
+            }
+            g
+        })
+        .collect())
+}
+
+/// A model's compiled faces, read once a process: its text is fixed for its name (a built-in's
+/// is in the binary, a runtime one's name is its content's hash), so every setup and run after
+/// the first shares the faces read.
+type ModelFaces = std::sync::Arc<Vec<(String, Vec<Face>)>>;
+
+fn parsed(m: &forge_workholding::model::Model) -> Result<ModelFaces, String> {
+    type Read = ModelFaces;
+    static CACHE: std::sync::OnceLock<std::sync::Mutex<Vec<(String, Read)>>> = std::sync::OnceLock::new();
+    let c = CACHE.get_or_init(|| std::sync::Mutex::new(Vec::new()));
+    if let Some(r) = c
+        .lock()
+        .ok()
+        .and_then(|v| v.iter().find(|x| x.0 == m.name).map(|x| x.1.clone()))
+    {
+        return Ok(r);
+    }
+    let r: Read = std::sync::Arc::new(
+        crate::fixture_model::read(m.check).map_err(|_| "the compiled faces do not read".to_string())?,
+    );
+    if let Ok(mut v) = c.lock() {
+        v.push((m.name.clone(), r.clone()));
+    }
+    Ok(r)
+}
+
+/// A rotation matrix as a signed permutation, when it is one.
+fn rot_of(m: &[[f64; 3]; 3]) -> Option<crate::fixture_model::Rot> {
+    let mut out = [(0usize, 1.0f64); 3];
+    for (i, row) in m.iter().enumerate() {
+        let k = row.iter().position(|x| x.abs() == 1.0)?;
+        if row.iter().enumerate().any(|(j, x)| j != k && *x != 0.0) {
+            return None;
+        }
+        out[i] = (k, row[k]);
+    }
+    crate::fixture_model::is_rot(&out).then_some(out)
 }
 
 impl Fixture {
@@ -527,6 +705,47 @@ impl Fixture {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_device_with_no_bodies_has_a_finite_jaw_top() {
+        let p = forge_workholding::Placed {
+            name: "none".into(),
+            kind: forge_workholding::Kind::Custom,
+            bodies: vec![],
+            mount: forge_workholding::Mount::Table { z: -12.5 },
+            held: vec![],
+            notes: vec![],
+        };
+        let f = Fixture::from_workholding(&p, 0, 1.0);
+        assert_eq!(f.jaw_top, -12.5);
+        assert!(f.faces().is_empty() && f.enveloped.is_empty());
+    }
+
+    #[test]
+    fn a_library_vise_as_the_checkers_fixture() {
+        let l = forge_workholding::Library::builtin();
+        let st = forge_workholding::Box3 {
+            min: [0.0, 0.0, -60.0],
+            max: [80.0, 60.0, 0.0],
+        };
+        let v = l.get("standin-vise-150").unwrap();
+        let p = forge_workholding::mill::vise("v", v, &st, 0, 50.0, None, None).unwrap();
+        let f = Fixture::from_workholding(&p, 0, 1.0);
+        let names: Vec<_> = f.boxes().into_iter().map(|b| b.0).collect();
+        for n in ["base", "fixed jaw", "moving jaw"] {
+            assert!(names.iter().any(|m| m == n), "{n} in {names:?}");
+        }
+        // the jaws grip 50 of the stock (it sits on the bed); the vise stands its height (100) on the table
+        assert!((f.jaw_top - (-10.0)).abs() < 1e-9, "{}", f.jaw_top);
+        let t = f.table_z.unwrap();
+        assert!((f.jaw_top - t - v.get("height").unwrap()).abs() < 1e-9);
+        // nothing below the table; every face names its piece
+        assert!(f.boxes().iter().all(|b| b.1[2] >= t - 1e-9));
+        let fs = f.faces();
+        assert!(!fs.is_empty() && fs.iter().all(|x| f.piece_of(x.id).is_some()));
+        assert_eq!(f.placed.as_ref().map(|q| q.bodies.len()), Some(p.bodies.len()));
+        assert_eq!((f.axis, f.clearance), (0, 1.0));
+    }
 
     const V: ViseSize = ViseSize {
         jaw_width: 150.0,
@@ -593,6 +812,9 @@ mod tests {
             jaw_top: 30.0,
             axis: 0,
             clearance: 1.0,
+            table_z: None,
+            enveloped: vec![],
+            placed: None,
         };
         let b = f.boxes();
         assert_eq!(b.len(), 1);

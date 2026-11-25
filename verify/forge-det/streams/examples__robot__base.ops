@@ -1,0 +1,5 @@
+{"doc":"examples/robot/base.fg"}
+{"op":"SetParam","param":"w","value":{"value":84,"dim":"Length"}}
+{"op":"SetParam","param":"h","value":{"value":21,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"ReplaceFeature","id":"top","text":"sketch top(on: plinth.end) {\n  p = pt(0, 0)\n}\n"}

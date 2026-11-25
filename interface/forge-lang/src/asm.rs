@@ -1745,6 +1745,10 @@ pub enum Issue {
         measured: f64,
         cmp: Cmp,
         limit: f64,
+        /// An `=`'s tolerance (`+- T`), 0 for none.
+        tol: f64,
+        /// The limit is an angle: the numbers are radians, said in degrees.
+        deg: bool,
     },
     UnknownMetric {
         metric: String,
@@ -1854,6 +1858,23 @@ fn note(span: Span, issue: Issue) -> Error {
 }
 
 impl Issue {
+    /// What a person may want under the text: a failed expect's line as written
+    /// (`expect interferences = 0`), its text being in words.
+    pub fn detail(&self) -> Option<String> {
+        match self {
+            Issue::ExpectFailed {
+                metric,
+                cmp,
+                limit,
+                tol,
+                deg,
+                ..
+            } => Some(format!("expect {}", crate::expect_words::raw_in(metric, *cmp, *limit, *tol, *deg))),
+            Issue::Inside { issue, .. } => issue.detail(),
+            _ => None,
+        }
+    }
+
     pub fn level(&self) -> Level {
         match self {
             Issue::Redundant { .. }
@@ -2130,7 +2151,9 @@ fn issue_text(i: &Issue) -> String {
             measured,
             cmp,
             limit,
-        } => format!("expect {metric}: {measured} is not {cmp:?} {limit}"),
+            tol,
+            deg,
+        } => crate::expect_words::words_in(metric, *cmp, *limit, *tol, *measured, *deg),
         Issue::ExpectUnevaluable { metric, why } => {
             format!("expect {metric} cannot be measured: {}", why.text())
         }
@@ -2283,11 +2306,15 @@ fn issue_data(i: &Issue) -> Vec<(&'static str, Json)> {
             measured,
             cmp,
             limit,
+            tol,
+            deg,
         } => vec![
             ("metric", s(metric)),
             ("measured", (*measured).into()),
             ("cmp", s(&format!("{cmp:?}"))),
             ("limit", (*limit).into()),
+            ("tol", (*tol).into()),
+            ("expect", s(&crate::expect_words::raw_in(metric, *cmp, *limit, *tol, *deg))),
         ],
         Issue::UnknownMetric { metric } => vec![("metric", s(metric))],
         Issue::ExpectUnevaluable { metric, why } => {
@@ -4807,8 +4834,9 @@ pub fn finish(
                 });
                 break 'one;
             };
-            let limit = match ev.expr(v) {
-                Ok(Value::Num(n)) => n.v,
+            // an angle's limit (`value(j.turn) = 30deg`): the numbers are radians, said in degrees
+            let (limit, deg) = match ev.expr(v) {
+                Ok(Value::Num(n)) => (n.v, n.dim == crate::values::Dim::Angle),
                 _ => {
                     ev.errors.push(note(s.span, unevaluable(Unevaluable::NoLimit)));
                     out.expects.push(ExpectOut {
@@ -4856,6 +4884,8 @@ pub fn finish(
                         measured,
                         cmp: *c,
                         limit,
+                        tol,
+                        deg,
                     },
                 ));
             }

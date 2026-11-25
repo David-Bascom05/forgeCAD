@@ -1,0 +1,5 @@
+{"doc":"examples/rack18u/casters/floor_ref.fg"}
+{"op":"SetParam","param":"hx","value":{"value":315,"dim":"Length"}}
+{"op":"SetParam","param":"ly","value":{"value":840,"dim":"Length"}}
+{"op":"SetParam","param":"zf","value":{"value":116.55000000000001,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}

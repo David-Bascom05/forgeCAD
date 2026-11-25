@@ -1,0 +1,7 @@
+{"doc":"examples/unified/peg_board.fg"}
+{"op":"SetParam","param":"L","value":{"value":126,"dim":"Length"}}
+{"op":"SetParam","param":"Wd","value":{"value":63,"dim":"Length"}}
+{"op":"SetParam","param":"T","value":{"value":8.4,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"MoveFeature","id":"lift","before":null}
+{"op":"ReplaceFeature","id":"on_top","text":"on_top = fastened(k.seat, p1.shank.end, flip: true)\n"}

@@ -1,0 +1,6 @@
+{"doc":"examples/thermoform/snap_lid.fg"}
+{"op":"SetParam","param":"t","value":{"value":1.5750000000000002,"dim":"Length"}}
+{"op":"SetParam","param":"W","value":{"value":94.5,"dim":"Length"}}
+{"op":"SetParam","param":"L","value":{"value":63,"dim":"Length"}}
+{"op":"Rename","from":"footprint","to":"footprint_r"}
+{"op":"ReplaceFeature","id":"lid","text":"lid = thermoform(body, from: \"inner\", t: t, material: \"ABS\")\n"}

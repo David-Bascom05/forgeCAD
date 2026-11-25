@@ -1,0 +1,7 @@
+{"doc":"examples/rack18u/fans/test.fg"}
+{"op":"SetParam","param":"pan_z","value":{"value":951.3000000000001,"dim":"Length"}}
+{"op":"SetParam","param":"tray_z","value":{"value":938.049,"dim":"Length"}}
+{"op":"SetParam","param":"rack_y","value":{"value":420,"dim":"Length"}}
+{"op":"Rename","from":"pan","to":"pan_r"}
+{"op":"MoveFeature","id":"thread_m8","before":null}
+{"op":"ReplaceFeature","id":"press","text":"press = fit_rule(\"../hw/pem_fh_m8_25.fg\", \"standin/top_pan_standin.fg\")\n"}

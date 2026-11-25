@@ -2,4 +2,7 @@
 channel = "1.99.1"
 profile = "minimal"
 components = ["clippy", "rustfmt"]
-targets = ["wasm32-wasip1"]
+# every target a check builds: wasm32-wasip1 (the workspace tests under WASI, wasm.yml) and
+# wasm32-unknown-unknown (forge-render's browser lib and its wasm32 clippy, web/tests/ci.sh and
+# pre-verify), so rustup installs both on a fresh machine
+targets = ["wasm32-wasip1", "wasm32-unknown-unknown"]

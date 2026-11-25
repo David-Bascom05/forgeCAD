@@ -1,0 +1,4 @@
+{"doc":"examples/rack18u/fans/probes/fit_interference.fg"}
+{"op":"SetParam","param":"d","value":{"value":119.7,"dim":"Length"}}
+{"op":"SetParam","param":"h","value":{"value":7.612500000000001,"dim":"Length"}}
+{"op":"Rename","from":"a","to":"a_r"}

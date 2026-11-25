@@ -488,12 +488,22 @@ fn punch_rec(file: &str, t: &Table) -> Result<PunchRec, CatalogError> {
     let width = r.num("width")?;
     let tip_height = r.num("tip_height")?;
     let max_load = r.num("max_load")?;
+    let role = role_rd(&mut r)?;
+    let max_thickness = r.num("max_thickness")?;
     let rd = (r.num("relief.depth")?, r.num("relief.z0")?, r.num("relief.z1")?);
     let segments = r.segments()?;
     let outline = r.outline()?;
+    let has_outline = outline.is_some();
     let prov = r.prov("punch")?;
     r.check_cites(&prov)?;
     let mut unknown = Vec::new();
+    // a flattening punch has no tip: its face is flat
+    let (tip_radius, tip_angle) = match role {
+        crate::tooling::Role::Flatten => (tip_radius.or(Some(0.0)), tip_angle.or(Some(90.0))),
+        // an offset insert: no tip, its step's angle published
+        crate::tooling::Role::Offset { .. } => (tip_radius.or(Some(0.0)), tip_angle),
+        _ => (tip_radius, tip_angle),
+    };
     for (k, v) in [
         ("height", height),
         ("tip_radius", tip_radius),
@@ -527,9 +537,12 @@ fn punch_rec(file: &str, t: &Table) -> Result<PunchRec, CatalogError> {
             profile: outline,
             segments,
             max_load,
+            role,
+            max_thickness,
             // a width that is the envelope of a published dimension (twice it, about the tip
             // line): the dimension itself is what is drawn
-            drawn_width: prov_width_twice(&prov).then_some(w / 2.0),
+            // (a drawn section is what it is: drawn and checked alike)
+            drawn_width: (prov_width_twice(&prov) && !has_outline).then_some(w / 2.0),
         };
         // the working part: the flanks up to where they reach the body's width (or 12 mm, the
         // stand-ins' height, whichever is lower), unless the record states it
@@ -554,6 +567,26 @@ fn punch_rec(file: &str, t: &Table) -> Result<PunchRec, CatalogError> {
         clamp,
         kind,
         punch,
+    })
+}
+
+/// A record's `role` (`bend` when it says none) and, for an offset tool, its `z`.
+fn role_rd(r: &mut Rd) -> Result<crate::tooling::Role, CatalogError> {
+    use crate::tooling::Role;
+    let said = r.text("role")?;
+    if said.is_some() {
+        // a role is a fact about the tool: cited like its numbers
+        r.held.push("role".into());
+    }
+    Ok(match said.as_deref() {
+        None | Some("bend") => Role::Bend,
+        Some("flatten") => Role::Flatten,
+        Some("hem") => Role::Hem,
+        Some("offset") => Role::Offset {
+            z: r.num("z")?
+                .ok_or_else(|| r.bad("z", "an offset tool's offset, mm"))?,
+        },
+        _ => return Err(r.bad("role", "bend, flatten, hem or offset")),
     })
 }
 
@@ -583,11 +616,20 @@ fn die_rec(file: &str, t: &Table) -> Result<DieRec, CatalogError> {
     let width = r.num("width")?;
     let floor = r.num("floor")?;
     let max_load = r.num("max_load")?;
+    let role = role_rd(&mut r)?;
+    let max_thickness = r.num("max_thickness")?;
     let segments = r.segments()?;
     let outline = r.outline()?;
     let prov = r.prov("die")?;
     r.check_cites(&prov)?;
     let mut unknown = Vec::new();
+    // a flattening die has no V: its top is flat
+    let (v, angle, rs) = match role {
+        crate::tooling::Role::Flatten => (v.or(Some(0.0)), angle.or(Some(90.0)), rs.or(Some(0.0))),
+        // an offset insert: its step's angle is its own, published; no V
+        crate::tooling::Role::Offset { .. } => (v.or(Some(0.0)), angle, rs.or(Some(0.0))),
+        _ => (v, angle, rs),
+    };
     for (k, x) in [
         ("v", v),
         ("angle", angle),
@@ -612,6 +654,8 @@ fn die_rec(file: &str, t: &Table) -> Result<DieRec, CatalogError> {
             profile: outline,
             segments,
             max_load,
+            role,
+            max_thickness,
         };
         match d.validate() {
             Ok(()) => Ok(d),
@@ -986,6 +1030,59 @@ impl Catalog {
 mod tests {
     use super::*;
 
+    /// Every drawn section (an `outline` measured off a maker's drawing): one closed loop, its tip
+    /// at the origin (within the 0.5 mm it is grown and a millimetre of the drawing), its top at
+    /// the published height, the tip the lowest point; cited as an estimate with its basis.
+    #[test]
+    fn drawn_sections_sit_on_their_published_dimensions() {
+        let c = Catalog::builtin();
+        let mut n = 0;
+        for r in &c.punches {
+            let Ok(p) = &r.punch else { continue };
+            let Some(prof) = &p.profile else { continue };
+            n += 1;
+            let pts: Vec<forge_math::Point2> = prof.iter().map(|s| s.point(0.0)).collect();
+            let (zlo, zhi) = pts.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |a, q| {
+                (a.0.min(q.y), a.1.max(q.y))
+            });
+            assert!(
+                (zhi - p.height).abs() < 1e-6,
+                "{}: top {zhi} vs height {}",
+                p.id,
+                p.height
+            );
+            assert!((-1.5..=0.0).contains(&zlo), "{}: lowest {zlo}", p.id);
+            let tip = pts.iter().min_by(|a, b| a.y.total_cmp(&b.y)).unwrap();
+            // the lowest vertex of a rounded tip lies anywhere along its arc
+            assert!(tip.x.abs() < 1.5 + p.tip_radius, "{}: tip at x {}", p.id, tip.x);
+            let cites = r.prov.of("outline");
+            assert!(
+                cites
+                    .iter()
+                    .any(|c| c.status == Status::Estimate && c.basis.is_some()),
+                "{}: the outline's cite",
+                p.id
+            );
+            assert!(
+                p.drawn_width.is_none(),
+                "{}: a drawn section is drawn as checked",
+                p.id
+            );
+            // the body checked by distance starts at the tip height: below it, the working part
+            // is the rules' (a body there would collide with the contact the bend is made by)
+            for l in &p.body_section().loops {
+                for sg in l {
+                    assert!(
+                        sg.point(0.0).y >= p.tip_height - 1e-9,
+                        "{}: body below the tip height",
+                        p.id
+                    );
+                }
+            }
+        }
+        assert!(n >= 8, "{n} drawn sections");
+    }
+
     #[test]
     fn builtin_library_reads_and_cites_every_value() {
         let c = Catalog::builtin();
@@ -993,15 +1090,27 @@ mod tests {
         for p in &c.punches {
             assert!(p.prov.real, "{}", p.id);
             if let Ok(x) = &p.punch {
-                for f in ["height", "tip_radius", "tip_angle"] {
+                // a flattening punch has a face, no tip: its height is what places it
+                let fields: &[&str] = match x.role {
+                    crate::tooling::Role::Flatten => &["height", "role"],
+                    crate::tooling::Role::Offset { .. } => &["height", "role", "tip_angle", "z"],
+                    _ => &["height", "tip_radius", "tip_angle"],
+                };
+                for f in fields.iter().copied() {
                     assert_eq!(p.prov.status(f), Some(Status::Published), "{} {f}", p.id);
                 }
                 x.validate().unwrap();
             }
         }
         for d in &c.dies {
-            if d.die.is_ok() {
-                for f in ["v", "angle", "shoulder_radius", "height"] {
+            if let Ok(x) = &d.die {
+                // a flattening die is a block, no V
+                let fields: &[&str] = match x.role {
+                    crate::tooling::Role::Flatten => &["height", "role"],
+                    crate::tooling::Role::Offset { .. } => &["height", "role", "angle", "z"],
+                    _ => &["v", "angle", "shoulder_radius", "height"],
+                };
+                for f in fields.iter().copied() {
                     assert_eq!(d.prov.status(f), Some(Status::Published), "{} {f}", d.id);
                 }
             }

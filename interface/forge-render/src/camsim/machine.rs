@@ -18,6 +18,9 @@ use forge_machine::sim::{Happening, Path, SegKind, Violation};
 use forge_math::dmath;
 use forge_math::ipow::Powi as _;
 
+/// How far the workholding's base may sit off the table before it is a check's failure, mm.
+pub const SEAT_TOL: f64 = 0.01;
+
 /// A setup's program on its machine, as the simulation plays it.
 pub struct MachineView {
     pub run: MachineRun,
@@ -371,17 +374,80 @@ impl MachineView {
                 planned: false,
             });
         }
+        // the workholding off the table: the work offset (`at:`) puts its base above the table
+        // (the part held in the air) or into it. Placed (no `at:`), it is seated
+        if let Some(g) = self.run.seat
+            && g.abs() > SEAT_TOL
+        {
+            let (lo, hi) = self.run.holding.unwrap_or_default();
+            let words = if g > 0.0 {
+                format!("{g:.2} mm above the table: the part is held in the air")
+            } else {
+                format!("{:.2} mm into the table", -g)
+            };
+            let t = self.tl.ops.first().map_or(0.0, |o| o.t0);
+            out.push(Marker {
+                op: self.tl.ops.first().map(|_| 0),
+                setup: self.setup,
+                rule: "workholding_off_table".into(),
+                verdict: "fail".into(),
+                at: [0.5 * (lo[0] + hi[0]), 0.5 * (lo[1] + hi[1]), lo[2]],
+                t,
+                text: format!(
+                    "The workholding's base is {words} on {} (the setup's work offset, `at:`, puts it there)",
+                    self.run.def.name
+                ),
+                row: format!("its base {words}"),
+                tool: String::new(),
+                part: String::new(),
+                region: None,
+                planned: false,
+            });
+        }
         out.sort_by(|a, b| a.t.total_cmp(&b.t));
         out
     }
 
     /// The machine's bodies at time t, in the part's frame (shaded); `hit` names drawn red. A
-    /// body the user attached a model to (forge_machine_builder::models: a maker's model, read
-    /// from their own library, never shipped) is drawn as that model, moving with its link; a
+    /// body with a model (forge_machine_builder::models: the user's own, else forgecad's shipped
+    /// makers' models, `models_dir`) is drawn as that model, moving with its link; a
     /// whole-machine model on the base. An enclosure is drawn see-through into `glass`, so it never
     /// hides the cut. The checks keep the record's envelopes either way.
     pub fn draw(&self, t: f64, hit: &[String], out: &mut Vec<WorldVert>) {
         self.draw_with(t, hit, out, &mut Vec::new());
+    }
+
+    /// What the collision check takes at time t, see-through amber over the drawing, in the
+    /// part's frame: each checked machine body's primitives (forge_machine::collide::
+    /// machine_bodies) and the workholding's bodies as the run checked them (`run.work`, in
+    /// their links' frames as the machine's are).
+    pub fn draw_checked(&self, t: f64, glass: &mut Vec<WorldVert>) {
+        let def = &self.run.def;
+        let q = self.q_at(t);
+        let pose = kin::pose(def, &q);
+        let w = self.to_part(&q);
+        let c = crate::viewcube::rgb(0xE8B13A);
+        let mut put = |prims: &[forge_machine::def::Prim], link: Option<usize>| {
+            let l = link.map_or(Rigid::ID, |j| pose[j]);
+            let m = w.then(&l);
+            let tr = crate::machine_mesh::prims_tris(prims);
+            for tri in &tr.tri {
+                for &k in tri {
+                    let mut col = super::draw::shade_pub(c, f3(m.dir(tr.nrm[k as usize])));
+                    col[3] = 0.28;
+                    glass.push(WorldVert {
+                        at: f3(m.apply(tr.pos[k as usize])),
+                        colour: col,
+                    });
+                }
+            }
+        };
+        for b in forge_machine::collide::machine_bodies(def) {
+            put(&b.prims, b.link);
+        }
+        for b in &self.run.work {
+            put(&b.prims, b.link);
+        }
     }
 
     /// `draw`, the see-through bodies (an enclosure) into `glass`.
@@ -454,8 +520,168 @@ impl MachineView {
     }
 }
 
-/// The models the user attached to a machine (their own library: `forgecad machine model
-/// attach` / `split`), each placed in the base frame at home, with the body it is drawn as (None:
+/// The folder a machine's models are drawn from: the user's own (their library: `forgecad
+/// machine model attach`), else forgecad's shipped ones (`models::drawn_dir`: the makers'
+/// published models, Git LFS), where downloaded.
+pub fn models_dir(machine: &str) -> Option<std::path::PathBuf> {
+    forge_machine_builder::models::drawn_dir(forge_machine_builder::catalog::user_dir().as_deref(), machine)
+}
+
+/// Where forgecad's workholding models are (forge-workholding's data/models: the makers'
+/// published models, Git LFS): `FORGECAD_WORKHOLDING_MODELS`, else the build's source tree.
+fn holding_roots() -> Vec<std::path::PathBuf> {
+    let mut out = vec![];
+    if let Some(d) = std::env::var_os("FORGECAD_WORKHOLDING_MODELS") {
+        out.push(d.into());
+    }
+    out.push(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../kernel/forge-workholding/data/models"),
+    );
+    out
+}
+
+/// A workholding body's real part as a mesh (an STL relative to the models folder), read once;
+/// None where it is not there or not downloaded (an LFS pointer is no mesh).
+pub fn holding_part(part: &str) -> Option<std::sync::Arc<Tris>> {
+    if !part.to_ascii_lowercase().ends_with(".stl") {
+        return None;
+    }
+    holding_roots()
+        .into_iter()
+        .map(|r| r.join(part))
+        .find(|p| forge_dirs::fs::metadata(p).is_ok_and(|m| m.len() > 1024))
+        .and_then(|p| crate::machine_model::file_tris(&p).ok())
+}
+
+/// The command that fetches forgecad's shipped models of a machine, where it ships some that
+/// are not downloaded (a clone's LFS pointers) and the user has none of their own: the machine
+/// is drawn from its record's parts meanwhile.
+pub fn models_missing(machine: &str) -> Option<String> {
+    if models_dir(machine).is_some() {
+        return None;
+    }
+    forge_machine_builder::models::not_downloaded(machine).map(|(_, cmd)| cmd)
+}
+
+/// Where a machine body's geometry comes from: a model drawn in its place (its file), its
+/// record's `.fg` part, its record's primitives (the collision envelope), or nothing.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Source {
+    Model(String),
+    Part(String),
+    Prims,
+    /// A workholding's `Fixture::boxes()`: for a model body, the box about its faces (it can
+    /// reach past the body), which the machine run checks today.
+    Boxes,
+    None,
+}
+
+/// A body of a machine: what the simulation draws it as, and what the collision check
+/// (forge_machine::collide::machine_bodies) takes for it. The two are to be one (David: what's
+/// drawn is what's checked); where they are not, the test of every built-in machine names it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BodySources {
+    pub body: String,
+    pub drawn: Source,
+    pub checked: Source,
+}
+
+/// Every body of `def`: its drawn source and its checked source. The drawn side takes the
+/// models a machine is drawn with: the user's own and forgecad's shipped ones (`user`), or the
+/// shipped ones alone (the same on every computer: the test's count). The checked side is what
+/// `Cam::machine_run`'s check takes: a body's real part where forge_machine_lang::real_trees
+/// compiled it (collide::check_with), else its record's primitives, or nothing for a body the
+/// check leaves out (`check = false`).
+pub fn sources(def: &forge_machine::MachineDef, user: bool) -> Vec<BodySources> {
+    let dir = if user {
+        models_dir(&def.name)
+    } else {
+        forge_machine_builder::models::shipped_dir(&def.name)
+    };
+    // the models that read (an LFS pointer is no model), by body
+    let models: Vec<(String, String)> = dir
+        .as_ref()
+        .and_then(|d| Some((d, forge_machine_builder::models::load_in(d).ok()?)))
+        .map(|(d, ms)| {
+            ms.into_iter()
+                .filter(|m| crate::machine_model::file_tris(&d.join(&m.file)).is_ok())
+                .filter_map(|m| Some((m.body?, m.file)))
+                .collect()
+        })
+        .unwrap_or_default();
+    let checked: Vec<String> = forge_machine::collide::machine_bodies(def)
+        .into_iter()
+        .map(|b| b.name)
+        .collect();
+    let (trees, _) = forge_machine_lang::real_trees(def, None);
+    def.bodies
+        .iter()
+        .map(|b| {
+            let drawn = match models.iter().find(|(body, _)| body == &b.name) {
+                Some((_, f)) => Source::Model(f.clone()),
+                None => match &b.part {
+                    Some(p)
+                        if forge_machine_builder::make::builtin_part(p)
+                            .is_some_and(|src| crate::machine_mesh::part_tris(src, None).is_ok()) =>
+                    {
+                        Source::Part(p.clone())
+                    }
+                    _ if b.prims.is_empty() => Source::None,
+                    _ => Source::Prims,
+                },
+            };
+            let checked = if !b.check {
+                Source::None
+            } else if trees.contains_key(&b.name) {
+                Source::Part(b.part.clone().unwrap_or_default())
+            } else if checked.contains(&b.name) {
+                Source::Prims
+            } else {
+                Source::None
+            };
+            BodySources {
+                body: b.name.clone(),
+                drawn,
+                checked,
+            }
+        })
+        .collect()
+}
+
+/// Every body of a placed workholding device (any: a catalogue vise, the user's own import, a
+/// stand-in): what the simulation draws it as (its mesh, its `.fg` part, or its own prims) and
+/// what the machine run's collision check takes for it (the fixture's boxes: for a model body,
+/// the box about its faces). Certification checks a model body's faces themselves, from the
+/// same compile as the drawn mesh (forge_cam::fixture::body_source); the machine run's check
+/// moves onto them with CAM-MACHINE's real-model collisions, and these become one.
+pub fn holding_sources(f: &forge_cam::fixture::Fixture) -> Vec<BodySources> {
+    let Some(p) = &f.placed else {
+        return vec![];
+    };
+    p.bodies
+        .iter()
+        .map(|b| {
+            let drawn = match &b.part {
+                Some(part) if holding_part(part).is_some() => Source::Model(part.clone()),
+                Some(part) if part.ends_with(".fg") => Source::Part(part.clone()),
+                _ if b.prims.is_empty() => Source::None,
+                _ => Source::Prims,
+            };
+            BodySources {
+                body: b.name.clone(),
+                drawn,
+                checked: if b.exact.is_some() {
+                    Source::Boxes
+                } else {
+                    Source::Prims
+                },
+            }
+        })
+        .collect()
+}
+
+/// The models a machine is drawn with (`models_dir`: the user's own library, `forgecad machine
+/// model attach` / `split`, else forgecad's shipped ones), each placed in the base frame at home, with the body it is drawn as (None:
 /// the whole machine). Read once per change of the machine's models.toml; none where it has none
 /// or a file does not read (the record's bodies are drawn then).
 fn attached(machine: &str) -> std::sync::Arc<Vec<(Option<String>, std::sync::Arc<Tris>)>> {
@@ -470,7 +696,7 @@ fn attached(machine: &str) -> std::sync::Arc<Vec<(Option<String>, std::sync::Arc
         >,
     >;
     static KEPT: OnceLock<Kept> = OnceLock::new();
-    let Some(dir) = forge_machine_builder::models::dir(machine) else {
+    let Some(dir) = models_dir(machine) else {
         return Arc::new(vec![]);
     };
     let index = dir.join(forge_machine_builder::models::INDEX);

@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/hw/pem_fh_m4_12.fg"}
+{"op":"SetParam","param":"d","value":{"value":4.2,"dim":"Length"}}
+{"op":"SetParam","param":"P","value":{"value":0.735,"dim":"Length"}}
+{"op":"SetParam","param":"l","value":{"value":12.600000000000001,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}
+{"op":"MoveFeature","id":"body","before":null}

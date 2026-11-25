@@ -22,6 +22,8 @@ const WRITE: u16 = 109;
 const LAST: u16 = 110;
 const FOLLOW: u16 = 111;
 const SEE: u16 = 112;
+const PLAN: u16 = 113;
+const COLLIDE: u16 = 114;
 
 fn tool(name: &'static str, icon: &'static str, action: Option<Action>, on: bool) -> Tool {
     Tool {
@@ -117,19 +119,91 @@ pub(super) fn status(s: &Shell) -> Option<String> {
         None => "stand-in tooling".into(),
     };
     let n = sim.plan.steps.len();
+    // the environment owns the status bar: no feasible order is said there with its first
+    // reason (BUTTON-AUDITOR: Suggest Order and Simulate Again never silent)
     Some(format!(
         "Bend Simulation · {machine} · {n} bend{} · {}",
         if n == 1 { "" } else { "s" },
-        if sim.plan.feasible {
-            "feasible"
-        } else {
-            "no feasible order"
-        }
+        infeasible(b).unwrap_or_else(|| "feasible".into())
+    ))
+}
+
+/// Why a Bend Simulation tool is off, in words (its tooltip; BUTTON-AUDITOR: no silent button).
+pub(super) fn why_off(s: &Shell, name: &str) -> Option<String> {
+    let b = s.sheet.bend_sim.as_deref()?;
+    let sim = match &b.sim {
+        Ok(x) => x,
+        Err(e) => return Some(format!("nothing simulated: {e}")),
+    };
+    let n = sim.plan.steps.len();
+    match name {
+        "First Bend" | "Previous Bend" if b.step == 0 => Some("already at bend 1".into()),
+        "Next Bend" | "Last Bend" if b.step + 1 >= n => Some(format!("already at the last bend ({n})")),
+        "Write Program" if b.doc.is_some() => Some("the program is written: its document is open in the browser".into()),
+        _ => None,
+    }
+}
+
+/// A catalogue key in words: "trumpf/EV004_30deg" reads "EV004 30°" (UX-LEAD; the key itself
+/// on hover where it is shown).
+pub fn tool_words(id: &str) -> String {
+    let w = id.rsplit('/').next().unwrap_or(id).replace('_', " ");
+    w.split(' ')
+        .map(|p| {
+            // "30deg", "85deg" read as degrees; a part such as "V16-85deg" too
+            match p.rsplit_once('-') {
+                Some((a, b)) if b.ends_with("deg") => format!("{a}-{}", degrees(b)),
+                _ => degrees(p),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn degrees(p: &str) -> String {
+    match p.strip_suffix("deg") {
+        Some(n) if !n.is_empty() && n.chars().all(|c| c.is_ascii_digit() || c == '.') => format!("{n}°"),
+        _ => p.to_string(),
+    }
+}
+
+/// The planner found no feasible order: the first reason, in words.
+pub(super) fn infeasible(b: &BendSimUi) -> Option<String> {
+    let sim = b.sim.as_ref().ok().filter(|x| !x.plan.feasible)?;
+    let cat = b.catalog.as_ref().and_then(|c| c.as_ref().ok());
+    let first = sim.plan.blocking.first().map(|k| {
+        let rules: Vec<String> = k
+            .checks
+            .iter()
+            .filter(|c| !c.pass)
+            .map(|c| super::bendsim_cards::rule_failed(c.rule).to_string())
+            .fold(Vec::new(), |mut v: Vec<String>, w| {
+                // each clause once ("it hits a tool" for the die's two checks)
+                if !v.contains(&w) {
+                    v.push(w);
+                }
+                v
+            });
+        format!(
+            // the bend by its name (its index in the part is not the step the panel numbers)
+            "{} fails: {} (best tried: {} on {})",
+            sim.names[k.bend],
+            if rules.is_empty() { "its checks".to_string() } else { rules.join("; ") },
+            super::bendsim_cards::tool_short(cat, &k.punch, true),
+            super::bendsim_cards::tool_short(cat, &k.die, false)
+        )
+    });
+    Some(format!(
+        "No feasible order: {}",
+        first.unwrap_or_else(|| "the planner found none with these tools".into())
     ))
 }
 
 pub(super) fn groups(s: &Shell) -> Vec<Group> {
     let b = s.sheet.bend_sim.as_deref();
+    let n = b.and_then(|b| b.sim.as_ref().ok()).map_or(0, |x| x.plan.steps.len());
+    let at_first = b.is_some_and(|b| b.step == 0);
+    let at_last = b.is_some_and(|b| b.step + 1 >= n);
     let ran = b.is_some_and(|b| b.sim.is_ok());
     let cmd = |c: u16| ran.then_some(Action::Env(EnvId::BendSim, c));
     let any = b.is_some().then_some(());
@@ -154,7 +228,10 @@ pub(super) fn groups(s: &Shell) -> Vec<Group> {
         ),
         group(
             "Program",
-            vec![tool("Suggest Order", "redo", cmd(SUGGEST), false)],
+            vec![
+                tool("Suggest Order", "redo", cmd(SUGGEST), false),
+                tool("Plan Stations", "bendtable", cmd(PLAN), false),
+            ],
             vec![
                 tool(
                     "Write Program",
@@ -179,10 +256,10 @@ pub(super) fn groups(s: &Shell) -> Vec<Group> {
                 playing,
             )],
             vec![
-                tool("First Bend", "first", cmd(FIRST), false),
-                tool("Previous Bend", "stepback", cmd(BACK), false),
-                tool("Next Bend", "stepfwd", cmd(NEXT), false),
-                tool("Last Bend", "last", cmd(LAST), false),
+                tool("First Bend", "first", cmd(FIRST).filter(|_| !at_first), false),
+                tool("Previous Bend", "stepback", cmd(BACK).filter(|_| !at_first), false),
+                tool("Next Bend", "stepfwd", cmd(NEXT).filter(|_| !at_last), false),
+                tool("Last Bend", "last", cmd(LAST).filter(|_| !at_last), false),
             ],
         ),
         group(
@@ -191,6 +268,7 @@ pub(super) fn groups(s: &Shell) -> Vec<Group> {
             vec![
                 tool("Follow Bend", "eye", cmd(FOLLOW), b.is_some_and(|b| b.follow)),
                 tool("See Through", "hide", cmd(SEE), b.is_some_and(|b| b.see_through)),
+                tool("Collisions", "warning", cmd(COLLIDE), b.is_some_and(|b| b.collisions)),
             ],
         ),
     ]
@@ -214,7 +292,7 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
             );
             use super::bendsim::Pane;
             // the panel's width: long lines wrap within it
-            ui.set_max_width(r.width() - 24.0);
+            ui.set_max_width((r.width() - 24.0).max(0.0));
             ui.spacing_mut().item_spacing.x = ui.spacing().item_spacing.x.max(6.0);
             ui.add_space(4.0);
             ui.horizontal(|ui| {
@@ -245,13 +323,14 @@ pub(super) fn dock(s: &mut Shell, ui: &mut Ui, r: Rect) {
         return;
     };
     let t = s.theme;
+    b.inch = s.units == "in";
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r.shrink2(egui::vec2(12.0, 10.0))));
     child.set_clip_rect(r);
     let mut flat = None;
     egui::ScrollArea::vertical()
         .id_salt("env-bendsim-dock")
         .show(&mut child, |ui| {
-            ui.set_max_width(r.width() - 40.0);
+            ui.set_max_width((r.width() - 40.0).max(0.0));
             flat = super::bendsim::bend_sheet(ui, &t, &mut b);
         });
     s.sheet.bend_sim = Some(b);
@@ -321,10 +400,17 @@ pub(super) fn panels(s: &mut Shell, ctx: &egui::Context) {
 /// The view is the renderer's (the press in 3D, gui_bendsim.rs): over it, the machine, step and
 /// failures, and the timeline along its foot. The view keeps its pointer (orbit, zoom).
 pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
+    let camera = s.camera;
+    let theme = s.theme;
     let Some(b) = s.sheet.bend_sim.as_deref_mut() else {
         return false;
     };
     super::bendsim::overlay(ui, view, b);
+    if b.overview {
+        for (k, r) in station_chips(ui, view, camera, &theme, b) {
+            s.places.push((format!("env:bendsim:station:{}", k + 1), r));
+        }
+    }
     // a narrow view: the view's settings on a row of their own, the bar taller for it
     let bar = super::bendsim::Bar::for_width(view.width());
     let narrow = bar == super::bendsim::Bar::Narrow;
@@ -335,6 +421,12 @@ pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
         ),
         egui::pos2(view.right() - 12.0, view.bottom() - 8.0),
     );
+    // a view too narrow for the bar (BUTTON-AUDITOR's 480 px window: a view ~200 px, or none):
+    // no bar; the ribbon's Play group still steps through the program
+    s.places.push(("env:bendsim:view".into(), view));
+    if band.width() < MIN_BAR {
+        return false;
+    }
     egui::Area::new(egui::Id::unique("env-bendsim-timeline"))
         .fixed_pos(band.min)
         .order(egui::Order::Foreground)
@@ -344,14 +436,16 @@ pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
                 .corner_radius(6.0)
                 .inner_margin(6.0)
                 .show(ui, |ui| {
-                    ui.set_width(band.width() - 12.0);
+                    ui.set_width((band.width() - 12.0).max(0.0));
                     super::bendsim::timeline_ui(ui, b, bar);
                 });
         });
-    s.places.push(("env:bendsim:view".into(), view));
     s.places.push(("env:bendsim:timeline".into(), band));
     false
 }
+
+/// The narrowest band the timeline bar is drawn in (its transport, the stage strip).
+pub const MIN_BAR: f32 = 240.0;
 
 pub(super) fn command(s: &mut Shell, c: u16) {
     let Some(b) = s.sheet.bend_sim.as_deref_mut() else {
@@ -378,24 +472,49 @@ pub(super) fn command(s: &mut Shell, c: u16) {
             b.follow = !b.follow;
             if b.follow {
                 b.frame = Some(super::bendsim::Framing::Work);
+                b.overview = false;
             }
         }
         SEE => b.see_through = !b.see_through,
+        COLLIDE => b.collisions = !b.collisions,
         MACHINE => b.pane = super::bendsim::Pane::Setup,
         SUGGEST => {
             b.pane = super::bendsim::Pane::Program;
             b.suggest = true;
+            if let Some(w) = infeasible(b) {
+                s.status = w;
+            }
         }
         WRITE => {
             if let Err(e) = b.write_doc() {
                 s.status = format!("Bend Simulation: {e}");
             }
         }
-        OVERVIEW => b.frame = Some(super::bendsim::Framing::Overview),
+        OVERVIEW => {
+            b.frame = Some(super::bendsim::Framing::Overview);
+            b.overview = true;
+        }
+        PLAN => {
+            // the program's tools laid out as stations along the bed (BENDSIM-TOOLS' planner);
+            // over a document's own stations only when the user says so
+            let mut c = b.choice.clone();
+            c.stations_auto = true;
+            let tooling = b.tooling.clone();
+            b.redo(c, &tooling);
+        }
         AGAIN => {
             if let Some(fg) = s.fg.as_ref() {
                 let tooling = b.tooling.clone();
                 again(b, fg, &tooling);
+            }
+            // never silent: what the planner found, or why there is no order
+            let b = s.sheet.bend_sim.as_deref().unwrap();
+            s.status = infeasible(b).unwrap_or_else(|| match &b.sim {
+                Ok(x) => format!("Simulated again: {} bends, feasible", x.plan.steps.len()),
+                Err(e) => format!("Bend Simulation: {e}"),
+            });
+            if let Some(n) = b.note.clone() {
+                s.status = format!("{} · {n}", s.status);
             }
         }
         k => {
@@ -446,6 +565,159 @@ pub(super) fn label_at(s: &Shell, t: f64) -> Option<String> {
     ))
 }
 
+/// A station's chip in the press overview: its name, tools and bends, over its place on the bed.
+pub struct Chip {
+    pub station: usize,
+    pub text: String,
+    /// The tools' catalogue keys (on hover).
+    pub keys: String,
+    pub rect: Rect,
+    /// Its station's place on the screen (the chip's leader runs to it).
+    pub at: egui::Pos2,
+    /// The station the shown bend works at.
+    pub here: bool,
+}
+
+/// The stations' chips, where they stand on the screen (UX-LEAD: the overview labelled, a click
+/// selects): each over its die's middle at the bed, the working station's in the accent.
+pub fn chips(ui: &Ui, view: Rect, camera: Option<(crate::camera::Camera, (u32, u32))>, b: &BendSimUi) -> Vec<Chip> {
+    let (Some((cam, size)), Ok(sim)) = (camera, b.sim.as_ref()) else {
+        return vec![];
+    };
+    let ppp = ui.ctx().pixels_per_point();
+    let here = sim.plan.steps.get(b.step).and_then(|s| s.station);
+    let mut out = Vec::new();
+    for (k, st) in sim.tooling.stations.iter().enumerate() {
+        let bends: Vec<String> = sim
+            .plan
+            .steps
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.station == Some(k))
+            .map(|(i, _)| (i + 1).to_string())
+            .collect();
+        let cat = b.catalog.as_ref().and_then(|c| c.as_ref().ok());
+        let keys = format!(
+            "punch stack {:.0} mm · die stack {:.0} mm\npunch {} · die {}",
+            st.punch_length,
+            st.die_length,
+            sim.tooling.punches[st.punch].id,
+            sim.tooling.dies[st.die].id
+        );
+        // the stacks' lengths too: why the same tools stand at two stations (the coordinator)
+        let text = format!(
+            "S{} · {} / {} · stacks {:.0}/{:.0} mm · {}",
+            k + 1,
+            super::bendsim_cards::tool_short(cat, &sim.tooling.punches[st.punch].id, true),
+            super::bendsim_cards::tool_short(cat, &sim.tooling.dies[st.die].id, false),
+            st.punch_length,
+            st.die_length,
+            if bends.is_empty() {
+                "no bends".to_string()
+            } else {
+                format!("bend{} {}", if bends.len() == 1 { "" } else { "s" }, bends.join(", "))
+            }
+        );
+        // the die's foot on the bed, at the station's middle
+        let at = [0.0f32, st.y as f32, -(sim.tooling.dies[st.die].height as f32) - 10.0];
+        let Some((x, y)) = cam.pixel_of(at, size.0, size.1) else { continue };
+        let q = egui::pos2(view.left() + x / ppp, view.top() + y / ppp);
+        if !view.contains(q) {
+            continue;
+        }
+        let g = ui.painter().layout_no_wrap(text.clone(), egui::FontId::proportional(12.0), egui::Color32::WHITE);
+        // hung under its station's place, clear of the tools
+        let sz = g.size() + egui::vec2(12.0, 6.0);
+        let rect = Rect::from_min_size(egui::pos2(q.x - 0.5 * sz.x, q.y + 14.0), sz);
+        out.push(Chip {
+            station: k,
+            text,
+            keys,
+            rect,
+            at: q,
+            here: here == Some(k),
+        });
+    }
+    // stations close on the screen (seen along the bed): each chip moved down clear of the ones
+    // already placed, a leader back to its station
+    let mut placed: Vec<Rect> = Vec::new();
+    for c in &mut out {
+        while placed.iter().any(|r| r.expand(2.0).intersects(c.rect)) {
+            c.rect = c.rect.translate(egui::vec2(0.0, c.rect.height() + 4.0));
+        }
+        placed.push(c.rect);
+    }
+    out
+}
+
+fn station_chips(
+    ui: &mut Ui,
+    view: Rect,
+    camera: Option<(crate::camera::Camera, (u32, u32))>,
+    t: &super::theme::Theme,
+    b: &mut BendSimUi,
+) -> Vec<(usize, Rect)> {
+    let list = chips(ui, view, camera, b);
+    let p = ui.painter_at(view);
+    let mut go = None;
+    for c in &list {
+        let r = ui.interact(c.rect, egui::Id::unique("bendsim-station-chip").with(c.station), egui::Sense::click());
+        let fill = if c.here {
+            t.accent
+        } else if r.hovered() {
+            egui::Color32::from_black_alpha(220)
+        } else {
+            egui::Color32::from_black_alpha(170)
+        };
+        if !c.rect.contains(c.at) {
+            let from = egui::pos2(c.rect.center().x, c.rect.top());
+            p.line_segment([from, c.at], egui::Stroke::new(1.0, egui::Color32::from_black_alpha(170)));
+            p.circle_filled(c.at, 3.0, fill);
+        }
+        p.rect_filled(c.rect, 9.0, fill);
+        p.text(
+            c.rect.center(),
+            egui::Align2::CENTER_CENTER,
+            &c.text,
+            egui::FontId::proportional(12.0),
+            egui::Color32::WHITE,
+        );
+        let r = r.on_hover_text(format!("{}\nclick: go to this station's first bend", c.keys));
+        if r.clicked() {
+            go = Some(c.station);
+        }
+    }
+    if let Some(k) = go {
+        select_station(b, k);
+    }
+    list.iter().map(|c| (c.station, c.rect)).collect()
+}
+
+/// A station chosen (its chip clicked): its first bend shown, framed at its tools.
+pub fn select_station(b: &mut BendSimUi, k: usize) {
+    let first = b
+        .sim
+        .as_ref()
+        .ok()
+        .and_then(|s| s.plan.steps.iter().position(|st| st.station == Some(k)));
+    if let Some(i) = first {
+        b.go(i);
+        b.playing = false;
+        b.overview = false;
+        b.frame = Some(super::bendsim::Framing::Work);
+    }
+}
+
+#[cfg(test)]
+mod words_tests {
+    #[test]
+    fn a_catalogue_key_reads_in_words() {
+        assert_eq!(super::tool_words("trumpf/EV004_30deg"), "EV004 30°");
+        assert_eq!(super::tool_words("bystronic/V16-85deg_H55"), "V16-85° H55");
+        assert_eq!(super::tool_words("trumpf/OW202-S"), "OW202-S");
+    }
+}
+
 #[cfg(test)]
 mod timeline_tests {
     use super::*;
@@ -485,3 +757,4 @@ mod timeline_tests {
         assert_eq!((b.step, b.t), (1, 1.0));
     }
 }
+

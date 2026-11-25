@@ -1203,7 +1203,9 @@ allowed; each top-level statement may make at most 100000 calls, nested at most 
 
 `expect volume|area = V +- T[%]`, `expect faces|edges|bodies|holes = N` (holes: round holes of the
 finished part), `expect section_area(V) = A` (the material cut by the plane z = V), `expect valid`. A failed line is
-`ExpectFailed` with the measured value and the limit. An expect whose limit is the measured value
+`ExpectFailed` with the measured value and the limit, said in words (`expected 12 faces, found 11`,
+`expected no interferences, found 1`, `expected clearance at least 2 mm, found 1.4 mm`) and the
+line as written in its detail (`expect faces = 12`). An expect whose limit is the measured value
 to the last digit is the lint `ExpectCopied`.
 
 The built part's measure (`fg run --json`: `part`) is its volume, area, centroid, faces, edges,

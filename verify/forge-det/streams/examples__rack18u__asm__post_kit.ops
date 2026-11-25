@@ -1,0 +1,7 @@
+{"doc":"examples/rack18u/asm/post_kit.fg"}
+{"op":"SetParam","param":"t3","value":{"value":3.1710000000000003,"dim":"Length"}}
+{"op":"SetParam","param":"m6","value":{"value":6.300000000000001,"dim":"Length"}}
+{"op":"SetParam","param":"m6_min","value":{"value":5.019,"dim":"Length"}}
+{"op":"Rename","from":"post","to":"post_r"}
+{"op":"MoveFeature","id":"m6_thread","before":null}
+{"op":"ReplaceFeature","id":"fh_press","text":"fh_press = fit_rule(\"../hw/pem_fh_m6_20.fg\", \"../frame/post.fg\")\n"}

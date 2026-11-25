@@ -1,0 +1,6 @@
+{"doc":"examples/sheetmetal/load_tray.fg"}
+{"op":"SetParam","param":"t","value":{"value":1.5750000000000002,"dim":"Length"}}
+{"op":"SetParam","param":"r","value":{"value":1.5750000000000002,"dim":"Length"}}
+{"op":"SetParam","param":"k","value":{"value":0.441,"dim":"Ratio"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"ReplaceFeature","id":"tab_hole","text":"tab_hole = cutout(th, wall: tab)\n"}

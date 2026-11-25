@@ -11,6 +11,8 @@ forge-lang = { path = "../forge-lang" }
 forge-machine = { path = "../../kernel/forge-machine" }
 forge-machine-builder = { path = "../forge-machine-builder" }
 forge-mesh = { path = "../../kernel/forge-mesh" }
+forge-workholding-builder = { path = "../forge-workholding-builder" }
+forge-topo = { path = "../../kernel/forge-topo" }
 forge-math = { path = "../../kernel/forge-math" }
 
 [lints]

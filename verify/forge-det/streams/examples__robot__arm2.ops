@@ -1,0 +1,7 @@
+{"doc":"examples/robot/arm2.fg"}
+{"op":"SetParam","param":"shoulder.turn","value":{"value":31.499999999999996,"dim":"Angle"}}
+{"op":"SetParam","param":"shoulder.lo","value":{"value":-178.5,"dim":"Angle"}}
+{"op":"SetParam","param":"shoulder.hi","value":{"value":178.5,"dim":"Angle"}}
+{"op":"Rename","from":"base","to":"base_r"}
+{"op":"MoveFeature","id":"elbow","before":null}
+{"op":"ReplaceFeature","id":"grip","text":"grip = slider(finger.glide, fore.tip, along: along, limit: (lo, hi))\n"}

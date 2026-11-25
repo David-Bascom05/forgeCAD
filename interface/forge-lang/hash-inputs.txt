@@ -15,6 +15,7 @@ path interface/forge-units
 path kernel/forge-alloc
 path kernel/forge-asm
 path kernel/forge-bool
+path kernel/forge-bb
 path kernel/forge-brake
 path kernel/forge-dirs
 path kernel/forge-draw

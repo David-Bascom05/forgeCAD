@@ -19,6 +19,7 @@ pub mod homing;
 pub mod kin;
 pub mod library;
 pub mod lookahead;
+pub mod mesh;
 pub mod multi;
 pub mod removal;
 pub mod setup;

@@ -1,0 +1,6 @@
+{"doc":"examples/machined/well_island.fg"}
+{"op":"SetParam","param":"L","value":{"value":63,"dim":"Length"}}
+{"op":"SetParam","param":"W","value":{"value":42,"dim":"Length"}}
+{"op":"SetParam","param":"t","value":{"value":12.600000000000001,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"ReplaceFeature","id":"boss","text":"boss = extrude(bs.c, depth)\n"}

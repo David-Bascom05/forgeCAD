@@ -1,0 +1,5 @@
+{"doc":"examples/rack18u/casters/plate.fg"}
+{"op":"SetParam","param":"w","value":{"value":69.3,"dim":"Length"}}
+{"op":"SetParam","param":"l","value":{"value":94.5,"dim":"Length"}}
+{"op":"SetParam","param":"t","value":{"value":3.1500000000000004,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
