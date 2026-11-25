@@ -993,26 +993,11 @@ type NarrowAnswer = (Narrow, Option<bool>);
 type NarrowMemo = std::collections::HashMap<NarrowKey, NarrowAnswer>;
 static NARROWS: std::sync::Mutex<Option<NarrowMemo>> = std::sync::Mutex::new(None);
 
-/// The narrow phase's two walks (the crossing test, then the near test by `distance_kept`) as
-/// before `narrow_near`, kept one train for comparison: FORGECAD_ASM_TWO_WALKS=1, or
-/// `set_two_walks`. 0 not read yet, 1 one walk, 2 two walks.
-static TWO_WALKS: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
-
-/// Choose the narrow phase's old two walks (true) or the one walk (false) for this process.
-pub fn set_two_walks(on: bool) {
-    TWO_WALKS.store(if on { 2 } else { 1 }, std::sync::atomic::Ordering::Relaxed);
-}
-
+/// The narrow phase's old two walks (the crossing test, then the near test by `distance_kept`)
+/// and per-triangle `near_surface`, as before `narrow_near` and `near_all`: built only with the
+/// `two-walks` feature, kept one train so a comparison build can check the new ones against them.
 fn two_walks() -> bool {
-    use std::sync::atomic::Ordering::Relaxed;
-    match TWO_WALKS.load(Relaxed) {
-        0 => {
-            let on = std::env::var("FORGECAD_ASM_TWO_WALKS").is_ok_and(|v| v == "1");
-            set_two_walks(on);
-            on
-        }
-        v => v == 2,
-    }
+    cfg!(feature = "two-walks")
 }
 
 fn narrow_code(r: Narrow, near: Option<bool>) -> u8 {

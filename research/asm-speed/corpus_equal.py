@@ -6,6 +6,7 @@ The whole `build --json` output must match with timings removed: every verdict, 
 volume, clearance and gap point, bit for bit (floats compare by their printed digits, which
 round-trip). Prints one line a job and a summary; exits 1 on any difference.
 usage: corpus_equal.py BIN_A ENV_A BIN_B ENV_B OUT.jsonl [JOBS]
+(the old walks: BIN_A built with `cargo build --release -p forge-cli -p forge-asm --features forge-asm/two-walks`)
 ENV_x: comma-separated NAME=VALUE, or - for none."""
 import json, os, re, subprocess, sys
 from concurrent.futures import ThreadPoolExecutor

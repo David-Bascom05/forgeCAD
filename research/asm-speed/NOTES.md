@@ -30,7 +30,7 @@ test's own frame. Positions and node boxes are moved only when the walk reaches 
 answers equal the two walks' answers by construction: each test sees exactly the leaf pairs and
 coordinates it saw before, and neither answer depends on the visiting order. The near test
 stops at the first pair within reach. The old path is kept for one train behind
-FORGECAD_ASM_TWO_WALKS=1.
+the cargo feature `forge-asm/two-walks` (comparison builds only, not a user setting).
 
 The memo now keeps the near answer with the narrow verdict. Learned codes 3 and 4 are new; old
 readers skip them. Old disk caches' code 0 still answers through their kept gaps.
