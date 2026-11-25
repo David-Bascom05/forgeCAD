@@ -135,6 +135,18 @@ squash merges. They have not been checked one by one: the train records are the 
   - Fix (b), EXACT-CORE's or WORKHOLDING's: certify_bb returns Undecided once a sub-resolution
     cell lies wholly in the band.
   - Details in research/handoff/WORKHOLDING.md on cam/workholding-default2.
+  - The coordinator's ruling: hand (a) off. Real vises stay opt-in by name
+    (`vise("haas-vise-05-0404", ..)`, `fixture: workholding(..)`) until (a) or (b) lands.
+    WORKHOLDING's default2, which makes them the default, stays held until then.
+  - Where to look for (a): facing's and clear's regions past the stock (`clear` reaches 2r past
+    the stock box: lib.rs's "clear" op builds the outer loop at stock ± 2r) and pocket_in's
+    trim_air/side entries (ops.rs). The overrun's end against a jaw face at the stock edge is what
+    must sit clearance + max μ + room away.
+  - Also seen, cause unconfirmed: the two-setup flange's op2 (the part turned over into the vise,
+    `back = facing(op2, tool: t1, to: 0, step: 1)`) reports ok = false in 1.8 s even with the
+    stand-in vise. My hypothesis: op2's heights were written for the wrong frame (its `rest`
+    contour planned a plunge 4.25 mm into the part). So likely the doc, not the planner; check
+    what op2's frame puts at z 0 before blaming either.
 
 ## Risks
 
