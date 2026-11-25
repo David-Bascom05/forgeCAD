@@ -677,3 +677,151 @@ pub fn run_setup(path: &Path) -> Result<Outcome, String> {
     );
     Ok(Outcome { ok, text, json })
 }
+
+// ------------------------------------------------------------------------------------------
+// Real geometry for the collision check (forge_machine::mesh)
+
+/// The chord the real geometry is compiled at (mm): curved faces forge_cam cannot hold exactly
+/// or under an enclosure are certified triangles within it.
+pub const REAL_CHORD: f64 = 0.05;
+
+/// A part's real geometry for the collision check, from its model's B-rep through the shared
+/// compiled-face pipeline (forge_workholding_builder::compile_solid): one box per face, the
+/// face's proven enclosure grown by its mu and the chord, a point on each connected piece of the
+/// part, and its mesh for the inside test.
+/// Generic: any B-rep (a built-in `.fg` part, an imported STEP's solid, a fixture).
+pub fn real_tree(body: &forge_topo::Body, chord: f64) -> Result<forge_machine::mesh::Tree, String> {
+    let s = forge_workholding_builder::compile::compile_solid(body, chord)?;
+    // one box per triangle of the compiled mesh (each within the chord of the surface, the
+    // surface within the chord of it), grown by the chord and the body's rounding (the largest
+    // mu of its compiled faces): a face's own box would cover its holes and trims (a table's top
+    // over its T-slots), the triangles follow them
+    let mu = s.faces.iter().map(|f| f.mu).fold(0.0f64, f64::max);
+    let m = chord + mu;
+    let boxes: Vec<([f64; 3], [f64; 3])> = s
+        .mesh
+        .iter()
+        .map(|t| {
+            let lo = [0, 1, 2].map(|k| (t[0][k].min(t[1][k]).min(t[2][k]) - m).next_down());
+            let hi = [0, 1, 2].map(|k| (t[0][k].max(t[1][k]).max(t[2][k]) + m).next_up());
+            (lo, hi)
+        })
+        .collect();
+    forge_machine::mesh::Tree::new(boxes, pieces(&s.mesh), s.mesh)
+}
+
+/// One corner of each connected piece of a triangle mesh (corners joined by equal positions).
+fn pieces(mesh: &[[[f64; 3]; 3]]) -> Vec<[f64; 3]> {
+    let key = |p: &[f64; 3]| p.map(f64::to_bits);
+    let mut id: std::collections::HashMap<[u64; 3], usize> = std::collections::HashMap::new();
+    let mut pts: Vec<[f64; 3]> = Vec::new();
+    let mut parent: Vec<usize> = Vec::new();
+    fn find(parent: &mut [usize], mut i: usize) -> usize {
+        while parent[i] != i {
+            parent[i] = parent[parent[i]];
+            i = parent[i];
+        }
+        i
+    }
+    for t in mesh {
+        let ids: Vec<usize> = t
+            .iter()
+            .map(|p| {
+                *id.entry(key(p)).or_insert_with(|| {
+                    pts.push(*p);
+                    parent.push(parent.len());
+                    parent.len() - 1
+                })
+            })
+            .collect();
+        for w in ids.windows(2) {
+            let (a, b) = (find(&mut parent, w[0]), find(&mut parent, w[1]));
+            if a != b {
+                parent[a] = b;
+            }
+        }
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    (0..pts.len())
+        .filter(|&i| {
+            let r = find(&mut parent, i);
+            seen.insert(r)
+        })
+        .map(|i| pts[i])
+        .collect()
+}
+
+/// The real geometry of every body of `def` whose part is a `.fg` file (under `dir`, else a
+/// built-in machine's embedded part), compiled once per content (the part's text and the chord)
+/// for the process. A body whose part does not build or compile keeps its envelope only, and is
+/// listed with why.
+pub fn real_trees(
+    def: &MachineDef,
+    dir: Option<&Path>,
+) -> (forge_machine::collide::Trees, Vec<(String, String)>) {
+    use std::sync::{Arc, Mutex, OnceLock};
+    type Cache = Mutex<std::collections::HashMap<u64, Result<Arc<forge_machine::mesh::Tree>, String>>>;
+    static CACHE: OnceLock<Cache> = OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    let mut trees = forge_machine::collide::Trees::new();
+    let mut left = Vec::new();
+    for b in &def.bodies {
+        let Some(part) = &b.part else { continue };
+        if !part.ends_with(".fg") {
+            left.push((
+                b.name.clone(),
+                format!("{part}: only `.fg` parts are compiled here"),
+            ));
+            continue;
+        }
+        let (src, folder) = match dir {
+            Some(d) => {
+                let path = d.join(part);
+                match std::fs::read_to_string(&path) {
+                    Ok(s) => (s, path.parent().map(Path::to_path_buf)),
+                    Err(e) => {
+                        left.push((b.name.clone(), format!("{}: {e}", path.display())));
+                        continue;
+                    }
+                }
+            }
+            None => match forge_machine_builder::make::builtin_part(part) {
+                Some(s) => (s.to_string(), None),
+                None => {
+                    left.push((b.name.clone(), format!("{part}: not a built-in part")));
+                    continue;
+                }
+            },
+        };
+        // FNV-1a over the text and the chord's bits: the content, not the name
+        let mut h = 0xcbf29ce484222325u64;
+        for x in src.bytes().chain(REAL_CHORD.to_bits().to_le_bytes()) {
+            h ^= x as u64;
+            h = h.wrapping_mul(0x100000001b3);
+        }
+        let hit = cache.lock().unwrap().get(&h).cloned();
+        let got = match hit {
+            Some(r) => r,
+            None => {
+                let opts = forge_lang::Options {
+                    dir: folder,
+                    ..forge_lang::Options::default()
+                };
+                let (run, _) = forge_lang::run(&src, opts, forge_lang::build::Cache::default());
+                let r = match run.body {
+                    Some(body) if run.ok() => real_tree(&body, REAL_CHORD).map(Arc::new),
+                    _ => Err(format!("{part}: does not build")),
+                };
+                cache.lock().unwrap().insert(h, r.clone());
+                r
+            }
+        };
+        match got {
+            Ok(t) => {
+                trees.insert(b.name.clone(), t);
+            }
+            Err(e) => left.push((b.name.clone(), e)),
+        }
+    }
+    (trees, left)
+}

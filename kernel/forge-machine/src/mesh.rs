@@ -31,6 +31,9 @@ pub struct Tree {
     pub nodes: Vec<Node>,
     /// Points on the body (at least one on each of its solids), for the inside test.
     pub probes: Vec<V3>,
+    /// A closed triangle mesh of the body, within the boxes' bands of its surface (each triangle
+    /// inside a face box): its ray parity is the solid's at every point outside all the boxes.
+    pub tris: Vec<[V3; 3]>,
 }
 
 /// Faces per leaf.
@@ -38,7 +41,7 @@ const LEAF: usize = 4;
 
 impl Tree {
     /// The tree over `boxes` (each `lo <= hi`, finite), with `probes` on the body.
-    pub fn new(mut boxes: Vec<(V3, V3)>, probes: Vec<V3>) -> Result<Tree, String> {
+    pub fn new(mut boxes: Vec<(V3, V3)>, probes: Vec<V3>, tris: Vec<[V3; 3]>) -> Result<Tree, String> {
         if boxes.is_empty() {
             return Err("no faces".into());
         }
@@ -56,13 +59,94 @@ impl Tree {
             boxes,
             nodes,
             probes,
+            tris,
         })
     }
 
-    /// The root's box.
-    pub fn bounds(&self) -> (V3, V3) {
-        (self.nodes[0].lo, self.nodes[0].hi)
+    /// Whether `p` (body frame) is in a face box: near the surface, where the mesh's parity may
+    /// differ from the solid's.
+    pub fn near(&self, p: V3) -> bool {
+        let inb = |lo: &V3, hi: &V3| (0..3).all(|k| lo[k] <= p[k] && p[k] <= hi[k]);
+        let mut stack = vec![0usize];
+        while let Some(n) = stack.pop() {
+            let nd = &self.nodes[n];
+            if !inb(&nd.lo, &nd.hi) {
+                continue;
+            }
+            match nd.kids {
+                Some((a, b)) => stack.extend([a, b]),
+                None => {
+                    if self.boxes[nd.first..nd.first + nd.count]
+                        .iter()
+                        .any(|(lo, hi)| inb(lo, hi))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
     }
+
+    /// Whether `p` is inside the solid: Some by ray parity on the mesh where `p` is away from the
+    /// surface (in no face box), None where it is near it or every ray tried grazes an edge.
+    pub fn inside(&self, p: V3) -> Option<bool> {
+        if self.tris.is_empty() || self.near(p) {
+            return None;
+        }
+        // directions with no simple ratio to the axes or each other (a ray along an edge or a
+        // face is unlikely; parity needs no unit length)
+        let dirs = [
+            [0.613, 0.5791, 0.5372],
+            [0.2673, 0.5345, 0.8018],
+            [-0.6911, 0.4083, 0.5974],
+        ];
+        'dir: for d in dirs {
+            let mut n = 0u32;
+            for t in &self.tris {
+                match crossing(p, d, t) {
+                    Cross::No => {}
+                    Cross::Yes => n += 1,
+                    Cross::Edge => continue 'dir,
+                }
+            }
+            return Some(n % 2 == 1);
+        }
+        None
+    }
+}
+
+enum Cross {
+    No,
+    Yes,
+    /// Too close to an edge or the plane to call.
+    Edge,
+}
+
+/// Whether the ray p + t d (t > 0) crosses triangle `t` (Möller-Trumbore), with a margin.
+fn crossing(p: V3, d: V3, t: &[V3; 3]) -> Cross {
+    use crate::kin::{cross, dot, sub};
+    const EPS: f64 = 1e-9;
+    let (e1, e2) = (sub(t[1], t[0]), sub(t[2], t[0]));
+    let h = cross(d, e2);
+    let a = dot(e1, h);
+    let scale = dot(e1, e1).max(dot(e2, e2));
+    if a.abs() <= EPS * scale {
+        return Cross::No; // parallel to the plane: a ray in a triangle's plane misses its interior
+    }
+    let f = 1.0 / a;
+    let s = sub(p, t[0]);
+    let u = f * dot(s, h);
+    let q = cross(s, e1);
+    let v = f * dot(d, q);
+    let w = f * dot(e2, q);
+    if u < -EPS || v < -EPS || u + v > 1.0 + EPS || w < 0.0 {
+        return Cross::No;
+    }
+    if u < EPS || v < EPS || u + v > 1.0 - EPS || w < EPS {
+        return Cross::Edge;
+    }
+    Cross::Yes
 }
 
 fn bounds(b: &[(V3, V3)]) -> (V3, V3) {

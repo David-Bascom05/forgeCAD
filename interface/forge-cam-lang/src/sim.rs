@@ -327,7 +327,26 @@ impl Cam {
                 ));
             }
         }
-        let contacts = collide::check(&setup, &tl, &work);
+        // the stock as given, against the machine and the tool's holder and shank (never the
+        // cutter, which cuts it): the in-process stock is always inside it, so a contact is
+        // possible (collide's `superset`: never claimed a Hit); at no clearance, touching only
+        let mut stock = collide::part_body(
+            &setup,
+            "stock (as given)",
+            &[forge_machine::def::Prim::Box {
+                min: mv(s.stock.min),
+                max: mv(s.stock.max),
+            }],
+            collide::Role::Stock,
+        );
+        stock.superset = true;
+        stock.clearance = Some(0.0);
+        let mut checked = work.clone();
+        checked.push(stock);
+        // the machine's bodies by their real geometry (forge_machine::mesh, compiled once per
+        // part), the envelopes where a part has none
+        let (trees, _) = forge_machine_lang::real_trees(&def, None);
+        let contacts = collide::check_with(&setup, &tl, &checked, &trees);
 
         Ok(MachineRun {
             program: prog.name.clone(),

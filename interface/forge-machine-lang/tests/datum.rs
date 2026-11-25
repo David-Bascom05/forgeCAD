@@ -59,7 +59,11 @@ fn the_part_mount_datum_is_the_real_tables_top() {
             let excused = HMC_PALLET_DATUM_INSIDE.contains(&m.name.as_str()) && mt.name == "pallet";
             if excused {
                 // still inside: if a record is fixed, take it off the list
-                assert!(top - datum > 1.0, "{}: fixed, take it off HMC_PALLET_DATUM_INSIDE", m.name);
+                assert!(
+                    top - datum > 1.0,
+                    "{}: fixed, take it off HMC_PALLET_DATUM_INSIDE",
+                    m.name
+                );
                 continue;
             }
             if (top - datum).abs() > 1e-6 {
@@ -74,5 +78,10 @@ fn the_part_mount_datum_is_the_real_tables_top() {
         }
     }
     assert!(seen > 50, "{seen} mounts checked");
-    assert!(bad.is_empty(), "{} mounts off their part:\n{}", bad.len(), bad.join("\n"));
+    assert!(
+        bad.is_empty(),
+        "{} mounts off their part:\n{}",
+        bad.len(),
+        bad.join("\n")
+    );
 }

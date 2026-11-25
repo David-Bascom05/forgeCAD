@@ -86,6 +86,69 @@ fn stl(tris: &[[[f64; 3]; 3]], header: &str) -> Vec<u8> {
 }
 
 /// Compiles the STEP text by `spec`.
+/// One solid compiled for the checker, in its own coordinates: each face exact
+/// (forge_cam::lower), else under a proven enclosure (forge_cam::enclose), else forge-mesh's
+/// triangles certified within `chord` (planar faces carrying mu = the chord plus the body's
+/// rounding); and the whole mesh (every triangle's corners on the solid within the chord), for
+/// drawing and for points on the solid. Shared by workholding and machine bodies (any model:
+/// a `.fg` part's B-rep, a maker's or a user's STEP).
+pub struct Solid {
+    pub faces: Vec<Face>,
+    pub mesh: Vec<[[f64; 3]; 3]>,
+    pub exact: usize,
+    pub enclosed: usize,
+    pub meshed: usize,
+    pub triangles: usize,
+}
+
+pub fn compile_solid(body: &forge_topo::Body, chord: f64) -> Result<Solid, String> {
+    if chord <= 0.0 || chord.is_nan() {
+        return Err("chord > 0".into());
+    }
+    let mut out = Solid {
+        faces: Vec::new(),
+        mesh: Vec::new(),
+        exact: 0,
+        enclosed: 0,
+        meshed: 0,
+        triangles: 0,
+    };
+    let mut left = std::collections::BTreeSet::new();
+    for (k, f) in body.face_ids().enumerate() {
+        match forge_cam::enclose::enclose_face(body, f, k, &mut out.faces) {
+            Ok(forge_cam::enclose::How::Exact) => out.exact += 1,
+            Ok(forge_cam::enclose::How::Enclosed) => out.enclosed += 1,
+            Err(_) => {
+                out.meshed += 1;
+                left.insert(k as u32);
+            }
+        }
+    }
+    let q = forge_mesh::tessellate::Quality {
+        chord,
+        ..Default::default()
+    };
+    let m = forge_mesh::tessellate_tolerant(body, &q).map_err(|e| format!("{e:?}"))?;
+    if let Some(u) = m.unsettled.iter().find(|f| left.contains(f)) {
+        return Err(format!(
+            "face {u} is not settled by the mesh (no certified triangles)"
+        ));
+    }
+    let mu = forge_cam::lower::mu(body_scale(body)) + chord;
+    for (t, f) in m.triangles.iter().zip(&m.face_of) {
+        let [a, b, cc] = t.map(|i| {
+            let p = m.positions[i as usize];
+            [p.x, p.y, p.z]
+        });
+        out.mesh.push([a, b, cc]);
+        if left.contains(f) {
+            out.faces.push(fixture_model::triangle(a, b, cc, mu, 0));
+            out.triangles += 1;
+        }
+    }
+    Ok(out)
+}
+
 pub fn compile(step: &[u8], spec: &Spec) -> Result<Compiled, String> {
     if !fixture_model::is_rot(&spec.rot) {
         return Err("rot: a proper rotation permuting the axes".into());
@@ -129,36 +192,13 @@ pub fn compile(step: &[u8], spec: &Spec) -> Result<Compiled, String> {
             if std::mem::replace(&mut used[si], true) {
                 return Err(format!("solid {si} is in two groups"));
             }
-            let body = &s.body;
-            let mut left = std::collections::BTreeSet::new();
-            let mut fs = Vec::new();
-            for (k, f) in body.face_ids().enumerate() {
-                match forge_cam::enclose::enclose_face(body, f, k, &mut fs) {
-                    Ok(forge_cam::enclose::How::Exact) => c.exact += 1,
-                    Ok(forge_cam::enclose::How::Enclosed) => c.enclosed += 1,
-                    Err(_) => {
-                        c.meshed += 1;
-                        left.insert(k as u32);
-                    }
-                }
-            }
-            let q = forge_mesh::tessellate::Quality {
-                chord: spec.chord,
-                ..Default::default()
-            };
-            let m = forge_mesh::tessellate_tolerant(body, &q).map_err(|e| format!("solid {si}: {e:?}"))?;
-            if let Some(u) = m.unsettled.iter().find(|f| left.contains(f)) {
-                return Err(format!(
-                    "solid {si}: face {u} is not settled by the mesh (no certified triangles)"
-                ));
-            }
-            let mu = forge_cam::lower::mu(body_scale(body)) + spec.chord;
-            for (t, f) in m.triangles.iter().zip(&m.face_of) {
-                let [a, b, cc] = t.map(|i| {
-                    let p = m.positions[i as usize];
-                    [p.x, p.y, p.z]
-                });
-                let t = [a, b, cc].map(|p| {
+            let one = compile_solid(&s.body, spec.chord).map_err(|e| format!("solid {si}: {e}"))?;
+            c.exact += one.exact;
+            c.enclosed += one.enclosed;
+            c.meshed += one.meshed;
+            c.triangles += one.triangles;
+            for t in &one.mesh {
+                let t = t.map(|p| {
                     let w = r(p);
                     [w[0] + shift[0], w[1] + shift[1], w[2] + shift[2]]
                 });
@@ -171,11 +211,8 @@ pub fn compile(step: &[u8], spec: &Spec) -> Result<Compiled, String> {
                     }
                 }
                 draw.push(t);
-                if left.contains(f) {
-                    fs.push(fixture_model::triangle(a, b, cc, mu, 0));
-                    c.triangles += 1;
-                }
             }
+            let fs = one.faces;
             faces.extend(fs.iter().map(|f| fixture_model::moved(f, &rot, shift, 0)));
         }
         for (i, f) in faces.iter_mut().enumerate() {

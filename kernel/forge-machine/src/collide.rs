@@ -56,6 +56,9 @@ pub struct CBody {
     /// `prims` where it proves more; `prims` stay its envelope (they hold its solid: the inside
     /// test, and every check that takes only primitives). None: the primitives alone.
     pub tree: Option<std::sync::Arc<crate::mesh::Tree>>,
+    /// A superset of the body (the stock as first given, while the in-process stock is cut
+    /// inside it): a contact with it is possible, never claimed a Hit.
+    pub superset: bool,
 }
 
 /// Real geometry for named machine bodies (`check_with`).
@@ -114,6 +117,22 @@ fn segment_pair(
     spans: &mut usize,
 ) -> Verdict {
     let seg = &tl.segments[si];
+    // real geometry where neither body can be wholly inside the other at the segment's start
+    // (not_nested: then for the whole segment when it comes out clear); else, and on the moves
+    // after a skip (their own span logic), the envelopes
+    let env = |c: &CBody| CBody {
+        tree: None,
+        ..c.clone()
+    };
+    let real = a.tree.is_some() || b.tree.is_some();
+    let after = tl.after_skip.iter().any(|d| d.segment == si);
+    let (ea, eb);
+    let (a, b) = if real && (after || !not_nested(a, b, &kin::pose(def, &seg.at(0.0)))) {
+        (ea, eb) = (env(a), env(b));
+        (&ea, &eb)
+    } else {
+        (a, b)
+    };
     match tl.after_skip.iter().find(|d| d.segment == si) {
         Some(d) => check_after_skip(
             def,
@@ -182,17 +201,18 @@ pub fn machine_bodies(def: &MachineDef) -> Vec<CBody> {
             clearance: b.clearance,
             passes_stock: b.passes_stock,
             tree: None,
+            superset: false,
         })
         .collect()
 }
 
-/// `machine_bodies` with real geometry where `trees` has it: a display-only body (`check =
-/// false`, its envelope a stand-in such as a closed enclosure box) is checked too once its real
-/// geometry is given.
+/// `machine_bodies` with real geometry where `trees` has it. A display-only body (`check =
+/// false`) stays out: its model is a stand-in too (the Haas enclosure's part is a solid block,
+/// the way covers deform), until a real model replaces it and the record checks it.
 pub fn machine_bodies_with(def: &MachineDef, trees: &Trees) -> Vec<CBody> {
     def.bodies
         .iter()
-        .filter(|b| !b.prims.is_empty() && (b.check || trees.contains_key(&b.name)))
+        .filter(|b| !b.prims.is_empty() && b.check)
         .map(|b| CBody {
             name: b.name.clone(),
             link: def.joint_index(&b.link),
@@ -202,6 +222,7 @@ pub fn machine_bodies_with(def: &MachineDef, trees: &Trees) -> Vec<CBody> {
             clearance: b.clearance,
             passes_stock: b.passes_stock,
             tree: trees.get(&b.name).cloned(),
+            superset: false,
         })
         .collect()
 }
@@ -236,6 +257,7 @@ pub fn tool_bodies(s: &Setup, t: u32) -> Vec<CBody> {
             clearance: None,
             passes_stock: false,
             tree: None,
+            superset: false,
         })
         .collect()
 }
@@ -297,6 +319,7 @@ pub fn part_body(s: &Setup, name: &str, prims_in_part: &[Prim], role: Role) -> C
         clearance: None,
         passes_stock: false,
         tree: None,
+        superset: false,
     }
 }
 
@@ -561,32 +584,27 @@ fn pair_gap(a: &CBody, ta: &IRigid, b: &CBody, tb: &IRigid, clearance: f64) -> (
     (worst, wide)
 }
 
-/// Whether, at the exact pose `pose`, a point of each body lies outside the other's envelope
-/// wherever the other is checked by its tree (so neither can be wholly inside the other). A
-/// body without a tree is checked by its primitives, solids: being inside one touches it.
+/// Whether, at the exact pose `pose`, neither body can be wholly inside the other where the
+/// other is checked by its tree: each connected piece of a tree body (one probe each) is outside
+/// the other's solid, and a primitive body (one piece: a tool, a stock) has some primitive's
+/// centre outside it, by the other's mesh parity away from its surface (mesh.rs `inside`; a
+/// point near the surface, or a ray that grazes, is not taken as outside). A body checked by its
+/// primitives needs nothing: being inside a solid touches it. With the surfaces apart over a
+/// whole segment this holds for all of it (a connected body partly outside another, touching
+/// none of its surface, stays outside it); a segment whose surfaces meet is not clear anyway.
 fn not_nested(a: &CBody, b: &CBody, pose: &[Rigid]) -> bool {
     let at = |c: &CBody| match c.link {
         Some(i) => pose[i],
         None => Rigid::ID,
     };
-    let points = |c: &CBody| -> Vec<V3> {
-        match &c.tree {
-            Some(t) => t.probes.clone(),
-            None => c.prims.first().map(|p| vec![prim_centre(p)]).unwrap_or_default(),
-        }
-    };
     let outside = |inner: &CBody, outer: &CBody| -> bool {
-        if outer.tree.is_none() {
-            return true;
+        let Some(t) = &outer.tree else { return true };
+        let (ti, back) = (at(inner), at(outer).inverse());
+        let out = |p: &V3| t.inside(back.apply(ti.apply(*p))) == Some(false);
+        match &inner.tree {
+            Some(it) => !it.probes.is_empty() && it.probes.iter().all(out),
+            None => inner.prims.iter().map(prim_centre).any(|p| out(&p)),
         }
-        let (ti, to) = (at(inner), at(outer));
-        let back = to.inverse();
-        let pts = points(inner);
-        !pts.is_empty()
-            && pts.iter().all(|p| {
-                let x = back.apply(ti.apply(*p));
-                outer.prims.iter().all(|pr| depth(pr, &Rigid::ID, x) <= 0.0)
-            })
     };
     outside(a, b) && outside(b, a)
 }
@@ -768,16 +786,8 @@ fn check_span(
     let q = q_span(seg, s0, s1);
     let pose = kin::ipose(def, &q);
     let (ta, tb) = (ilink(&pose, a.link), ilink(&pose, b.link));
-    let real = a.tree.is_some() || b.tree.is_some();
-    let (mut worst, mut wide) = pair_gap(a, &ta, b, &tb, clearance);
-    if real && worst >= clearance && !not_nested(a, b, &kin::pose(def, &seg.at(s0))) {
-        // a body may be wholly inside the other: the envelopes decide this span
-        let env = |c: &CBody| CBody {
-            tree: None,
-            ..c.clone()
-        };
-        (worst, wide) = pair_gap(&env(a), &ta, &env(b), &tb, clearance);
-    }
+    let real = a.tree.is_some() || b.tree.is_some() || a.superset || b.superset;
+    let (worst, wide) = pair_gap(a, &ta, b, &tb, clearance);
     if worst >= clearance {
         return Verdict::Clear;
     }
@@ -814,7 +824,11 @@ fn may_pair(a: &CBody, b: &CBody, kind: SegKind) -> bool {
         return false;
     }
     let cut = |x: &CBody, y: &CBody| {
-        matches!(x.role, Role::Tool { cutting: true }) && y.role == Role::Stock && kind != SegKind::Rapid
+        // a cutting tool in the stock on a feed move cuts it; in a superset of it (the stock as
+        // first given) on any move, it may be over a region already cut
+        matches!(x.role, Role::Tool { cutting: true })
+            && y.role == Role::Stock
+            && (kind != SegKind::Rapid || y.superset)
     };
     let through = |x: &CBody, y: &CBody| x.passes_stock && y.role == Role::Stock;
     !(cut(a, b) || cut(b, a) || through(a, b) || through(b, a))
