@@ -251,9 +251,13 @@ impl Default for Look {
 
 /// A PNG or JPEG file as RGBA (sRGB) and its size, if it reads.
 pub fn read_image(path: &str) -> Option<(u32, u32, Vec<u8>)> {
-    let bytes = forge_dirs::fs::read(path).ok()?;
+    decode_image(&forge_dirs::fs::read(path).ok()?)
+}
+
+/// PNG or JPEG bytes as RGBA (sRGB) and their size, if they read.
+pub fn decode_image(bytes: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
     if bytes.starts_with(b"\x89PNG") {
-        let mut d = png::Decoder::new(std::io::Cursor::new(&bytes));
+        let mut d = png::Decoder::new(std::io::Cursor::new(bytes));
         d.set_transformations(
             png::Transformations::EXPAND | png::Transformations::STRIP_16 | png::Transformations::ALPHA,
         );
@@ -276,8 +280,7 @@ pub fn read_image(path: &str) -> Option<(u32, u32, Vec<u8>)> {
     }
     use zune_core::{colorspace::ColorSpace, options::DecoderOptions};
     let options = DecoderOptions::default().jpeg_set_out_colorspace(ColorSpace::RGBA);
-    let mut d =
-        zune_jpeg::JpegDecoder::new_with_options(zune_core::bytestream::ZCursor::new(&bytes), options);
+    let mut d = zune_jpeg::JpegDecoder::new_with_options(zune_core::bytestream::ZCursor::new(bytes), options);
     let rgba = d.decode().ok()?;
     let info = d.info()?;
     let (w, h) = (info.width as u32, info.height as u32);
