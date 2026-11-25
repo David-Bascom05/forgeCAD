@@ -3946,10 +3946,12 @@ mod offset_plan_tests {
         assert!(st.pass() && st.stroke == Stroke::Offset { k: 1 });
         // reported as not checked: neither a fail (a warning, not in the failures) nor a pass
         let sc = st.checks.iter().find(|c| c.rule == Rule::SelfCollision).unwrap();
-        assert!(sc.unchecked.is_some() && !sc.pass && sc.severity == Severity::Warning, "{sc:?}");
+        assert!(
+            sc.unchecked.is_some() && !sc.pass && sc.severity == Severity::Warning,
+            "{sc:?}"
+        );
         assert!(sc.value.is_nan() && !sc.certified);
         assert!(st.failures().is_empty());
         assert!(contacts_of(&m, &tl, &[false, false], st).is_empty());
     }
-
 }
