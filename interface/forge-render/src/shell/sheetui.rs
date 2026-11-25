@@ -494,9 +494,13 @@ impl Shell {
             ui.horizontal(|ui| {
                 // Inventor's selection button: an arrow, the slot's name, red till it has picks
                 let (r, resp) = ui.allocate_exact_size(vec2(118.0, 24.0), Sense::click());
-                let p = ui.painter();
                 let empty = d.slots[k].picks.is_empty();
                 let edge = if on { t.focus } else { t.line };
+                if on {
+                    // the dialog's focus is this pick: keys go to the view (STANDARD §9)
+                    places.push(("focus:pick".into(), r));
+                }
+                let p = ui.painter();
                 p.rect_filled(r, 3.0, if on { t.on } else { t.raised });
                 p.rect_stroke(r, 3.0, Stroke::new(1.0, edge), StrokeKind::Inside);
                 icons::draw(

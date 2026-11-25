@@ -204,6 +204,7 @@ fn value_row(
     let edit = ui.put(
         field,
         egui::TextEdit::singleline(text)
+            .id(field_id(&name))
             .font(mono(13.0))
             .desired_width(field.width() - 14.0)
             .margin(vec2(7.0, 5.0)),
@@ -232,6 +233,52 @@ fn value_row(
         );
     }
     places.push((name, field));
+}
+
+/// A value field's id: by its place name, so focus can be put in it.
+fn field_id(name: &str) -> egui::Id {
+    egui::Id::unique(("fg-field", name))
+}
+
+/// Focus where the user acts first (STANDARD §9). A dialog with no pick to make: its first
+/// field, its text selected, as it opens. A pick-first one: the pick, keys to the view; but a
+/// digit typed with nothing focused starts the entry in its first number field (pick the edges,
+/// type 2, Enter).
+fn focus_first(ctx: &egui::Context, tool: &FgTool) {
+    let hide = shown_only_with_picks(tool);
+    let Some(p) = tool
+        .params
+        .iter()
+        .find(|p| needs(tool.kind, p.name).is_none() && !hide.contains(&p.name))
+    else {
+        return;
+    };
+    let id = field_id(&format!("fg:tool:param:{}", p.name));
+    // shown last frame too, or just opened
+    let key = egui::Id::unique("fg-dialog-shown");
+    let frame = ctx.cumulative_frame_nr();
+    let fresh = ctx.data(|d| d.get_temp::<u64>(key)).is_none_or(|f| f + 1 < frame);
+    ctx.data_mut(|d| d.insert_temp(key, frame));
+    let free = ctx.memory(|m| m.focused().is_none());
+    let digit = || {
+        ctx.input(|i| {
+            i.events.iter().any(|e| {
+                matches!(e, egui::Event::Text(s)
+                    if s.starts_with(|c: char| c.is_ascii_digit() || c == '.' || c == '-'))
+            })
+        })
+    };
+    if (fresh && tool.slots.is_empty()) || (free && !tool.slots.is_empty() && digit()) {
+        ctx.memory_mut(|m| m.request_focus(id));
+        // the text selected: what's typed replaces it
+        let mut s = egui::text_edit::TextEditState::load(ctx, id).unwrap_or_default();
+        let n = p.text.chars().count();
+        s.cursor.set_char_range(Some(egui::text::CCursorRange::two(
+            egui::text::CCursor::new(0),
+            egui::text::CCursor::new(n),
+        )));
+        s.store(ctx, id);
+    }
 }
 
 /// A chip: a pick to take back out, or a choice to take.
@@ -589,6 +636,7 @@ impl Shell {
             }
         }
 
+        focus_first(ui.ctx(), tool);
         ui.add_space(2.0);
         heading(ui, "Input Geometry", t);
         let mut activate = None;

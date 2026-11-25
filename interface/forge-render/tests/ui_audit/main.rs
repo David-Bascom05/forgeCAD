@@ -1033,7 +1033,10 @@ impl Crawl {
                 );
             }
             if rec.class == Class::Dialog && !toast {
-                if after.focus.is_none() || after.focus == before.focus {
+                // focus where the user acts first (STANDARD §9): a typed field with the keys,
+                // or the pick slot taking picks (keys to the view)
+                let pick = h.gui.shell.place("focus:pick").is_some();
+                if !pick && (after.focus.is_none() || after.focus == before.focus) {
                     rec.findings.push(judge::finding(
                         "no-focus",
                         false,

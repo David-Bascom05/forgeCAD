@@ -851,6 +851,10 @@ fn origin_row(
         ink,
     );
     places.push((format!("asm:origin:{}", k + 1), r));
+    if waiting {
+        // the dialog's focus is this pick: keys go to the view (STANDARD §9)
+        places.push(("focus:pick".into(), r));
+    }
     let c = resp.clicked();
     resp.on_hover_text(p.as_ref().map_or(label, |p| p.reference.clone()));
     c

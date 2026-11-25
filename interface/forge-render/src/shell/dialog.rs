@@ -154,6 +154,10 @@ pub(super) fn pick_row(
     places: &mut Vec<(String, Rect)>,
 ) -> bool {
     let (r, resp) = ui.allocate_exact_size(vec2(DIALOG_W, 34.0), Sense::click());
+    if waiting {
+        // the dialog's focus is this pick: keys go to the view (STANDARD §9)
+        places.push(("focus:pick".into(), r));
+    }
     let p = ui.painter();
     let (edge, fill) = if waiting {
         (t.focus, t.raised)
