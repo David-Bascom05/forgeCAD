@@ -2553,7 +2553,8 @@ impl Cam {
     /// (and nothing is posted) records each 3D op's generator call, then those run on the
     /// pool. Each is a function of its memo key alone, which no earlier op's result enters,
     /// so the run that follows takes every one from its memo: the same values, in the same
-    /// order, as making them there. Only with two or more such ops and more than one thread.
+    /// order, as making them there (rest's key holds the earlier ops' paths: it is made in the
+    /// run only). Only with two or more such ops and more than one thread.
     fn prefetch(&self, prog: &[forge_lang::syntax::Stmt], src: &str, dir: &Path) {
         let gen3d = prog
             .iter()
@@ -5842,8 +5843,11 @@ impl Cam {
                 }
                 let h = s.heights;
                 if let Some(jobs) = self.prefetch.as_mut() {
-                    // the prefetch pass: a 3D generator's call recorded; nothing generated
-                    if GEN3D.contains(&kind) {
+                    // the prefetch pass: a 3D generator's call recorded; nothing generated.
+                    // Not rest's: its key holds the setup's earlier ops' paths
+                    // (`earlier_cuts`), which this pass does not make, so it would be made for
+                    // a key the run never asks
+                    if GEN3D.contains(&kind) && kind != "rest" {
                         jobs.push(Prefetch {
                             su,
                             kind: kind.to_string(),
@@ -6601,6 +6605,22 @@ impl Cam {
     /// linked (stay down / lift / retract by a fixed rule), and certified afterwards by the
     /// column route like the surfacing ops. With `cusp:` the stepover and step-down are the
     /// largest the scallop module proves leave at most that cusp on a plane at the op's slopes.
+    /// The setup's built ops so far, each path with its tool's profile (a tool with none, a
+    /// drill's, is left out): what the stock holds after them, as `HeightMap::sweep_path` models it.
+    fn earlier_cuts(&self, su: usize) -> Vec<(forge_cam::engage::Profile, &OpPath)> {
+        self.ops
+            .iter()
+            .filter(|o| o.setup == su && o.status == "built")
+            .filter_map(|o| {
+                Some((
+                    forge_cam::engage::Profile::of(&self.tools[o.tool?].tool)?,
+                    &o.paths,
+                ))
+            })
+            .flat_map(|(p, ps)| ps.iter().map(move |q| (p, q)))
+            .collect()
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn finish3d(
         &self,
@@ -6640,6 +6660,16 @@ impl Cam {
                 (s.tol, ti, h, feed, arc_min_r(&s.machine, feed.0))
             )
         );
+        // rest reads the stock the setup's earlier ops left (`earlier_cuts`): their paths too
+        let key = if kind == "rest" {
+            // (of the stock, what its model reads: its bottom, top and voids)
+            format!(
+                "{key} {:?}",
+                ((s.ip.min[2], s.ip.max[2], &s.ip.voids), self.earlier_cuts(su))
+            )
+        } else {
+            key
+        };
         let (paths, plan, finish) = FINISHED.get_or(key, || {
             let (mut plan, mut finish) = (Vec::new(), None);
             let r = self.finish3d_made(su, kind, a, ti, h, feed, &mut plan, &mut finish);
@@ -6988,13 +7018,31 @@ impl Cam {
                     None => get_num(a, "stepover", Some(0.1 * d))?,
                 };
                 fin.stepover = so;
-                let m = forge_cam_3d::rest::region(
+                // and only where the stock as the setup's earlier ops left it stands above what
+                // this tool leaves: their paths swept over the stock's top less its voids, on
+                // cells centred on the grid's nodes (a model for where to cut, not for safety;
+                // the region is within the part's footprint, so within the stock's box: its
+                // sides are not read)
+                let [lo, hi] = forge_cam_3d::drop::DropCutter::extent(&dc);
+                let hc = grid / (grid / 0.1).ceil();
+                let ip = &s.ip;
+                let mut sm = forge_cam::engage::HeightMap::new(
+                    [lo[0] - 0.5 * hc, lo[1] - 0.5 * hc, ip.min[2]],
+                    [hi[0] + 0.5 * hc, hi[1] + 0.5 * hc, ip.max[2]],
+                    hc,
+                );
+                sm.lower_voids(ip);
+                for (pr, p) in self.earlier_cuts(su) {
+                    sm.sweep_path(p.start, &p.moves, &pr);
+                }
+                let m = forge_cam_3d::rest::region_in(
                     &dc,
                     &sf.check,
                     &bdc,
                     &before.check,
                     grid,
                     get_num(a, "min", Some(0.05))?,
+                    Some(&|x, y| sm.top(x, y)),
                 );
                 if !m.on.iter().any(|x| *x) {
                     return Err(
@@ -7011,6 +7059,16 @@ impl Cam {
                     &within,
                 )
                 .map_err(|x| e(format!("{x:?}")))?;
+                // each pass from where it first meets the stock the model holds to where it last
+                // does (the model lowered as the passes cut it): no run at the cutting feed over
+                // what is already finished
+                let pr = forge_cam::engage::Profile::of(&t.tool).ok_or("rest: a tool with no profile")?;
+                let rp = forge_cam_3d::rest::trim(rp, &mut |p, q| sm.sweep(p, q, &pr) > 1e-4);
+                if rp.is_empty() {
+                    return Err(
+                        "rest: nothing left by the earlier ops that this tool reaches (above `min`)".into(),
+                    );
+                }
                 vec![rp]
             }
             _ => {
@@ -12048,6 +12106,41 @@ mod prefetch_tests {
         let fresh = super::run(src, &dir);
         super::memo::bypass(false);
         assert_eq!(reply(&cam), reply(&fresh), "made ahead: not the fresh run");
+    }
+
+    /// rest is not made ahead: its key holds the setup's earlier ops' paths, which the
+    /// prefetch pass does not make, so made ahead it would be made twice (once for a key the
+    /// run never asks). With a zlevel, a parallel and a rest, the run makes the rest once and
+    /// the two surfacing ops once each, and is the fresh run. (Its steps are its own: no other
+    /// test's call, so no other test's memo entry.)
+    #[test]
+    fn rest_is_made_in_the_run_only() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+        let src = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 40, holder: \"bt40-er32\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01)\nrough = zlevel(op1, tool: t1, leave: 0.5, step: 2.5, stepover: 4, area: (-34, -28, -6, 0), grid: 1)\nfin = parallel(op1, tool: t2, stepover: 2.5, area: (-24, -18, -16, -10))\nleft = rest(op1, tool: t2, after: t1, stepover: 2.5, area: (-26, -20, -12, -6), grid: 1.25)\nprog = program(op1, post: \"fanuc\", number: 1003)\n";
+        let reply = |cam: &super::Cam| {
+            let mut t = cam.json().to_string();
+            for p in &cam.programs {
+                t.push_str(&format!("\n{:?}", p.text));
+            }
+            t
+        };
+        let (s0, f0) = (super::SURFACED.computed(), super::FINISHED.computed());
+        let cam = super::run(src, &dir);
+        assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+        assert_eq!(
+            super::SURFACED.computed() - s0,
+            2,
+            "a surfacing op made twice or not at all"
+        );
+        assert_eq!(
+            super::FINISHED.computed() - f0,
+            1,
+            "rest made ahead as well as in the run"
+        );
+        super::memo::bypass(true);
+        let fresh = super::run(src, &dir);
+        super::memo::bypass(false);
+        assert_eq!(reply(&cam), reply(&fresh), "not the fresh run");
     }
 }
 

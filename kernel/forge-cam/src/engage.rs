@@ -424,6 +424,39 @@ impl HeightMap {
         self.sweep_in(a, b, p, None)
     }
 
+    /// Every move of a path from `start` swept (`sweep`), an arc or helix as chords no longer
+    /// than a cell; a probe or a cycle is passed over (its end taken as the next start). For a
+    /// model of what the path leaves, as `sweep` makes it: at each cell's centre, not under it.
+    pub fn sweep_path(&mut self, start: [f64; 3], moves: &[PMove], p: &Profile) {
+        let mut at = start;
+        for m in moves {
+            match *m {
+                PMove::Rapid { to } | PMove::Line { to, .. } => {
+                    self.sweep(at, to, p);
+                    at = to;
+                }
+                PMove::Arc { to, c, cw, .. } => {
+                    let a0 = dmath::atan2(at[1] - c[1], at[0] - c[0]);
+                    let sw = sweep(a0, dmath::atan2(to[1] - c[1], to[0] - c[0]), !cw);
+                    let (rx, ry) = (at[0] - c[0], at[1] - c[1]);
+                    let rad = (rx * rx + ry * ry).sqrt();
+                    let k = ((sw.abs() * rad / self.h).ceil() as usize).max(1);
+                    let mut q0 = at;
+                    for i in 1..=k {
+                        let t = i as f64 / k as f64;
+                        let (sn, cs) = dmath::sin_cos(a0 + t * sw);
+                        let q = [c[0] + rad * cs, c[1] + rad * sn, at[2] + t * (to[2] - at[2])];
+                        self.sweep(q0, q, p);
+                        q0 = q;
+                    }
+                    at = to;
+                }
+                PMove::Probe { to, .. } => at = to,
+                PMove::Cycle { .. } => {}
+            }
+        }
+    }
+
     /// `sweep`, passing over the runs of a row that lie in a tile of `tiles` whose highest cell
     /// is at or below both the move's lowest tip and the bottom: `sweep` leaves every such cell
     /// as it is (its first test). The cells are visited in the same order: the same map and the
@@ -1299,6 +1332,34 @@ mod tests {
                 assert!(lowered > 100, "{p:?} {a:?}->{b:?}: only {lowered} cells lowered");
             }
         }
+    }
+
+    #[test]
+    fn a_path_swept_is_its_moves_swept() {
+        // a line then a half circle (ccw, centre (10, 0), radius 5) with a 2 mm ball 1 deep
+        let p = Profile::Ball { r: 2.0 };
+        let mut m = HeightMap::new([-10.0, -10.0, -5.0], [30.0, 10.0, 0.0], 0.1);
+        let moves = [
+            PMove::Line {
+                to: [5.0, 0.0, -1.0],
+                f: 100.0,
+                phase: Phase::Cut,
+            },
+            PMove::Arc {
+                to: [15.0, 0.0, -1.0],
+                c: [10.0, 0.0],
+                cw: false,
+                f: 100.0,
+            },
+        ];
+        m.sweep_path([0.0, 0.0, -1.0], &moves, &p);
+        let at = |x: f64, y: f64| m.top(x, y);
+        // under the line and the arc's lowest point (10, −5): the tip's depth, within a cell
+        assert!((at(2.05, 0.05) + 1.0).abs() < 0.01, "{}", at(2.05, 0.05));
+        assert!((at(10.05, -4.95) + 1.0).abs() < 0.01, "{}", at(10.05, -4.95));
+        // the arc's far side (10, 5) and the circle's centre: untouched
+        assert_eq!(at(10.05, 5.05), 0.0);
+        assert_eq!(at(10.05, 0.05), 0.0);
     }
 
     #[test]
