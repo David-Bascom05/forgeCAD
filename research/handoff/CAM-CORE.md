@@ -69,20 +69,24 @@ c135b274 with tools/preverify 13d78f06 stand). `cam/adaptive-cap-warning` went i
 
 ## Not started (in scope or promised)
 
-- **Real workholding on about 3 examples** (coordinator's wind-down item (c)).
-  - Eight machined examples have no workholding: block_m6, flange, mold_core, mold_core_finish,
-    plate_break, plate_mark, slot_plate, well_island.
-  - The standard vise is `haas-vise-05-0404`. It is only on WORKHOLDING's `cam/workholding-haas`,
-    not in main, so it waits for that.
-  - Flange (worked out, not finished): with a 3 mm clamp the profile to −0.5 reaches 0.5 mm into
-    the jaws. The realistic plan is two setups:
-    - op1 in the vise faces, clears, bores and drills, and profiles only to about z 4;
-    - op2 is the part turned over (`setup(f, from: op1, ..)`), gripped by those profiled sides,
-      facing the 3 mm below off and profiling the rest.
-  - Certifying against the vise's real bodies is slow (over 6 minutes, unfinished, for the
-    two-setup flange). Time it, and say in each file which approach it uses.
-  - The mould cores want a Haas Tooling fixture plate from WORKHOLDING's inventory.
-  - flange and plate_break have tracked .nc: re-bless once, judged.
+- **Real workholding on 3 examples: done, handed to WORKHOLDING to land** with their chain (the
+  coordinator's ruling: the docs need `cam/workholding-any2`, which is not in main).
+  - flange, plate_break and block_m6 are held in `vise("haas-vise-05-0404", across: "x", ..)`.
+  - The stock is deeper under the part and the jaws grip only its bottom, so their tops stand 3 mm
+    under the part. The profile/clear goes 0.5 mm into the skin, the part stays on it, and the
+    skin is faced off in a second setup (said in each file, not in the example).
+  - Tested on any2 @11c7a3b2: each certifies, ok, all ops built, 0.22–0.44 s.
+  - Exact edits:
+    - flange: header as sent; op1 `below: 8` with `clamp: 5`.
+    - plate_break and block_m6: a workholding note; op1 `below: 6` with `clamp: 3`.
+  - .nc: plate_break byte-identical. flange differs only in the four bolt-circle G81 depths,
+    Z-22.9 → Z-22.983: the through-drill was clipped by the 3 mm skin and now reaches its full
+    depth (intended).
+  - A true two-setup flange (op2 turned over into the vise) was tried. `facing` in op2 against the
+    real vise ran over 2 minutes; this is reported to WORKHOLDING. My op2 heights were also in the
+    wrong frame.
+  - The other five examples without workholding (mold_core, mold_core_finish, plate_mark,
+    slot_plate, well_island) remain; the mould cores want `plate(..)` (below).
 - **rptu1 `nut` rapids**: still 397 mm against crazy.rs's 300 mm bound. The rest is each level's
   trip to the slot's far end for the islands' corner arcs, which touch the stock's box but remove
   nothing. trim_air's air test is the stock box, so it cannot tell. A stock-aware air test (the
