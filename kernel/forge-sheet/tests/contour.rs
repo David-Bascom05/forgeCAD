@@ -391,11 +391,12 @@ fn refusals_are_typed() {
     assert_eq!(s.walls.len(), 1);
 }
 
-#[test]
-fn fuzz_random_profiles() {
+type Case = (usize, f64, f64, Gauge, Vec<(f64, f64, Option<f64>)>, Hand, f64, Vec<Segment>);
+
+/// `fuzz_random_profiles`'s cases, drawn in turn from its seed.
+fn random_profiles() -> Vec<Case> {
     let mut rng = Rng::new(0xc0_7012);
-    // the cases drawn in turn, then built side by side (a build takes nothing from the draws)
-    let cases: Vec<_> = (0..250)
+    (0..250)
         .map(|seed| {
             let t = rng.range(0.5, 3.0);
             let k = rng.range(0.25, 0.5);
@@ -425,7 +426,13 @@ fn fuzz_random_profiles() {
             );
             (seed, t, k, g, moves, hand, w, prof)
         })
-        .collect();
+        .collect()
+}
+
+#[test]
+fn fuzz_random_profiles() {
+    // the cases drawn in turn, then built side by side (a build takes nothing from the draws)
+    let cases = random_profiles();
     // per case: refused, clashed, or built in this long
     let outcomes = forge_math::par::map(cases.len(), |i| {
         let (seed, t, k, g, moves, hand, w, prof) = &cases[i];
@@ -506,4 +513,23 @@ fn timing() {
         graph * 1e6,
         fold * 1e6
     );
+}
+
+/// Case 64 of `fuzz_random_profiles` (t 2.1586, k 0.4638, five moves, right hand, w 28.96): a
+/// folded clash whose search met an edge running within rounding of the clash limit along a
+/// stretch, which leaves refined to 2^-48 of the parameter (24M intervals, 322 s). Its verdict is
+/// FoldedClash, found within a bounded number of the checks' questions.
+#[test]
+fn fuzz_case_64_contact_at_the_limit_is_decided_quickly() {
+    let (seed, ..) = &random_profiles()[64];
+    assert_eq!(*seed, 64);
+    let (_, _, _, g, _, hand, w, prof) = &random_profiles()[64];
+    let (s, _) = Sheet::contour(FeatureId(9), g.clone(), Frame::WORLD, prof, *w, *hand, 0.0).unwrap();
+    let q0 = forge_sheet::build::check_questions();
+    let at = Instant::now();
+    let r = build_with(&s, Map::Folded);
+    let asked = forge_sheet::build::check_questions() - q0;
+    println!("case 64: {:?} in {:.3} s, {asked} questions", r.as_ref().err().map(|e| format!("{e:?}").chars().take(60).collect::<String>()), at.elapsed().as_secs_f64());
+    assert!(matches!(r, Err(SheetError::FoldedClash { .. })), "{:?}", r.err());
+    assert!(asked < 2_000_000, "{asked} questions");
 }

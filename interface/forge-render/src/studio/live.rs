@@ -47,8 +47,10 @@ impl Pace {
     pub fn fit_cost(&mut self, ms: f64, rows: u32) {
         let per_row = (ms / rows.max(1) as f64).max(1e-6);
         let fit = (self.budget_ms / per_row) as u32;
-        // no more than doubling at once: a measure taken while the GPU was idle overstates it
-        self.rows = (fit.min(self.rows.saturating_mul(2)) / 8 * 8).clamp(8, MOST_ROWS);
+        // growing no more than a quarter (or a band) at once: a measure taken while the GPU was
+        // idle overstates it, and a frame that overshoots is a hitch
+        let most = (self.rows + self.rows / 4).max(self.rows + 8);
+        self.rows = (fit.min(most) / 8 * 8).clamp(8, MOST_ROWS);
     }
 }
 
@@ -500,10 +502,10 @@ mod tests {
         // a GPU at 0.01 ms a row, measured 20 ms late whatever the rows (as a page's queue says)
         let took = |rows: u32| 20.0 + 0.01 * rows as f64;
         let mut p = Pace::default();
-        // it grows no more than doubling at once, to about the budget's 800 rows past the floor
+        // it grows no more than a quarter at once, to about the budget's 800 rows past the floor
         p.fit(took(64), 64);
-        assert_eq!(p.rows, 128);
-        for _ in 0..12 {
+        assert_eq!(p.rows, 80);
+        for _ in 0..24 {
             let r = p.rows;
             p.fit(took(r), r);
         }

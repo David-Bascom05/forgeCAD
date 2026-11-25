@@ -12,6 +12,7 @@
 //! certify checks them (the path the posted text means, not the path planned).
 use crate::check::Move;
 use crate::ops::{OpPath, PMove, Spindle, Step};
+use forge_math::ipow::Powi as _;
 use forge_post::{Point, Q, digits, quant};
 use forge_tooling::toml::{self, Table, Val};
 
@@ -195,7 +196,7 @@ pub fn quantize(ops: &[OpPath], number: u32, title: &str, d: &Dialect) -> Result
                     let mut cx = q(2.0 * (c[0] + tip[0]), k)?;
                     if (cx - at[0]).rem_euclid(2) != 0 {
                         // to the start's parity, the nearer way to the true centre
-                        let exact = 2.0 * (c[0] + tip[0]) * 10f64.powi(k as i32);
+                        let exact = 2.0 * (c[0] + tip[0]) * 10f64.ipow(k as i32);
                         cx += if (exact - cx as f64) >= 0.0 { 1 } else { -1 };
                     }
                     if to == at {
@@ -679,7 +680,7 @@ pub fn round_trip(p: &QProgram, d: &Dialect) -> Result<(String, Vec<Motion>), St
 /// The posted motions as reference-point moves per op, for certify: (move, cutting, rapid,
 /// step); the step indices count the op's posted moves.
 pub fn posted_moves(ms: &[Motion], ops: &[OpPath], d: &Dialect) -> Vec<Vec<PMove>> {
-    let scale = 10f64.powi(d.decimals as i32);
+    let scale = 10f64.ipow(d.decimals as i32);
     let mut out: Vec<Vec<PMove>> = vec![Vec::new(); ops.len()];
     let mut cur: Option<usize> = None;
     let mut at: Option<[f64; 2]> = None;

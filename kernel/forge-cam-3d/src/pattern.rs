@@ -124,6 +124,7 @@ pub fn spiral(c: [f64; 2], r0: f64, r1: f64, pitch: f64, tol: f64, inward: bool)
 #[cfg(test)]
 mod tests {
     use super::*;
+    use forge_math::ipow::Powi as _;
 
     #[test]
     fn raster_covers_the_box() {
@@ -144,14 +145,14 @@ mod tests {
         let ls = radial([0.0, 0.0], 1.0, 10.0, 1.0, false);
         let a = ls[0][1];
         let b = ls[1][1];
-        assert!(((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2)).sqrt() <= 1.0);
+        assert!(((a[0] - b[0]).ipow(2) + (a[1] - b[1]).ipow(2)).sqrt() <= 1.0);
     }
 
     #[test]
     fn spiral_radius_grows_by_pitch() {
         let s = spiral([0.0, 0.0], 0.0, 5.0, 1.0, 0.001, false);
         let last = s.last().unwrap();
-        assert!(((last[0].powi(2) + last[1].powi(2)).sqrt() - 5.0).abs() < 1e-9);
+        assert!(((last[0].ipow(2) + last[1].ipow(2)).sqrt() - 5.0).abs() < 1e-9);
         assert!(s.len() > 50);
     }
 }

@@ -8,6 +8,7 @@ use crate::cert::certify;
 use crate::map::{self, Map};
 use forge_bool::{Index, Member, Op, Shape, Where};
 use forge_geom::Surface;
+use forge_math::ipow::Powi as _;
 use forge_math::rng::Rng;
 use forge_math::{Box3, Point3};
 use forge_mesh::{Quality, tessellate};
@@ -1387,7 +1388,7 @@ fn without(part: &Part, gone: std::ops::Range<usize>) -> Part {
 
 /// Lengths and coordinates to `digits` decimals, directions to two more.
 fn rounded(f: &Feature, digits: i32) -> Feature {
-    let k = 10f64.powi(digits);
+    let k = 10f64.ipow(digits);
     let rd = |v: f64| (v * k).round() / k;
     let rdir = |v: f64| (v * k * 100.0).round() / (k * 100.0);
     let p2 = |p: forge_math::Point2| forge_math::Point2::new(rd(p.x), rd(p.y));

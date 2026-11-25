@@ -12,6 +12,7 @@ pub mod exact;
 pub mod frame;
 pub mod hash;
 pub mod interval;
+pub mod ipow;
 pub mod linalg;
 pub mod par;
 pub mod poly;

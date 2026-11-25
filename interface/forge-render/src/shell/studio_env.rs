@@ -379,9 +379,8 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
                             "Poly Haven HDRIs, CC0; all but the bundled one come from tools/fetch-hdri.sh",
                         );
                     if st.light == lights.len() - 1 {
-                        ui.horizontal(|ui| {
-                            ui.label("File");
-                            ui.text_edit_singleline(&mut st.hdri)
+                        row(ui, "File".into(), |ui| {
+                            ui.add(egui::TextEdit::singleline(&mut st.hdri).desired_width(f32::INFINITY))
                                 .on_hover_text("a Radiance .hdr, equirectangular");
                         });
                     }
@@ -436,8 +435,7 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
 
             let out = format!("Output · {} × {}, {} samples", st.size.0, st.size.1, st.spp);
             let head = fold(ui, s, "studio-fold-output", &out, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label("Size");
+                row(ui, "Size".into(), |ui| {
                     ui.add(egui::DragValue::new(&mut st.size.0).range(16..=8192));
                     ui.label("×");
                     ui.add(egui::DragValue::new(&mut st.size.1).range(16..=8192));
@@ -452,14 +450,15 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
                 row(ui, format!("Turntable {} frames", st.frames), |ui| {
                     ui.add(egui::Slider::new(&mut st.frames, 4..=360).show_value(false));
                 });
-                ui.horizontal(|ui| {
-                    ui.label("File");
+                row(ui, "File".into(), |ui| {
                     ui.add(
-                        egui::TextEdit::singleline(&mut st.out).hint_text("a new file in the Capture folder"),
+                        egui::TextEdit::singleline(&mut st.out)
+                            .hint_text("Capture folder")
+                            .desired_width(f32::INFINITY),
                     )
                     .on_hover_text(
-                        "Empty: <document>-render-<time>.png in the Capture settings' folder (else the \
-                         document's). A name alone goes there too.",
+                        "Empty: a new file, <document>-render-<time>.png, in the Capture settings' folder \
+                         (else the document's). A name alone goes there too.",
                     );
                 });
             });
@@ -641,7 +640,9 @@ pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
     let t = s.theme;
     let st = &s.studio;
     let text = live_words(st);
-    let busy = refining(st);
+    // a working state (preparing, starting again, refining) has the spinner
+    let busy = refining(st) || (st.samples < READABLE && st.rendering.is_none());
+    let refines = refining(st);
     // its own layer over the view, so the pointer reaches it (the view's takes it otherwise)
     let target = st.target;
     egui::Area::new(egui::Id::unique("studio-live-badge"))
@@ -660,14 +661,19 @@ pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
                     }
                 })
                 .response;
-            if busy {
+            if refines {
                 // (a frame's own response doesn't sense the pointer)
                 ui.interact(
                     r.rect,
                     egui::Id::unique("studio-live-badge-hover"),
                     egui::Sense::hover(),
                 )
-                .on_hover_text(format!("Refines until {target} samples; edits restart it"));
+                .on_hover_text(format!(
+                    "The live view refines until {target} samples; edits restart it. A \
+                         render uses Output's samples."
+                ));
+            }
+            if busy {
                 ui.ctx().request_repaint();
             }
         });

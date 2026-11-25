@@ -177,7 +177,8 @@ impl Cam {
             .find(|p| p.setups.contains(&si) && p.text.is_some())
             .ok_or_else(|| format!("setup {}: no program posted for it", s.name))?;
         let text = prog.text.clone().expect("found with text");
-        let def = record(&s.machine)
+        // the one machine list's record (read once), not the built-ins parsed again
+        let def = crate::machines::record(&s.machine)
             .cloned()
             .ok_or_else(|| format!("machine `{}` is not one forge-machine defines", s.machine))?;
         let control = gcode::Control::for_dialect(&def, &prog.post, 1)?;
@@ -353,7 +354,7 @@ impl Cam {
     /// or a rate is not published, and the simulation plays rapids at its own speed.
     pub fn sim_rapids(&self, si: usize) -> Option<[f64; 3]> {
         let s = self.setups.get(si)?;
-        let def = record(&s.machine)?;
+        let def = crate::machines::record(&s.machine)?;
         let mut out = [0.0; 3];
         for (k, l) in ["X", "Y", "Z"].iter().enumerate() {
             let j = def
@@ -370,15 +371,6 @@ impl Cam {
     /// time is not cited.
     pub fn sim_tool_change(&self, si: usize) -> Option<f64> {
         let s = self.setups.get(si)?;
-        record(&s.machine)?.changer.as_ref()?.change_s
+        crate::machines::record(&s.machine)?.changer.as_ref()?.change_s
     }
-}
-
-/// forge-machine's built-in record of a name: the records read once (all of them take ~35 ms
-/// to read, and the timeline asks per op).
-fn record(name: &str) -> Option<&'static forge_machine::def::MachineDef> {
-    static R: std::sync::OnceLock<Vec<forge_machine::def::MachineDef>> = std::sync::OnceLock::new();
-    R.get_or_init(forge_machine::library::builtin)
-        .iter()
-        .find(|d| d.name == name)
 }

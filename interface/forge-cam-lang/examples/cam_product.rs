@@ -7,6 +7,7 @@ use forge_cam_geom::check::Face;
 use forge_cam_geom::offset::offset;
 use forge_cam_geom::region::{Loop, Region, Seg, p2};
 use forge_cam_geom::tool::{Cutter, Holder, assemble};
+use forge_math::ipow::Powi as _;
 use forge_tooling::Library;
 
 fn circle(r: f64, ccw: bool) -> Loop {
@@ -51,7 +52,7 @@ fn path(segs: &[Seg], z: f64, k: usize) -> OpPath {
                 }
             }
             Seg::Arc { a, b, c, ccw } => {
-                let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+                let r = ((a.x - c.x).ipow(2) + (a.y - c.y).ipow(2)).sqrt();
                 let ang = |p: forge_cam_geom::region::P2| forge_math::dmath::atan2(p.y - c.y, p.x - c.x);
                 let t0 = ang(a);
                 let mut t1 = ang(b);

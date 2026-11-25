@@ -36,6 +36,7 @@ use forge_cam_geom::real::Ctx;
 use forge_cam_geom::region::{self, Exact, Region, Seg};
 use forge_cam_geom::slab::Sec;
 use forge_math::dmath;
+use forge_math::ipow::Powi as _;
 
 /// One piece of an obstacle's boundary: the curve, its end gap (0 for a segment), its box.
 #[derive(Clone, Debug)]
@@ -574,7 +575,7 @@ fn piece_gap(pts: &[[f64; 2]], axes: &[[f64; 2]], sec: &Sec, gap: f64, cut: f64,
     let mut near = (f64::INFINITY, [0.0, 0.0]);
     for p in pts {
         let q = approx_nearest(sec, *p);
-        let d2 = (p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2);
+        let d2 = (p[0] - q[0]).ipow(2) + (p[1] - q[1]).ipow(2);
         if d2 < near.0 {
             // from Z toward the piece: the axis along which the piece lies beyond Z
             near = (d2, [q[0] - p[0], q[1] - p[1]]);
@@ -616,8 +617,8 @@ fn approx_nearest(s: &Sec, p: [f64; 2]) -> [f64; 2] {
             if l > 0.0 && sector(c, a, b, ccw, [ip(v[0]), ip(v[1])]) > 0 {
                 return [c[0] + r * v[0] / l, c[1] + r * v[1] / l];
             }
-            let da = (p[0] - a[0]).powi(2) + (p[1] - a[1]).powi(2);
-            let db = (p[0] - b[0]).powi(2) + (p[1] - b[1]).powi(2);
+            let da = (p[0] - a[0]).ipow(2) + (p[1] - a[1]).ipow(2);
+            let db = (p[0] - b[0]).ipow(2) + (p[1] - b[1]).ipow(2);
             if da <= db { a } else { b }
         }
     }

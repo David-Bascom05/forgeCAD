@@ -6,6 +6,7 @@
 //! y = z), the form its chuck obstacle already has.
 use crate::{Kind, Record, Role, WhError};
 use forge_cam_geom::region::{Loop, Region, Seg, p2};
+use forge_math::ipow::Powi as _;
 
 fn refuse(device: &str, what: impl Into<String>, fix: impl Into<String>) -> WhError {
     WhError::Placement {
@@ -353,7 +354,7 @@ pub fn check_path(devices: &[Spin], path: &[[f64; 2]], nose_r: f64, clearance: f
     let mut pts = Vec::new();
     for w in path.windows(2) {
         let (a, b) = (w[0], w[1]);
-        let len = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+        let len = ((b[0] - a[0]).ipow(2) + (b[1] - a[1]).ipow(2)).sqrt();
         let n = (len / step).ceil().max(1.0) as usize;
         for k in 0..n {
             let t = k as f64 / n as f64;

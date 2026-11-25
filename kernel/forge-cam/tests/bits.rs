@@ -32,7 +32,12 @@ fn segs(h: &mut u64, ss: &[Seg]) {
 // re-pinned on train 4b: the union of two judged changes, the train-3 posted-text change
 // (haas: no G187 P2; haas-hsm added) and cam/machine-train4's seven new dialects (siemens,
 // heidenhain, pathpilot, mach3, mach4, centroid-cnc12, masso); the same value on wasm32-wasip1
-const PINNED: u64 = 0x724230b4ba925167;
+// per interval rule: the exact-zero rule (default), and the strict rule (feature ival-strict)
+const PINNED: u64 = if forge_cam_geom::ival::STRICT {
+    0x724230b4ba925167
+} else {
+    0xf63cb2c01a5d6348
+};
 
 #[test]
 fn the_same_bits_everywhere() {

@@ -231,6 +231,7 @@ fn refine(
 mod tests {
     use super::*;
     use crate::drop::Analytic;
+    use forge_math::ipow::Powi as _;
 
     fn dome() -> Analytic {
         Analytic {
@@ -320,7 +321,7 @@ mod tests {
                 for j in 0..n {
                     for i in 0..n {
                         let (x, y) = (x0 + g * i as f64, y0 + g * j as f64);
-                        if (x - cx).powi(2) + (y - cy).powi(2) <= r * r {
+                        if (x - cx).ipow(2) + (y - cy).ipow(2) <= r * r {
                             on[j * n + i] = true;
                         }
                     }

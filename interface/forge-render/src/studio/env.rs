@@ -4,6 +4,7 @@
 //! Humphreys, PBRT 4th ed., 12.5). The GPU reads `words()`; the CPU mirror samples the same.
 
 use super::v3::{V3, v3};
+use forge_math::ipow::Powi as _;
 use std::f32::consts::PI;
 
 #[derive(Clone, Debug)]
@@ -104,7 +105,7 @@ pub fn read_hdr(bytes: &[u8]) -> Result<(usize, usize, Vec<[f32; 3]>), String> {
             if p[3] == 0 {
                 return [0.0; 3];
             }
-            let f = f32::powi(2.0, p[3] as i32 - 136);
+            let f = 2.0f32.ipow(p[3] as i32 - 136);
             [p[0] as f32 * f, p[1] as f32 * f, p[2] as f32 * f]
         })
         .collect();

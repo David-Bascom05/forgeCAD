@@ -16,6 +16,7 @@ use forge_agent::measure::{Free, Quantity, Reading};
 use forge_lang::error::Op;
 use forge_lang::props::{FIELDS, Physical, Props, STATES, Tab};
 use forge_math::Point3;
+use forge_math::ipow::Powi as _;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InspectCmd {
@@ -440,8 +441,8 @@ pub fn shown(q: Quantity, v: f64, (unit, angle): (&str, &str), places: usize) ->
         0 if angle == "rad" => format!("{:.places$} rad", v.to_radians()),
         0 => format!("{v:.places$}°"),
         5 => format!("{v:.places$}"),
-        2 => format!("{:.places$} {unit}²", v * per_unit(unit).powi(2)),
-        3 => format!("{:.places$} {unit}³", v * per_unit(unit).powi(3)),
+        2 => format!("{:.places$} {unit}²", v * per_unit(unit).ipow(2)),
+        3 => format!("{:.places$} {unit}³", v * per_unit(unit).ipow(3)),
         4 if matches!(unit, "in" | "ft") => format!("{:.places$} lb", v / 0.453_592_37),
         4 => format!("{v:.places$} kg"),
         _ => format!("{:.places$} {unit}", v * per_unit(unit)),
@@ -978,7 +979,7 @@ impl Shell {
                     want = true;
                 }
                 // a solid bar: a long tab reads as one that scrolls
-                ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
+                ui.spacing_mut().scroll = super::theme::solid_scroll();
                 egui::ScrollArea::vertical()
                     .id_salt(("iprops-body", p.tab))
                     .auto_shrink([false, false])
@@ -1170,6 +1171,7 @@ impl Shell {
         } else {
             egui::TextEdit::singleline(text)
         };
+        let edit = edit.id(egui::Id::unique(("iprops", key)));
         let resp = ui.put(r, edit.font(sans(13.0)).margin(vec2(8.0, 5.0)).hint_text(hint));
         places.push((format!("iprops:{key}"), resp.rect));
         if resp.lost_focus() && *text != was {
@@ -1280,6 +1282,11 @@ impl Shell {
                 Self::prop_field(ui, p, doc, date, f, "YYYY-MM-DD", ops, places);
             }
             return;
+        }
+        // the first field takes the keys as the window opens (STANDARD §9)
+        if let Some((key, _, _)) = FIELDS.iter().find(|f| f.2 == tab) {
+            let text = p.typing.get(*key).cloned().unwrap_or_default();
+            super::dialog::focus_on_open(ui.ctx(), "iprops", egui::Id::unique(("iprops", *key)), &text);
         }
         for (key, _, _) in FIELDS.iter().filter(|f| f.2 == tab) {
             let w = ui.available_width();
@@ -1826,6 +1833,8 @@ fn fig(x: f64) -> String {
     if !(1e-4..1e12).contains(&a) {
         return format!("{x:.4e}");
     }
+    // on-screen figures only (a value's digits before the point): never saved
+    #[allow(clippy::disallowed_methods)]
     let int = if a < 1.0 { 1 } else { a.log10().floor() as i32 + 1 };
     let places = (5 - int).clamp(0, 4) as usize;
     let s = format!("{a:.places$}");

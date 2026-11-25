@@ -432,3 +432,96 @@ fn the_tool_label_does_not_follow_the_tool() {
         "no label behind a dialog or window"
     );
 }
+
+/// The cut surface as played (task 2 of the realistic simulation): the mould core's ball-end
+/// finishing at its end, the stock alone, close. The top is lit through the columns' corners,
+/// so a ball's cusps and the stepover show. `FORGE_UI_SHOTS` keeps it.
+#[test]
+fn the_mould_cores_cut_surface() {
+    let dir = copied("surface", &["mold_core.fg", "mold_core_finish_cam.fg"]);
+    let Some(mut h) = open(&dir.join("mold_core_finish_cam.fg"), (1400.0, 860.0), true) else {
+        return;
+    };
+    for _ in 0..20 {
+        h.step();
+    }
+    h.gui
+        .camsim_command("at=1;colour=material;part=hidden;paths=0;tool=0;follow=0;fit=stock")
+        .unwrap();
+    let t0 = std::time::Instant::now();
+    shot(&mut h, "native-surface-01-mould-finish-1400x860");
+    eprintln!("stock drawn and shot: {:.0} ms", t0.elapsed().as_secs_f64() * 1e3);
+    // close on the cut mid-way through the steep-and-shallow finishing: the detail window's
+    // cusps beside the coarser stock
+    let st = h.gui.shell.camsim.as_ref().unwrap();
+    let k = st.sim.tl.ops.iter().position(|o| o.name == "ss").unwrap();
+    let t = 0.5 * (st.sim.tl.ops[k].t0 + st.sim.tl.ops[k].t1);
+    h.gui
+        .camsim_command(&format!("t={t};tool=1;detail=1;follow=1;fit=tool"))
+        .unwrap();
+    shot(&mut h, "native-surface-02-mould-detail-1400x860");
+    h.gui.camsim_command("detail=0").unwrap();
+    shot(&mut h, "native-surface-03-mould-no-detail-1400x860");
+}
+
+/// The flange's posted program played on the Haas VF-2 (CAM-HAAS's cited record, named in the
+/// document through the one machine list): the machine drawn from its record's parts, the table
+/// carrying the part under the head. `FORGE_UI_SHOTS` keeps the shot.
+#[test]
+fn the_flange_on_a_haas_vf2() {
+    let dir = copied("vf2", &["flange.fg"]);
+    let src = std::fs::read_to_string(machined().join("flange_cam.fg"))
+        .unwrap()
+        .replace("machine(\"generic-vmc3\")", "machine(\"haas-vf-2\")")
+        .replace("at: (0, 0, -250)", "at: (-381, -203, -400)")
+        .replace("post: \"fanuc\"", "post: \"haas\"");
+    std::fs::write(dir.join("flange_vf2_cam.fg"), src).unwrap();
+    let Some(mut h) = open(&dir.join("flange_vf2_cam.fg"), (1400.0, 860.0), true) else {
+        return;
+    };
+    for _ in 0..20 {
+        h.step();
+    }
+    let st = h.gui.shell.camsim.as_ref().unwrap();
+    assert!(st.sim.cam.ok, "{:?}", st.sim.cam.errors);
+    h.gui
+        .camsim_command("tab=program;source=machine;machine=1;at=0.3;part=hidden;fit=machine")
+        .unwrap();
+    let mv = h
+        .gui
+        .shell
+        .camsim
+        .as_ref()
+        .unwrap()
+        .sim
+        .machine()
+        .expect("the VF-2 runs it");
+    assert_eq!(mv.run.def.name, "haas-vf-2");
+    assert!(mv.markers.is_empty(), "{:?}", mv.markers.first().map(|m| &m.text));
+    shot(&mut h, "native-machine-01-vf2-flange-1400x860");
+    // the operator's view: the eye stays put in the machine, so as the table carries the part
+    // the target moves in the part's frame by just the table's travel
+    let target = |h: &Headless| h.gui.view.as_ref().unwrap().nav.camera.target;
+    let joints = |h: &Headless, t: f64| {
+        let mv = h.gui.shell.camsim.as_ref().unwrap().sim.machine().unwrap();
+        let q = mv.joints_at(t);
+        let get = |n: &str| q.iter().find(|j| j.0 == n).unwrap().1;
+        (get("X"), get("Y"))
+    };
+    h.gui.camsim_command("eye=shop;follow=0;at=0.3").unwrap();
+    shot(&mut h, "native-machine-02-vf2-shop-eye-a");
+    let (a, ta) = (target(&h), h.gui.shell.camsim.as_ref().unwrap().t);
+    h.gui.camsim_command("at=0.62").unwrap();
+    shot(&mut h, "native-machine-03-vf2-shop-eye-b");
+    let (b, tb) = (target(&h), h.gui.shell.camsim.as_ref().unwrap().t);
+    let ((xa, ya), (xb, yb)) = (joints(&h, ta), joints(&h, tb));
+    // the table moves −x for +X: in the part's frame a still eye moves +x by the same
+    let (dx, dy) = ((b[0] - a[0]) as f64, (b[1] - a[1]) as f64);
+    assert!(
+        (dx - (xb - xa)).abs() < 1e-3 && (dy - (yb - ya)).abs() < 1e-3,
+        "eye moved ({dx}, {dy}), joints ({}, {})",
+        xb - xa,
+        yb - ya
+    );
+    assert!((xb - xa).abs() + (yb - ya).abs() > 1.0, "the table moved");
+}

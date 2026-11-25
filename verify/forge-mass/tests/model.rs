@@ -10,6 +10,7 @@
 //!   2^30 away), whose volume is exact: `mass` is within its `err`.
 
 use forge_geom::{Cone, Cylinder, Sphere, SurfaceGeom, Torus};
+use forge_math::ipow::Powi as _;
 use forge_math::rng::Rng;
 use forge_math::{Frame, Point2, Point3, Vec3, dmath};
 
@@ -110,7 +111,7 @@ fn chebyshev_weights_interpolate() {
             let sum: f64 = w.iter().sum();
             let got: f64 = (0..n).map(|i| w[i] / sum * p(bs[i])).sum();
             let scale =
-                c.iter().map(|x| x.abs()).sum::<f64>() * (1.0 + lo.abs().max(hi.abs())).powi(n as i32);
+                c.iter().map(|x| x.abs()).sum::<f64>() * (1.0 + lo.abs().max(hi.abs())).ipow(n as i32);
             let d = (got - p(b)).abs() / scale;
             worst = worst.max(d);
             assert!(d < 1e-12, "n {n}: {got} vs {}", p(b));
@@ -123,7 +124,7 @@ fn chebyshev_weights_interpolate() {
 fn exact_breps_far_away() {
     use forge_ops::{Profile, extrude};
     for e in [0, 10, 20, 30] {
-        let far = 2.0f64.powi(e);
+        let far = 2.0f64.ipow(e);
         for (a, b, t) in [(1.0, 0.5, 0.25), (3.0, 1.25, 0.75), (0.375, 2.5, 1.5)] {
             let mut f = Frame::WORLD;
             f.origin = Point3::new(far, -far, far * 0.5);

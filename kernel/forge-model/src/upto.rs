@@ -20,6 +20,7 @@
 use crate::{Combine, ExtentError, Feature, History, RegenError, Tool, Turn, tool};
 use forge_bool::{Member, Op, Seg2, Shape};
 use forge_geom::{Cone, CurveGeom, Cylinder, Plane, Sphere, Surface, SurfaceGeom, Torus};
+use forge_math::ipow::Powi as _;
 use forge_math::{Frame, Point2, Point3, UnitVec3, Vec2, Vec3, dmath, poly, tol};
 use forge_ops::{Axis2, Profile, ProfileLoop, Segment};
 use forge_topo::{Body, Name};
@@ -357,7 +358,7 @@ fn torus(
     let off = refp - c;
     let h = a.dot(off);
     let rho = (off - a * h).length();
-    let inside = ((rho - tr.major).powi(2) + h * h).sqrt() < tr.minor;
+    let inside = ((rho - tr.major).ipow(2) + h * h).sqrt() < tr.minor;
     let r = if inside {
         tr.minor + offset
     } else {
@@ -961,7 +962,7 @@ fn hits(sh: &Shape, o: Point3, d: Vec3, out: &mut Vec<(f64, Option<Surface>)>) {
                 2.0 * (l.x * v.x + l.y * v.y),
                 l.x * l.x + l.y * l.y,
             ];
-            let radius = |t: f64| ((l.x + v.x * t).powi(2) + (l.y + v.y * t).powi(2)).sqrt();
+            let radius = |t: f64| ((l.x + v.x * t).ipow(2) + (l.y + v.y * t).ipow(2)).sqrt();
             let wall = |s: &Seg2| revolved_wall(frame, *origin, *dir, *perp, s);
             for s in segs.iter() {
                 match *s {
@@ -1014,7 +1015,7 @@ fn hits(sh: &Shape, o: Point3, d: Vec3, out: &mut Vec<(f64, Option<Surface>)>) {
                     }
                     Seg2::Arc { c, r, start, sweep } => {
                         let (hc, rc) = hr(c);
-                        let w = [(l.z - hc).powi(2), 2.0 * (l.z - hc) * v.z, v.z * v.z];
+                        let w = [(l.z - hc).ipow(2), 2.0 * (l.z - hc) * v.z, v.z * v.z];
                         let f = [s2[2] + w[0] + rc * rc - r * r, s2[1] + w[1], s2[0] + w[2]];
                         let roots: Vec<f64> = if rc.abs() <= 1e-12 {
                             poly::quadratic(f[2], f[1], f[0])

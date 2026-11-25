@@ -11,6 +11,7 @@ use crate::model::Model;
 use crate::plan::Plan;
 use crate::sim::{Check, Kind, Phase, Piece, Rule, Severity, Step, StepCtx};
 use crate::tooling::{Punch, Segment, Tooling};
+use forge_math::ipow::Powi as _;
 use forge_math::{Point2, dmath};
 use forge_sheet::Strip;
 
@@ -536,7 +537,7 @@ fn bbox(pts: &[[f64; 3]]) -> Option<([f64; 3], [f64; 3])> {
 fn box_gap(a: ([f64; 3], [f64; 3]), b: ([f64; 3], [f64; 3])) -> f64 {
     let gaps: [f64; 3] = [0, 1, 2].map(|i| (b.0[i] - a.1[i]).max(a.0[i] - b.1[i]));
     if gaps.iter().any(|g| *g > 0.0) {
-        gaps.iter().map(|g| g.max(0.0).powi(2)).sum::<f64>().sqrt()
+        gaps.iter().map(|g| g.max(0.0).ipow(2)).sum::<f64>().sqrt()
     } else {
         gaps.iter().copied().fold(f64::NEG_INFINITY, f64::max)
     }

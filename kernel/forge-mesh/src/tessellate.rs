@@ -2872,6 +2872,7 @@ fn strips(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use forge_math::ipow::Powi as _;
     use forge_math::rng::Rng;
     use forge_math::{Frame, Point3, Vec3};
     use forge_ops::{Profile, extrude};
@@ -3112,7 +3113,7 @@ mod tests {
                 let q = Quality { chord, max_angle };
                 let step = arc_step(r, &q);
                 // the sag of one step, computed stably
-                let sag = 2.0 * r * dmath::sin(0.25 * step).powi(2);
+                let sag = 2.0 * r * dmath::sin(0.25 * step).ipow(2);
                 assert!(sag <= chord * (1.0 + 1e-12), "{r} {chord}: {sag}");
                 assert!(step <= max_angle);
                 for fine in [false, true] {
@@ -3122,7 +3123,7 @@ mod tests {
                     });
                     let width = 1e-3f64.min(dmath::PI);
                     let n = edge_segments(&c, Interval::new(0.0, width), &q, fine);
-                    let sag = 2.0 * r * dmath::sin(0.25 * width / n as f64).powi(2);
+                    let sag = 2.0 * r * dmath::sin(0.25 * width / n as f64).ipow(2);
                     let allowed = if fine { 0.5 * chord } else { chord };
                     assert!(sag <= allowed * (1.0 + 1e-12), "{r} {chord} {fine}: {sag}");
                 }

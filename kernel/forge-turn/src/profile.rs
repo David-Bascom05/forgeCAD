@@ -23,6 +23,7 @@
 use forge_cam_geom::region::{Loop, P2, Region, Seg, p2};
 use forge_geom::curve::Curve;
 use forge_geom::surface::Surface;
+use forge_math::ipow::Powi as _;
 use forge_math::{Frame, Point3, dmath, tol};
 use forge_topo::{Body, FaceId};
 
@@ -260,7 +261,7 @@ fn arc_on_face(body: &Body, fid: FaceId, a: P2, b: P2, c: P2) -> Result<Seg, Pro
     // the side of the chord ab the middle point is on picks the arc
     let side = (b.x - a.x) * (m.y - a.y) - (b.y - a.y) * (m.x - a.x);
     let cside = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
-    let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+    let r = ((a.x - c.x).ipow(2) + (a.y - c.y).ipow(2)).sqrt();
     if side.abs() <= 1e-9 * (1.0 + r) {
         return Err(undecided());
     }
@@ -273,7 +274,7 @@ fn arc_on_face(body: &Body, fid: FaceId, a: P2, b: P2, c: P2) -> Result<Seg, Pro
 
 /// The z range and the largest ρ of the arc from a to b about c (counter-clockwise or not).
 fn arc_range(a: P2, b: P2, c: P2, ccw: bool) -> (f64, f64, f64) {
-    let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+    let r = ((a.x - c.x).ipow(2) + (a.y - c.y).ipow(2)).sqrt();
     let ang = |p: P2| dmath::atan2(p.y - c.y, p.x - c.x);
     let (mut t0, mut t1) = (ang(a), ang(b));
     if !ccw {
@@ -428,7 +429,7 @@ pub(crate) fn area2(l: &Loop) -> f64 {
         let (p, q) = (s.start(), s.end());
         a += p.x * q.y - q.x * p.y;
         if let Seg::Arc { a: s0, b: s1, c, ccw } = *s {
-            let r2 = (s0.x - c.x).powi(2) + (s0.y - c.y).powi(2);
+            let r2 = (s0.x - c.x).ipow(2) + (s0.y - c.y).ipow(2);
             let r = r2.sqrt();
             let mut t = dmath::atan2(s1.y - c.y, s1.x - c.x) - dmath::atan2(s0.y - c.y, s0.x - c.x);
             if ccw {

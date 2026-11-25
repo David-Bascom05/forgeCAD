@@ -5,6 +5,7 @@ use forge_lang::edit::apply_checked;
 use forge_lang::error::{Literal, Op, ParamKey};
 use forge_lang::values::{Dim, Src};
 use forge_lang::{Options, Run};
+use forge_math::ipow::Powi as _;
 use std::path::{Path, PathBuf};
 
 fn dir(name: &str) -> PathBuf {
@@ -260,7 +261,7 @@ fn e9_a_used_files_components_and_with_place_parts() {
     let disc = std::f64::consts::PI * 25.0;
     assert!((vol("lib.fg|cup(d=3)") - disc * 10.0).abs() < 1e-6);
     assert!((vol("lib.fg|cup()") - disc * 16.0).abs() < 1e-6);
-    assert!((vol("lib.fg|with:W=12") - 12.0f64.powi(3)).abs() < 1e-6);
+    assert!((vol("lib.fg|with:W=12") - 12.0f64.ipow(3)).abs() < 1e-6);
     // a param the file has not, or a component it has not, is refused typed
     let r = run_in(&d, "c = part(\"lib.fg\", with: {Q: 1})\n", true);
     assert!(

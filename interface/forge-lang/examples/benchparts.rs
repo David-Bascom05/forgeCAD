@@ -19,7 +19,10 @@ use forge_model::{Feature, Part, Solid};
 
 /// The bench parts, by name.
 fn names() -> Vec<String> {
-    let dir = format!("{}/parts/bench", env!("CARGO_MANIFEST_DIR"));
+    // (FORGE_BENCH_PARTS as `source` reads it: the gate's `bits` names the checkout's own parts,
+    // not the shared build folder, which another gate starting meanwhile empties and refills)
+    let dir = std::env::var("FORGE_BENCH_PARTS")
+        .unwrap_or_else(|_| format!("{}/parts/bench", env!("CARGO_MANIFEST_DIR")));
     let mut v: Vec<String> = std::fs::read_dir(dir)
         .expect("the bench parts")
         .filter_map(|e| e.ok().map(|e| e.path()))
