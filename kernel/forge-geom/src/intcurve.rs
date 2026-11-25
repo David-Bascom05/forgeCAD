@@ -714,6 +714,10 @@ pub fn trace_marched(a: &Surface, b: &Surface, region: Box3, scale: f64) -> Opti
         }
     };
     for s in seeds {
+        // past the op's work budget its answer is refused whatever is traced: no more branches
+        if crate::budget::over() {
+            return None;
+        }
         if covered.binary_search(&key(s)).is_ok() {
             continue;
         }
@@ -840,6 +844,11 @@ fn walk(
     // the curve's direction at p, already asked of the surfaces when p was reached
     let mut here = direction(a, b, p);
     for k in 0..max {
+        // past the op's work budget its answer is refused whatever is traced (looked at every 256
+        // steps: a NURBS walk spends at each)
+        if k % 256 == 255 && crate::budget::over() {
+            return None;
+        }
         // the way the chain was going: where the surfaces touch on the curve their normals' cross
         // product vanishes and may turn over, and the chain carries on regardless
         let along = pts
@@ -1075,10 +1084,11 @@ fn ends(s: &Surface, p: Point3, d: Vec3, h: f64) -> bool {
 /// (`rim_point`): past its old stall, an op goes on to trim and trace the rest of its NURBS faces,
 /// and may still be refused further on. The Haas sweep (st-28l, umc-500_ss, TR160 with op-budget,
 /// 2026-11-25): the ops the carry lets answer spend at most 5.6M (UMC-500 #87260 box_sub) but for
-/// UMC-500 #264610's four (21M, given up); those refused after it spend 5.3M to 359M (up to 33 s,
-/// refused in 0.03 to 1.6 s before). 6 * 2^20: the answers kept, a refusal stopped near its old
-/// time (`budget::cap_total`: deterministic, the same on any thread or order).
-pub const CARRIED: u64 = 6 << 20;
+/// UMC-500 #264610's four (21M, given up); ST-28L #673016 union_pair66, which answered before the
+/// carry, carries and spends 14.5M; those refused after it spend 5.3M to 359M (up to 33 s,
+/// refused in 0.03 to 1.6 s before). 2^24: every answer but #264610's kept, a refusal stopped in
+/// about 3 s (`budget::cap_total`: deterministic, the same on any thread or order).
+pub const CARRIED: u64 = 1 << 24;
 
 /// Where the curve of `s` and `other` near `p` meets the rim of `s`'s parameters (a spline
 /// patch's edge, its face's): on the domain edge nearest `p` (not a wrapping one), along it, the
