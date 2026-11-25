@@ -9,7 +9,8 @@ warm, so a train's build is incremental on the last one's. Never a branch name: 
 conductor sent. The stage runs exactly as the train's own script runs it (TRAIN-CONDUCTOR's
 t7gates.sh), whole, never a selection:
   native  tools/ci/native-tests.py --workspace (JOBS=3)
-  render  forge-render: clippy (wasm32, -D warnings) and cargo test --locked (lavapipe)
+  render  forge-render: clippy (wasm32, -D warnings), cargo test --release (CI's gpu job) and
+          cargo test (debug, the train's), lavapipe
   wasm    tools/ci/wasm-tests.py
   clippy  cargo clippy --workspace --all-targets --locked -- -D warnings
   guards  model-licences, removed_checks, no-fusion-gallery, no-vendor-tool-libraries
@@ -30,13 +31,16 @@ subprocess.run(["git", "-C", repo, "checkout", "-q", "--detach", sha], check=Tru
 subprocess.run(["git", "-C", repo, "clean", "-qfdx", "-e", "target", "-e", "/interface/forge-render/target"], check=True)
 if subprocess.run(["git", "-C", repo, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip() != sha:
     sys.exit("stage: checkout is not the sha")
-env = dict(os.environ, CARGO_PROFILE_TEST_DEBUG="0", CARGO_PROFILE_DEV_DEBUG="0",
+env = dict(os.environ, CARGO_PROFILE_TEST_DEBUG="0", CARGO_PROFILE_DEV_DEBUG="0", CARGO_PROFILE_RELEASE_DEBUG="0",
            CARGO_INCREMENTAL="0", JOBS=os.environ.get("JOBS", "3"))
 py = sys.executable
 STAGES = {
     "native": [([py, "tools/ci/native-tests.py", "--workspace"], ".")],
     "render": [(["sh", "-c", 'CLIPPY_CONF_DIR="$PWD/web/clippy" cargo clippy --lib --locked '
                  "--target wasm32-unknown-unknown -- -D warnings"], "interface/forge-render"),
+               # release first, as CI's gpu job (release-only checks: studio_model's first-frame
+               # time, races the debug build is too slow to show), then debug, as the train's run
+               (["cargo", "test", "--release", "--locked", "--no-fail-fast"], "interface/forge-render"),
                (["cargo", "test", "--locked", "--no-fail-fast"], "interface/forge-render")],
     "wasm": [([py, "tools/ci/wasm-tests.py"], ".")],
     "clippy": [(["cargo", "clippy", "--workspace", "--all-targets", "--locked", "--", "-D",
