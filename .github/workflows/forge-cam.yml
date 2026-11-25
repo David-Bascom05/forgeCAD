@@ -15,6 +15,11 @@ on:
     paths: ["verify/forge-cam/**", "kernel/forge-cam*/**", "kernel/forge-tooling/**", "kernel/forge-post/**", "kernel/forge-machine/**", "interface/forge-cam-lang/**", "examples/machined/**", ".github/workflows/forge-cam.yml"]
   workflow_dispatch:
 
+# (release builds here are tests and checks, not what ships: the quicker build of 16 codegen units;
+# shipped binaries and the speed gate use [profile.release]'s 1, Cargo.toml)
+env:
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+
 jobs:
   # the posted programs kept in the repository (examples/machined/*_cam.nc) are what their
   # documents post now: a change that moves one (feeds, a post, a path) re-blesses it in its own
