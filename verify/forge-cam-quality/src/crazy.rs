@@ -21,16 +21,9 @@ pub const KNOWN: &[(&str, &str, &str, f64, &str)] = &[
     (
         "rptu1_clear_cam",
         "nut",
-        "recut",
-        0.44,
-        "clear round the nut: 44 % of its length again over what it cut (CAM-CORE)",
-    ),
-    (
-        "rptu1_clear_cam",
-        "nut",
         "rapids",
-        593.0,
-        "clear round the nut: 593 mm of rapids for 178 mm cut (CAM-CORE)",
+        397.0,
+        "clear round the nut: 397 mm of rapids for 178 mm cut, the slot's far-end trips for the islands' corner arcs (trim_air's box test cannot see they remove nothing; a stock-aware air test, CAM-CORE handoff)",
     ),
 ];
 
