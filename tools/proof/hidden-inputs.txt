@@ -170,8 +170,8 @@ no-output (allocator bookkeeping: spin locks, page owners and heaps, never a val
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|atomic|owner: [AtomicU8; 1 << 16],
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|atomic|owner: [const { AtomicU8::new(0) }; 1 << 16],
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|atomic|use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
-no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|static|static ALLOC: Alloc = Alloc {
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|static|static ALLOC: Alloc = Alloc(UnsafeCell::new(Heap::new()));
+no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|static|static ALLOC: Alloc = Alloc::new(Mem {
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|static|static CACHE: core::cell::UnsafeCell<Cache> = const { core::cell::UnsafeCell::new(Cache::new()) };
 no-output (allocator bookkeeping: spin locks, page owners and heaps, never a value a caller computes with)  @ forge-alloc/src/lib.rs|thread_local|std::thread_local! {
 no-output (work index, counter or stop flag)  @ forge-asm/src/check.rs|atomic|let next = std::sync::atomic::AtomicUsize::new(0);
