@@ -150,6 +150,11 @@ impl Gui {
     }
 
     /// The document the tab shows: the one picked, else the open one.
+    /// Whether the document's folder keeps a history (Create Version and Release need one).
+    pub(crate) fn vers_kept(&self) -> bool {
+        self.vers_doc().is_some_and(|f| History::open(&f).is_some())
+    }
+
     fn vers_doc(&self) -> Option<PathBuf> {
         self.shell
             .versions

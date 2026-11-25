@@ -1,6 +1,7 @@
 use forge_machine::gcode::Control;
 use forge_machine::library::builtin;
 use forge_machine::sim::{self, Cut, Happening, Path, Setup, SimTool, Violation};
+use forge_math::ipow::Powi as _;
 
 fn vmc() -> forge_machine::MachineDef {
     builtin().remove(0)
@@ -205,7 +206,7 @@ fn css_facing_to_the_axis_meets_the_clamp() {
     let k = 1000.0 * 200.0 / forge_math::dmath::TAU;
     let rc = k / 2000.0; // the radius below which the clamp holds
     // ∫ over r from 0 to 30 of max(1/2000, r/k) dr / 0.2, in minutes
-    let want = (rc / 2000.0 + (30.0f64.powi(2) - rc * rc) / (2.0 * k)) / 0.2 * 60.0;
+    let want = (rc / 2000.0 + (30.0f64.ipow(2) - rc * rc) / (2.0 * k)) / 0.2 * 60.0;
     assert!(
         (tl.segments.last().unwrap().t_min - want).abs() < 1e-9,
         "{} vs {want}",

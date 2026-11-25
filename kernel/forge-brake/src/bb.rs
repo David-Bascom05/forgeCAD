@@ -9,6 +9,7 @@
 //! instant) under the limit is a proven violation. Cells are split until one of the two holds or
 //! they are smaller than the resolution, where the bound is within it of the truth.
 use forge_math::Interval;
+use forge_math::ipow::Powi as _;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
@@ -50,7 +51,7 @@ pub trait Problem {
     /// distance at its centre less its half-diagonal (the distance is 1-Lipschitz).
     fn lower(&self, e: &[Interval; 3]) -> (f64, f64) {
         let mid = e.map(|i| i.mid());
-        let hd = ((e.iter().map(|i| (0.5 * i.width()).powi(2)).sum::<f64>()).sqrt() + SLACK).next_up();
+        let hd = ((e.iter().map(|i| (0.5 * i.width()).ipow(2)).sum::<f64>()).sqrt() + SLACK).next_up();
         (self.sd_bounds(mid).0 - hd, hd)
     }
     /// How much each coordinate of the image counts when choosing what to split.
@@ -258,7 +259,7 @@ fn split_dim<P: Problem>(pb: &P, c: &Cell) -> usize {
         let (a, b) = (pb.image(lo), pb.image(hi));
         let wt = pb.weights();
         let mv = (0..3)
-            .map(|i| (wt[i] * (a[i] - b[i])).powi(2))
+            .map(|i| (wt[i] * (a[i] - b[i])).ipow(2))
             .sum::<f64>()
             .sqrt();
         // a parameter that moves nothing at the centre may still curve: count its width a little
@@ -290,7 +291,7 @@ mod tests {
             [q[0] + q[3], q[1], 0.0]
         }
         fn sd(&self, p: [f64; 3]) -> f64 {
-            ((p[0] - 3.0).powi(2) + p[1].powi(2) + p[2].powi(2)).sqrt() - 1.0
+            ((p[0] - 3.0).ipow(2) + p[1].ipow(2) + p[2].ipow(2)).sqrt() - 1.0
         }
     }
 

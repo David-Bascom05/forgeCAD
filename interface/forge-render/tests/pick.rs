@@ -2,6 +2,7 @@
 
 use forge_geom::SurfaceGeom;
 use forge_math::Point3;
+use forge_math::ipow::Powi as _;
 use forge_render::camera::Camera;
 use forge_render::mesh::PartMesh;
 use forge_render::render::{self, Entity, Offscreen, Overlay, PickHit, Renderer, part_info};
@@ -127,7 +128,7 @@ fn every_face_edge_and_vertex_of_a_box_answers_to_its_own_pixel() {
         assert_eq!(vec![f], face_at(&body, q), "{q:?}");
         // and the point it says it hit is that point
         let w = g.world(0, q);
-        let d = (0..3).map(|k| (hit.point[k] - w[k]).powi(2)).sum::<f32>().sqrt();
+        let d = (0..3).map(|k| (hit.point[k] - w[k]).ipow(2)).sum::<f32>().sqrt();
         assert!(d < 0.5, "{q:?} {:?} off by {d}", hit.point);
     }
 
@@ -293,6 +294,7 @@ fn what_is_picked_can_be_marked_and_shows() {
             entity: hit.entity,
             selected: false,
             second: false,
+            warn: false,
         }],
     );
     let selected = shot(
@@ -302,6 +304,7 @@ fn what_is_picked_can_be_marked_and_shows() {
             entity: hit.entity,
             selected: true,
             second: false,
+            warn: false,
         }],
     );
     assert!(

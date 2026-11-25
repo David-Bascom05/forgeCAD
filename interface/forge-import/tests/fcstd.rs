@@ -2,6 +2,7 @@
 //! to the solid FreeCAD would make of it (volume and centroid worked out by hand), or says why not.
 
 use forge_import::fcstd::translate;
+use forge_math::ipow::Powi as _;
 
 /// A zip of stored members (no CRC: the reader does not check one).
 fn zip(members: &[(&str, &str)]) -> Vec<u8> {
@@ -500,7 +501,7 @@ fn a_revolve_symmetric_about_its_sketch_turns_half_each_way() {
     };
     let vol = 100.0 * 15.0 * PI / 2.0;
     // the centroid of a sector of the ring: at 15 * sin(45deg) / (pi / 4) from the axis, mid-angle
-    let r = (2.0 / 3.0) * (20.0f64.powi(3) - 10.0f64.powi(3)) / (20.0f64.powi(2) - 10.0f64.powi(2))
+    let r = (2.0 / 3.0) * (20.0f64.ipow(3) - 10.0f64.ipow(3)) / (20.0f64.ipow(2) - 10.0f64.ipow(2))
         * std::f64::consts::FRAC_1_SQRT_2
         / (PI / 4.0);
     let fg = only(&file(rev(true)));
@@ -1023,10 +1024,10 @@ fn a_periodic_spline_is_written_with_its_poles_wrapped() {
     // the closed uniform cubic over the poles: each span's point is the poles' blend by the uniform basis
     let at = |i: usize, t: f64| {
         let b = [
-            (1.0 - t).powi(3) / 6.0,
-            (3.0 * t.powi(3) - 6.0 * t * t + 4.0) / 6.0,
-            (-3.0 * t.powi(3) + 3.0 * t * t + 3.0 * t + 1.0) / 6.0,
-            t.powi(3) / 6.0,
+            (1.0 - t).ipow(3) / 6.0,
+            (3.0 * t.ipow(3) - 6.0 * t * t + 4.0) / 6.0,
+            (-3.0 * t.ipow(3) + 3.0 * t * t + 3.0 * t + 1.0) / 6.0,
+            t.ipow(3) / 6.0,
         ];
         let x: f64 = (0..4).map(|j| b[j] * poles[(i + j) % 4].0).sum();
         let y: f64 = (0..4).map(|j| b[j] * poles[(i + j) % 4].1).sum();
@@ -1090,10 +1091,10 @@ fn a_pad_with_a_spline_side_writes_the_spline_exactly() {
     // the bump over y = 10: the integral of (y - 10) dx along the curve, from x = 40 to 0
     let at = |t: f64| {
         let b = [
-            (1.0 - t).powi(3),
-            3.0 * t * (1.0 - t).powi(2),
+            (1.0 - t).ipow(3),
+            3.0 * t * (1.0 - t).ipow(2),
             3.0 * t * t * (1.0 - t),
-            t.powi(3),
+            t.ipow(3),
         ];
         let w: f64 = (0..4).map(|i| b[i] * ws[i]).sum();
         let x: f64 = (0..4).map(|i| b[i] * ws[i] * poles[i].0).sum::<f64>() / w;

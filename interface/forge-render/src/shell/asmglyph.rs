@@ -227,7 +227,12 @@ impl Shell {
             if *count > 1 {
                 let c = r.right_top() + vec2(-1.0, 1.0);
                 let g = ctx.fonts_mut(|fo| {
-                    fo.layout_no_wrap(count.to_string(), super::theme::sans(9.0), Color32::WHITE)
+                    fo.layout_no_wrap(
+                        count.to_string(),
+                        // a count inside the 14 px glyph: the one size under theme::MIN_TEXT
+                        egui::FontId::new(9.0, egui::FontFamily::Proportional),
+                        Color32::WHITE,
+                    )
                 });
                 let bg = Rect::from_center_size(c, vec2(g.size().x + 6.0, 12.0));
                 p.rect_filled(bg, 6.0, Color32::from_rgb(0x50, 0x58, 0x66));

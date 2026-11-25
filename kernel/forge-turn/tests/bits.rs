@@ -33,9 +33,18 @@ fn segs(h: &mut u64, ss: &[Seg]) {
     }
 }
 
-const PINNED: u64 = 0x090b01ba435f80d4;
+// per interval rule: the exact-zero rule (default), and the strict rule (feature ival-strict)
+const PINNED: u64 = if forge_cam_geom::ival::STRICT {
+    0x090b01ba435f80d4
+} else {
+    0x4c02154e280a60a6
+};
 /// The threaded bush: boring, an ID groove and an ID thread.
-const PINNED_NUT: u64 = 0xa77a8e918924fedd;
+const PINNED_NUT: u64 = if forge_cam_geom::ival::STRICT {
+    0xa77a8e918924fedd
+} else {
+    0x68ca8d84031db37d
+};
 
 #[test]
 fn the_same_bits_everywhere() {

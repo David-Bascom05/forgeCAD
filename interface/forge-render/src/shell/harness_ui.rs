@@ -757,7 +757,7 @@ impl Shell {
                             round_up,
                         } => {
                             line_edit(ui, &t, "Name", name, "loom", "name", places);
-                            line_edit(ui, &t, "Slack", slack, "0.03", "slack", places);
+                            line_edit(ui, &t, "Slack (ratio)", slack, "0.03", "slack", places);
                             line_edit(ui, &t, "Round up to (mm)", round_up, "5", "round", places);
                         }
                         Dialog::Connector {

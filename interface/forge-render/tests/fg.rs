@@ -233,15 +233,23 @@ fn tree_actions_are_typed_ops_and_a_refusal_is_typed() {
         return;
     };
 
-    // the base is read below it: deleting it is refused, nothing changes
+    // the base is read below it: its Delete is drawn off (the reason on hover), a click on it
+    // does nothing, and the op asked anyway is refused, typed
     assert!(h.click("fg:row:base"));
     h.step();
     assert_eq!(h.gui.shell.fg.as_ref().unwrap().selected.as_deref(), Some("base"));
     assert!(h.menu_item("fg:row:base", "fg:menu:delete:base"));
-    let refused = h.gui.shell.fg.as_ref().unwrap().refused.clone().unwrap();
-    assert!(refused.starts_with("StillRead"), "{refused}");
     assert!(h.gui.fg.as_ref().unwrap().ops.is_empty());
     assert_eq!(h.gui.fg.as_ref().unwrap().src, PLATE);
+    let refused = h
+        .gui
+        .fg_apply(forge_lang::error::Op::DeleteFeature { id: "base".into() })
+        .unwrap_err();
+    assert!(refused.starts_with("StillRead"), "{refused}");
+    assert!(!h.gui.shell.status.contains("StillRead"), "{}", h.gui.shell.status);
+    assert_eq!(h.gui.fg.as_ref().unwrap().src, PLATE);
+    h.key(egui::Key::Escape);
+    h.step();
 
     // one loop instance gets its own width
     assert!(h.menu_item("fg:row:psk[1]", "fg:menu:split:psk.w:psk[1]"));

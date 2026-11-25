@@ -5,14 +5,27 @@
 use forge_lang::build::Cache;
 use forge_lang::{Measure, Options, Run};
 
+/// The scratch folder holding the bench font (`text(..)` parts read it): made once per process,
+/// the font written whole under another name and renamed into place, so no test ever reads it
+/// half-written. (Tests run side by side: "is it there? else write it" let one test read the
+/// font while another was writing it, a truncated font, `WrongKind`: as bench_ports.rs had.)
+pub fn font_dir() -> std::path::PathBuf {
+    static DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        let dir = forge_dirs::temp_dir().join(format!("forge-lang-tests-{}", forge_dirs::process_id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let font = dir.join(forge_lang::bench::FONT);
+        let part = dir.join(format!("{}.part", forge_lang::bench::FONT));
+        std::fs::write(&part, forge_lang::bench::font_bytes()).expect("font");
+        std::fs::rename(&part, &font).expect("font in place");
+        dir
+    })
+    .clone()
+}
+
 /// The part built, a scratch folder beside it holding the bench font (`text(..)` parts read it).
 pub fn run(src: &str) -> (Run, Cache) {
-    let dir = forge_dirs::temp_dir().join(format!("forge-lang-tests-{}", forge_dirs::process_id()));
-    std::fs::create_dir_all(&dir).expect("temp dir");
-    let font = dir.join(forge_lang::bench::FONT);
-    if !font.exists() {
-        std::fs::write(&font, forge_lang::bench::font_bytes()).expect("font");
-    }
+    let dir = font_dir();
     let opts = Options {
         dir: Some(dir),
         ..Options::default()
