@@ -414,6 +414,8 @@ no-output (powi: small integer exponents, same bits native and wasm; ban-list it
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam/src/surf.rs|float|let len = ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2)).sqrt();
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam/src/surf.rs|float|let off = ((mm[0] - 0.5 * (a[0] + b[0])).powi(2) + (mm[1] - 0.5 * (a[1] + b[1])).powi(2)).sqrt();
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-cam/src/surf.rs|float|let r = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2)).sqrt();
+speed (cache answering a function of its own key: a model's compiled faces by its name, whose text is fixed)  @ forge-cam/src/fixture.rs|lazy|static CACHE: std::sync::OnceLock<std::sync::Mutex<Vec<(String, Read)>>> = std::sync::OnceLock::new();
+speed (cache answering a function of its own key: a model's compiled faces by its name, whose text is fixed)  @ forge-cam/src/fixture.rs|static|static CACHE: std::sync::OnceLock<std::sync::Mutex<Vec<(String, Read)>>> = std::sync::OnceLock::new();
 no-output (in-memory filesystem's file times: its count of changes, no clock read; read only for cache staleness and eviction)  @ forge-dirs/src/fs.rs|clock|pub fn accessed(&self) -> io::Result<SystemTime> {
 no-output (in-memory filesystem's file times: its count of changes, no clock read; read only for cache staleness and eviction)  @ forge-dirs/src/fs.rs|clock|pub fn created(&self) -> io::Result<SystemTime> {
 no-output (in-memory filesystem's file times: its count of changes, no clock read; read only for cache staleness and eviction)  @ forge-dirs/src/fs.rs|clock|pub fn modified(&self) -> io::Result<SystemTime> {
@@ -810,3 +812,10 @@ no-output (prints only: FORGE_CAM_DEBUG traces each sign refinement to stderr)  
 no-output (prints only: the FORGE_CAM_DEBUG flag, read once)  @ forge-num/src/real.rs|lazy|static DBG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 no-output (prints only: the FORGE_CAM_DEBUG flag, read once)  @ forge-num/src/real.rs|static|static DBG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 no-output (lookups only: get/insert/remove, never iterated; a fixed unseeded hasher, Fx)  @ forge-num/src/real.rs|hash-order|struct Memo(std::collections::HashMap<Key, R, std::hash::BuildHasherDefault<Fx>>);
+speed (lazy field or constant table: the built-in models, parsed once from data compiled in)  @ forge-workholding/src/model.rs|lazy|static M: OnceLock<Vec<Model>> = OnceLock::new();
+speed (lazy field or constant table: the built-in models, parsed once from data compiled in)  @ forge-workholding/src/model.rs|lazy|use std::sync::OnceLock;
+speed (lazy field or constant table: the built-in models, parsed once from data compiled in)  @ forge-workholding/src/model.rs|static|static M: OnceLock<Vec<Model>> = OnceLock::new();
+no-output (constant tables or print switches: the compiled models embedded by build.rs)  @ forge-workholding/src/model.rs|env|include!(concat!(env!("OUT_DIR"), "/checks.rs"));
+no-output (the drawn mesh's location: drawing only, never a checked face, id or verdict)  @ forge-workholding/src/model.rs|env|std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+speed (cache answering a function of its own key: models compiled while running, each named by its content's sha256)  @ forge-workholding/src/model.rs|lazy|static R: OnceLock<std::sync::Mutex<Vec<&'static Model>>> = OnceLock::new();
+speed (cache answering a function of its own key: models compiled while running, each named by its content's sha256)  @ forge-workholding/src/model.rs|static|static R: OnceLock<std::sync::Mutex<Vec<&'static Model>>> = OnceLock::new();
