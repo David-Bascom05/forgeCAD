@@ -3342,9 +3342,9 @@ impl Cam {
             && let Ok(r) = self.wh.get(to)
         {
             let w = format!(
-                "vise(\"{name}\"): now the workholding library's `{to}`: the same jaws and opening, with the vise body under them down to the table{}",
+                "vise(\"{name}\") is now the workholding library's {to}: the same jaws and opening, with its body down to the table.{}",
                 if r.standin {
-                    " (a stand-in: measure your vise)"
+                    " It's a stand-in: measure your vise."
                 } else {
                     ""
                 }
