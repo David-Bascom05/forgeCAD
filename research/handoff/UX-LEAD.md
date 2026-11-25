@@ -64,6 +64,13 @@ IMPORT-SPEED's import/faces.
 - **CAM 480 px shot**: re-shoot `research/cam/ui/cam-480-view.png` if the browser's width at
   480 px ever changes.
 
+## Agreed wording, not yet written
+
+- **STEP edge-gap warning** (IMPORT-SPEED / KERNEL-STRESS tier 2, a solid kept with a
+  warning): "edge #E lies 0.96 mm off face #F, though the file claims 0.00001 mm accuracy:
+  that face may look wrong and isn't checked there (exporting the file again may help)".
+  Drop "and isn't checked there" if that face's checks still run.
+
 ## Decisions made in review (for the standard's next edit)
 
 - A working state shows the shared spinner (ux::loading) and a word ("checking",
