@@ -192,6 +192,11 @@ impl Link for WebLink {
         s.client.local(op, after);
         s.flush();
     }
+    fn local_group(&self, ops: Vec<Op>, after: String) {
+        let mut s = self.0.borrow_mut();
+        s.client.local_group(ops, after);
+        s.flush();
+    }
     fn undo(&self) -> Option<Result<(), String>> {
         let mut s = self.0.borrow_mut();
         let r = s.client.undo();

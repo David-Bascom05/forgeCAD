@@ -2431,10 +2431,9 @@ impl Session {
     /// Several ops as one edit, one undo step: refused whole if the result wouldn't check.
     pub fn apply_all(&mut self, ops: Vec<Op>) -> Result<(), Error> {
         let text = edit::apply_all_checked(&self.src, &ops)?;
+        // one group: the server commits all of it or none (M5), as the edit is one here
         if let Some(l) = &self.sync {
-            for op in &ops {
-                l.local(op.clone(), text.clone());
-            }
+            l.local_group(ops.clone(), text.clone());
         }
         self.take_text(text);
         self.ops.extend(ops);

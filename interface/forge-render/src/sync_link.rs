@@ -22,6 +22,9 @@ pub trait Link {
     fn pending(&self) -> usize;
     /// The app applied and checked `op` and got `after`: share it.
     fn local(&self, op: Op, after: String);
+    /// The app applied several ops as one edit (an apply-all) and checked the result, `after`:
+    /// share them as one group, which the server commits whole or not at all.
+    fn local_group(&self, ops: Vec<Op>, after: String);
     /// Hosted undo: the inverse of this client's last op, rebased (others' edits stay). None:
     /// nothing to undo; Err: it no longer applies.
     fn undo(&self) -> Option<Result<(), String>>;
@@ -52,6 +55,9 @@ impl Link for forge_remote::Session {
     }
     fn local(&self, op: Op, after: String) {
         forge_remote::Session::local(self, op, after);
+    }
+    fn local_group(&self, ops: Vec<Op>, after: String) {
+        forge_remote::Session::local_group(self, ops, after);
     }
     fn undo(&self) -> Option<Result<(), String>> {
         forge_remote::Session::undo(self)
