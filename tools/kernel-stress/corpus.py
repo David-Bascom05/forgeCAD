@@ -6,7 +6,8 @@ them from the zips, for the kernel's rewrite to pass.
 
 `make` reads a sweep's JSON lines (run.sh's OUTDIR) and keeps, for each failure class, the three
 cases on the fewest faces. A row names the zip, the STEP file in it, the solid's entity (two for
-a pair), the op and what it gave then. No geometry is in the corpus: `run` takes each solid out
+a pair), the op and what it gave then. research/kernel-stress/pinned.tsv adds cases named by hand
+(asked for by another session, with an owner), whatever their size. No geometry is in the corpus: `run` takes each solid out
 of its file on the branch haas-3d-models (extract.py), runs the op (verify/forge-stress) and
 says whether it now passes. Passing means: the solid reads valid (closed, checks, mass, a
 watertight mesh), and the op answers Ok and right. A row that was wrong (or hung, or crashed)
@@ -92,6 +93,14 @@ def make(out):
             print("\t".join([f"K{n:03d}", cls] + [c.replace("\t", " ") for c in row]))
             if len(seen) == 3:
                 break
+    # the cases named by hand (pinned.tsv: who asked, who owns it), whatever the sweep's smallest
+    pinned = os.path.join(ROOT, "research", "kernel-stress", "pinned.tsv")
+    for line in open(pinned):
+        c = line.rstrip("\n").split("\t")
+        if line.startswith("class\t") or len(c) < 7:
+            continue
+        n += 1
+        print("\t".join([f"K{n:03d}"] + c[:7]))
 
 
 def norm_why(w):

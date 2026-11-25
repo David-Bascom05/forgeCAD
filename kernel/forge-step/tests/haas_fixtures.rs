@@ -237,3 +237,60 @@ fn a_bore_through_umc400s_part_finishes() {
         Err(e) => panic!("{e:?}"),
     }
 }
+
+/// `b` moved by `d`, as forge-stress moves its copies (names salted, so the two share none).
+/// FALLBACK's, from fix/torus-tangent-branches' tests/haas_booleans.rs.
+fn moved(b: &Body, d: forge_math::Vec3) -> Body {
+    use forge_geom::{CurveGeom, SurfaceGeom};
+    use forge_math::{Frame, Point3};
+    let f = Frame::WORLD.with_origin(Point3::ORIGIN + d);
+    let salt = forge_topo::Name::feature(0x5eed);
+    let mut c = b.clone();
+    for v in &mut c.vertices {
+        v.point = f.point_to_world(v.point);
+        v.name = v.name.salted(salt);
+    }
+    for e in &mut c.edges {
+        e.curve = e.curve.transformed(&f);
+        e.name = e.name.salted(salt);
+        e.bbox = Default::default();
+    }
+    for x in &mut c.faces {
+        x.surface = x.surface.transformed(&f);
+        x.name = x.name.salted(salt);
+        x.bbox = Default::default();
+        x.query = Default::default();
+    }
+    c.hulls = Default::default();
+    c
+}
+
+/// A guard, not a fix (FALLBACK's scan, the oracle corpus's): HRTA6 #56170 (167 faces, 18 tori:
+/// O-ring grooves, drill-point cones) with a copy moved k of its width along x, k from 0.40 to
+/// 0.43 (forge-stress's over2 is 0.4137). Main refuses all nine (InconsistentClassification),
+/// which passes; where union and intersection both answer, they must make up twice the solid.
+/// With the tori traced apart (fix/torus-tangent-branches, held) both check clean yet miss by
+/// -972 mm3 at 0.4137 and +126 at 0.417: wrong answers only the volume sees. So a change that
+/// makes main answer here must answer right.
+#[test]
+fn a_part_with_tori_with_copies_near_over_answers_right_or_refuses() {
+    use forge_bool::{Op, boolean};
+    let b = one("tori_167faces.step");
+    let w = b.faces_box().x.width();
+    let v = mass::mass_rel(&b, 1e-6).unwrap().volume;
+    for k in [0.40, 0.405, 0.41, 0.412, 0.4137, 0.415, 0.417, 0.42, 0.43] {
+        let copy = moved(&b, forge_math::Vec3::new(k * w, 0.0, 0.0));
+        let (Ok(u), Ok(i)) = (
+            boolean(&b, &copy, Op::Union, 9000),
+            boolean(&b, &copy, Op::Intersect, 9000),
+        ) else {
+            continue;
+        };
+        let sum = mass::mass_rel(&u, 1e-6).unwrap().volume + mass::mass_rel(&i, 1e-6).unwrap().volume;
+        let miss = sum - 2.0 * v;
+        assert!(
+            miss.abs() < 1e-6 * v,
+            "offset {k}: union + intersection - 2V = {miss}"
+        );
+    }
+}

@@ -210,6 +210,10 @@ fn translated(b: &Body, d: Vec3) -> Body {
     c
 }
 
+/// A box `hi.z - lo.z` tall standing on `lo`, its base `hi.x - lo.x` by `hi.y - lo.y` along the
+/// x and y that `Frame::from_z` picks for z, which are not the world's (for z up its x is the
+/// world's y and its y the world's -x). So it is not the box from `lo` to `hi`. Kept as it is: the
+/// sweeps' box ops and the corpus's rows were made with it, and any box through the solid serves.
 fn block(lo: Point3, hi: Point3, id: u64) -> Option<Body> {
     let p = forge_ops::Profile {
         plane: Frame::from_z(Point3::new(lo.x, lo.y, lo.z), UnitVec3::Z),
@@ -703,7 +707,7 @@ fn main() {
                 }
             }
         }
-        // a box through it: a quarter off, through in y
+        // a box through it (see `block`: turned from the quarter off through in y this names)
         if let Some(t) = block(
             Point3::new(c.x, bx.y.lo - m, c.z),
             Point3::new(bx.x.hi + m, bx.y.hi + m, bx.z.hi + m),
