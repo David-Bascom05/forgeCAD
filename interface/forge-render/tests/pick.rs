@@ -293,6 +293,7 @@ fn what_is_picked_can_be_marked_and_shows() {
             entity: hit.entity,
             selected: false,
             second: false,
+            warn: false,
         }],
     );
     let selected = shot(
@@ -302,6 +303,7 @@ fn what_is_picked_can_be_marked_and_shows() {
             entity: hit.entity,
             selected: true,
             second: false,
+            warn: false,
         }],
     );
     assert!(

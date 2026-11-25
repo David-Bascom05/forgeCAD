@@ -199,6 +199,8 @@ pub struct Built {
     pub reused: usize,
     /// The part's new mesh; none when the part is the one already shown, or didn't build.
     pub mesh: Option<PartMesh>,
+    /// What of `mesh` the view could not draw (Some with every mesh replaced, None otherwise).
+    pub undrawn: Option<crate::shell::fg::Undrawn>,
     /// The faces the build changed, for the screen at once (the whole mesh follows).
     pub delta: Option<Delta>,
     /// When `mesh` is new: the flat pattern of the part's first sheet; none without one.
@@ -714,6 +716,8 @@ pub enum Msg {
         mesh: PartMesh,
         flat: Option<PartMesh>,
         mesh_ms: f64,
+        /// What of the part the mesh could not draw (said in Issues, outlined in the view).
+        undrawn: crate::shell::fg::Undrawn,
     },
     /// Drives set in the kept solve: each occurrence's pose (the last build's order), or None
     /// when they need a build; and the solve's time.
@@ -724,22 +728,75 @@ pub enum Msg {
     },
 }
 
-fn whole(body: &forge_topo::Body, flat: Option<&forge_topo::Body>) -> (PartMesh, Option<PartMesh>) {
-    let mesh = match tess::build_part_reporting(body) {
+fn whole(
+    body: &forge_topo::Body,
+    flat: Option<&forge_topo::Body>,
+) -> (PartMesh, Option<PartMesh>, crate::shell::fg::Undrawn) {
+    let (mesh, undrawn) = match tess::build_part_reporting(body) {
         Ok((m, left)) => {
-            // drawn without the faces that cannot be meshed: said, face by face
+            // drawn without the faces that cannot be meshed: said, face by face (Issues), and
+            // their border outlined in the view
             for l in &left {
                 eprintln!("forge-app: face {} left out of the drawing: {}", l.face, l.why);
             }
-            m
+            let u = undrawn_of(body, &left);
+            (m, u)
         }
         Err(e) => {
             eprintln!("forge-app: can't mesh it: {e:?}");
-            PartMesh::empty()
+            let none = crate::shell::fg::Undrawn {
+                faces: Vec::new(),
+                none_drawn: true,
+            };
+            (PartMesh::empty(), none)
         }
     };
     let flat = flat.map(|b| tess::build_part(b).unwrap_or_else(|_| PartMesh::empty()));
-    (mesh, flat)
+    (mesh, flat, undrawn)
+}
+
+/// The faces a part's drawing left out, for the Issues window and the view: each one's border
+/// (the B-rep edges the faces beside it draw, outlined) and where it is (Show). Ids are those the
+/// mesher gave, of the body as it numbers its live faces (compacted, as the mesher meshed it).
+pub fn undrawn_of(body: &forge_topo::Body, left: &[tess::LeftOut]) -> crate::shell::fg::Undrawn {
+    use forge_topo::FaceId;
+    let compacted;
+    let body = if body.dead > 0 {
+        compacted = body.compact();
+        &compacted
+    } else {
+        body
+    };
+    let faces = left
+        .iter()
+        .map(|l| {
+            let f = FaceId(l.face);
+            let mut edges: Vec<u32> = body
+                .face(f)
+                .loops
+                .iter()
+                .flat_map(|&lp| body.lp(lp).coedges())
+                .map(|c| body.coedge(c).edge.0)
+                .collect();
+            edges.sort_unstable();
+            edges.dedup();
+            let b = body.face_box(f);
+            let (x, y, z) = (b.x, b.y, b.z);
+            let center = [x.mid(), y.mid(), z.mid()];
+            let radius = ((x.hi - x.lo).powi(2) + (y.hi - y.lo).powi(2) + (z.hi - z.lo).powi(2)).sqrt() / 2.0;
+            crate::shell::fg::UndrawnFace {
+                face: l.face,
+                why: l.why.clone(),
+                edges,
+                center,
+                radius: if radius.is_finite() { radius } else { 1.0 },
+            }
+        })
+        .collect();
+    crate::shell::fg::Undrawn {
+        faces,
+        none_drawn: false,
+    }
 }
 
 type Whole = (u64, forge_topo::Body, Option<forge_topo::Body>);
@@ -752,7 +809,7 @@ fn mesh_whole(bodies: Receiver<Whole>, out: Sender<Msg>, waker: Arc<dyn Fn() + S
             w = n;
         }
         let t = Instant::now();
-        let (mesh, flat) = whole(&w.1, w.2.as_ref());
+        let (mesh, flat, undrawn) = whole(&w.1, w.2.as_ref());
         let mesh_ms = t.elapsed().as_secs_f64() * 1e3;
         if out
             .send(Msg::Final {
@@ -760,6 +817,7 @@ fn mesh_whole(bodies: Receiver<Whole>, out: Sender<Msg>, waker: Arc<dyn Fn() + S
                 mesh,
                 flat,
                 mesh_ms,
+                undrawn,
             })
             .is_err()
         {
@@ -1001,13 +1059,14 @@ impl Worker {
         #[cfg(target_arch = "wasm32")]
         {
             let t = Instant::now();
-            let (mesh, flat) = whole(&w.1, w.2.as_ref());
+            let (mesh, flat, undrawn) = whole(&w.1, w.2.as_ref());
             let mesh_ms = t.elapsed().as_secs_f64() * 1e3;
             self.send(Msg::Final {
                 seq: w.0,
                 mesh,
                 flat,
                 mesh_ms,
+                undrawn,
             })
         }
     }
@@ -1103,6 +1162,7 @@ impl Worker {
                 rebuilt: run.rebuilt,
                 reused: run.reused,
                 mesh: None,
+                undrawn: None,
                 flat: None,
                 delta: None,
                 sheets: vec![],
@@ -1130,14 +1190,18 @@ impl Worker {
             .map(|p| p.to_string_lossy().to_string());
         let opening = self.gpu.is_some();
         let before = if opening {
-            place.as_deref().and_then(|p| shown_before(p, &job.1))
+            // (what of it couldn't be drawn comes with the first build, which meshes it again)
+            place
+                .as_deref()
+                .and_then(|p| shown_before(p, &job.1))
+                .map(|(m, f)| (m, f, crate::shell::fg::Undrawn::default()))
         } else {
             None
         };
         // opening with nothing kept: the part as built without its checks first (a thermoform's
         // forming, the measures), on screen while they run; its mesh is the first build's too
         // when that build is the same stage (meshed once: a face that can't mesh is slow to fail)
-        let mut quick_mesh: Option<(u64, PartMesh, Option<PartMesh>)> = None;
+        let mut quick_mesh: Option<(u64, PartMesh, Option<PartMesh>, crate::shell::fg::Undrawn)> = None;
         let before = before.or_else(|| {
             if !opening {
                 return None;
@@ -1151,13 +1215,13 @@ impl Worker {
             let (shape, c) = forge_lang::run(&job.1, quick, std::mem::take(&mut self.cache));
             self.cache = c;
             let b = shape.body.as_ref()?;
-            let (mesh, flat) = whole(b, flat_body(&shape).as_ref());
+            let (mesh, flat, undrawn) = whole(b, flat_body(&shape).as_ref());
             if shape.stage != 0 {
-                quick_mesh = Some((shape.stage, mesh.clone(), flat.clone()));
+                quick_mesh = Some((shape.stage, mesh.clone(), flat.clone(), undrawn.clone()));
             }
-            Some((mesh, flat))
+            Some((mesh, flat, undrawn))
         });
-        if opening && let Some((mesh, flat)) = before {
+        if opening && let Some((mesh, flat, undrawn)) = before {
             let quick = Options {
                 build: false,
                 dir: self.dir.clone(),
@@ -1182,6 +1246,7 @@ impl Worker {
                 rebuilt: 0,
                 reused: 0,
                 mesh: Some(mesh),
+                undrawn: Some(undrawn),
                 flat,
                 delta: None,
                 sheets: vec![],
@@ -1253,12 +1318,14 @@ impl Worker {
             // the first build comes whole (after a preview too, which it replaces)
             let first = opening;
             let (mut mesh, mut flat, mut delta) = (None, None, None);
+            let mut undrawn = None;
             match changed {
                 Some(b) if first => {
-                    let (m, f) = match quick_mesh.take() {
-                        Some((stage, m, f)) if stage == run.stage => (m, f),
+                    let (m, f, u) = match quick_mesh.take() {
+                        Some((stage, m, f, u)) if stage == run.stage => (m, f, u),
                         _ => whole(b, flat_body(&run).as_ref()),
                     };
+                    undrawn = Some(u);
                     if let (Some(place), Some(read)) = (&place, &read) {
                         keep_shown(place, &job.1, read, &m, f.as_ref());
                     }
@@ -1318,6 +1385,7 @@ impl Worker {
                 rebuilt: shaped.map_or(run.rebuilt, |x| x.0),
                 reused: shaped.map_or(run.reused, |x| x.1),
                 mesh,
+                undrawn,
                 flat,
                 delta,
                 sheets,
@@ -2143,5 +2211,40 @@ impl Session {
 
     pub fn until(&self) -> Option<String> {
         crate::plat::lock(&self.until).clone()
+    }
+}
+
+#[cfg(test)]
+mod undrawn_tests {
+    use super::*;
+
+    /// A face the mesher fails on (its outline turned the wrong way) is left out, and `whole`
+    /// says which, with the border edges the view outlines: B-rep ids the mesh draws, so the
+    /// outline finds their segments.
+    #[test]
+    fn a_face_left_out_comes_with_its_border_and_place() {
+        let body = crate::load::body("crank").expect("the crank bench part");
+        let (_, _, none) = whole(&body, None);
+        assert_eq!(none, crate::shell::fg::Undrawn::default(), "a part that meshes leaves nothing out");
+        let bad = body
+            .face_ids()
+            .find(|&f| matches!(body.face(f).surface, forge_geom::Surface::Plane(_)))
+            .expect("a cap");
+        let mut broken = body.clone();
+        let c = broken.lp(body.face(bad).loops[0]).coedges().next().unwrap();
+        broken.coedges[c.index()].forward ^= true;
+        let (mesh, _, u) = whole(&broken, None);
+        assert!(!u.none_drawn);
+        assert_eq!(u.faces.len(), 1, "{u:?}");
+        let f = &u.faces[0];
+        assert_eq!(f.face, bad.0);
+        assert!(!f.why.is_empty());
+        assert!(!f.edges.is_empty());
+        let drawn: Vec<u32> = mesh.lods[0].edges.iter().map(|e| e.edge).collect();
+        assert!(f.edges.iter().all(|e| drawn.contains(e)), "{:?} in {drawn:?}", f.edges);
+        // its place is its own face's box: the middle inside it, and no bigger than the part
+        let b = body.face_box(bad);
+        assert!(b.x.lo <= f.center[0] && f.center[0] <= b.x.hi, "{:?}", f.center);
+        assert!(f.radius > 0.0 && (f.radius as f32) < mesh.radius * 2.0, "{}", f.radius);
     }
 }

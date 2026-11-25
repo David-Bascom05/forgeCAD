@@ -20,6 +20,82 @@ pub fn issue_counts(issues: &[Issue]) -> (usize, usize) {
     (e, issues.iter().filter(|i| !is_note(i)).count() - e)
 }
 
+/// What of the part the view could not draw: faces the mesher failed on, left out of the
+/// drawing (the part itself is unchanged). Kept in step with the mesh the view shows.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Undrawn {
+    /// The faces left out (at most the mesher's limit), each with its border and where it is.
+    pub faces: Vec<UndrawnFace>,
+    /// Past that limit nothing of the part is drawn.
+    pub none_drawn: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct UndrawnFace {
+    /// The face's id in the part's body.
+    pub face: u32,
+    /// The mesher's reason, as it gives it (shown on hover only).
+    pub why: String,
+    /// The B-rep edges bounding it: drawn by the faces beside it, outlined in the warning colour.
+    pub edges: Vec<u32>,
+    /// Where it is, for Show: its middle and how far round it (mm).
+    pub center: [f64; 3],
+    pub radius: f64,
+}
+
+impl Undrawn {
+    /// Whether there's anything to say: one warning for the part when there is.
+    pub fn any(&self) -> bool {
+        self.none_drawn || !self.faces.is_empty()
+    }
+
+    /// The Issues line: what the view leaves out and that the part is unchanged.
+    pub fn line(&self, part: &str) -> String {
+        if self.none_drawn {
+            format!("{part} couldn't be drawn: its faces couldn't be meshed. The part itself is unchanged.")
+        } else {
+            let n = self.faces.len();
+            format!(
+                "{part}: {} couldn't be drawn and {} left out of the view. The part itself is unchanged.",
+                if n == 1 { "1 face".to_string() } else { format!("{n} faces") },
+                if n == 1 { "is" } else { "are" }
+            )
+        }
+    }
+
+    /// The hover: each face and the mesher's reason.
+    pub fn detail(&self) -> String {
+        if self.none_drawn {
+            return "The mesher failed on too many of its faces (or its only one) to draw any of it".into();
+        }
+        self.faces
+            .iter()
+            .map(|f| format!("face {}: Mesher: {}", f.face, f.why))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Show's place: the middle of the faces left out and how far round them.
+    pub fn place(&self) -> Option<([f64; 3], f64)> {
+        let (lo, hi) = self.faces.iter().fold(
+            ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]),
+            |(mut lo, mut hi), f| {
+                for k in 0..3 {
+                    lo[k] = lo[k].min(f.center[k] - f.radius);
+                    hi[k] = hi[k].max(f.center[k] + f.radius);
+                }
+                (lo, hi)
+            },
+        );
+        if !lo[0].is_finite() {
+            return None;
+        }
+        let c = [0, 1, 2].map(|k| (lo[k] + hi[k]) / 2.0);
+        let r = (0..3).map(|k| ((hi[k] - lo[k]) / 2.0).powi(2)).sum::<f64>().sqrt();
+        Some((c, r.max(1.0)))
+    }
+}
+
 pub fn is_note(i: &Issue) -> bool {
     i.asm
         .as_ref()
@@ -334,6 +410,8 @@ pub struct FgPanel {
     pub edit_fresh: bool,
     /// Every issue listed, not the first few.
     pub all_issues: bool,
+    /// What of the part the view could not draw (faces the mesher failed on).
+    pub undrawn: Undrawn,
     /// A browser row being renamed in place: its statement and the name typed so far.
     pub renaming: Option<(String, String)>,
     pub rename_fresh: bool,
@@ -662,6 +740,13 @@ fn keys(ks: &[ParamKey]) -> String {
 }
 
 impl FgPanel {
+    /// The Issues window's and status bar's counts: the build's issues, and a warning for what
+    /// of the part the view could not draw.
+    pub fn counts(&self) -> (usize, usize) {
+        let (e, w) = issue_counts(&self.issues);
+        (e, w + usize::from(self.undrawn.any()))
+    }
+
     pub fn tree(&self) -> Vec<TreeRow> {
         tree_rows(&self.feats)
     }
@@ -1239,6 +1324,49 @@ impl Shell {
         self.fg = Some(fg);
     }
 
+    /// The Issues row for what the view could not draw: a warning in words, the mesher's reasons
+    /// on hover, Show to frame the faces left out (outlined in the view in the warning colour).
+    fn undrawn_row(
+        ui: &mut Ui,
+        t: &super::theme::Theme,
+        fg: &FgPanel,
+        out: &mut Vec<FgAct>,
+        places: &mut Vec<(String, Rect)>,
+    ) {
+        let u = &fg.undrawn;
+        ui.add_space(super::theme::S1);
+        let r = ui
+            .horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = super::theme::S2;
+                egui::Frame::new()
+                    .fill(WARN.gamma_multiply(0.16))
+                    .corner_radius(super::theme::R1)
+                    .inner_margin(egui::Margin::symmetric(6, 1))
+                    .show(ui, |ui| {
+                        ui.label(egui::RichText::new("Warning").font(medium(11.0)).color(WARN));
+                    });
+                ui.label(egui::RichText::new("Drawing").font(super::theme::caption()).color(t.ink2));
+            })
+            .response;
+        places.push(("fg:undrawn".into(), r.rect));
+        ui.add_space(2.0);
+        let part = fg.file.rsplit(['/', '\\']).next().unwrap_or(&fg.file);
+        let line = ui
+            .label(egui::RichText::new(u.line(part)).font(sans(12.0)).color(t.ink))
+            .on_hover_text(u.detail());
+        places.push(("fg:undrawn:line".into(), line.rect));
+        if let Some((c, r)) = u.place() {
+            ui.add_space(2.0);
+            if Self::fg_button(ui, "Show", "fg:undrawn:show".into(), places) {
+                out.push(FgAct::Locate(c, r));
+            }
+        }
+        if !fg.issues.iter().all(is_note) {
+            ui.add_space(super::theme::S1);
+            ui.separator();
+        }
+    }
+
     pub(super) fn fg_button(
         ui: &mut Ui,
         label: &str,
@@ -1502,7 +1630,7 @@ impl Shell {
         out: &mut Vec<FgAct>,
         places: &mut Vec<(String, Rect)>,
     ) {
-        let (errors, warnings) = issue_counts(&fg.issues);
+        let (errors, warnings) = fg.counts();
         let head = format!("{} · {}", plural(errors, "error"), plural(warnings, "warning"));
         let ink = if errors > 0 {
             t.error
@@ -1514,6 +1642,9 @@ impl Shell {
         let r = ui.label(egui::RichText::new(head).font(medium(12.0)).color(ink));
         places.push(("fg:issues".into(), r.rect));
         ui.add_space(super::theme::S1);
+        if fg.undrawn.any() {
+            Self::undrawn_row(ui, t, fg, out, places);
+        }
         let issues = std::mem::take(&mut fg.issues);
         // a long list shows its first few until asked
         let cap = if fg.all_issues { 300 } else { 8 };

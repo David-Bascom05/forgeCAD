@@ -1610,7 +1610,26 @@ impl Gui {
                     entity: Entity::Face(f),
                     selected: true,
                     second: false,
+                    warn: false,
                 }));
+                // the border of each face the view could not draw, in the warning colour, so its
+                // gap reads as "not drawn", not as a hole in the part (the Issues window says so)
+                if let Some(p) = &self.shell.fg {
+                    m.extend(
+                        p.undrawn
+                            .faces
+                            .iter()
+                            .flat_map(|f| f.edges.iter())
+                            .take(192)
+                            .map(|&e| Mark {
+                                placement: 0,
+                                entity: Entity::Edge(e),
+                                selected: false,
+                                second: false,
+                                warn: true,
+                            }),
+                    );
+                }
                 // the bend simulation's bodies are not the design's: none of its marks
                 if self.bend.showing() {
                     m.clear();
@@ -2395,7 +2414,13 @@ impl Gui {
                 }
                 // an older shape's, a newer one's faces already on screen
                 crate::fg::Msg::Final { seq, .. } if seq != s.changed => continue,
-                crate::fg::Msg::Final { mesh, flat, .. } => {
+                crate::fg::Msg::Final {
+                    mesh, flat, undrawn, ..
+                } => {
+                    // what of it couldn't be drawn: the Issues window's and the outline's
+                    if let Some(p) = &mut self.shell.fg {
+                        p.undrawn = undrawn;
+                    }
                     self.fg_folded = Some(mesh);
                     self.fg_flat = flat;
                     if let Some(v) = &mut self.view {
@@ -2427,6 +2452,9 @@ impl Gui {
                 p.feats = b.feats;
                 p.params = b.params;
                 p.issues = b.issues;
+                if let Some(u) = &b.undrawn {
+                    p.undrawn = u.clone();
+                }
                 if let Some(c) = b.cutlist {
                     p.cutlist = c;
                 }
@@ -2976,6 +3004,7 @@ impl Gui {
                 entity: Entity::Face(f),
                 selected: true,
                 second,
+                warn: false,
             })
             .collect();
         let centre = c.centre.map(|x| x as f32);

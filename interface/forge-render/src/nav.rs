@@ -300,6 +300,7 @@ impl Nav {
                 entity,
                 selected: true,
                 second: false,
+                warn: false,
             })
             .collect();
         if self.drag.is_none()
@@ -312,6 +313,7 @@ impl Nav {
                 entity: h.entity,
                 selected: false,
                 second: false,
+                warn: false,
             });
         }
         out

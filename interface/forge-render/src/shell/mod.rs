@@ -1377,7 +1377,7 @@ impl Shell {
                 ui.interact(said, ui.scope_id().with("status-times"), Sense::hover())
                     .on_hover_text(&a.timings);
             }
-            let (errors, warnings) = fg::issue_counts(&fg.issues);
+            let (errors, warnings) = fg.counts();
             let text = format!(
                 "{} · {}",
                 fg::plural(errors, "error"),

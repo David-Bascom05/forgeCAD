@@ -311,6 +311,7 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
                     entity: h.entity,
                     selected: true,
                     second: false,
+                    warn: false,
                 });
             }
         }
