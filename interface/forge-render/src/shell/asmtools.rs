@@ -682,11 +682,9 @@ pub fn suppress_op(id: &str, on: bool) -> Op {
 /// A top-level part is chosen in the browser: what Pattern, Mirror and Copy act on (the ribbon
 /// draws them off until there is one, saying so).
 pub fn top_chosen(a: &AsmPanel) -> bool {
-    a.selected.as_ref().is_some_and(|k| {
-        a.insts
-            .iter()
-            .any(|i| i.path == *k && !i.path.contains('.') && !i.sub)
-    })
+    a.selected
+        .as_ref()
+        .is_some_and(|k| a.insts.iter().any(|i| i.path == *k && !i.path.contains('.') && !i.sub))
 }
 
 pub fn suppress_ops(a: &AsmPanel, id: &str, on: bool) -> Vec<Op> {
@@ -816,11 +814,7 @@ fn origin_row(
         (k + 1).to_string(),
         semi(11.0),
         // near-black on the amber of the step being waited for (white on it was 2.2:1)
-        if waiting {
-            super::theme::ON_FOCUS
-        } else {
-            Color32::WHITE
-        },
+        if waiting { super::theme::ON_FOCUS } else { Color32::WHITE },
     );
     let (label, ink) = match p {
         Some(Pick {
