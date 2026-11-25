@@ -821,6 +821,235 @@ fn distance(a: &PartMesh, b: &PartMesh, rel: &Frame, limit: f64) -> Option<(f64,
     best
 }
 
+// ---- an overlap proven from the meshes ----
+
+/// Whether the checker may settle an interference from the meshes (`certify`) instead of the
+/// exact boolean. Always on in the product; tests turn it off to compare with the exact path
+/// (forge-lang's tests/asm_certify.rs: the verdicts must be the same).
+pub static CERTIFY_FROM_MESHES: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// Seeds `certify` probes from at most; the crossing triangle pairs it needs before it tries at
+/// all (parts that only touch cross at a few: the rack's and the kits' at 1 to 4; a thread grown
+/// into its nut at hundreds), which is also how many seeds it tries before giving up when none
+/// has given a ball; and points along each seed.
+const CERTIFY_SEEDS: usize = 1024;
+const CERTIFY_MANY: usize = 64;
+/// The crossing walk gives up once it has visited `CERTIFY_VISITS` triangles of the first mesh
+/// with fewer than one crossing per `CERTIFY_SPARSE` of them: a thread grown into its nut crosses
+/// at about one in twelve from the start (post_kit: 22 by the 128th, 91 by the 2048th); parts
+/// that only touch, at none in their first thousands.
+const CERTIFY_VISITS: usize = 128;
+const CERTIFY_SPARSE: usize = 64;
+const CERTIFY_PROBES: usize = 6;
+
+/// The distance from p to `m`'s surface and whether p is inside (ray parity): Some(d) for a
+/// point inside at distance d, None outside or where the ray grazes an edge (not decided).
+fn clear_inside(m: &PartMesh, p: Point3) -> Option<f64> {
+    let bvh = m.bvh();
+    if bvh.nodes.is_empty() {
+        return None;
+    }
+    let mut near = f64::INFINITY;
+    let mut stack = vec![0usize];
+    while let Some(n) = stack.pop() {
+        let node = &bvh.nodes[n];
+        if box_gap(&node.bbox, &Box3::from_point(p)) > near {
+            continue;
+        }
+        if node.leaf {
+            for &t in &bvh.items[node.lo..node.hi] {
+                near = near.min(p.distance(closest_on_tri(p, &m.tri(t))));
+            }
+        } else {
+            stack.push(node.hi);
+            stack.push(node.lo);
+        }
+    }
+    (near > 0.0 && inside(m, p, 0.5 * near)? ).then_some(near)
+}
+
+/// A proven lower bound on the volume two solids share, from their meshes alone, when it is
+/// large enough that the exact path (`BrepExact::overlap_now`) would also call the pair an
+/// interference; else None (the exact path decides).
+///
+/// Why it is sound. Each mesh lies within its `tolerance` of its solid's surface and that surface
+/// within `tolerance` of the mesh (the bound the narrow phase already rests on: "each is within
+/// its chord of its solid"). So a point inside mesh A whose distance to it exceeds
+/// `tolerance + r` is inside solid A with the whole ball of radius r about it; likewise for B. Each
+/// probe that is so for both meshes gives a ball inside both solids; balls kept are pairwise
+/// disjoint, so the common solid's volume v is at least the sum of their volumes, `lo`. The exact
+/// path reports no interference only when v ≤ 0 or 2v ≤ LINEAR · area(common), and the common
+/// solid's boundary lies in A's and B's boundaries, so area(common) ≤ `area` (an upper bound on
+/// both parts' areas). Certifying only when 2·lo > 2·LINEAR·area (a factor 2 of room for the
+/// exact path's own mass error) makes its verdict an interference as well.
+///
+/// Where it probes: from each crossing triangle pair (the narrow phase's test), along the
+/// direction into both solids (minus the sum of their outward normals) from the pair's nearest
+/// points; then from triangles of either mesh in the shared region, into their own solid; at
+/// distances doubling from the larger tolerance. Work: nothing past the crossing count when the
+/// meshes cross at fewer than `CERTIFY_MANY` pairs; else at most `CERTIFY_SEEDS` seeds (and
+/// `CERTIFY_MANY` when none gives a ball), `CERTIFY_PROBES` probes each, two nearest-point queries and two parity rays per probe; the parts' areas only
+/// once a ball is found.
+fn gcd(mut a: usize, mut b: usize) -> usize {
+    while b != 0 {
+        (a, b) = (b, a % b);
+    }
+    a
+}
+
+fn certify(a: &PartMesh, b: &PartMesh, rel: &Frame, area: &dyn Fn() -> Option<f64>) -> Option<f64> {
+    let (ta, tb) = (a.tolerance, b.tolerance);
+    let inv = rel.inverse();
+    let mut balls: Vec<(Point3, f64)> = Vec::new();
+    let mut lo = 0.0;
+    // the bound to pass, asked for once the first ball is found (a part's area costs its mass
+    // properties)
+    let mut need: Option<f64> = None;
+    let mut seeds = 0usize;
+    let tri_area = |m: &PartMesh| -> f64 { (0..m.triangles.len()).map(|t| 0.5 * normal(&m.tri(t)).length()).sum() };
+    let mut mesh_area: Option<f64> = None;
+    // what a seed's probes leave: Some(true) proven, Some(false) give up, None go on
+    let mut probe = |c: Point3, d: Vec3| -> Option<bool> {
+        seeds += 1;
+        let mut t = ta.max(tb);
+        for _ in 0..CERTIFY_PROBES {
+            let p = c + d * t;
+            t *= 2.0;
+            let (Some(da), Some(db)) = (clear_inside(a, p), clear_inside(b, inv.point_to_world(p))) else {
+                continue;
+            };
+            // a hair less than the clearance, for the rounding of the distances
+            let r = (da - ta).min(db - tb) * (1.0 - 1e-9);
+            if r > 0.0 && balls.iter().all(|(q, s)| p.distance(*q) >= r + s) {
+                balls.push((p, r));
+                lo += 4.0 / 3.0 * forge_math::dmath::PI * r * r * r;
+            }
+        }
+        // the exact areas (mass properties) only once the meshes' own areas say the bound is near
+        if need.is_none()
+            && !balls.is_empty()
+            && lo > 0.9 * 2.0 * tol::LINEAR * *mesh_area.get_or_insert_with(|| tri_area(a) + tri_area(b))
+        {
+            match area() {
+                Some(x) if x.is_finite() && x >= 0.0 => need = Some(2.0 * tol::LINEAR * x),
+                _ => return Some(false),
+            }
+        }
+        if need.is_some_and(|n| lo > n) {
+            Some(true)
+        } else if seeds >= CERTIFY_SEEDS || (balls.is_empty() && seeds >= CERTIFY_MANY) {
+            Some(false)
+        } else {
+            None
+        }
+    };
+    let unit = |v: Vec3| {
+        let l = v.length();
+        (l > 1e-12).then(|| v / l)
+    };
+    // seeds 1: where the meshes cross (up to CERTIFY_SEEDS of the crossing pairs, in the walk's
+    // order, while they come at least one per CERTIFY_SPARSE triangles visited),
+    // visited spread out: the walk finds neighbours one after another, and the first
+    // CERTIFY_FIRST seeds should sample the whole crossing
+    let depth = ta + tb + tol::LINEAR;
+    // `b`'s triangles and tree boxes moved into `a`'s frame as the walk reaches them (moving them
+    // all first, as `Placed` does, costs more than the walk when it gives up early)
+    let tri_b = |t: usize| b.tri(t).map(|p| rel.point_to_world(p));
+    let mut cross: Vec<(usize, usize)> = Vec::new();
+    let mut visits = 0usize;
+    let (ba, bb) = (a.bvh(), b.bvh());
+    if !ba.nodes.is_empty() && !bb.nodes.is_empty() {
+        let mut stack = vec![(0usize, 0usize)];
+        'walk: while let Some((na, nb)) = stack.pop() {
+            let (x, y) = (&ba.nodes[na], &bb.nodes[nb]);
+            if box_gap(&x.bbox, &moved_box(&y.bbox, rel)) > 0.0 {
+                continue;
+            }
+            match (x.leaf, y.leaf) {
+                (true, true) => {
+                    for &ia in &ba.items[x.lo..x.hi] {
+                        // visits counted by the first mesh's triangles taken against a leaf
+                        visits += 1;
+                        let tx = a.tri(ia);
+                        for &ib in &bb.items[y.lo..y.hi] {
+                            if crosses(&tx, a.sharp()[ia], &tri_b(ib), b.sharp()[ib], depth) {
+                                cross.push((ia, ib));
+                            }
+                        }
+                        if cross.len() >= CERTIFY_SEEDS || (visits >= CERTIFY_VISITS && cross.len() * CERTIFY_SPARSE < visits) {
+                            break 'walk;
+                        }
+                    }
+                }
+                (false, true) => {
+                    stack.push((x.hi, nb));
+                    stack.push((x.lo, nb));
+                }
+                (true, false) => {
+                    stack.push((na, y.hi));
+                    stack.push((na, y.lo));
+                }
+                (false, false) => {
+                    stack.push((x.hi, y.hi));
+                    stack.push((x.hi, y.lo));
+                    stack.push((x.lo, y.hi));
+                    stack.push((x.lo, y.lo));
+                }
+            }
+        }
+    }
+    let n = cross.len();
+    if n < CERTIFY_MANY {
+        return None;
+    }
+    // a stride coprime to n visits every pair once, far apart at first
+    let stride = (1..=n).rev().find(|s| (*s as f64) <= 0.618 * n as f64 && gcd(*s, n) == 1).unwrap_or(1);
+    for k in 0..n {
+        let (ia, ib) = cross[(k * stride) % n];
+        let (x, y) = (a.tri(ia), tri_b(ib));
+        if let (Some(na), Some(nb)) = (unit(normal(&x)), unit(normal(&y)))
+            && let Some(d) = unit(-(na + nb))
+        {
+            let (_, pa, pb) = tri_distance(&x, &y);
+            if let Some(e) = probe(Point3::new(0.5 * (pa.x + pb.x), 0.5 * (pa.y + pb.y), 0.5 * (pa.z + pb.z)), d) {
+                return e.then_some(lo);
+            }
+        }
+    }
+    // seeds 2 (a face of one inside the other; threads whose meshes cross only at feature edges):
+    // triangles of either mesh in the shared region, spread over it, from each centre into its
+    // own solid
+    let (ab, bb) = (a.bounds(), moved_box(&b.bounds(), rel));
+    let meet = |p: forge_math::Interval, q: forge_math::Interval| {
+        let (lo, hi) = (p.lo.max(q.lo), p.hi.min(q.hi));
+        (lo <= hi).then(|| forge_math::Interval::new(lo, hi))
+    };
+    let (Some(x), Some(y), Some(z)) = (meet(ab.x, bb.x), meet(ab.y, bb.y), meet(ab.z, bb.z)) else {
+        return None;
+    };
+    let shared = Box3 { x, y, z };
+    for (m, map) in [(a, Frame::WORLD), (b, *rel)] {
+        let mut found = Vec::new();
+        m.bvh().query(m.tri_boxes(), &moved_box(&shared, &map.inverse()), &mut found);
+        found.sort_unstable();
+        let step = found.len().div_ceil(CERTIFY_SEEDS / 2).max(1);
+        for &t in found.iter().step_by(step) {
+            let tri = m.tri(t).map(|p| map.point_to_world(p));
+            if let Some(n) = unit(normal(&tri)) {
+                let c = Point3::new(
+                    (tri[0].x + tri[1].x + tri[2].x) / 3.0,
+                    (tri[0].y + tri[1].y + tri[2].y) / 3.0,
+                    (tri[0].z + tri[1].z + tri[2].z) / 3.0,
+                );
+                if let Some(e) = probe(c, -n) {
+                    return e.then_some(lo);
+                }
+            }
+        }
+    }
+    None
+}
+
 // ---- exact confirmation ----
 
 /// Why an exact overlap volume could not be had.
@@ -837,17 +1066,40 @@ pub enum ExactFail {
 /// faces in contact leave, is no volume: 0).
 pub trait Exact: Sync {
     fn overlap_volume(&self, a: &PartRef, b: &PartRef, b_in_a: &Frame) -> Result<f64, ExactFail>;
+    /// An upper bound on the part solid's surface area (mm²), with its error included; None
+    /// where not known (then an overlap is never certified from the meshes, `certify`).
+    fn area_bound(&self, _part: &PartRef) -> Option<f64> {
+        None
+    }
+    /// Whether the part's solid has a procedural face (a screw's thread, a blend, a sweep): the
+    /// faces the exact intersection can take seconds over. Only such pairs are tried by `certify`;
+    /// between analytic solids the boolean takes milliseconds.
+    fn procedural(&self, _part: &PartRef) -> bool {
+        false
+    }
 }
 
 impl<T: Exact + ?Sized> Exact for &T {
     fn overlap_volume(&self, a: &PartRef, b: &PartRef, b_in_a: &Frame) -> Result<f64, ExactFail> {
         (**self).overlap_volume(a, b, b_in_a)
     }
+    fn area_bound(&self, part: &PartRef) -> Option<f64> {
+        (**self).area_bound(part)
+    }
+    fn procedural(&self, part: &PartRef) -> bool {
+        (**self).procedural(part)
+    }
 }
 
 impl<T: Exact + ?Sized + Send> Exact for Arc<T> {
     fn overlap_volume(&self, a: &PartRef, b: &PartRef, b_in_a: &Frame) -> Result<f64, ExactFail> {
         (**self).overlap_volume(a, b, b_in_a)
+    }
+    fn area_bound(&self, part: &PartRef) -> Option<f64> {
+        (**self).area_bound(part)
+    }
+    fn procedural(&self, part: &PartRef) -> bool {
+        (**self).procedural(part)
     }
 }
 
@@ -898,7 +1150,39 @@ impl Exact for BrepExact {
         }
         v
     }
+
+    /// The exact mass properties' area plus their reported area error, kept by the solid's
+    /// identity.
+    fn area_bound(&self, part: &PartRef) -> Option<f64> {
+        let id = self.idents.get(&(part.doc.clone(), part.body)).copied();
+        if let Some(id) = id
+            && let Some(a) = AREAS.lock().ok().and_then(|m| m.as_ref()?.get(&id).copied())
+        {
+            return a;
+        }
+        let a = self
+            .bodies
+            .get(&(part.doc.clone(), part.body))
+            .and_then(|b| forge_topo::mass::mass(b).ok())
+            .map(|m| m.area.abs() + m.err[1].abs())
+            .filter(|a| a.is_finite());
+        if let Some(id) = id
+            && let Ok(mut m) = AREAS.lock()
+        {
+            m.get_or_insert_with(Default::default).insert(id, a);
+        }
+        a
+    }
+
+    fn procedural(&self, part: &PartRef) -> bool {
+        self.bodies.get(&(part.doc.clone(), part.body)).is_some_and(|b| {
+            b.face_ids()
+                .any(|f| matches!(b.face(f).surface, forge_geom::Surface::Procedural(_)))
+        })
+    }
 }
+
+static AREAS: std::sync::Mutex<Option<std::collections::HashMap<u128, Option<f64>>>> = std::sync::Mutex::new(None);
 
 impl BrepExact {
     fn overlap_now(&self, a: &PartRef, b: &PartRef, b_in_a: &Frame) -> Result<f64, ExactFail> {
@@ -979,6 +1263,9 @@ pub struct Interference {
     pub b: Path,
     /// Exact shared volume (mm³), where kernel solids confirmed it.
     pub volume: Option<f64>,
+    /// A proven lower bound on the shared volume (mm³) where the meshes certified the overlap
+    /// (`certify`) and the exact intersection was not run: `volume` is then None.
+    pub volume_at_least: Option<f64>,
     /// False when no exact geometry was there: the meshes cross, deeper than `tolerance`.
     pub confirmed: bool,
     /// The narrow phase's tolerance for this pair: overlaps shallower than this may be missed.
@@ -1032,6 +1319,8 @@ pub struct InterferenceReport {
     pub narrow_tests: usize,
     pub cache_hits: usize,
     pub exact_runs: usize,
+    /// Pairs whose interference the meshes proved, the boolean not run (`certify`).
+    pub certified: usize,
     pub reused: usize,
 }
 
@@ -1045,6 +1334,7 @@ impl InterferenceReport {
                 a: i.a.clone(),
                 b: i.b.clone(),
                 volume: i.volume,
+                volume_at_least: i.volume_at_least,
                 confirmed: i.confirmed,
                 boolean_failed: i.boolean_failed.clone(),
             })
@@ -1211,10 +1501,15 @@ pub struct Checker<P: Parts, E: Exact> {
     exact: E,
     pub threads: usize,
     /// Per pair: the meshes' crossing test, whether they come within the tolerance, and the
-    /// exact overlap where it was asked for.
-    cache: BTreeMap<Key, (Narrow, bool, Result<f64, ExactFail>)>,
+    /// exact overlap where it was asked for, and the meshes' proven lower bound on the overlap
+    /// where that settled it instead (`certify`).
+    cache: BTreeMap<Key, PairCheck>,
     last: Option<(Vec<Occ>, PairResults)>,
 }
+
+/// One pair's checks: the meshes' crossing test, whether they come within the tolerance, the
+/// exact overlap where it was run, and the meshes' proven lower bound where that settled it.
+type PairCheck = (Narrow, bool, Result<f64, ExactFail>, Option<f64>);
 
 fn pose_bits(f: &Frame) -> [u64; 9] {
     let (o, x, z) = (f.origin, f.x().get(), f.z().get());
@@ -1458,19 +1753,48 @@ impl<P: Parts, E: Exact> Checker<P, E> {
             .filter(|(k, n)| **n && intent(pairs[**k].0, pairs[**k].1).is_none())
             .map(|(k, _)| *k)
             .collect();
-        rep.exact_runs = confirm.len();
-        let volumes = par(confirm.len(), self.threads, |t| {
+        // a pair whose meshes prove a shared volume past the exact path's contact rule is an
+        // interference without the boolean (`certify`); the others are the boolean's
+        let may_certify = CERTIFY_FROM_MESHES.load(std::sync::atomic::Ordering::Relaxed);
+        let certified: Vec<Option<f64>> = par_any(confirm.len(), self.threads, |t| {
             let k = confirm[t];
+            if !may_certify {
+                return None;
+            }
+            if narrowed[todo.iter().position(|x| *x == k).expect("confirm is from todo")] == Narrow::Clear {
+                return None;
+            }
+            let (i, j) = pairs[k];
+            let (x, y) = if keyed[k].2 { (j, i) } else { (i, j) };
+            if !self.exact.procedural(&occ[x].part) && !self.exact.procedural(&occ[y].part) {
+                return None;
+            }
+            let (ma, mb) = meshes(k);
+            certify(ma, mb, &keyed[k].1, &|| {
+                Some(self.exact.area_bound(&occ[x].part)? + self.exact.area_bound(&occ[y].part)?)
+            })
+        });
+        let exact: Vec<usize> = (0..confirm.len()).filter(|&t| certified[t].is_none()).collect();
+        rep.exact_runs = exact.len();
+        rep.certified = confirm.len() - exact.len();
+        let volumes = par(exact.len(), self.threads, |e| {
+            let k = confirm[exact[e]];
             let (i, j) = pairs[k];
             let (x, y) = if keyed[k].2 { (j, i) } else { (i, j) };
             self.exact.overlap_volume(&occ[x].part, &occ[y].part, &keyed[k].1)
         });
         for ((k, r), n) in todo.iter().zip(&narrowed).zip(&near) {
-            let vol = match confirm.iter().position(|c| c == k) {
-                Some(t) => volumes[t].clone(),
-                None => Err(ExactFail::NoSolid),
+            let (vol, least) = match confirm.iter().position(|c| c == k) {
+                Some(t) => match certified[t] {
+                    Some(v) => (Err(ExactFail::NoSolid), Some(v)),
+                    None => (
+                        volumes[exact.iter().position(|e| *e == t).expect("run")].clone(),
+                        None,
+                    ),
+                },
+                None => (Err(ExactFail::NoSolid), None),
             };
-            self.cache.insert(keyed[*k].0.clone(), (*r, *n, vol));
+            self.cache.insert(keyed[*k].0.clone(), (*r, *n, vol, least));
         }
 
         let mut results: PairResults = BTreeMap::new();
@@ -1483,7 +1807,7 @@ impl<P: Parts, E: Exact> Checker<P, E> {
             }
         }
         for (k, &(i, j)) in pairs.iter().enumerate() {
-            let (r, near, vol) = self.cache[&keyed[k].0].clone();
+            let (r, near, vol, least) = self.cache[&keyed[k].0].clone();
             let hit = if !near {
                 None
             } else {
@@ -1495,6 +1819,16 @@ impl<P: Parts, E: Exact> Checker<P, E> {
                 Some(match intent_of(i, j) {
                     Some((by, short)) => PairHit::Intended(IntendedContact { a, b, by }, short),
                     None => match vol {
+                        // proven by the meshes: a shared volume of at least `least`
+                        _ if least.is_some() => PairHit::Interference(Interference {
+                            a,
+                            b,
+                            volume: None,
+                            volume_at_least: least,
+                            confirmed: true,
+                            tolerance: ma.tolerance + mb.tolerance + tol::LINEAR,
+                            boolean_failed: None,
+                        }),
                         // no common solid: in contact (the meshes come within the tolerance)
                         Ok(v) if v <= 0.0 => PairHit::Touch(a, b),
                         // no exact solids, and the meshes do not cross: in contact as far as is known
@@ -1503,6 +1837,7 @@ impl<P: Parts, E: Exact> Checker<P, E> {
                             a,
                             b,
                             volume: vol.as_ref().ok().copied(),
+                            volume_at_least: None,
                             confirmed: vol.is_ok(),
                             tolerance: ma.tolerance + mb.tolerance + tol::LINEAR,
                             boolean_failed: match vol {

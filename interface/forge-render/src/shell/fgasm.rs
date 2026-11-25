@@ -3636,6 +3636,7 @@ mod tests {
                     a: "base".into(),
                     b: "bolt[0]".into(),
                     volume: None,
+                    volume_at_least: None,
                     confirmed: true,
                     boolean_failed: None,
                 },

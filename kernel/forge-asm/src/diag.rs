@@ -167,6 +167,9 @@ pub enum Diagnostic {
         b: Path,
         /// Exact shared volume (mm³), where kernel solids confirmed it.
         volume: Option<f64>,
+        /// A proven lower bound on the shared volume (mm³), where the meshes proved the overlap
+        /// and the exact intersection was not run.
+        volume_at_least: Option<f64>,
         confirmed: bool,
         /// When unconfirmed because the kernel's intersection failed: its reason.
         boolean_failed: Option<String>,

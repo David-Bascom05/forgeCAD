@@ -1719,6 +1719,8 @@ pub enum Issue {
         a: String,
         b: String,
         volume: Option<f64>,
+        /// A proven lower bound on the shared volume, where the exact one was not computed.
+        volume_at_least: Option<f64>,
         confirmed: bool,
         /// When unconfirmed because the kernel's intersection failed: its reason.
         boolean_failed: Option<String>,
@@ -2104,10 +2106,15 @@ fn issue_text(i: &Issue) -> String {
             a,
             b,
             volume,
+            volume_at_least,
             boolean_failed,
             ..
         } => match (volume, boolean_failed) {
             (Some(v), _) => format!("{a} and {b} share {v:.4} mm3 (declare a fit if meant)"),
+            (None, _) if volume_at_least.is_some() => format!(
+                "{a} and {b} share at least {:.4} mm3, proven from their meshes; the exact volume was not computed (declare a fit if meant)",
+                volume_at_least.unwrap_or(0.0)
+            ),
             (None, Some(why)) => format!(
                 "{a} and {b} overlap by their meshes; the exact intersection failed ({why}), so the volume is unconfirmed"
             ),
@@ -2246,6 +2253,7 @@ fn issue_data(i: &Issue) -> Vec<(&'static str, Json)> {
             a,
             b,
             volume,
+            volume_at_least,
             confirmed,
             boolean_failed,
         } => {
@@ -2255,6 +2263,9 @@ fn issue_data(i: &Issue) -> Vec<(&'static str, Json)> {
                 ("volume", volume.map_or(Json::Null, Json::Num)),
                 ("confirmed", (*confirmed).into()),
             ];
+            if let Some(lo) = volume_at_least {
+                v.push(("volume_at_least", Json::Num(*lo)));
+            }
             if let Some(why) = boolean_failed {
                 v.push(("boolean_failed", s(why)));
             }
@@ -3365,6 +3376,8 @@ pub struct OverlapStats {
     pub narrow_tests: usize,
     pub cache_hits: usize,
     pub exact_runs: usize,
+    /// Pairs whose interference the meshes proved, the exact boolean not run.
+    pub certified: usize,
 }
 
 /// Ids to names, and names to the statements that made them.
@@ -4344,6 +4357,7 @@ pub fn finish(
             narrow_tests: rep.narrow_tests,
             cache_hits: rep.cache_hits,
             exact_runs: rep.exact_runs,
+            certified: rep.certified,
         }),
         step,
         part_docs,
@@ -5490,6 +5504,7 @@ fn push_diag(ev: &mut Eval, names: &Names, dg: &fa::Diagnostic, d: &Doc) {
             a,
             b,
             volume,
+            volume_at_least,
             confirmed,
             boolean_failed,
         } => (
@@ -5498,6 +5513,7 @@ fn push_diag(ev: &mut Eval, names: &Names, dg: &fa::Diagnostic, d: &Doc) {
                 a: path_name(names, a),
                 b: path_name(names, b),
                 volume: *volume,
+                volume_at_least: *volume_at_least,
                 confirmed: *confirmed,
                 boolean_failed: boolean_failed.clone(),
             },
@@ -5777,6 +5793,7 @@ pub fn json(out: &AsmOut) -> Json {
                 ("narrow_tests", o.narrow_tests.into()),
                 ("cache_hits", o.cache_hits.into()),
                 ("exact_runs", o.exact_runs.into()),
+                ("certified", o.certified.into()),
             ]),
         ));
     }
