@@ -370,8 +370,16 @@ impl Field {
         let hh = h * std::f64::consts::FRAC_1_SQRT_2;
         // a cell meets the disk where its centre is within r + h/√2 of the axis
         let reach = r + hh;
-        let lo = [(x - reach).max(self.ip.min[0]), (y - reach).max(self.ip.min[1]), self.ip.min[2]];
-        let hi = [(x + reach).min(self.ip.max[0]), (y + reach).min(self.ip.max[1]), self.ip.max[2]];
+        let lo = [
+            (x - reach).max(self.ip.min[0]),
+            (y - reach).max(self.ip.min[1]),
+            self.ip.min[2],
+        ];
+        let hi = [
+            (x + reach).min(self.ip.max[0]),
+            (y + reach).min(self.ip.max[1]),
+            self.ip.max[2],
+        ];
         if lo[0] >= hi[0] || lo[1] >= hi[1] || hi[2] <= z + self.eps {
             return false;
         }

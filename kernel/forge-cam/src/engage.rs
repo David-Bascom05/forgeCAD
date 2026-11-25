@@ -1152,7 +1152,11 @@ mod tests {
         let mut z = old;
         for k in 0..=2000 {
             let t = k as f64 / 2000.0;
-            let c = [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]), a[2] + t * (b[2] - a[2])];
+            let c = [
+                a[0] + t * (b[0] - a[0]),
+                a[1] + t * (b[1] - a[1]),
+                a[2] + t * (b[2] - a[2]),
+            ];
             let d = ((x - c[0]).powi(2) + (y - c[1]).powi(2)).sqrt();
             if d <= p.r() {
                 z = z.min(c[2] + p.at(d));
@@ -1163,7 +1167,11 @@ mod tests {
 
     #[test]
     fn sweep_under_never_brings_a_cell_below_what_it_still_holds() {
-        let profs = [Profile::Bull { r: 3.0, re: 0.0 }, Profile::Bull { r: 3.0, re: 1.0 }, Profile::Ball { r: 3.0 }];
+        let profs = [
+            Profile::Bull { r: 3.0, re: 0.0 },
+            Profile::Bull { r: 3.0, re: 1.0 },
+            Profile::Ball { r: 3.0 },
+        ];
         let moves = [
             ([2.0, 5.13, 4.0], [17.7, 5.13, 4.0]),
             ([3.1, 2.9, 6.0], [15.2, 11.4, 2.5]),
@@ -1190,7 +1198,11 @@ mod tests {
                                 let x = under.x0 + (i as f64 + u as f64 / 6.0) * under.h;
                                 let y = under.y0 + (j as f64 + v as f64 / 6.0) * under.h;
                                 let t = true_height(10.0, a, b, p, x, y);
-                                assert!(t <= under.z[k] + 1e-9, "{p:?} {a:?}->{b:?}: cell {i} {j} at {} holds {t}", under.z[k]);
+                                assert!(
+                                    t <= under.z[k] + 1e-9,
+                                    "{p:?} {a:?}->{b:?}: cell {i} {j} at {} holds {t}",
+                                    under.z[k]
+                                );
                             }
                         }
                     }
@@ -1205,7 +1217,12 @@ mod tests {
         let c = forge_cam_geom::region::P2 { x: 8.37, y: 7.11 };
         let a = forge_cam_geom::region::P2 { x: c.x + 5.3, y: c.y };
         let circle = forge_cam_geom::region::Loop {
-            segs: vec![Seg::Arc { a, b: a, c, ccw: true }],
+            segs: vec![Seg::Arc {
+                a,
+                b: a,
+                c,
+                ccw: true,
+            }],
         };
         let ip = InProcess {
             min: [0.0, 0.0, 0.0],
@@ -1228,13 +1245,19 @@ mod tests {
                     for u in 0..=4 {
                         let x = m.x0 + (i as f64 + u as f64 / 4.0) * m.h;
                         let y = m.y0 + (j as f64 + v as f64 / 4.0) * m.h;
-                        assert!(((x - c.x).powi(2) + (y - c.y).powi(2)).sqrt() <= 5.3 + 1e-9, "cell {i} {j} pokes out");
+                        assert!(
+                            ((x - c.x).powi(2) + (y - c.y).powi(2)).sqrt() <= 5.3 + 1e-9,
+                            "cell {i} {j} pokes out"
+                        );
                     }
                 }
             }
         }
         // all but the rim: the disk of radius 5.3 − h/√2 − h holds every centre lowered by plain
         // whose cell is wholly inside, near enough
-        assert!(n > 0 && n < n_plain && (n as f64) > 0.85 * n_plain as f64, "{n} of {n_plain}");
+        assert!(
+            n > 0 && n < n_plain && (n as f64) > 0.85 * n_plain as f64,
+            "{n} of {n_plain}"
+        );
     }
 }
