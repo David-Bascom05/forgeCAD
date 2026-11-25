@@ -123,6 +123,14 @@ impl Gui {
         self.studio.as_mut().map(|h| &mut h.live)
     }
 
+    /// The Studio's live view as it goes: the samples in the picture shown, those traced, the
+    /// rows it traces a frame (the page's state for its tests).
+    pub fn studio_progress(&self) -> Option<(u32, u32, u32)> {
+        self.studio
+            .as_ref()
+            .map(|h| (h.live.samples(), h.live.traced(), h.live.pace.rows))
+    }
+
     /// The GPU drawing the window (tests: a software rasteriser's frames are its own measure).
     pub fn adapter(&self) -> &wgpu::AdapterInfo {
         &self.adapter

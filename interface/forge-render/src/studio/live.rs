@@ -18,6 +18,9 @@ pub struct Pace {
     pub rows: u32,
     /// The GPU time a frame's trace may take, ms.
     pub budget_ms: f64,
+    /// The least a measured band took: what the measure takes whatever the rows (in the browser
+    /// the queue says it's done a frame or so late), not counted against them.
+    pub floor_ms: f64,
 }
 
 impl Default for Pace {
@@ -25,6 +28,7 @@ impl Default for Pace {
         Pace {
             rows: 64,
             budget_ms: 8.0,
+            floor_ms: f64::INFINITY,
         }
     }
 }
@@ -35,10 +39,74 @@ const MOST_ROWS: u32 = 64 * 4096;
 impl Pace {
     /// The GPU took `ms` for `rows` rows: the rows that fill the budget.
     pub fn fit(&mut self, ms: f64, rows: u32) {
+        self.floor_ms = self.floor_ms.min(ms);
+        self.fit_cost(ms - self.floor_ms, rows);
+    }
+
+    /// `rows` rows cost the frame `ms`: the rows that fill the budget.
+    pub fn fit_cost(&mut self, ms: f64, rows: u32) {
         let per_row = (ms / rows.max(1) as f64).max(1e-6);
         let fit = (self.budget_ms / per_row) as u32;
         // no more than doubling at once: a measure taken while the GPU was idle overstates it
         self.rows = (fit.min(self.rows.saturating_mul(2)) / 8 * 8).clamp(8, MOST_ROWS);
+    }
+}
+
+/// The page's frames, the pace's measure in the browser (whose queue says its work is done only
+/// a frame or so late, too coarse to time a band): each 16 frames, two trace nothing, the second's
+/// time a bare frame's; the others' times, past a bare frame's, are what their rows cost. Fitted
+/// once a 16, growing no more than a quarter, between an eighth of a sample and a sample a frame
+/// (a page's frames go out without waiting, so their times answer late: a fit to each overshoots).
+#[derive(Default)]
+struct Frames {
+    /// When the last frame began, and the rows it sent.
+    at: Option<(f64, u32)>,
+    /// The frame's place in the 16 (0 and 1: no rows).
+    k: u32,
+    /// A bare frame's time, ms.
+    bare: Option<f64>,
+    /// This 16's traced frames: their times, rows, how many.
+    sum: (f64, f64, u32),
+}
+
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+impl Frames {
+    /// A frame begins in a picture `h` rows high: the last one's time taken, the pace fitted.
+    /// True: send no rows this frame.
+    fn tick(&mut self, pace: &mut Pace, h: u32) -> bool {
+        let now = crate::viewer::now_ms();
+        if let Some((at, sent)) = self.at
+            && now - at < 5000.0
+        {
+            let ms = now - at;
+            if self.k == 2 {
+                self.bare = Some(self.bare.map_or(ms, |b| b + 0.3 * (ms - b)));
+            } else if self.k >= 3 || self.k == 0 {
+                self.sum = (self.sum.0 + ms, self.sum.1 + sent as f64, self.sum.2 + 1);
+            }
+        }
+        if self.k == 0 {
+            if let (Some(bare), (t, r, n @ 1..)) = (self.bare, self.sum) {
+                let (t, r) = (t / n as f64, r / n as f64);
+                // a slow page's frames may grow by a quarter for the trace
+                pace.budget_ms = 8f64.max(0.25 * bare);
+                let per_row = ((t - bare).max(0.0) / r.max(1.0)).max(1e-6);
+                let fit = (pace.budget_ms / per_row).min(pace.rows as f64 * 1.25) as u32;
+                let lo = (h / 8).max(8);
+                pace.rows = (fit / 8 * 8).clamp(lo, h.max(lo));
+            }
+            self.sum = (0.0, 0.0, 0);
+        }
+        let probe = self.k < 2;
+        self.k = (self.k + 1) % 16;
+        self.at = Some((now, 0));
+        probe
+    }
+
+    fn sent(&mut self, rows: u32) {
+        if let Some((_, s)) = &mut self.at {
+            *s = rows;
+        }
     }
 }
 
@@ -66,8 +134,12 @@ pub struct Live {
     /// waits for it).
     stage: Option<(u32, u32)>,
     /// A band measured: when it was sent, its rows; `done` says when the GPU had finished it.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     measuring: Option<(f64, u32)>,
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     done: std::sync::Arc<std::sync::Mutex<Option<f64>>>,
+    /// The browser's measure (`Frames`).
+    frames: Frames,
 }
 
 impl Live {
@@ -85,6 +157,7 @@ impl Live {
             stage: None,
             measuring: None,
             done: Default::default(),
+            frames: Frames::default(),
         }
     }
 
@@ -147,14 +220,23 @@ impl Live {
             self.restart();
             self.last = Some((view, settings));
         }
-        // what the GPU took for the band measured (callbacks come with a poll natively)
+        // natively, what the GPU took for the band measured (its callback comes with a poll); in
+        // the browser, the page's frames
         #[cfg(not(target_arch = "wasm32"))]
-        let _ = self.tracer.device.poll(wgpu::PollType::Poll);
-        if let Some((sent, rows)) = self.measuring
-            && let Some(at) = self.done.lock().ok().and_then(|mut d| d.take())
-        {
-            self.pace.fit(at - sent, rows);
-            self.measuring = None;
+        let probe = {
+            let _ = self.tracer.device.poll(wgpu::PollType::Poll);
+            if let Some((sent, rows)) = self.measuring
+                && let Some(at) = self.done.lock().ok().and_then(|mut d| d.take())
+            {
+                self.pace.fit(at - sent, rows);
+                self.measuring = None;
+            }
+            false
+        };
+        #[cfg(target_arch = "wasm32")]
+        let probe = self.frames.tick(&mut self.pace, size.1);
+        if probe {
+            return true;
         }
         let h = size.1;
         // this frame's rows: a denoise's passes under way first (the trace waits for it), then
@@ -198,6 +280,8 @@ impl Live {
                 self.stage = Some((0, 0));
             }
         }
+        self.frames.sent(sent);
+        #[cfg(not(target_arch = "wasm32"))]
         if self.measuring.is_none() && sent > 0 {
             let done = self.done.clone();
             self.measuring = Some((crate::viewer::now_ms(), sent));
@@ -413,20 +497,23 @@ mod tests {
 
     #[test]
     fn the_pace_fills_the_budget_and_backs_off() {
+        // a GPU at 0.01 ms a row, measured 20 ms late whatever the rows (as a page's queue says)
+        let took = |rows: u32| 20.0 + 0.01 * rows as f64;
         let mut p = Pace::default();
-        // a fast GPU: 0.01 ms a row grows to the budget's 800 rows, doubling at most each time
-        p.fit(0.64, 64);
+        // it grows no more than doubling at once, to about the budget's 800 rows past the floor
+        p.fit(took(64), 64);
         assert_eq!(p.rows, 128);
-        for _ in 0..10 {
+        for _ in 0..12 {
             let r = p.rows;
-            p.fit(0.01 * r as f64, r);
+            p.fit(took(r), r);
         }
-        assert_eq!(p.rows, 800);
-        // slower: it backs off at once, to the rows the budget holds, a multiple of 8
-        p.fit(800.0 * 0.1, 800);
-        assert_eq!(p.rows, 80);
+        assert!((780..=880).contains(&p.rows) && p.rows % 8 == 0, "{}", p.rows);
+        // slower: it backs off at once, to the rows the budget holds
+        let r = p.rows;
+        p.fit(20.0 + 0.1 * r as f64, r);
+        assert!((72..=96).contains(&p.rows), "{}", p.rows);
         // however slow, a band of 8 rows a frame still goes
-        p.fit(1e4, 80);
+        p.fit(1e4, p.rows);
         assert_eq!(p.rows, 8);
     }
 

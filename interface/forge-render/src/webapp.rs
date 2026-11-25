@@ -82,6 +82,7 @@ enum Ask {
     Machine(String),
     /// `Gui::capture_command`'s words: a photo or a recording, as Capture's settings say.
     Capture(String),
+    Studio(String),
 }
 
 thread_local! {
@@ -514,6 +515,11 @@ impl Host {
                         self.gui.shell.status = e;
                     }
                 }
+                Ask::Studio(c) => {
+                    if let Some(l) = self.gui.studio_live() {
+                        l.target = if c == "stop" { l.traced() } else { 1024 };
+                    }
+                }
                 Ask::Rebuild => self.gui.rebuild_open(),
                 Ask::Apply(op) => {
                     if let Err(e) = self.gui.fg_apply(op) {
@@ -863,6 +869,17 @@ fn state_json(g: &Gui, canvas: Json) -> String {
                 ),
                 ("last", g.shell.capture.last.clone().into()),
             ]),
+        ),
+        // the Render Studio's live view: samples shown, traced, rows a frame
+        (
+            "studio",
+            g.studio_progress().map_or(Json::Null, |(shown, traced, rows)| {
+                Json::obj(vec![
+                    ("shown", num(shown as f64)),
+                    ("traced", num(traced as f64)),
+                    ("rows", num(rows as f64)),
+                ])
+            }),
         ),
         ("cam", cam_json(g)),
         ("robot", robot_json(g)),
@@ -1316,6 +1333,12 @@ pub fn app_machine(cmd: String) {
 #[wasm_bindgen]
 pub fn app_capture(words: String) {
     ask(Ask::Capture(words));
+}
+
+/// The Render Studio's live view (tests): `stop` it where it is, or let it `go` on.
+#[wasm_bindgen]
+pub fn app_studio(cmd: String) {
+    ask(Ask::Studio(cmd));
 }
 
 /// The app's state as JSON: see `state_json`.
