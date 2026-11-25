@@ -2034,3 +2034,92 @@ fn a_replans_first_frame_draws_its_own_plan() {
         assert!(red.is_empty(), "{part}: frame 0 draws {red:?} red, every check passing");
     }
 }
+
+/// Showcase 4 (off unless BENDSIM_PICKERS_CLIP names a folder): the stations set up by hand. The
+/// TruBend tray as planned, passing; station 1's punch swapped in its picker for a gooseneck,
+/// which meets the ram at once (said red); Simulate Again plans around the stations as they now
+/// are; the new program played. 1920 x 1080 frames, frame-NNNN.ppm.
+#[test]
+fn a_pickers_clip() {
+    use forge_lang::error::Op;
+    let Ok(dir) = std::env::var("BENDSIM_PICKERS_CLIP") else { return };
+    let Ok(mut h) = Headless::new((1920.0, 1080.0), 1.0) else { return };
+    h.step();
+    let d = scratch("pickers-clip");
+    let f = d.join("load_tray.fg");
+    let src = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/sheetmetal/load_tray.fg");
+    std::fs::copy(src, &f).unwrap();
+    open(&mut h, f.to_str().unwrap());
+    click(&mut h, "tab:Environments");
+    click(&mut h, "tool:Bend Simulation");
+    let c = Choice {
+        press: Some("trumpf-trubend-5130".into()),
+        stations_auto: true,
+        ..Choice::default()
+    };
+    {
+        let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+        b.redo(c, "std-eu");
+        b.write_doc().expect("written");
+        b.reload();
+        b.follow = true;
+    }
+    let mut k = 0usize;
+    let mut hold = |h: &mut Headless, frames: usize, set: &dyn Fn(&mut forge_render::shell::bendsim::BendSimUi)| {
+        for _ in 0..frames {
+            set(h.gui.shell.sheet.bend_sim.as_mut().unwrap());
+            h.step();
+            std::fs::write(format!("{dir}/frame-{k:04}.ppm"), h.ppm()).unwrap();
+            k += 1;
+        }
+    };
+    // as planned: Machine & Tools, bend 1 being made, every check passing
+    hold(&mut h, 75, &|b| {
+        b.pane = forge_render::shell::bendsim::Pane::Setup;
+        b.playing = false;
+        b.step = 0;
+        b.t = 0.6;
+    });
+    // station 1's punch picked: the gooseneck OW200/K
+    {
+        let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+        let name = b.doc.as_ref().unwrap().stations[0].clone();
+        b.doc_op(&Op::SetArg { id: name, arg: "punch".into(), text: "\"trumpf/OW200-K\"".into() })
+            .expect("the punch picked");
+    }
+    let at = {
+        let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
+        let st = &b.sim.as_ref().unwrap().plan.steps[0];
+        let phimax = st.angle + st.overbend;
+        st.failures().iter().find_map(|c| c.phi).map_or(0.6, |p| 0.4 + 0.35 * (p / phimax).clamp(0.0, 1.0))
+    };
+    hold(&mut h, 105, &|b| {
+        b.playing = false;
+        b.step = 0;
+        b.t = at;
+    });
+    // Simulate Again: planned around the stations as they now stand
+    {
+        let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+        let (c, t) = (b.choice.clone(), b.tooling.clone());
+        b.redo(c, &t);
+    }
+    hold(&mut h, 45, &|b| {
+        b.playing = false;
+        b.step = 0;
+        b.t = 0.0;
+    });
+    // the new program, played
+    let n = h.gui.shell.sheet.bend_sim.as_ref().unwrap().steps();
+    let frames = 120 * n.max(1);
+    for i in 0..frames {
+        let x = i as f64 / frames as f64 * n as f64;
+        hold(&mut h, 1, &|b| {
+            b.pane = forge_render::shell::bendsim::Pane::Program;
+            b.playing = false;
+            b.set_position(x);
+        });
+    }
+    let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
+    eprintln!("pickers clip: {k} frames; re-planned feasible {:?}; note {:?}", b.sim.as_ref().map(|s| s.plan.feasible), b.note);
+}
