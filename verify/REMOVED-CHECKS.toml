@@ -95,12 +95,19 @@ id = "contact-ball-quadric-lower"
 owner = "CAM-3D-FINISH"
 removed = "certify_bb (via check::closed_form, in certify_shared and certify_with's column route) skipped where the closed-form bound proves Clear: the bound"
 rust = { file = "kernel/forge-cam-geom/src/contact.rs", fn = "lower" }
-reviewed_at = "61360b08f6e52e02"
+# 2026-11-25 (CAM-SPEED, cam/speed-bull): the disc capsule (bull-nose cutters: a > 0) re-read
+# against the new code by FALLBACK (the -(a + rho) floor, eb5f279e), EXACT-CORE (SAFE) and the
+# coordinator's independent second review (SAFE; 2,191 brute-force poses, 0 violations)
+reviewed_at = "3564e850de70583e"
 level = "L1"
-hyp = "H.contact (verify/forge-cam/RESUME.md): sd_K <= sd_B for B in capsule K; the shell step; the tangent-plane bound of a convex quadratic over a box; the full surface bounds the trimmed patch"
+hyp = "H.contact (verify/forge-cam/RESUME.md): sd_K <= sd_B for B in capsule K (a disc capsule: K the points within rho of a solid core cylinder of radius a; P = P0 swept by the horizontal disc, a face crossing it floored at -(a + rho)); the shell step; the tangent-plane bound of a convex quadratic over a box; the full surface bounds the trimmed patch"
 lemmas = []
 tests = [
   { file = "kernel/forge-cam-geom/src/contact.rs", name = "never_above_the_true_minimum", kind = "sampling" },
+  { file = "kernel/forge-cam-geom/src/contact.rs", name = "a_bull_noses_bound_is_never_above_the_true_minimum", kind = "sampling" },
+  { file = "kernel/forge-cam-geom/src/contact.rs", name = "review_a_disc_capsules_bound_never_exceeds_the_truth", kind = "sampling" },
+  { file = "kernel/forge-cam-geom/src/contact.rs", name = "review_a_small_corner_bull_through_a_face_is_never_certified", kind = "mutation" },
+  { file = "kernel/forge-cam-geom/src/contact.rs", name = "review_a_straddling_disc_capsule_clears_a_gouge", kind = "mutation" },
   { file = "kernel/forge-cam-geom/src/contact.rs", name = "nan_inf_and_overflow_are_refused", kind = "mutation" },
   { file = "kernel/forge-cam-geom/src/contact.rs", name = "degenerate_moves_and_the_inside_case", kind = "unit" },
   { file = "kernel/forge-cam-geom/src/contact.rs", name = "exact_on_a_sphere_touching_from_above", kind = "unit" },
