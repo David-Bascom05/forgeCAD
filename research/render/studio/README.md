@@ -25,3 +25,16 @@ an estimate of what's left) and Cancel, the button saying "Rendering…"; at the
 its file (Open folder, Copy path, Close) and "Render saved: PATH" in the status bar; a failure says
 why (tests/studio_model.rs render_image_shows_its_progress_at_once_then_its_result). A file named
 alone (render.png) goes beside the document.
+
+11-live-refining.png, 12-render-file-hint.png, 13-recording-pill.png (1400×860, dark;
+`STUDIO_UX_SHOTS=DIR cargo test --release --test studio_model shots_for_ux`):
+- 11: the live view between its denoise steps. It traces a band of rows a frame and shows the
+  picture at 8, 16, 32, 64 samples then every 64, so on a slow GPU the picture sits still a while.
+  The badge says it's still refining ("Tracing · N samples", the count traced, with a spinner;
+  hover: "Refines until N samples; edits restart it") and goes back to "N samples · denoised" when
+  done.
+- 12: Output open, the File field empty with its hint "a new file in the Capture folder": a render
+  goes there as `<document>-render-<time>.png` (the document's folder if Capture has none), and the
+  status says "Wrote PATH".
+- 13: a recording under way: its pill with Cancel and "Esc" beside it (Cancel discards a video;
+  frames already written are kept).

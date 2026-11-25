@@ -204,6 +204,11 @@ impl Scene {
     pub fn set_part(&mut self, part: u32, center: [f32; 3], radius: f32, chords: Vec<f32>) {
         self.centers[part as usize] = center;
         self.chords[part as usize] = chords;
+        // a box kept from the old shape would frame the old part (a sheet's flat pattern framed as
+        // its folded part): the new sphere's cube until the caller gives the tight box
+        if let Some(b) = self.boxes.get_mut(part as usize) {
+            *b = (center.map(|c| c - radius), center.map(|c| c + radius));
+        }
         for i in 0..self.placements.len() {
             if self.placements[i].part == part {
                 let rows = self.placements[i].rows;
@@ -279,6 +284,14 @@ impl Scene {
     /// Each part's box in its own space: bounds then hold what's shown, tightly.
     pub fn set_part_boxes(&mut self, boxes: Vec<crate::explode::Aabb>) {
         self.boxes = boxes;
+    }
+
+    /// One part's box after its shape changed (after `set_part`); ignored when the scene keeps no
+    /// boxes.
+    pub fn set_part_box(&mut self, part: u32, b: crate::explode::Aabb) {
+        if let Some(x) = self.boxes.get_mut(part as usize) {
+            *x = b;
+        }
     }
 
     /// The box of what's shown, by the parts' boxes (none without them, or with nothing shown).
