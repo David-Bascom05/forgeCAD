@@ -816,3 +816,6 @@ no-output (prints only: FORGE_CAM_DEBUG traces each sign refinement to stderr)  
 no-output (prints only: the FORGE_CAM_DEBUG flag, read once)  @ forge-num/src/real.rs|lazy|static DBG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 no-output (prints only: the FORGE_CAM_DEBUG flag, read once)  @ forge-num/src/real.rs|static|static DBG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 no-output (lookups only: get/insert/remove, never iterated; a fixed unseeded hasher, Fx)  @ forge-num/src/real.rs|hash-order|struct Memo(std::collections::HashMap<Key, R, std::hash::BuildHasherDefault<Fx>>);
+no-output (nothing counted unless built with forge-step's `times` feature, which no build of the app or the kernel sets; the counts are per-phase nanoseconds printed by examples/steptimes, never read by a read)  @ forge-step/src/read.rs|atomic|pub static NS: [std::sync::atomic::AtomicU64; 8] = [const { std::sync::atomic::AtomicU64::new(0) }; 8];
+no-output (same: the clock is read only inside `times::timed` under the `times` feature, and only to add to NS)  @ forge-step/src/read.rs|clock|let t = std::time::Instant::now();
+no-output (same static as the atomic line above)  @ forge-step/src/read.rs|static|pub static NS: [std::sync::atomic::AtomicU64; 8] = [const { std::sync::atomic::AtomicU64::new(0) }; 8];

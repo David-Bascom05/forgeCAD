@@ -12,6 +12,10 @@ forge-geom = { path = "../forge-geom" }
 forge-topo = { path = "../forge-topo" }
 forge-mesh = { path = "../forge-mesh" }
 
+[features]
+# per-phase CPU time of a read, summed over its solids (`read::times`): research/import-speed
+times = []
+
 [dev-dependencies]
 forge-ops = { path = "../forge-ops" }
 forge-bool = { path = "../forge-bool" }

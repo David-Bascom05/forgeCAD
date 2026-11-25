@@ -1492,7 +1492,7 @@ fn measures_agree<'a>(
     body: &Body,
     pre: Option<(&'a forge_mesh::TriMesh, u64)>,
 ) -> Result<Measured<'a>, String> {
-    let m = forge_topo::mass::mass_rel(body, 1e-6);
+    let m = times::timed(5, || forge_topo::mass::mass_rel(body, 1e-6));
     if forge_geom::budget::over() {
         return Err(TOO_LONG.into());
     }
@@ -1509,7 +1509,7 @@ fn measures_agree<'a>(
             ));
         }
     };
-    let (warning, mesh) = mesh_agrees(body, &m, pre)?;
+    let (warning, mesh) = times::timed(6, || mesh_agrees(body, &m, pre))?;
     Ok((warning, Some(m), mesh))
 }
 
@@ -1914,11 +1914,11 @@ pub(crate) fn finish(
     lim: &Limits,
     stats: &mut Stats,
 ) -> Result<Finished, String> {
-    let (mut body, budget) = healed(proto, uncertainty, lim, stats)?;
-    if laid_out_in_a_speck(&body) {
+    let (mut body, budget) = times::timed(2, || healed(proto, uncertainty, lim, stats))?;
+    if times::timed(3, || laid_out_in_a_speck(&body)) {
         return Err(SPECK.into());
     }
-    record_deviations(&mut body, stats);
+    times::timed(4, || record_deviations(&mut body, stats));
     let agree = measures_agree(&body, None);
     drop(budget);
     let (unverified, mass, mesh) = agree?;
@@ -2066,7 +2066,7 @@ pub fn import_drawn(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> 
         let s = &imp.solids[k];
         s.mesh
             .is_none()
-            .then(|| s.display_mesh().ok().map(std::borrow::Cow::into_owned))
+            .then(|| times::timed(7, || s.display_mesh().ok().map(std::borrow::Cow::into_owned)))
     });
     for (s, m) in imp.solids.iter_mut().zip(drawn) {
         if let Some(m) = m {
@@ -2091,7 +2091,7 @@ struct Head<'a> {
 }
 
 fn head<'a>(text: &'a [u8], lim: &Limits, only_measure: bool) -> Result<Head<'a>, ImportError> {
-    let f = parse(text, lim).map_err(ImportError::Parse)?;
+    let f = times::timed(0, || parse(text, lim)).map_err(ImportError::Parse)?;
     // each solid's context: from the representation that lists it
     let mut ctx_of: BTreeMap<u32, u32> = BTreeMap::new();
     let mut any_ctx = None;
@@ -2162,7 +2162,7 @@ fn head<'a>(text: &'a [u8], lim: &Limits, only_measure: bool) -> Result<Head<'a>
 fn built(h: &Head<'_>) -> (Vec<std::sync::Mutex<Option<Built>>>, Vec<usize>) {
     let built = forge_math::par::map(h.roots.len(), |k| {
         let (id, r, ctx) = h.roots[k];
-        std::sync::Mutex::new(Some(build_root(&h.f, id, r, ctx, h.assembly)))
+        std::sync::Mutex::new(Some(times::timed(1, || build_root(&h.f, id, r, ctx, h.assembly))))
     });
     let sizes: Vec<usize> = built
         .iter()
@@ -2550,6 +2550,44 @@ fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> Vec<Occurrence> {
         }
     }
     out
+}
+
+/// Per-phase time of reads, summed over solids and threads, with the `times` feature (else
+/// nothing is counted, and `timed` is its expression alone): research/import-speed/CHECKS.md.
+pub mod times {
+    /// The phases, in the order `finish` runs them.
+    pub const NAMES: [&str; 8] = ["parse", "topology", "heal", "speck", "deviations", "mass", "mesh check", "display mesh"];
+    #[cfg(feature = "times")]
+    pub static NS: [std::sync::atomic::AtomicU64; 8] = [const { std::sync::atomic::AtomicU64::new(0) }; 8];
+
+    /// `f()`, its wall time on this thread added to phase `k`.
+    #[inline(always)]
+    pub fn timed<T>(k: usize, f: impl FnOnce() -> T) -> T {
+        #[cfg(feature = "times")]
+        {
+            let t = std::time::Instant::now();
+            let x = f();
+            NS[k].fetch_add(t.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
+            x
+        }
+        #[cfg(not(feature = "times"))]
+        {
+            let _ = k;
+            f()
+        }
+    }
+
+    /// Each phase's seconds so far, and the counts set back to 0.
+    pub fn take() -> [f64; 8] {
+        #[cfg(feature = "times")]
+        {
+            NS.each_ref().map(|n| n.swap(0, std::sync::atomic::Ordering::Relaxed) as f64 * 1e-9)
+        }
+        #[cfg(not(feature = "times"))]
+        {
+            [0.0; 8]
+        }
+    }
 }
 
 #[cfg(test)]
