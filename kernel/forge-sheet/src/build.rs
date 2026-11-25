@@ -2290,7 +2290,18 @@ impl<'a> Strips<'a> {
                                             // stretch are nearest its middle's at its ends
                                             sag(u)?;
                                             let m = geo.point(inset(u.mid()), w);
-                                            Some(stretch(m, [geo.point(inset(u.lo), w), geo.point(inset(u.hi), w)]))
+                                            let flat = match bd.piece {
+                                                Piece::Arc { c, r, .. } => c.x.abs() + c.y.abs() + r + TOL,
+                                                _ => [inset(u.lo), inset(u.hi)]
+                                                    .iter()
+                                                    .map(|q| q.x.abs() + q.y.abs())
+                                                    .fold(0.0, f64::max),
+                                            };
+                                            Some(stretch(
+                                                m,
+                                                [geo.point(inset(u.lo), w), geo.point(inset(u.hi), w)],
+                                                geo.magnitude(flat, w),
+                                            ))
                                         },
                                         &|u| Some(geo.point(inset(u), w)),
                                         &reach,
@@ -2318,7 +2329,11 @@ impl<'a> Strips<'a> {
                                     // plane or across a bend's radius)
                                     &|u| {
                                         let m = geo.point(q, t * u.mid());
-                                        Some(stretch(m, [geo.point(q, t * u.lo), geo.point(q, t * u.hi)]))
+                                        Some(stretch(
+                                            m,
+                                            [geo.point(q, t * u.lo), geo.point(q, t * u.hi)],
+                                            geo.magnitude(q.x.abs() + q.y.abs(), t),
+                                        ))
                                     },
                                     &|u| Some(geo.point(q, t * u)),
                                     &reach,
@@ -2988,12 +3003,27 @@ impl<'a> Strips<'a> {
     }
 }
 
-/// How far a segment's or a short arc's points lie from its middle `m`, given its ends: the
-/// farther end, widened past the rounding of the computed points.
-fn stretch(m: Point3, ends: [Point3; 2]) -> f64 {
+/// How far a segment's or an arc's points lie from its middle `m`, given its ends: the farther
+/// end (a segment by convexity; an arc parametrised by angle, each half turning at most a half
+/// turn, by 2R sin(phi / 2) rising in phi), widened past the rounding of the computed points.
+/// That rounding scales with the inputs' magnitude `mag` (the frame's origin, the arc's centre
+/// and radius, the bend's radius), not the points' (which cancellation can make small): 1e-12
+/// of it is past a few dozen ulps of any of them.
+fn stretch(m: Point3, ends: [Point3; 2], mag: f64) -> f64 {
     let far = ends.iter().map(|e| e.distance(m)).fold(0.0, f64::max);
-    let mag = [m.x, m.y, m.z].iter().fold(1.0f64, |a, c| a.max(c.abs()));
+    let mag = [m.x, m.y, m.z, mag].iter().fold(1.0f64, |a, c| a.max(c.abs()));
     far + 1e-12 * mag
+}
+
+impl Geo {
+    /// The magnitude of a folded point's inputs at a flat point of size `p` and depth `w`.
+    fn magnitude(&self, p: f64, w: f64) -> f64 {
+        let o = |f: &Frame| f.origin.x.abs() + f.origin.y.abs() + f.origin.z.abs();
+        match self {
+            Geo::Plane(f) => o(f) + p + w.abs(),
+            Geo::Round { axis, rho0, .. } => o(axis) + rho0.abs() + p + w.abs(),
+        }
+    }
 }
 
 /// The deepest point found along a curve over fractions 0..1 by `depth`, by halving while
