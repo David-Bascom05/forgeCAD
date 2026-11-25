@@ -2428,7 +2428,12 @@ fn library_vise(
 
 /// Old forge-tooling vise names and their workholding-library successors (same jaw width,
 /// height and thickness and the same opening; the successor adds the body under the jaws).
-const VISE_SUCCESSOR: &[(&str, &str)] = &[("generic-vise-150", "standin-vise-150")];
+const VISE_SUCCESSOR: &[(&str, &str)] = &[
+    // the 6 in class: Haas Tooling's own 05-0404, whose bodies are the maker's model (the
+    // stand-in stays, named, for a job that has no real vise)
+    ("generic-vise-150", "haas-vise-05-0404"),
+    ("generic-vise-100", "haas-vise-05-0405"),
+];
 
 /// Runs a machining document (its file's directory finds the part) on the built-in library.
 pub fn run(src: &str, dir: &Path) -> Cam {
@@ -3341,14 +3346,19 @@ impl Cam {
         if let Some((_, to)) = VISE_SUCCESSOR.iter().find(|(from, _)| *from == name)
             && let Ok(r) = self.wh.get(to)
         {
-            let w = format!(
-                "vise(\"{name}\") is now the workholding library's {to}: the same jaws and opening, with its body down to the table.{}",
-                if r.standin {
-                    " It's a stand-in: measure your vise."
-                } else {
-                    ""
-                }
-            );
+            let w = if r.standin {
+                format!(
+                    "vise(\"{name}\") is now the workholding library's {to}: the same jaws and opening, with its body down to the table. It's a stand-in: measure your vise."
+                )
+            } else {
+                format!(
+                    "vise(\"{name}\") is now {to}, {}: its bodies are the maker's own model of it, so the clearance checks are against the real vise and not boxes. Its jaws are {} mm wide and {} high and open to {}; name a vise yourself to hold the part another way.",
+                    r.product,
+                    r.get("jaw_width").unwrap_or(f64::NAN),
+                    r.get("jaw_height").unwrap_or(f64::NAN),
+                    r.get("max_opening").unwrap_or(f64::NAN),
+                )
+            };
             if !self.warnings.contains(&w) {
                 self.warnings.push(w);
             }
