@@ -159,6 +159,23 @@ transform, and the op lands on the wrong target (reproduced in `reviews/N1-N9-re
 Retries are answered by (client, op id), whether committed or refused, so a resend never turns a
 refusal into a commit.
 
+**Groups (apply-all), PROTOCOL 3 (2026-11-25).** A bundle of edits the user makes as one (`apply_all`)
+is one op id carrying `ops: [..]`; a single edit is a group of one (one wire shape, no op/ops
+split; the store still reads PROTOCOL 2's single-op records). A group is exactly a run of pending
+ops made in sequence on the author's own text that must commit atomically: each op is rebased
+through the others' ops since its base, never through its own group; StaleSpan counts the group's
+earlier ops as the author's own; the group is checked **once, on its result** (an intermediate text
+may be invalid), with its inverse, under one validation budget; it is one log record, so a refusal
+writes nothing; dedup is by (client, id) for the whole group. Its inverse is the reversed group,
+and a group with no inverse is an undo **barrier** the user is told about (never a silent skip to
+an older edit). Caps: ≤ 256 ops and ≤ 512 KiB, checked on the client before sending and again on
+the server. **No edit before the first Welcome**: a client refuses local edits while joining, so
+no op is ever sent with a guessed base (an op claiming base 0 for a text at seq N was the third
+route to the wrong-target bug; `reviews/m5-groups.md`). The cost: a served part is read-only until
+its server first answers (milliseconds normally; for the whole time if the server is unreachable
+at open). Editing offline from a cold open needs the base the local text corresponds to, kept on
+disk with the text: phase 4.
+
 ### 4.3 Can it be proven?
 
 Yes, in the existing ForgeLang model, op type by op type:
@@ -759,8 +776,13 @@ actor needs only the entries since the oldest base it may rebase from.
 So a server is **CPU-bound**: 2 vCPUs commit ~2,400 ops/s at 0.8 ms. Memory per open document is
 ~210 KB when idle and up to ~1.2 MB when hot: the actor keeps its recent ops in memory up to a
 1 MiB cap (HOSTED-BUILD's soak: 5 documents flat at 30 MB from 22k to 44k ops, so the ~4 KB/op
-growth above was the log filling toward its cap). 8 GB holds ~6,500 hot or tens of thousands of
-idle documents. The cap can be smaller: the in-memory log need only reach the oldest base still
+growth above was the log filling toward its cap). HOSTED-BUILD's 50-minute soak (40 documents ×
+3 sessions, 359,635 edits, 6,000 resumes, 0 failures, 0.663 ms CPU per op) confirms it: RSS rose
+~560 B/op until every log reached the cap, stepped once when the 40 documents compacted together,
+then stayed flat for 27 minutes and ~195,000 ops. So: **~1.2 MB live, ~5 MB RSS high-water per hot
+document** (the synchronized-compaction peak plus what the allocator keeps). 8 GB then holds
+~1,500 hot documents at the high-water mark, or tens of thousands of idle ones; stagger compactions
+to lower the peak. The cap can be smaller: the in-memory log need only reach the oldest base still
 pending among connected clients, since older bases rebase from the store (§4.2).
 
 Cost, from cited on-demand prices (us-east-1, PRIOR-ART-PHASE2 §1–4); users' op rate and
