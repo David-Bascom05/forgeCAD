@@ -21,6 +21,33 @@ checked. TRAIN-CONDUCTOR expects a row in any CAM speed PR that moves outputs.
 
 ## Changes that move outputs
 
+### Bull-nose cutters: a closed form and the section past a cylinder's end (CAM-SPEED)
+
+- **What.** `kernel/forge-cam-geom/src/contact.rs`: the disc capsule (a bull-nose is the points
+  within its corner radius of a solid core cylinder), so `contact::clear` has a closed form for
+  bull-nose cutters (planes exact, cylinders by the axis-perpendicular bound, others d − a;
+  floored at −(a + ρ) where the face crosses the core, FALLBACK's review).
+  `kernel/forge-cam-geom/src/drop.rs` `bull_section`: a bull column's section past a horizontal
+  cylinder face's end, so the gap search sees where the round ends (it saw the untrimmed
+  cylinder and ran to its budget). Branch `cam/speed-bull` (ccc7d37e). The old path:
+  forge-cam-geom feature `old-closed-form` (one train).
+- **Moves.** Only paths made with a bull-nose cutter (no shipped document uses one; the 47
+  documents and the mould fuzz, 84 runs, are byte-identical apart from wall times). Measured,
+  bull-10-r1 rest after a flat-10 zlevel on a corner of mold_core: 64.6 → 11.4 s cold; rest
+  1785 → 425 moves (chords proven clear are not split), cut length 164.6 → 165.9 mm, rapids the
+  same; certification full except G4 in both, least cutter distance −0.01 in both.
+- **Sound.** Both are lower bounds on the cutter's clearance: the capsule contains the body
+  (piece by piece, exact two-sum comparisons at tight points), the section lies below the true
+  section b(√(u² + a²)) and is at least as wide (proof in its doc comment). A tighter bound only
+  proves Clear where the true clearance holds; every posted path is still certified by the
+  checker independently. Reviewed: CAM-3D-FINISH (section proof by hand), EXACT-CORE (SAFE,
+  after the two-sum fix 14df2eb4), FALLBACK (contact.rs: the floor fix eb5f279e); the
+  coordinator's independent second review is pending.
+- **Pinned by.** contact.rs: never_above (ball), a_bull_noses_bound_is_never_above_the_true_minimum,
+  a_bull_nose_has_a_disc_capsule, review_a_disc_capsules_bound_never_exceeds_the_truth, the
+  straddle review test; drop.rs: a_bull_noses_section_is_below_and_as_wide_as_the_true_one,
+  a_bull_section_needs_its_arc_exactly_on_its_ring; finish3d_memo_tests' bull-10-r1 case.
+
 ### SurfDrop's drape gap budget: 2000 -> 1000 cells (CAM-3D-FINISH)
 
 - **What.** `kernel/forge-cam-3d/src/surfdrop.rs` `GAP_BUDGET`: the cells one face's gap
