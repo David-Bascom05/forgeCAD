@@ -1745,9 +1745,10 @@ fn healed(
 /// tolerances set, and its display mesh; what [`finish_checked`] needs to end as `finish` would.
 pub(crate) struct Shown {
     body: Body,
-    /// The display mesh, as [`Solid::display_mesh`] makes it (none: it cannot be drawn).
+    /// The display mesh, as [`Solid::display_mesh`] makes it (none: it cannot be drawn, or not
+    /// within what the check's mesh could have: drawn after the checks where the body is kept).
     mesh: Option<forge_mesh::TriMesh>,
-    /// What drawing it spent, where it did not run its budget out.
+    /// What drawing it spent.
     mesh_spent: Option<u64>,
     /// The read's budget left once the body was healed.
     left: u64,
@@ -1778,11 +1779,18 @@ pub(crate) fn finish_shown(
         record_deviations(&mut body, &mut dev);
         u64::MAX - budget::left()
     };
+    // the display mesh, drawn within no more than its own budget (MESH) or what the check's mesh
+    // could have at most (what healing left, less the tolerances' spend): a drawing that runs that
+    // out is not kept (the check's mesh would run out too: such a body is refused as too long to
+    // measure, or drawn after its checks), and one that does not is MESH's, bit for bit
+    let most = forge_mesh::tessellate::MESH.min(left.saturating_sub(dev_spent));
     let (mesh, mesh_spent) = {
-        let _b = budget::scoped(forge_mesh::tessellate::MESH);
+        let _b = budget::scoped(most);
         let m = forge_mesh::tessellate::tessellate_tolerant(&body, &Solid::display_quality(&body)).ok();
-        let l = budget::left();
-        (m, (l > 0).then_some(forge_mesh::tessellate::MESH - l))
+        match budget::left() {
+            0 => (None, None),
+            l => (m, Some(most - l)),
+        }
     };
     Ok(Shown {
         body,

@@ -209,11 +209,18 @@ mod cached {
 
     const MAGIC: &[u8; 8] = b"FCMODEL1";
 
+    /// The file's bytes hashed in 4 MB pieces on all cores, and the pieces' hashes together.
     pub fn key(bytes: &[u8]) -> u128 {
+        const PIECE: usize = 4 << 20;
+        let pieces: Vec<&[u8]> = bytes.chunks(PIECE).collect();
+        let hashes = forge_math::par::map(pieces.len(), |k| forge_math::hash::hash128(pieces[k]));
         let mut h = forge_math::hash::Hash128::new();
-        h.str("forge-render machine model display meshes 1");
+        h.str("forge-render machine model display meshes 2");
         h.str(env!("FORGE_KERNEL_HASH"));
-        h.bytes(bytes);
+        h.word(bytes.len() as u64);
+        for x in hashes {
+            h.u128(x);
+        }
         h.finish()
     }
 
@@ -404,6 +411,32 @@ pub fn placed_points(t: &Tris, m: &Model) -> Vec<[f64; 3]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Solids' triangles put together are those pushed one by one.
+    #[test]
+    fn solids_flattened_together_as_one_by_one() {
+        let m = |z: f64| forge_mesh::TriMesh {
+            positions: vec![
+                forge_math::Point3::new(0.0, 0.0, z),
+                forge_math::Point3::new(1.0, 0.0, z),
+                forge_math::Point3::new(0.0, 1.0, z),
+                forge_math::Point3::new(1.0, 1.0, z + 1.0),
+            ],
+            triangles: vec![[0, 1, 2], [1, 3, 2]],
+            edges: vec![vec![0, 1], vec![1, 3, 2]],
+            ..Default::default()
+        };
+        let ms: Vec<_> = (0..20).map(|k| m(k as f64)).collect();
+        let mut one = Tris::default();
+        for x in &ms {
+            push(&mut one, &x.positions, &x.triangles, &x.edges);
+        }
+        let all = tris_of("x", ms.iter(), 0).unwrap();
+        assert_eq!(
+            (&all.pos, &all.nrm, &all.tri, &all.edges, &all.patches),
+            (&one.pos, &one.nrm, &one.tri, &one.edges, &one.patches)
+        );
+    }
 
     /// Meshes cached come back the same, and only for their key and whole.
     #[test]
