@@ -102,6 +102,12 @@ def build(ws):
                        stdout=subprocess.PIPE, text=True)
     if b.returncode:
         sys.exit(f"readsmap: the {ws} test build failed")
+    # package names by manifest (a package id names the package only when it differs from its
+    # directory's name: "path+file:///…/forge-model#0.1.0")
+    md = json.loads(subprocess.run(["cargo", "metadata", "--format-version", "1", "--no-deps",
+                                    "--locked"], cwd=os.path.join(root, ws), capture_output=True,
+                                   text=True, check=True).stdout)
+    names = {p["manifest_path"]: p["name"] for p in md["packages"]}
     bins, seen = [], set()
     for line in b.stdout.splitlines():
         m = json.loads(line)
@@ -109,8 +115,7 @@ def build(ws):
             if m["executable"] in seen:
                 continue
             seen.add(m["executable"])
-            pkg = m["package_id"]
-            name = pkg.split(" ")[0] if " " in pkg else pkg.split("#")[-1].split("@")[0]
+            name = names[m["manifest_path"]]
             bins.append((m["executable"], os.path.dirname(m["manifest_path"]), name,
                          m["target"]["name"]))
     return bins
