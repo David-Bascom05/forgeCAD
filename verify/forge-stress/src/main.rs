@@ -312,8 +312,12 @@ impl Ops<'_> {
             let spent = before - forge_geom::budget::left();
             drop(outer);
             let bms = t.elapsed().as_secs_f64() * 1e3;
-            (bms, spent, judge(r))
+            MESH_EVALS.store(0, std::sync::atomic::Ordering::Relaxed);
+            let j = judge(r);
+            (bms, spent, j)
         });
+        // what the answer's mesh spent (0 when there was no answer to mesh)
+        let mesh_evals = MESH_EVALS.load(std::sync::atomic::Ordering::Relaxed);
         match r {
             Res::Skipped => f64::NAN,
             Res::Panic(m) => {
@@ -326,7 +330,10 @@ impl Ops<'_> {
                     op,
                     bms,
                     &st,
-                    &format!(",\"vol\":{},\"all_ms\":{ms:.1},\"evals\":{spent}", num(v)),
+                    &format!(
+                        ",\"vol\":{},\"all_ms\":{ms:.1},\"evals\":{spent},\"mesh_evals\":{mesh_evals}",
+                        num(v)
+                    ),
                     &d,
                 );
                 if st == "empty" { 0.0 } else { v }

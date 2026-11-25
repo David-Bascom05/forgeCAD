@@ -872,9 +872,11 @@ pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
     tessellate_with(body, q, false)
 }
 
-/// What drawing one body from a file may spend outside an import: a top-level op's budget, as a
-/// boolean's (eight files' reads' worth).
-pub const MESH: u64 = forge_geom::budget::OP;
+/// What drawing one body from a file may spend outside an import. A mesh's units (steps round a
+/// fan, a sixteenth of a spline evaluation) cost about a hundredth of a boolean's in time, so its
+/// own: the Haas corpus's dearest mesh that finishes (HFL-3015D-6 #266470 with a copy over it,
+/// hairline faces) spends 606M in about 3 s; this is seven times that, some 25 to 45 s.
+pub const MESH: u64 = 1 << 32;
 
 /// `tessellate`, but a body from a file (`Body::from_file`), whose edges may meet only within their
 /// tolerance and so cross where its faces are laid flat, has those faces drawn as they are: the mesh

@@ -216,9 +216,9 @@ fn a_boolean_and_a_check_past_their_budget_refuse() {
 
 /// UMC-400 #63060 (73 faces): a bore through it, which ran without end in the curve-surface search
 /// on its NURBS faces (K051/K052 of the corpus), now stops at the operation's work budget and
-/// refuses (about 45 s at opt-level 3).
+/// refuses (about 90 s at opt-level 3).
 #[test]
-#[cfg_attr(target_os = "wasi", ignore = "45 s natively")]
+#[cfg_attr(target_os = "wasi", ignore = "90 s natively")]
 fn a_bore_through_umc400s_part_finishes() {
     use forge_bool::{BoolError, Op, boolean};
     use forge_math::{Frame, Point2, UnitVec3, Vec3};

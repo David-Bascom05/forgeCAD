@@ -14,10 +14,11 @@ thread_local! {
 pub const FILE: u64 = 1 << 25;
 
 /// What one top-level operation that is not a file's read may spend (a boolean, a body's check),
-/// where its caller sets no other: eight files' solids' worth, so no op that finished before it was
-/// set refuses (the Haas corpus, research/kernel-stress), and one whose NURBS work would never end
-/// stops in under a few minutes (UMC-400's bore ran unbounded in `subdivide_pieces`).
-pub const OP: u64 = 1 << 28;
+/// where its caller sets no other: sixteen files' solids' worth. The Haas corpus's dearest op that
+/// finishes (ST-20LY #1015581 with a copy beside it, 50 s) spends 289M, so none that finished
+/// before it was set refuses (research/kernel-stress); one whose NURBS work would never end stops
+/// in about a minute and a half (UMC-400's bore ran unbounded in `subdivide_pieces`).
+pub const OP: u64 = 1 << 29;
 
 /// No limit again.
 fn end() {
