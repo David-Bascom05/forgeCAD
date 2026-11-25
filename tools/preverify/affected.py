@@ -47,7 +47,16 @@ for line in git("diff", "--name-status", "-M", f"{a.base}...{a.head}").splitline
 paths = [p for _, p in changes]
 WORKSPACES = [".", "interface/forge-render", "interface/forge-speech"]
 GLOBAL = ("rust-toolchain.toml", "clippy.toml", "rustfmt.toml")
-reads = json.load(open(a.reads))["workspaces"] if a.reads else None
+reads_doc = json.load(open(a.reads)) if a.reads else None
+reads = reads_doc["workspaces"] if reads_doc else None
+# a map made on an older main (an ancestor of BASE): a package that changed between the map's
+# commit and BASE may have tests the map never saw, so any change at all selects it
+stale = set()
+if reads_doc and reads_doc.get("commit") and reads_doc["commit"] != git("rev-parse", a.base).strip():
+    if subprocess.run(["git", "merge-base", "--is-ancestor", reads_doc["commit"], a.base],
+                      cwd=root).returncode:
+        sys.exit(f"affected: the reads map's commit {reads_doc['commit'][:8]} is not in {a.base}")
+    stale = set(git("diff", "--name-only", reads_doc["commit"], a.base).split())
 
 
 def meta(ws):
@@ -158,6 +167,10 @@ for ws in WORKSPACES:
         for name, e in rmap.items():
             if e.get("partial") and name in byname and paths:
                 pick(byname[name], "its reads map is partial")
+        if stale and paths:
+            for d, i in pdirs:
+                if i in members and any(f.startswith(d + "/") for f in stale):
+                    pick(i, "changed since the reads map's main")
         # a member the map does not know (new on this branch) is selected by its own files above
     sel = sorted(why)
     out["workspaces"][ws] = {"packages": sel, "why": why, "members": len(members)}

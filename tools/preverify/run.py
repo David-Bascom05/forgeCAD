@@ -45,6 +45,19 @@ if subprocess.run(["git", "merge-base", "--is-ancestor", base, head]).returncode
 if git("status", "--porcelain", "--untracked-files=no"):
     sys.exit("pre-verify: commit first (the record names a commit)")
 reads = os.path.join(cache, f"reads-{base}.json")
+if not os.path.exists(reads):
+    # the newest published map (branch preverify/maps, one reads-<main sha>.json per main) whose
+    # main is in BASE; affected.py treats what changed since that main conservatively
+    if subprocess.run(["git", "fetch", "-q", "origin", "preverify/maps"], capture_output=True).returncode == 0:
+        for f in git("ls-tree", "--name-only", "FETCH_HEAD").split():
+            c = f[len("reads-"):-len(".json")] if f.startswith("reads-") else ""
+            if c and subprocess.run(["git", "merge-base", "--is-ancestor", c, base],
+                                    capture_output=True).returncode == 0:
+                n = int(git("rev-list", "--count", f"{c}..{base}"))
+                if not os.path.exists(reads) or n < best:
+                    best = n
+                    with open(reads, "w") as fh:
+                        fh.write(git("show", f"FETCH_HEAD:{f}"))
 sel_cmd = [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "affected.py"), "--base", base, "--json"]
 if os.path.exists(reads):
     sel_cmd += ["--reads", reads]
