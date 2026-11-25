@@ -49,3 +49,19 @@ Test-build check (mine, after the preverify false-ok bug): forge-render `cargo c
 | claude/lang-det | LANG-PROOFS | cb88d331 | held | main merge after memfns + new tool, then VERIFY-RENDER; security wording only |
 | fix/overlap-interference-speed | — | — | dropped | remote kept for David |
 | machines/models-cli, builder-off-reasons | — | — | not riding | already in main |
+
+## FLAT-SITES work, pushed by the conductor (FLAT-SITES had wound down and could not push), 2026-11-25 09:15Z
+Every branch was rebuilt from FLAT-SITES's format-patch text on its own verified base, and its tree equals the hash FLAT-SITES gave. Commit shas differ from FLAT-SITES's local ones; the trees are what match.
+
+| branch | base | head | tree | contents |
+|---|---|---|---|---|
+| proof/flush-per-plane | ded2d224 | 7b61ccae | a3bd8102 | (already on origin) n-ary flush per plane |
+| flat/open-shell | ded2d224 | c37bc7e4 | 11d2374a | OpenShell refused (25884d3e) |
+| flat/cone-apex | ded2d224 | a241bcbe | 3aacadb1 | unify keeps a cone's tip (2c926b0b) |
+| flat/check-chords | ded2d224 | ca7739f3 | 8286ca0f | check draws loops finer (68501ad8) |
+| flat/g11-series | ded2d224 | df38be77 | fc184da6 | G11 docs ×3, trim-shallow 68f143af, T budget 1310c255, sampler U 7720efa0 |
+| flat/accum-margin | ded2d224 | 17867560 | 1a14c639 | δ-accumulation 7e530dc1, shape margin 5dd101a7 + 2af37071 |
+| flat/whole-turn | 6cd93533 | d37b853f | aade6d92 | model-size tests 875846c6, exact whole turn 722cad0b |
+| flat/subdivide-reuse | 10d87778 | f0adb8dc | 05d57413 | speed: subdivide reuse (bits identical, −1.08%) + research/handoff/FLAT-SITES.md (blob b66e9152) |
+
+Status: the series (all but subdivide-reuse) goes in train 10, rebased by the conductor onto train 9's main. subdivide-reuse goes in the speed train after gate-memfns (a).
