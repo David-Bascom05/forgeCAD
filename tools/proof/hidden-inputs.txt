@@ -810,3 +810,6 @@ no-output (prints only: FORGE_CAM_DEBUG traces each sign refinement to stderr)  
 no-output (prints only: the FORGE_CAM_DEBUG flag, read once)  @ forge-num/src/real.rs|lazy|static DBG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 no-output (prints only: the FORGE_CAM_DEBUG flag, read once)  @ forge-num/src/real.rs|static|static DBG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 no-output (lookups only: get/insert/remove, never iterated; a fixed unseeded hasher, Fx)  @ forge-num/src/real.rs|hash-order|struct Memo(std::collections::HashMap<Key, R, std::hash::BuildHasherDefault<Fx>>);
+speed (lazy field or constant table: the built-in models, parsed once from data compiled in)  @ forge-workholding/src/model.rs|lazy|static M: OnceLock<Vec<Model>> = OnceLock::new();
+speed (lazy field or constant table: the built-in models, parsed once from data compiled in)  @ forge-workholding/src/model.rs|lazy|use std::sync::OnceLock;
+speed (lazy field or constant table: the built-in models, parsed once from data compiled in)  @ forge-workholding/src/model.rs|static|static M: OnceLock<Vec<Model>> = OnceLock::new();
