@@ -277,6 +277,8 @@ fn main() {
         let keep = at.file_name().unwrap();
         for e in std::fs::read_dir(root.join(parent)).expect("dir").flatten() {
             if e.file_name() != keep && e.file_name() != "target" && e.file_name() != ".git" {
+                // (a native tool: no links on other targets, where relative imports do not reach)
+                #[cfg(unix)]
                 let _ = std::os::unix::fs::symlink(e.path(), scratch.join(parent).join(e.file_name()));
             }
         }

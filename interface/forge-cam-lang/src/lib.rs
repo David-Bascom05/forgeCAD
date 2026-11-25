@@ -104,7 +104,13 @@ fn adaptive_memo(
     // adaptive_reads_no_other_part_of_the_tool), so a stickout or holder edit reuses the path
     let key = format!(
         "adaptive/2 {:?}",
-        (rg, (&tool.tool, tidx, h, feed, ramp_feed, lead_feed), span, ip, prm)
+        (
+            rg,
+            (&tool.tool, tidx, h, feed, ramp_feed, lead_feed),
+            span,
+            ip,
+            prm
+        )
     );
     ADAPTIVE.get_or(key, || {
         forge_cam::adaptive::adaptive(rg, cut, span, ip, prm)
@@ -2641,10 +2647,6 @@ impl Cam {
                         let t0 = std::env::var("FORGE_CAM_TIME")
                             .is_ok()
                             .then(forge_math::clock::Instant::now);
-                        // the prefetch pass posts nothing
-                        if self.prefetch.is_some() && fname == "program" {
-                            return Ok(());
-                        }
                         let v = {
                             let _sp = prof::span(|| format!("stmt\t{fname}\t{name}"));
                             self.call(name, fname, &a, dir)?
@@ -3247,6 +3249,10 @@ impl Cam {
             }
             "probe_wcs" | "inspect" => self.probe_op(name, f, a),
             "program" => {
+                // the prefetch pass posts nothing (a program's value is 0 either way)
+                if self.prefetch.is_some() {
+                    return Ok(V::Num(0.0));
+                }
                 let su: Vec<usize> = match a.get("#0") {
                     Some(V::Setup(i)) => vec![*i],
                     Some(V::Tuple(t)) => t
@@ -4691,7 +4697,11 @@ impl Cam {
                     p
                 })
                 .collect();
-            (paths, map, HOP_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+            (
+                paths,
+                map,
+                HOP_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            )
         });
         if self.hop_maps.len() <= su {
             self.hop_maps.resize(su + 1, None);
@@ -9804,7 +9814,9 @@ impl Cam {
         // the quantised program (integers) and the dialect, each in full
         let rt = {
             let _sp = prof::span(|| format!("roundtrip\tprogram\t{name}"));
-            ROUND_TRIPS.get_or(format!("round_trip/2 {:?}", (&q, &d)), || forge_post::round_trip(&q, &d))
+            ROUND_TRIPS.get_or(format!("round_trip/2 {:?}", (&q, &d)), || {
+                forge_post::round_trip(&q, &d)
+            })
         };
         match rt {
             Ok((txt, _)) => {
@@ -11380,7 +11392,7 @@ mod finish3d_memo_tests {
         forge_dirs::fs::create_dir_all(&dir).unwrap();
         let part = forge_dirs::fs::read_to_string(src_dir.join("mold_core.fg")).unwrap();
         forge_dirs::fs::write(dir.join("mold_core.fg"), &part).unwrap();
-        let doc = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 40, holder: \"bt40-er32\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01)\nleft = rest(op1, tool: t2, after: t1, stepover: 3, area: (-30, -24, 30, 24), grid: 1.5)\n";
+        let doc = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 40, holder: \"bt40-er32\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01)\nleft = rest(op1, tool: t2, after: t1, stepover: 3, area: (-26, -20, -12, -6), grid: 1.5)\n";
         let run = |d: &str| {
             let before = super::FINISHED.computed();
             let cam = super::run(d, &dir);
@@ -11411,9 +11423,9 @@ mod finish3d_memo_tests {
             let r = run(&d);
             assert_eq!((r.0, &r.1), (0, &reply), "{what}: the paths were made again");
         }
-        for (what, d) in [
+        let cases = [
             ("stepover", doc.replace("stepover: 3", "stepover: 2.5")),
-            ("area", doc.replace("(-30, -24, 30, 24)", "(-30, -24, 30, 23)")),
+            ("area", doc.replace("(-26, -20, -12, -6)", "(-26, -20, -12, -7)")),
             ("cutter", doc.replace("\"ball-6\"", "\"bull-10-r1\"")),
             ("earlier cutter", doc.replace("\"flat-10\"", "\"flat-12\"")),
             ("tolerance", doc.replace("tol: 0.01", "tol: 0.02")),
@@ -11421,8 +11433,13 @@ mod finish3d_memo_tests {
                 "heights (the stock's top)",
                 doc.replace("margin: (0, 0, 2)", "margin: (0, 0, 3)"),
             ),
-        ] {
-            assert_eq!(run(&d).0, 1, "{what}: the paths were not made anew");
+        ];
+        // side by side (forge_math::par: in item order; inline where there are no threads):
+        // each case's count is taken around its own run on the thread running it (forge-memo
+        // counts per thread), and no two cases share a key
+        let made = forge_math::par::map(cases.len(), |i| run(&cases[i].1).0);
+        for ((what, _), n) in cases.iter().zip(made) {
+            assert_eq!(n, 1, "{what}: the paths were not made anew");
         }
         let edited = part.replacen("shared bw = 40", "shared bw = 38", 1);
         assert_ne!(edited, part);
@@ -11602,11 +11619,9 @@ mod prefetch_tests {
     #[test]
     fn the_3d_ops_made_ahead_are_the_run_made_fresh() {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
-        // the mould with smaller areas: five 3D ops (zlevel, parallel, waterline, pencil, rest)
-        let src = forge_dirs::fs::read_to_string(dir.join("mold_core_cam.fg"))
-            .unwrap()
-            .replace("area: (-30, -24, 30, 24)", "area: (-12, -9, 12, 9)")
-            .replace("area: (-45, -35, 45, 35)", "area: (-20, -15, 20, 15)");
+        // three 3D ops on a corner of the mould core (small areas, coarse steps): two
+        // surfacing (zlevel, parallel) and one finish3d (pencil), so both arms are made ahead
+        let src = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 40, holder: \"bt40-er32\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01)\nrough = zlevel(op1, tool: t1, leave: 0.5, step: 3, stepover: 4, area: (-34, -28, -6, 0), grid: 1)\nfin = parallel(op1, tool: t2, stepover: 3, area: (-24, -18, -16, -10))\ncorner = pencil(op1, tool: t2, area: (-24, -18, -16, -10), grid: 1)\nprog = program(op1, post: \"fanuc\", number: 1002)\n";
         let reply = |cam: &super::Cam| {
             let mut t = cam.json().to_string();
             for p in &cam.programs {
@@ -11615,13 +11630,29 @@ mod prefetch_tests {
             t
         };
         let (s0, f0) = (super::SURFACED.computed(), super::FINISHED.computed());
-        let cam = super::run(&src, &dir);
+        let cam = super::run(src, &dir);
         assert!(cam.errors.is_empty(), "{:?}", cam.errors);
-        // zlevel, parallel, waterline (surfacing); pencil, rest (finish3d): each made once
-        assert_eq!(super::SURFACED.computed() - s0, 3, "a surfacing op made twice or not at all");
-        assert_eq!(super::FINISHED.computed() - f0, 2, "a finishing op made twice or not at all");
+        assert!(
+            cam.ops.iter().all(|o| o.moves > 0 && o.status == "built"),
+            "an op not built: {:?}",
+            cam.ops
+                .iter()
+                .map(|o| (&o.name, o.moves, o.status, &o.refusal))
+                .collect::<Vec<_>>()
+        );
+        // zlevel, parallel (surfacing); pencil (finish3d): each made once
+        assert_eq!(
+            super::SURFACED.computed() - s0,
+            2,
+            "a surfacing op made twice or not at all"
+        );
+        assert_eq!(
+            super::FINISHED.computed() - f0,
+            1,
+            "a finishing op made twice or not at all"
+        );
         super::memo::bypass(true);
-        let fresh = super::run(&src, &dir);
+        let fresh = super::run(src, &dir);
         super::memo::bypass(false);
         assert_eq!(reply(&cam), reply(&fresh), "made ahead: not the fresh run");
     }
@@ -11705,7 +11736,12 @@ mod adaptive_memo_tests {
         let sq = |x0: f64, y0: f64, x1: f64, y1: f64| {
             let p = [p2(x0, y0), p2(x1, y0), p2(x1, y1), p2(x0, y1)];
             Loop {
-                segs: (0..4).map(|i| Seg::Line { a: p[i], b: p[(i + 1) % 4] }).collect(),
+                segs: (0..4)
+                    .map(|i| Seg::Line {
+                        a: p[i],
+                        b: p[(i + 1) % 4],
+                    })
+                    .collect(),
             }
         };
         let rg = Region {
