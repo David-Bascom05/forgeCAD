@@ -188,6 +188,9 @@ fn window_chosen(v: &mut View, ids: &crate::render::ViewIds, ask: &WindowAsk) ->
 }
 
 pub struct Gui {
+    /// When the status line last took a sync note (a collaborator's version, a refusal): a build
+    /// summary does not write over it for a few seconds (it came right after and hid it).
+    sync_note_at: Option<crate::plat::Instant>,
     /// A photo of the view on its way back from the GPU (`gui_record.rs`).
     photo: Option<gui_record::PhotoJob>,
     /// A recording under way (`gui_record.rs`).
@@ -361,6 +364,7 @@ impl Gui {
         let warm = ctx.run_ui(warm_input, |ui| warm_shell.ui(ui));
         warm_shell.out.clear();
         Gui {
+            sync_note_at: None,
             photo: None,
             recording: None,
             studio: None,
@@ -2411,6 +2415,7 @@ impl Gui {
         // (said whether or not a link is live: a pause's reason most of all)
         if let Some(n) = s.sync_note.take() {
             self.shell.status = n;
+            self.sync_note_at = Some(crate::plat::Instant::now());
         }
         if std::mem::take(&mut s.sync_changed)
             && let Some(p) = &mut self.shell.fg
@@ -2487,7 +2492,13 @@ impl Gui {
                 }) {
                     p.selected = None;
                 }
-                self.shell.status = p.summary.clone();
+                // (a sync note just said stays readable: the summary is in the panel too)
+                if !self
+                    .sync_note_at
+                    .is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(5))
+                {
+                    self.shell.status = p.summary.clone();
+                }
             }
             // every mesh so far, moved out rather than copied (a big import's are tens of MB)
             let restaged = b.asm.as_mut().and_then(|a| a.restage.take());
