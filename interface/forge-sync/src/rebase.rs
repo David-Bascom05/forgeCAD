@@ -29,11 +29,24 @@ pub fn rebase<'a>(op: &Op, client: &str, since: impl IntoIterator<Item = &'a Ent
         if span_op(&op) {
             return Err(Refusal::StaleSpan);
         }
-        if let Op::Rename { from, to } = &e.op {
-            op = rename_in(&op, from, to)?;
+        for x in &e.ops {
+            if let Op::Rename { from, to } = x {
+                op = rename_in(&op, from, to)?;
+            }
         }
     }
     Ok(op)
+}
+
+/// A group brought to the head: each of its ops through `since` like a single op. Never through
+/// the group's own earlier ops: the client made each on the text after them (they are its own,
+/// as its pending ops since base are). Any op refused refuses the group.
+pub fn rebase_group<'a>(
+    ops: &[Op],
+    client: &str,
+    since: impl IntoIterator<Item = &'a Entry> + Clone,
+) -> Result<Vec<Op>, Refusal> {
+    ops.iter().map(|op| rebase(op, client, since.clone())).collect()
 }
 
 /// An op that addresses bytes, not names: valid only on its base text.
@@ -150,7 +163,7 @@ mod tests {
             client: client.into(),
             id: 1,
             base: 0,
-            op,
+            ops: vec![op],
             inv: None,
             th: 0,
         }

@@ -57,7 +57,8 @@ fn rename_then_readd(send_real_base: bool) -> String {
     let mut n = 0;
     let mut sub = |s: &mut Sequencer, st: &mut MemStore, op: &Op| {
         n += 1;
-        s.submit(st, "bob", "bob/b", s.seq(), n, op).unwrap();
+        s.submit(st, "bob", "bob/b", s.seq(), n, std::slice::from_ref(op))
+            .unwrap();
     };
     sub(
         s,
@@ -89,7 +90,7 @@ fn rename_then_readd(send_real_base: bool) -> String {
     let ups: Vec<Up> = std::mem::take(&mut ada.outbox);
     for u in ups {
         let u = match (u, send_real_base) {
-            (Up::Op { id, op, .. }, true) => Up::Op { base: 0, id, op },
+            (Up::Op { id, ops, .. }, true) => Up::Op { base: 0, id, ops },
             (u, _) => u,
         };
         let (out, _) = room.receive(&mut st, 0, u);
@@ -125,7 +126,14 @@ fn a_refused_op_is_not_resent_by_a_resync_welcome() {
     }
     // bob's op lands (ada has not seen it yet)
     room.seq
-        .submit(&mut st, "bob", "bob/b", 0, 1, &set("h", 13.0))
+        .submit(
+            &mut st,
+            "bob",
+            "bob/b",
+            0,
+            1,
+            std::slice::from_ref(&set("h", 13.0)),
+        )
         .unwrap();
     // ada's Resync reaches the server first and is answered at once
     let (welcome, _) = room.receive(&mut st, 0, Up::Resync);
@@ -201,7 +209,8 @@ fn an_op_from_before_a_compaction_is_rebased_from_the_stores_history() {
     let mut n = 0;
     let mut sub = |s: &mut Sequencer, st: &mut MemStore, op: &Op| {
         n += 1;
-        s.submit(st, "bob", "bob/b", s.seq(), n, op).unwrap();
+        s.submit(st, "bob", "bob/b", s.seq(), n, std::slice::from_ref(op))
+            .unwrap();
     };
     sub(
         &mut s,
@@ -224,7 +233,15 @@ fn an_op_from_before_a_compaction_is_rebased_from_the_stores_history() {
     }
     assert!(s.compactions > 0 && s.floor() > 0, "compacted past the rename");
     // ada's edit, made at seq 0 (before the rename), arrives now
-    s.submit(&mut st, "ada", "ada/c", 0, 1, &set("w", 41.0)).unwrap();
+    s.submit(
+        &mut st,
+        "ada",
+        "ada/c",
+        0,
+        1,
+        std::slice::from_ref(&set("w", 41.0)),
+    )
+    .unwrap();
     assert!(s.head().contains("shared width = 41"), "{}", s.head());
     assert!(s.head().contains("shared w = 5"));
 
@@ -248,6 +265,13 @@ fn an_op_from_before_a_compaction_is_rebased_from_the_stores_history() {
         }
     }
     let mut st = NoHistory(st);
-    let r = s.submit(&mut st, "ada", "ada/c", 0, 2, &set("h", 3.0));
+    let r = s.submit(
+        &mut st,
+        "ada",
+        "ada/c",
+        0,
+        2,
+        std::slice::from_ref(&set("h", 3.0)),
+    );
     assert!(matches!(r, Err(Refusal::RebaseGone { base: 0 })), "{r:?}");
 }

@@ -50,10 +50,10 @@ fn a_restored_pending_op_follows_a_rename() {
         "bob/b",
         0,
         1,
-        &Op::Rename {
+        &[Op::Rename {
             from: "w".into(),
             to: "width".into(),
-        },
+        }],
     )
     .unwrap();
     s.submit(
@@ -62,10 +62,10 @@ fn a_restored_pending_op_follows_a_rename() {
         "bob/b",
         1,
         2,
-        &Op::AddFeature {
+        &[Op::AddFeature {
             before: Some("post".into()),
             text: "shared w = 5".into(),
-        },
+        }],
     )
     .unwrap();
     // next open

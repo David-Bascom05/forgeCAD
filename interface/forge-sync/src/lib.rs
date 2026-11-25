@@ -38,14 +38,16 @@ pub struct Entry {
     /// The client (a connection's stable id) it came from: its ops are deduplicated by
     /// (client, id), and its later ops are not transformed through it.
     pub client: String,
-    /// The client's op id.
+    /// The client's op id (a group's: one id for the whole group).
     pub id: u64,
     /// The seq the client made it on.
     pub base: u64,
-    /// The op as applied (rebased).
-    pub op: Op,
-    /// Its exact inverse on the text it was applied to (undo), if it has one.
-    pub inv: Option<Op>,
+    /// The group as applied (rebased), in order: one op, or several committed as one (all or
+    /// none). One record in the log, one seq.
+    pub ops: Vec<Op>,
+    /// Its exact inverse on the text it was applied to (undo), if every op has one: a group,
+    /// the ops' inverses in reverse order.
+    pub inv: Option<Vec<Op>>,
     /// The hash of the text after it.
     pub th: u64,
 }
@@ -305,6 +307,19 @@ pub fn hash_body(b: &forge_topo::Body) -> u64 {
 /// The protocol's limits on one op (checked before anything else, on the server).
 pub const MAX_OP_TEXT: usize = 256 << 10;
 pub const MAX_NAME: usize = 256;
+/// The most ops one group may have (its bytes are bounded by the server's largest message, and
+/// its check runs under the same time budget as one op's).
+pub const MAX_GROUP_OPS: usize = 256;
+
+/// [`check_limits`] for a group: 1 to [`MAX_GROUP_OPS`] ops, each within the limits.
+pub fn check_group(ops: &[Op]) -> Result<(), Refusal> {
+    if ops.is_empty() || ops.len() > MAX_GROUP_OPS {
+        return Err(Refusal::Invalid {
+            why: format!("a group of {} ops (1 to {MAX_GROUP_OPS})", ops.len()),
+        });
+    }
+    ops.iter().try_for_each(check_limits)
+}
 
 /// Refuses an op outside the protocol's limits: a text over [`MAX_OP_TEXT`], a name over
 /// [`MAX_NAME`] or with characters a name cannot have, a non-finite value.
@@ -376,14 +391,16 @@ fn counts(r: &forge_lang::Run) -> Counts {
     c
 }
 
-/// forge-lang's check of an op on `head` (as `edit::apply_checked`, without the reach): applied,
-/// then refused with the first new typed error the result has that `head` had not, counted by
-/// kind. `head_counts`, if known, spare evaluating the head again. `root` confines what files the
-/// evaluation may read (a server passes its project folder). Returns the new text and its counts.
+/// forge-lang's check of a group on `head` (as `edit::apply_checked`, without the reach): its ops
+/// applied in order, then the **result** refused with the first new typed error it has that
+/// `head` had not, counted by kind. The texts between ops are never checked: a group may pass
+/// through an invalid one (a rename, then the reference fixed). `head_counts`, if known, spare
+/// evaluating the head again. `root` confines what files the evaluation may read (a server
+/// passes its project folder). Returns the new text and its counts.
 pub fn validate(
     head: &str,
     head_counts: Option<&Counts>,
-    op: &Op,
+    ops: &[Op],
     dir: Option<std::path::PathBuf>,
     root: Option<std::path::PathBuf>,
 ) -> Result<(String, Counts), Refusal> {
@@ -391,7 +408,7 @@ pub fn validate(
         kind: e.kind().into(),
         text: e.text(),
     };
-    let text = forge_lang::edit::apply(head, op).map_err(lang)?;
+    let text = apply_all(head, ops).map_err(lang)?;
     let opts = forge_lang::Options {
         build: false,
         dir,
@@ -414,8 +431,18 @@ pub fn validate(
     Ok((text, now))
 }
 
-/// The wire protocol's version: a client of another version is refused at Hello.
-pub const PROTOCOL: u32 = 2;
+/// A group's ops applied in order (no check).
+pub fn apply_all(text: &str, ops: &[Op]) -> Result<String, forge_lang::error::Error> {
+    let mut t = std::borrow::Cow::Borrowed(text);
+    for op in ops {
+        t = std::borrow::Cow::Owned(forge_lang::edit::apply(&t, op)?);
+    }
+    Ok(t.into_owned())
+}
+
+/// The wire protocol's version: a client of another version is refused at Hello. 3: an op
+/// message, an entry, an Ack and an Applied carry a group (`ops`).
+pub const PROTOCOL: u32 = 3;
 
 /// This build's kernel: the pinned toolchain and the hash of the kernel's and the language's
 /// sources (build.rs). Geometry is bit-identical only between equal kernels, so a room holds one.

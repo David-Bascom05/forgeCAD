@@ -131,7 +131,7 @@ impl Room {
                 )],
                 vec![],
             ),
-            Up::Op { base, id, op } => match self.seq.submit(store, &author, &client, base, id, &op) {
+            Up::Op { base, id, ops } => match self.seq.submit(store, &author, &client, base, id, &ops) {
                 Ok(c) => {
                     let e = &c.entry;
                     let mut out = vec![(conn, down_for(e, &client))];
@@ -194,7 +194,7 @@ fn down_for(e: &crate::Entry, client: &str) -> Down {
         Down::Ack {
             id: e.id,
             seq: e.seq,
-            op: e.op.clone(),
+            ops: e.ops.clone(),
             inv: e.inv.clone(),
             th: e.th,
         }
@@ -202,7 +202,7 @@ fn down_for(e: &crate::Entry, client: &str) -> Down {
         Down::Applied {
             seq: e.seq,
             author: e.author.clone(),
-            op: e.op.clone(),
+            ops: e.ops.clone(),
             th: e.th,
         }
     }

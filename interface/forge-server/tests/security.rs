@@ -210,7 +210,7 @@ fn client_ids_are_per_account() {
         &Up::Op {
             base: 0,
             id: 1,
-            op: set_w(41.0),
+            ops: vec![set_w(41.0)],
         }
         .text(),
     )
@@ -222,15 +222,15 @@ fn client_ids_are_per_account() {
         &Up::Op {
             base: 1,
             id: 1,
-            op: set_w(77.0),
+            ops: vec![set_w(77.0)],
         }
         .text(),
     )
     .unwrap();
     match next(&mut ra) {
-        Down::Ack { seq, op, .. } => {
+        Down::Ack { seq, ops, .. } => {
             assert_eq!(seq, 2);
-            assert_eq!(op, set_w(77.0));
+            assert_eq!(ops, vec![set_w(77.0)]);
         }
         d => panic!("{d:?}"),
     }
@@ -250,7 +250,7 @@ fn a_fake_hash_only_marks_its_reporter() {
         &Up::Op {
             base: 0,
             id: 1,
-            op: set_w(50.0),
+            ops: vec![set_w(50.0)],
         }
         .text(),
     )
@@ -332,7 +332,7 @@ fn outside_changes_and_one_server_per_folder() {
             &Up::Op {
                 base: 0,
                 id: 1,
-                op: set_w(60.0),
+                ops: vec![set_w(60.0)],
             }
             .text(),
         )
@@ -396,8 +396,14 @@ fn validation_stays_in_the_folder() {
         before: None,
         text: format!("lib_ext = use(\"../{name}\")"),
     };
-    let free = forge_sync::validate(DOC, None, &op, Some(root.clone()), None);
-    let held = forge_sync::validate(DOC, None, &op, Some(root.clone()), Some(root.clone()));
+    let free = forge_sync::validate(DOC, None, std::slice::from_ref(&op), Some(root.clone()), None);
+    let held = forge_sync::validate(
+        DOC,
+        None,
+        std::slice::from_ref(&op),
+        Some(root.clone()),
+        Some(root.clone()),
+    );
     let _ = std::fs::remove_file(&outside);
     let _ = std::fs::remove_dir_all(&root);
     assert!(free.is_ok(), "with no root the file is read: {free:?}");
@@ -447,7 +453,7 @@ fn a_heavy_document_slows_only_itself() {
         &Up::Op {
             base: 0,
             id: 1,
-            op: heavy,
+            ops: vec![heavy],
         }
         .text(),
     )
@@ -458,7 +464,7 @@ fn a_heavy_document_slows_only_itself() {
         &Up::Op {
             base: 0,
             id: 1,
-            op: set_w(55.0),
+            ops: vec![set_w(55.0)],
         }
         .text(),
     )
@@ -480,7 +486,7 @@ fn a_heavy_document_slows_only_itself() {
         &Up::Op {
             base: 1,
             id: 2,
-            op: set_w(41.0),
+            ops: vec![set_w(41.0)],
         }
         .text(),
     )
@@ -506,7 +512,7 @@ fn a_hash_report_on_a_long_log_is_answered_at_once() {
             &Up::Op {
                 base: k,
                 id: k + 1,
-                op: set_w(10.0 + (k % 90) as f64),
+                ops: vec![set_w(10.0 + (k % 90) as f64)],
             }
             .text(),
         )
@@ -573,7 +579,7 @@ fn an_edit_on_disk_while_open_is_never_overwritten() {
         &Up::Op {
             base: 0,
             id: 1,
-            op: set_w(60.0),
+            ops: vec![set_w(60.0)],
         }
         .text(),
     )
@@ -633,7 +639,7 @@ fn a_panic_quarantines_one_document() {
         &Up::Op {
             base: 0,
             id: 1,
-            op: boom,
+            ops: vec![boom],
         }
         .text(),
     )
@@ -646,7 +652,7 @@ fn a_panic_quarantines_one_document() {
         &Up::Op {
             base: 0,
             id: 1,
-            op: set_w(50.0),
+            ops: vec![set_w(50.0)],
         }
         .text(),
     )

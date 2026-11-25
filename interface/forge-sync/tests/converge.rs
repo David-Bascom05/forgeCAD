@@ -394,8 +394,11 @@ fn a_document_cannot_grow_past_its_limits() {
         before: None,
         text: format!("shared big_{k} = {}", "1".repeat(30)),
     };
-    assert!(seq.submit(&mut store, "a", "a/c", 0, 1, &add(1)).is_ok());
-    match seq.submit(&mut store, "a", "a/c", 1, 2, &add(2)) {
+    assert!(
+        seq.submit(&mut store, "a", "a/c", 0, 1, std::slice::from_ref(&add(1)))
+            .is_ok()
+    );
+    match seq.submit(&mut store, "a", "a/c", 1, 2, std::slice::from_ref(&add(2))) {
         Err(forge_sync::Refusal::Invalid { why }) => assert!(why.contains("bytes"), "{why}"),
         x => panic!("{x:?}"),
     }
@@ -445,10 +448,10 @@ fn the_log_compacts_and_a_far_client_catches_up_by_snapshot() {
         "c0",
         0,
         1,
-        &Op::Rename {
+        std::slice::from_ref(&Op::Rename {
             from: "post".into(),
             to: "x".into(),
-        },
+        }),
     );
     assert!(
         matches!(r, Err(forge_sync::Refusal::AlreadyCommitted { .. })),
@@ -519,45 +522,57 @@ fn retries_are_answered_by_marks_and_refused_ids() {
         from: "nothing_here".into(),
         to: "x".into(),
     };
-    assert!(seq.submit(&mut st, "ada", "ada/c", 0, 1, &set_w(41.0)).is_ok());
     assert!(
-        seq.submit(&mut st, "ada", "ada/c", 1, 2, &bad).is_err(),
+        seq.submit(&mut st, "ada", "ada/c", 0, 1, std::slice::from_ref(&set_w(41.0)))
+            .is_ok()
+    );
+    assert!(
+        seq.submit(&mut st, "ada", "ada/c", 1, 2, std::slice::from_ref(&bad))
+            .is_err(),
         "op 2 refused"
     );
-    assert!(seq.submit(&mut st, "ada", "ada/c", 1, 3, &set_w(43.0)).is_ok());
+    assert!(
+        seq.submit(&mut st, "ada", "ada/c", 1, 3, std::slice::from_ref(&set_w(43.0)))
+            .is_ok()
+    );
     // in the log: the same entry again
-    let again = seq.submit(&mut st, "ada", "ada/c", 0, 1, &set_w(41.0)).unwrap();
+    let again = seq
+        .submit(&mut st, "ada", "ada/c", 0, 1, std::slice::from_ref(&set_w(41.0)))
+        .unwrap();
     assert!(again.duplicate && again.entry.seq == 1);
     seq.compact(&mut st).unwrap();
     // before the log: committed ones are AlreadyCommitted, the refused one is checked again
     for id in [1, 3] {
-        let r = seq.submit(&mut st, "ada", "ada/c", 0, id, &set_w(99.0));
+        let r = seq.submit(&mut st, "ada", "ada/c", 0, id, std::slice::from_ref(&set_w(99.0)));
         assert!(
             matches!(r, Err(forge_sync::Refusal::AlreadyCommitted { .. })),
             "{id}: {r:?}"
         );
     }
-    let r = seq.submit(&mut st, "ada", "ada/c", 2, 2, &bad);
+    let r = seq.submit(&mut st, "ada", "ada/c", 2, 2, std::slice::from_ref(&bad));
     assert!(
         !matches!(r, Err(forge_sync::Refusal::AlreadyCommitted { .. })),
         "{r:?}"
     );
     // another client's same ids are its own
-    assert!(seq.submit(&mut st, "ada", "ada/d", 2, 1, &set_w(44.0)).is_ok());
+    assert!(
+        seq.submit(&mut st, "ada", "ada/d", 2, 1, std::slice::from_ref(&set_w(44.0)))
+            .is_ok()
+    );
     // reopened from the snapshot (a restart): the same answers
     seq.compact(&mut st).unwrap();
     let mut seq = Sequencer::open(&mut st, "part.fg", DOC, None).unwrap();
-    let r = seq.submit(&mut st, "ada", "ada/c", 0, 3, &set_w(99.0));
+    let r = seq.submit(&mut st, "ada", "ada/c", 0, 3, std::slice::from_ref(&set_w(99.0)));
     assert!(
         matches!(r, Err(forge_sync::Refusal::AlreadyCommitted { .. })),
         "{r:?}"
     );
-    let r = seq.submit(&mut st, "ada", "ada/c", 3, 2, &bad);
+    let r = seq.submit(&mut st, "ada", "ada/c", 3, 2, std::slice::from_ref(&bad));
     assert!(
         !matches!(r, Err(forge_sync::Refusal::AlreadyCommitted { .. })),
         "{r:?}"
     );
-    let r = seq.submit(&mut st, "ada", "ada/d", 0, 1, &set_w(99.0));
+    let r = seq.submit(&mut st, "ada", "ada/d", 0, 1, std::slice::from_ref(&set_w(99.0)));
     assert!(
         matches!(r, Err(forge_sync::Refusal::AlreadyCommitted { .. })),
         "{r:?}"
@@ -584,7 +599,7 @@ fn a_gapped_ack_settles_its_op_and_the_resync_resends_nothing() {
     c.receive(Down::Ack {
         id: 1,
         seq: 5,
-        op: set_w(41.0),
+        ops: vec![set_w(41.0)],
         inv: None,
         th: 0,
     });

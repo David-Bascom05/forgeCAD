@@ -371,10 +371,10 @@ mod tests {
             client: "c".into(),
             id: seq,
             base: seq - 1,
-            op: Op::Rename {
+            ops: vec![Op::Rename {
                 from: format!("a{seq}"),
                 to: format!("a{}", seq + 1),
-            },
+            }],
             inv: None,
             th: seq * 7,
         }
