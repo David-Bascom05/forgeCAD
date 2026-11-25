@@ -1,0 +1,17 @@
+[package]
+name = "forge-remote"
+description = "A SERVED project's connection on the desktop: .forgecad/remote.toml, a forge-sync client per document on its own thread, reconnects"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# Native only (the browser build uses the page's WebSocket). LOCAL projects never start it.
+[dependencies]
+forge-sync = { path = "../forge-sync" }
+forge-ws = { path = "../forge-ws" }
+forge-lang = { path = "../forge-lang" }
+forge-dirs = { path = "../../kernel/forge-dirs" }
+
+[lints]
+workspace = true

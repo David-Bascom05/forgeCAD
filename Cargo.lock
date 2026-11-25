@@ -622,6 +622,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-remote"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-lang",
+ "forge-sync",
+ "forge-ws",
+]
+
+[[package]]
+name = "forge-server"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-git",
+ "forge-history",
+ "forge-lang",
+ "forge-remote",
+ "forge-server",
+ "forge-sync",
+ "forge-ws",
+]
+
+[[package]]
 name = "forge-sheet"
 version = "0.1.0"
 dependencies = [
@@ -684,6 +708,17 @@ dependencies = [
  "forge-mesh",
  "forge-ops",
  "forge-step",
+ "forge-topo",
+]
+
+[[package]]
+name = "forge-sync"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-keep",
+ "forge-lang",
+ "forge-math",
  "forge-topo",
 ]
 
@@ -848,6 +883,13 @@ dependencies = [
  "forge-step",
  "forge-topo",
  "forge-workholding",
+]
+
+[[package]]
+name = "forge-ws"
+version = "0.1.0"
+dependencies = [
+ "forge-git",
 ]
 
 [[package]]

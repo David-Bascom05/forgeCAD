@@ -1,0 +1,15 @@
+[package]
+name = "forge-ws"
+description = "WebSocket (RFC 6455) over std::net: the server's accept and the native client's connect, text messages, bounded"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# Written here rather than taken from crates.io: the handshake is SHA-1 (forge-git has it) and
+# base64; framing is a few dozen lines. No async runtime: one blocking reader per connection.
+[dependencies]
+forge-git = { path = "../../kernel/forge-git" }
+
+[lints]
+workspace = true

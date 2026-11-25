@@ -424,6 +424,9 @@ pub struct FgPanel {
     pub rename_fresh: bool,
     /// The last op the host refused, and why.
     pub refused: Option<String>,
+    /// A served part not syncing, and why (a hand edit, a refused Hello): a banner over the
+    /// view while it holds.
+    pub sync_paused: Option<String>,
     /// What the last applied edit said ("Move hole1 above fillet1"), kept to lead the build's
     /// summary when it comes, so the reply isn't replaced by the statistics.
     /// The build it belongs to, once one comes: every build of that edit (its checks, its final

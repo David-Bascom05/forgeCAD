@@ -188,6 +188,9 @@ fn window_chosen(v: &mut View, ids: &crate::render::ViewIds, ask: &WindowAsk) ->
 }
 
 pub struct Gui {
+    /// When the status line last took a sync note (a collaborator's version, a refusal): a build
+    /// summary does not write over it for a few seconds (it came right after and hid it).
+    sync_note_at: Option<crate::plat::Instant>,
     /// A photo of the view on its way back from the GPU (`gui_record.rs`).
     photo: Option<gui_record::PhotoJob>,
     /// A recording under way (`gui_record.rs`).
@@ -364,6 +367,7 @@ impl Gui {
         let warm = ctx.run_ui(warm_input, |ui| warm_shell.ui(ui));
         warm_shell.out.clear();
         Gui {
+            sync_note_at: None,
             audit_shapes: None,
             photo: None,
             recording: None,
@@ -2441,7 +2445,25 @@ impl Gui {
         let mut posed = None;
         // the anchors a selection was of, and those of the body now
         let mut renamed: Option<(Arc<crate::fg::AnchorView>, Arc<crate::fg::AnchorView>)> = None;
-        for m in s.poll() {
+        let msgs = s.poll();
+        // a SERVED part: collaborators' text, and what the link has to say
+        // (said whether or not a link is live: a pause's reason most of all)
+        if let Some(n) = s.sync_note.take() {
+            self.shell.status = n;
+            self.sync_note_at = Some(crate::plat::Instant::now());
+        }
+        if std::mem::take(&mut s.sync_changed)
+            && let Some(p) = &mut self.shell.fg
+        {
+            p.source = s.src.clone();
+            p.dirty = s.dirty();
+        }
+        if let Some(p) = &mut self.shell.fg
+            && p.sync_paused != s.sync_paused
+        {
+            p.sync_paused = s.sync_paused.clone();
+        }
+        for m in msgs {
             let mut b = match m {
                 crate::fg::Msg::Built(b) => *b,
                 crate::fg::Msg::Posed { poses, .. } => {
@@ -2516,7 +2538,7 @@ impl Gui {
                 }
                 // the edit that asked for this build says what it did first, then the build: on
                 // every build of that edit (its number was kept when it was sent)
-                self.shell.status = match &p.said {
+                let status = match &p.said {
                     Some((w, Some(at))) if *at == b.seq && b.checked && !b.preview => {
                         format!("{w}: done · {}", p.summary)
                     }
@@ -2526,6 +2548,13 @@ impl Gui {
                         p.summary.clone()
                     }
                 };
+                // (a sync note just said stays readable: the summary is in the panel too)
+                if !self
+                    .sync_note_at
+                    .is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(5))
+                {
+                    self.shell.status = status;
+                }
             }
             // every mesh so far, moved out rather than copied (a big import's are tens of MB)
             let restaged = b.asm.as_mut().and_then(|a| a.restage.take());
