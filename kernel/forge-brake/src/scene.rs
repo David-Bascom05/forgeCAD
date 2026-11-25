@@ -751,7 +751,7 @@ impl<'a> Scene<'a> {
     pub fn done_before(&self, k: usize) -> Vec<bool> {
         let mut d = vec![false; self.m.bends.len()];
         for st in self.plan.steps.iter().take(k) {
-            d[st.bend] = true;
+            st.mark(&mut d);
         }
         d
     }

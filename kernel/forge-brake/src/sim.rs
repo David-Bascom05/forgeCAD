@@ -18,7 +18,7 @@ use crate::bb::{self, Cell, Problem, Verdict};
 use crate::geo::{Iso3, Region, Rigid2, Seg, Slot, V3, sd_prism};
 use crate::model::{BendM, Model};
 use crate::num::Sc;
-use crate::tooling::{Die, Punch, Tooling, cover_within};
+use crate::tooling::{Die, Punch, Role, Tooling, cover_within};
 use forge_math::{Interval, Point2, Vec2, dmath};
 use forge_sheet::{JointId, Strip};
 
@@ -64,6 +64,8 @@ pub enum Rule {
     /// A hem's pre-bend passes, but no tool on the press flattens it (`Role::flattens`), or none
     /// that does passes the flattening's checks.
     NoFlattening,
+    /// An offset: the part's offset against the inserts' Z.
+    Offset,
 }
 
 impl Rule {
@@ -88,10 +90,11 @@ impl Rule {
             Rule::Handling => "handling",
             Rule::ToolRating => "tool_rating",
             Rule::NoFlattening => "no_flattening",
+            Rule::Offset => "offset",
         }
     }
 
-    pub const ALL: [Rule; 19] = [
+    pub const ALL: [Rule; 20] = [
         Rule::ToolCollision,
         Rule::ClosesOnPunch,
         Rule::SelfCollision,
@@ -111,6 +114,7 @@ impl Rule {
         Rule::Handling,
         Rule::ToolRating,
         Rule::NoFlattening,
+        Rule::Offset,
     ];
 }
 
@@ -387,6 +391,8 @@ pub enum Stroke {
     /// A hem's second: flattened from the pre-bend's turn `from` to the hem's
     /// (`StepCtx::flattening`).
     Flatten { from: f64 },
+    /// An offset: the bend and its neighbour `k` together, in one stroke (`StepCtx::set_offset`).
+    Offset { k: usize },
 }
 
 impl Stroke {
@@ -395,11 +401,20 @@ impl Stroke {
             Stroke::Air => "bend",
             Stroke::PreBend { .. } => "pre-bend",
             Stroke::Flatten { .. } => "flatten",
+            Stroke::Offset { .. } => "offset",
         }
     }
 }
 
 impl Step {
+    /// The bends this step leaves made, marked in `done`: its own, and an offset's second.
+    pub fn mark(&self, done: &mut [bool]) {
+        done[self.bend] = true;
+        if let Stroke::Offset { k } = self.stroke {
+            done[k] = true;
+        }
+    }
+
     /// Every error-level check passes.
     pub fn pass(&self) -> bool {
         self.checks
@@ -563,6 +578,9 @@ pub struct Off {
     /// Where across the bed (zone j's x) the tools' step is: the web's middle.
     pub x_ref: f64,
 }
+
+/// An offset's part against its inserts' Z: a hundredth either way (mm).
+pub const OFFSET_TOL: f64 = 0.01;
 
 /// Flattening: how far below the flat die's top a cell of the base's side may be enclosed and
 /// still rest on it (mm): an enclosure's width where a zone leaves the plane tangentially.
@@ -914,6 +932,9 @@ impl<'a> StepCtx<'a> {
             Stroke::PreBend { to } => ctx.set_pre_bend(to, st.overbend),
             Stroke::Flatten { from } => {
                 ctx.set_flattening(from);
+            }
+            Stroke::Offset { k } => {
+                ctx.set_offset(k);
             }
         }
         ctx
@@ -2072,6 +2093,9 @@ impl<'a> StepCtx<'a> {
         if self.flatten.is_some() {
             return self.flat_rules();
         }
+        if self.offset.is_some() {
+            return self.off_rules();
+        }
         let mut out = Vec::new();
         let included = dmath::PI - self.phimax;
         out.push(Check::rule(Rule::DieAngle, included, self.die.angle, false));
@@ -2277,6 +2301,60 @@ impl<'a> StepCtx<'a> {
         out.push(Check::not_checked(
             Rule::Tonnage,
             "the flattening force: the makers' tables are not yet confirmed",
+        ));
+        (out, travel, None)
+    }
+
+    /// An offset: the part's offset (how far the stroke takes the far wall down) against the
+    /// inserts' Z, both inserts the same Z; the stroke, the open height, the segments and the
+    /// ratings. The force is not checked: no maker publishes what an offset takes.
+    fn off_rules(&self) -> (Vec<Check>, f64, Option<f64>) {
+        let mut out = Vec::new();
+        let drop = self.ztip(self.phi0()) - self.ztip(self.phimax);
+        let z = |r: Role| match r {
+            Role::Offset { z } => Some(z),
+            _ => None,
+        };
+        let mut c = match (z(self.punch.role), z(self.die.role)) {
+            (Some(a), Some(b)) if (a - b).abs() <= 1e-9 => {
+                // a hundredth either way: the part is drawn to the inserts' Z
+                let mut c = Check::rule(Rule::Offset, drop, a + OFFSET_TOL, true);
+                c.lo = Some(a - OFFSET_TOL);
+                c.pass = c.pass && drop >= a - OFFSET_TOL;
+                c
+            }
+            _ => Check::rule(Rule::Offset, drop, f64::NAN, true),
+        };
+        if c.limit.is_nan() {
+            c.pass = false;
+            c.tool = Some(format!("die:{}", self.die.id));
+        }
+        out.push(c);
+        let travel = self.z_tdc - self.ztip(self.phimax);
+        out.push(Check::rule(Rule::Stroke, travel, self.tl.press.stroke, true));
+        let mut oh = Check::rule(
+            Rule::OpenHeight,
+            self.z_tdc,
+            self.ztip(self.phi0()) + self.tl.clearance,
+            false,
+        );
+        oh.phase = Some(Phase::Approach);
+        out.push(oh);
+        let (pl, dl) = self.tool_lengths();
+        let mut seg = Check::rule(
+            Rule::Segments,
+            pl.unwrap_or(0.0).min(dl.unwrap_or(0.0)),
+            self.need(),
+            false,
+        );
+        if pl.is_none() || dl.is_none() {
+            seg.pass = false;
+        }
+        out.push(seg);
+        self.tool_rating(&mut out);
+        out.push(Check::not_checked(
+            Rule::Tonnage,
+            "the force an offset takes: no maker publishes it",
         ));
         (out, travel, None)
     }
@@ -3512,7 +3590,7 @@ mod offset_tests {
 
     /// A Z: a 60 x 100 base, a web `z` high off its right edge (+90), a 30 long far wall off the
     /// web's top (-90), 1 mm.
-    fn zed(z: f64) -> Sheet {
+    pub(super) fn zed(z: f64) -> Sheet {
         let pts = [(0.0, 0.0), (60.0, 0.0), (60.0, 100.0), (0.0, 100.0)];
         let lp = ProfileLoop::new(
             (0..4)
@@ -3654,5 +3732,107 @@ mod offset_tests {
         // what is not such a pair is refused
         let mut other = StepCtx::new(&m, &tl, &[false, false], 1, su(), 0.0);
         assert!(!other.set_offset(0));
+    }
+}
+
+#[cfg(test)]
+use offset_tests::zed as offset_tests_zed;
+
+#[cfg(test)]
+mod offset_plan_tests {
+    use super::*;
+    use crate::plan::{Options, plan};
+
+    /// std-eu with an offset pair of Z `z` (90 degrees, rated to `max_t`): a test fixture, not a
+    /// maker's tools.
+    fn with_offset(z: f64, max_t: Option<f64>) -> Tooling {
+        let mut tl = crate::library::std_eu();
+        let p0 = tl.punches[0].clone();
+        tl.punches.push(Punch {
+            id: "test/offset-top".into(),
+            role: Role::Offset { z },
+            tip_angle: dmath::PI / 2.0,
+            tip_height: 30.0,
+            width: 23.0,
+            profile: None,
+            relief: None,
+            drawn_width: None,
+            max_thickness: max_t,
+            ..p0
+        });
+        let d0 = tl.dies[0].clone();
+        tl.dies.push(Die {
+            id: "test/offset-bottom".into(),
+            role: Role::Offset { z },
+            angle: dmath::PI / 2.0,
+            width: 60.0,
+            profile: None,
+            max_thickness: max_t,
+            ..d0
+        });
+        tl
+    }
+
+    fn drop_of(m: &Model) -> f64 {
+        let tl = crate::library::std_eu();
+        let su = Setup {
+            punch: 0,
+            die: 0,
+            rotate: false,
+        };
+        let mut ctx = StepCtx::new(m, &tl, &[false, false], 0, su, 0.0);
+        assert!(ctx.set_offset(1));
+        ctx.ztip(0.0) - ctx.ztip(ctx.phimax)
+    }
+
+    /// A Z on an offset pair of its own Z: one stroke makes both bends, passing, with the offset
+    /// rule at the part's offset; inserts of another Z are refused by the offset rule, and
+    /// inserts rated thinner than the sheet by their rating: the Z is then bent as two air
+    /// bends, as without the inserts.
+    #[test]
+    fn a_z_is_made_in_one_stroke_on_inserts_of_its_offset() {
+        let m = Model::new(&super::offset_tests_zed(8.0)).unwrap();
+        let z = drop_of(&m);
+        let tl = with_offset(z, Some(1.5));
+        let p = plan(&m, &tl, &Options::default());
+        assert!(p.feasible, "{:?}", p.blocking);
+        assert_eq!(
+            p.steps.len(),
+            1,
+            "{:?}",
+            p.steps.iter().map(|s| s.stroke).collect::<Vec<_>>()
+        );
+        let st = &p.steps[0];
+        assert_eq!(st.stroke, Stroke::Offset { k: 1 });
+        assert_eq!(
+            (st.punch.as_str(), st.die.as_str()),
+            ("test/offset-top", "test/offset-bottom")
+        );
+        let off = st.checks.iter().find(|c| c.rule == Rule::Offset).unwrap();
+        assert!(off.pass && (off.value - z).abs() < 1e-9, "{off:?}");
+        assert!(st.checks.iter().any(|c| c.rule == Rule::ToolRating && c.pass));
+        // another Z, or a rating under the sheet: two air bends instead, and why not the inserts
+        for tl in [with_offset(z + 0.5, Some(1.5)), with_offset(z, Some(0.5))] {
+            let p = plan(&m, &tl, &Options::default());
+            assert!(
+                p.steps.iter().all(|s| s.stroke == Stroke::Air),
+                "{:?}",
+                p.steps.iter().map(|s| s.stroke).collect::<Vec<_>>()
+            );
+            let su = Setup {
+                punch: tl.punches.len() - 1,
+                die: tl.dies.len() - 1,
+                rotate: false,
+            };
+            let mut ctx = StepCtx::new(&m, &tl, &[false, false], 0, su, 0.0);
+            assert!(ctx.set_offset(1));
+            let (checks, _, _) = ctx.rules(None);
+            assert!(
+                checks
+                    .iter()
+                    .any(|c| matches!(c.rule, Rule::Offset | Rule::ToolRating) && !c.pass),
+                "{checks:?}"
+            );
+        }
     }
 }

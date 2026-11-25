@@ -12,7 +12,7 @@
 use crate::catalog::Speeds;
 use crate::model::Model;
 use crate::plan::{Options, Plan, Program, programs, simulate};
-use crate::sim::{Check, Rule, Setup, StepCtx};
+use crate::sim::{Check, Rule, Setup, Step, StepCtx};
 use crate::tooling::{PunchKind, Station, Tooling};
 
 /// Stations are set on this grid along the bed (mm): what a setter measures to.
@@ -97,12 +97,12 @@ pub enum StageFail {
 }
 
 /// The bends done before each step of a program.
-fn done_before(m: &Model, seq: &[usize]) -> Vec<Vec<bool>> {
+fn done_before(m: &Model, steps: &[Step]) -> Vec<Vec<bool>> {
     let mut done = vec![false; m.bends.len()];
     let mut out = Vec::new();
-    for &j in seq {
+    for st in steps {
         out.push(done.clone());
-        done[j] = true;
+        st.mark(&mut done);
     }
     out
 }
@@ -153,7 +153,7 @@ type Layout = (Vec<Station>, Vec<(f64, f64)>);
 fn layout(m: &Model, tl: &Tooling, prog: &Program, tight: bool) -> Option<Layout> {
     let (ps, of) = pairs(m, tl, prog)?;
     let steps = &prog.plan.steps;
-    let dones = done_before(m, &prog.plan.sequence);
+    let dones = done_before(m, &prog.plan.steps);
     let bare = Tooling {
         stations: Vec::new(),
         ..tl.clone()
@@ -283,7 +283,7 @@ pub fn stage(m: &Model, tl: &Tooling, opts: &Options, max: usize) -> Result<Stag
             let Some((_, of)) = pairs(m, &bare, prog) else {
                 continue;
             };
-            let dones = done_before(m, &seq);
+            let dones = done_before(m, &plan.steps);
             let travel: Vec<Travel> = plan
                 .steps
                 .iter()

@@ -201,7 +201,11 @@ impl Walk {
                 return;
             };
             let j = top.1.expect("a frame follows the bend it took");
-            self.steps.pop();
+            if let Some(st) = self.steps.pop()
+                && let Stroke::Offset { k } = st.stroke
+            {
+                self.done[k] = false;
+            }
             self.done[j] = false;
             if !s.exhausted {
                 return;
@@ -213,10 +217,10 @@ impl Walk {
 
     /// A bend's search ended: its step taken (a new state), or the next bend.
     fn tried(&mut self, s: &mut Search, r: Option<Step>) {
-        let j = self.stack.last().and_then(|f| f.1).expect("a bend tried");
+        debug_assert!(self.stack.last().and_then(|f| f.1).is_some(), "a bend tried");
         match r {
             Some(step) => {
-                self.done[j] = true;
+                step.mark(&mut self.done);
                 self.steps.push(step);
                 self.enter(s);
             }
@@ -295,8 +299,9 @@ pub struct PlanJob {
     st: Option<State>,
     w: Option<Walk>,
     seq: Option<Plan>,
-    /// The walk's steps simulated in full so far, once the walk has ended (one a call).
-    fin: Vec<Step>,
+    /// The walk's steps simulated in full so far, once the walk has ended (one a call), each
+    /// with what follows it at once (a hem's flattening after its pre-bend).
+    fin: Vec<Vec<Step>>,
 }
 
 impl PlanJob {
@@ -330,9 +335,9 @@ impl PlanJob {
                 let k = self.fin.len();
                 let mut done = vec![false; m.bends.len()];
                 for st in &w.steps[..k] {
-                    done[st.bend] = true;
+                    st.mark(&mut done);
                 }
-                let full = s.finish(&done, &w.steps[k]);
+                let full = s.finish_all(&done, &w.steps[k]);
                 self.fin.push(full);
             }
         }
@@ -373,7 +378,7 @@ impl PlanJob {
             st: self.st.take()?,
         };
         if self.fin.len() == w.steps.len() {
-            let fin = std::mem::take(&mut self.fin);
+            let fin = std::mem::take(&mut self.fin).into_iter().flatten().collect();
             Some(conclude_with(&mut s, w, fin))
         } else {
             Some(conclude(&mut s, w))
@@ -577,6 +582,11 @@ impl<'a> Search<'a> {
 
     /// A taken step simulated in full (once per bends done, bend and setup), its reasons kept.
     fn finish(&mut self, done: &[bool], st: &Step) -> Step {
+        if let Stroke::Offset { k } = st.stroke {
+            let mut full = self.sim_offset(done, st.bend, k, st.setup, false);
+            full.rejected = st.rejected.clone();
+            return full;
+        }
         let key = (mask(done), st.bend, st.setup);
         let mut full = match self.fulls.get(&key) {
             Some(f) => f.clone(),
@@ -638,6 +648,114 @@ impl<'a> Search<'a> {
         }
         self.flats.insert(key, found);
         found.is_some()
+    }
+
+    /// Bend j's offset partner, by the model alone: a bend k off j's wall b (the web, nothing
+    /// else off it), not yet made, the same turn the other way. (The lines' being parallel is
+    /// `StepCtx::set_offset`'s to decide.)
+    fn partner(&self, done: &[bool], j: usize) -> Option<usize> {
+        let (m, b) = (self.m, &self.m.bends[j]);
+        if b.hem.is_some() {
+            return None;
+        }
+        match m.kids[b.b].as_slice() {
+            [k] if !done[*k]
+                && m.bends[*k].hem.is_none()
+                && m.bends[*k].sigma != b.sigma
+                && (m.bends[*k].theta - b.theta).abs() <= 1e-9 =>
+            {
+                Some(*k)
+            }
+            _ => None,
+        }
+    }
+
+    /// Bend j and its partner in one stroke, on the first offset pair (both inserts one Z) that
+    /// passes.
+    fn try_offset(&mut self, done: &[bool], j: usize) -> Option<Step> {
+        let k = self.partner(done, j)?;
+        let z = |r: crate::tooling::Role| match r {
+            crate::tooling::Role::Offset { z } => Some(z),
+            _ => None,
+        };
+        for i in 0..self.setups.len() {
+            let s = self.setups[i];
+            let (pz, dz) = (z(self.tl.punches[s.punch].role), z(self.tl.dies[s.die].role));
+            if !matches!((pz, dz), (Some(a), Some(b)) if a == b) {
+                continue;
+            }
+            if self.explored >= self.budget {
+                self.exhausted = true;
+                return None;
+            }
+            self.explored += 1;
+            let st = self.sim_offset(done, j, k, s, true);
+            if st.pass() {
+                return Some(st);
+            }
+        }
+        None
+    }
+
+    /// Bends j and k in one offset stroke, on this setup.
+    fn sim_offset(&mut self, done: &[bool], j: usize, k: usize, setup: Setup, quick: bool) -> Step {
+        let mut ctx = StepCtx::with_regions(self.m, self.tl, done, j, setup, 0.0, &self.regions);
+        let (pl, dl) = ctx.tool_lengths();
+        let mut step = Step {
+            bend: j,
+            stroke: Stroke::Offset { k },
+            joint: self.m.bends[j].joint,
+            angle: self.m.bends[j].theta,
+            overbend: 0.0,
+            setup,
+            punch: ctx.punch.id.clone(),
+            die: ctx.die.id.clone(),
+            punch_length: pl,
+            die_length: dl,
+            station: ctx.station,
+            flip: self.m.bends[j].sigma < 0.0,
+            gauge: None,
+            travel: 0.0,
+            force: None,
+            checks: Vec::new(),
+            rejected: Vec::new(),
+        };
+        if !ctx.set_offset(k) {
+            // not an offset pair after all (lines not parallel)
+            step.checks.push(Check::rule(Rule::Offset, 0.0, f64::NAN, true));
+            step.checks[0].pass = false;
+            return step;
+        }
+        ctx.memo = Some(self.verdicts.clone());
+        let (mut checks, travel, _) = ctx.rules(self.opts.uts);
+        step.travel = travel;
+        let failed = |c: &[Check]| c.iter().any(|c| !c.pass && c.severity == Severity::Error);
+        if quick && failed(&checks) {
+            step.checks = checks;
+            return step;
+        }
+        // the part on itself through a two-bend stroke: not yet simulated
+        checks.push(Check::not_checked(
+            Rule::SelfCollision,
+            "the part on itself through an offset's two bends",
+        ));
+        use crate::sim::Phase;
+        for phase in [Phase::Static, Phase::Approach, Phase::Bend, Phase::Return] {
+            if quick {
+                if phase == Phase::Return {
+                    break;
+                }
+                ctx.collisions_of(phase, None, &mut checks, true, true);
+                ctx.collisions_of(phase, None, &mut checks, true, false);
+                if failed(&checks) {
+                    break;
+                }
+            } else {
+                ctx.collisions(phase, None, &mut checks, false);
+            }
+        }
+        step.checks = checks;
+        step
     }
 
     /// A hem's flattening of bend j from the pre-bend's turn, on this setup.
@@ -708,7 +826,7 @@ impl<'a> Search<'a> {
         let mut out = Vec::with_capacity(steps.len());
         for st in steps {
             out.extend(self.finish_all(&done, st));
-            done[st.bend] = true;
+            st.mark(&mut done);
         }
         out
     }
@@ -882,11 +1000,17 @@ impl<'a> Search<'a> {
         }
     }
 
-    /// A bend's search begun: the kept answer, or the search to advance.
+    /// A bend's search begun: the kept answer, or the search to advance. An offset pair is
+    /// tried first, where the bend has a partner and an offset pair is mounted: one stroke for
+    /// two bends.
     fn try_begin(&mut self, done: &[bool], j: usize) -> Result<Option<Step>, Try> {
         let key = (mask(done), j);
         if let Some(r) = self.memo.get(&key) {
             return Ok(r.clone());
+        }
+        if let Some(st) = self.try_offset(done, j) {
+            self.memo.insert(key, Some(st.clone()));
+            return Ok(Some(st));
         }
         Err(Try {
             j,
@@ -1195,6 +1319,10 @@ pub fn simulate(m: &Model, tl: &Tooling, seq: &[usize], opts: &Options) -> Plan 
     let mut feasible = true;
     let mut blocking = Vec::new();
     for (i, &j) in seq.iter().enumerate() {
+        // made already: a hem's flattening (its pre-bend's follower), an offset's second bend
+        if done[j] {
+            continue;
+        }
         // a setup the program states: simulated as stated
         if let Some(Some(setup)) = opts.setups.as_ref().and_then(|v| v.get(i)) {
             let full = s.run(&done, j, *setup, false);
@@ -1237,7 +1365,11 @@ pub fn simulate(m: &Model, tl: &Tooling, seq: &[usize], opts: &Options) -> Plan 
         }
         let prev = steps.last().map(|st: &Step| st.setup);
         match s.try_bend_after(&done, j, prev) {
-            Some(st) => steps.extend(s.finish_all(&done, &st)),
+            Some(st) => {
+                steps.extend(s.finish_all(&done, &st));
+                // an offset makes its second bend too
+                st.mark(&mut done);
+            }
             None => {
                 feasible = false;
                 // its best attempt, simulated in full, stands in the plan
@@ -1362,11 +1494,18 @@ fn programs_with(
             }
             let prev = steps.last().map(|st| st.setup);
             if let Some(step) = s.try_bend_after(done, j, prev) {
-                done[j] = true;
+                step.mark(done);
+                let also = match step.stroke {
+                    Stroke::Offset { k } => Some(k),
+                    _ => None,
+                };
                 steps.push(step);
                 any |= walk(s, done, steps, found, keep);
                 steps.pop();
                 done[j] = false;
+                if let Some(k) = also {
+                    done[k] = false;
+                }
             }
             if s.exhausted || found.len() >= keep {
                 break;

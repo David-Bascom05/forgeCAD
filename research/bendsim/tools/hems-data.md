@@ -95,3 +95,32 @@ labels spring / top tool / flattening part / guide part). The drawings show the 
 part over a 13-15 mm gap above the holder: read (not quoted) as the punch pushing the sprung part
 down onto the hem in the gap. How the height divides between the sprung part and the holder is
 not published: the combination dies are not simulated for the flattening.
+
+## Offset holders and inserts (read 2026-11-25)
+
+WILA catalogue PDF pp.94-95 (publication.pdf above):
+
+| Tool | Figures |
+|---|---|
+| HU-001/1 top holder | "Working height 98 mm incl. inserts"; NS adaption, Safety-Pins; bottom takes INZU inserts; 515; 100 t/m; adaption width 50 drawn, body width UNKNOWN |
+| HU-005/1 bottom holder | "Working height 74 mm incl. inserts"; width 60; OZU adaption 13 x 20; 515; 100 t/m |
+| HU-006/1 bottom holder | "Working height 100 mm incl. inserts"; width 60; OZU adaption; 515; 100 t/m |
+| pairing | "HU-001 Top Holder can be used in combination with either HU-005 or HU-006 Bottom Holder." |
+| INZU-001 | 23 x 36; Z 1, 1.5, 2, 2.5; alpha 160 (Z1, Z1.5), 150 (Z2); Z2.5's angle conflicts in print (UNKNOWN); 100 t/m; "Set of inserts, top and bottom"; 515 |
+| INZU-002 | 23 x 36 for Z3-Z8 (0.5 steps), 45 high and 27 (Z10) or 32 (Z13, Z15) wide; alpha 90; 100 t/m |
+
+Mate LIT01119 p.23, 100 t/m, 415 and 835 long, T* the maximum material thickness:
+
+| Ids | Z | alpha | T* | Section |
+|---|---|---|---|---|
+| 40.510/515/520/525 | 1/1.5/2/2.5 | 160/160/150/140 | 1.0/1.2/1.5/1.5 | 36 x 23 |
+| 40.511/516/521/526 | 1/1.5/2/2.5 | 90 | 0.5/0.5/0.5/0.8 | 36 x 23 |
+| 40.530/535/540/545 | 3/3.5/4/4.5 | 90 | 1.0/1.0/1.2/1.5 | 36 x 23 |
+| 40.550-570 | 5-7 | 90 | 1.5 | 36 x 23 |
+| 40.575/580 | 7.5/8 | 90 | 1.6 | 36 x 23 |
+| 40.590/610/611/612 | 9/10/11/12 | 90 | 2.0 | 45 (25 to the step) x 27 |
+| 40.613/614 | 13/14 | 90 | 2.5 | 45 x 32 |
+| 40.615 | 15 | 90 | 3.0 | 45 x 32 |
+
+Where the step sits across an insert's width is not dimensioned (UNKNOWN); the drawings look like
+the bottom insert is the top turned 180 degrees, which no maker states.

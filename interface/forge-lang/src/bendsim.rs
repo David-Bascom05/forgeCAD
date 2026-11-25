@@ -1285,7 +1285,7 @@ fn contacts_json(
     let mut items: Vec<(Option<usize>, Vec<bool>, &fb::Step)> = Vec::new();
     for (i, st) in plan.steps.iter().enumerate() {
         items.push((Some(i + 1), done.clone(), st));
-        done[st.bend] = true;
+        st.mark(&mut done);
     }
     for b in &plan.blocking {
         // a blocked bend not among the steps: its best attempt, after the bends it followed
