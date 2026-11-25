@@ -1,13 +1,18 @@
 machining
 # plate_break.fg: face, clear the outline, bore it out, then break the top's edges 0.3 mm x 45°
 # with a 90° chamfer mill (a declared removal: the part is modelled with sharp edges).
+# Workholding: in a Haas 6" CrossOver vise (haas-vise-05-0404, checked against its own model).
+# The stock is 6 mm deeper than the part and the jaws grip only its bottom 3 mm, so their tops
+# stand 3 mm under the part. The clear goes 0.5 mm into that skin, clear of the jaws by more than
+# the fixture clearance, and the part stays on the skin; the skin is faced off with the part
+# turned over in a second setup (not in this example).
 shared tol = 0.01
 
 f    = part("plate_break.fg", material: "6061-T6")
 m    = machine("generic-vmc3")
 t1   = tool("flat-6", t: 1, stickout: 30, holder: "bt40-er32")
 t7   = tool("chamfer-10-90", t: 7, stickout: 25, holder: "bt40-er32")
-op1  = setup(f, machine: m, stock: box(margin: (3, 3, 1), below: 2), origin: "top-corner", tol: tol, at: (-20, -20, -250))
+op1  = setup(f, machine: m, stock: box(margin: (3, 3, 1), below: 6), origin: "top-corner", tol: tol, at: (-20, -20, -250), fixture: vise("haas-vise-05-0404", across: "x", clamp: 3))
 skim = facing(op1, tool: t1, to: 8, step: 1)
 side = clear(op1, tool: t1, from: 8, to: -0.5, step: 2, stepover: 2.4)
 bore = pocket(op1, f.bore, tool: t1, step: 2, stepover: 2.4, ramp: 3)
