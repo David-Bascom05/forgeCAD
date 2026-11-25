@@ -978,7 +978,7 @@ impl Shell {
                     want = true;
                 }
                 // a solid bar: a long tab reads as one that scrolls
-                ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
+                ui.spacing_mut().scroll = super::theme::solid_scroll();
                 egui::ScrollArea::vertical()
                     .id_salt(("iprops-body", p.tab))
                     .auto_shrink([false, false])
@@ -1170,6 +1170,7 @@ impl Shell {
         } else {
             egui::TextEdit::singleline(text)
         };
+        let edit = edit.id(egui::Id::unique(("iprops", key)));
         let resp = ui.put(r, edit.font(sans(13.0)).margin(vec2(8.0, 5.0)).hint_text(hint));
         places.push((format!("iprops:{key}"), resp.rect));
         if resp.lost_focus() && *text != was {
@@ -1280,6 +1281,11 @@ impl Shell {
                 Self::prop_field(ui, p, doc, date, f, "YYYY-MM-DD", ops, places);
             }
             return;
+        }
+        // the first field takes the keys as the window opens (STANDARD §9)
+        if let Some((key, _, _)) = FIELDS.iter().find(|f| f.2 == tab) {
+            let text = p.typing.get(*key).cloned().unwrap_or_default();
+            super::dialog::focus_on_open(ui.ctx(), "iprops", egui::Id::unique(("iprops", *key)), &text);
         }
         for (key, _, _) in FIELDS.iter().filter(|f| f.2 == tab) {
             let w = ui.available_width();

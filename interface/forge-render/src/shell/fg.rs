@@ -339,6 +339,11 @@ pub struct FgPanel {
     pub rename_fresh: bool,
     /// The last op the host refused, and why.
     pub refused: Option<String>,
+    /// What the last applied edit said ("Move hole1 above fillet1"), kept to lead the build's
+    /// summary when it comes, so the reply isn't replaced by the statistics.
+    /// The build it belongs to, once one comes: every build of that edit (its checks, its final
+    /// mesh) keeps the words in front; the next edit's doesn't.
+    pub said: Option<(String, Option<u64>)>,
     pub collapsed: HashSet<String>,
     pub sheets: Vec<SheetRow>,
     /// The part's thermoforms, and whether their wall thickness is mapped on the view.
@@ -845,6 +850,8 @@ impl Shell {
         let rows = fg.tree();
         let mut places: Vec<(String, Rect)> = Vec::new();
         let mut chosen = None;
+        // what a menu's "Select …" says it chose, in the status line
+        let mut select_said: Option<String> = None;
         let mut toggle = None;
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(area));
         let planes = self.overlays().planes;
@@ -852,6 +859,31 @@ impl Shell {
         let sheet = !fg.sheets.is_empty();
         let mut flat_row = false;
         let stmts = statements(&fg.feats);
+        // a menu item that can only be refused is drawn off with the reason (STANDARD §7):
+        // while a sketch is open, and a delete or move another statement's reading stops
+        let sketching = self.sketch.is_some();
+        let source = fg.source.clone();
+        let refusal = |op: &Op| -> Option<String> {
+            if sketching {
+                return Some("Finish or cancel the sketch first".into());
+            }
+            match forge_lang::edit::apply_all_checked(&source, std::slice::from_ref(op)) {
+                Ok(_) => None,
+                Err(forge_lang::error::Error::StillRead { name, reader, .. }) => {
+                    // a delete names up to three that use it; a move, the one in the way
+                    let mut users = match op {
+                        Op::DeleteFeature { .. } => readers(&source, &name),
+                        _ => vec![],
+                    };
+                    if users.is_empty() {
+                        users.push(reader);
+                    }
+                    let them = if users.len() == 1 { users[0].clone() } else { "them".into() };
+                    Some(format!("Used by {}: delete or change {them} first", listed(&users)))
+                }
+                Err(e) => Some(e.text()),
+            }
+        };
         let mut menu_places: Vec<(String, Rect)> = Vec::new();
         egui::ScrollArea::vertical()
             .id_salt("fg-tree")
@@ -1083,8 +1115,16 @@ impl Shell {
                     let edit = row.feat.is_some() && statement_of(&key) == key;
                     resp.context_menu(|ui| {
                         ui.set_min_width(150.0);
-                        let mut item = |ui: &mut Ui, label: &str, name: &str| {
-                            let b = ui.button(egui::RichText::new(label).font(sans(12.0)));
+                        let mut off_item = |ui: &mut Ui, label: &str, name: &str, why: Option<String>| {
+                            let b = ui.add_enabled(why.is_none(), egui::Button::new(egui::RichText::new(label).font(sans(12.0))));
+                            // an item that's off says why under itself, muted, in the menu: no
+                            // tooltip over the items below it (UX-LEAD)
+                            if let Some(w) = why {
+                                ui.horizontal(|ui| {
+                                    ui.add_space(8.0);
+                                    ui.label(egui::RichText::new(w).font(sans(11.0)).color(t.ink2));
+                                });
+                            }
                             menu_places.push((format!("fg:menu:{name}:{key}"), b.rect));
                             let hit = b.clicked();
                             if hit {
@@ -1093,42 +1133,59 @@ impl Shell {
                             hit
                         };
                         if is_sketch {
-                            if item(ui, "Edit Sketch", "edit-sketch") {
+                            if off_item(ui, "Edit Sketch", "edit-sketch", None) {
                                 fg.out.push(FgAct::EditSketch(key.clone()));
                             }
-                        } else if edit && item(ui, "Edit Feature", "edit") {
+                        } else if edit && off_item(ui, "Edit Feature", "edit", None) {
                             fg.out.push(FgAct::EditFeature(key.clone()));
                         }
                         let at = stmts.iter().position(|s| *s == key);
                         if let Some(k) = at {
-                            if item(ui, "Rename", "rename") {
+                            if off_item(ui, "Rename", "rename", None) {
                                 fg.renaming = Some((key.clone(), key.clone()));
                                 fg.rename_fresh = true;
                             }
-                            if k > 0 && item(ui, "Move Up", "up") {
-                                fg.out.push(FgAct::Apply(Op::MoveFeature {
+                            if k > 0 {
+                                let op = Op::MoveFeature {
                                     id: key.clone(),
                                     before: Some(stmts[k - 1].clone()),
-                                }));
+                                };
+                                if off_item(ui, "Move Up", "up", refusal(&op)) {
+                                    fg.out.push(FgAct::Apply(op));
+                                }
                             }
-                            if k + 1 < stmts.len() && item(ui, "Move Down", "down") {
-                                fg.out.push(FgAct::Apply(Op::MoveFeature {
+                            if k + 1 < stmts.len() {
+                                let op = Op::MoveFeature {
                                     id: key.clone(),
                                     before: stmts.get(k + 2).cloned(),
-                                }));
+                                };
+                                if off_item(ui, "Move Down", "down", refusal(&op)) {
+                                    fg.out.push(FgAct::Apply(op));
+                                }
                             }
                             ui.separator();
-                            if item(ui, "Suppress Features", "suppress") {
+                            if off_item(ui, "Suppress Features", "suppress", None) {
                                 fg.out.push(FgAct::Apply(Op::Suppress { id: key.clone() }));
                             }
                             // Inventor's End of Part dragged here: what follows isn't built
                             if fg.rollback.as_deref() != Some(key.as_str())
-                                && item(ui, "Move End of Part Here", "rollback")
+                                && off_item(ui, "Move End of Part Here", "rollback", None)
                             {
                                 fg.out.push(FgAct::Rollback(Some(key.clone())));
                             }
-                            if item(ui, "Delete", "delete") {
-                                fg.out.push(FgAct::Apply(Op::DeleteFeature { id: key.clone() }));
+                            let op = Op::DeleteFeature { id: key.clone() };
+                            let why = refusal(&op);
+                            let used = why.is_some() && !sketching;
+                            if off_item(ui, "Delete", "delete", why) {
+                                fg.out.push(FgAct::Apply(op));
+                            }
+                            // what stops the delete, a click away (STANDARD §9: naming it selects it)
+                            if used
+                                && let Some(first) = readers(&source, &key).into_iter().next()
+                                && off_item(ui, &format!("Select {first}"), "select-user", None)
+                            {
+                                select_said = Some(format!("{first} uses {key}: change or delete it first"));
+                                chosen = Some(first);
                             }
                         }
                         // one instance of a loop or a call: a shared param of its own
@@ -1138,7 +1195,7 @@ impl Shell {
                                 Op::SplitInstance { param, .. } => format!("split:{param}"),
                                 _ => unreachable!("just made"),
                             };
-                            if item(ui, &op_label(&op), &name) {
+                            if off_item(ui, &op_label(&op), &name, None) {
                                 fg.out.push(FgAct::Apply(op));
                             }
                         }
@@ -1231,12 +1288,16 @@ impl Shell {
             return;
         }
         if let Some(k) = chosen {
-            fg.selected = if fg.selected.as_deref() == Some(k.as_str()) {
+            // a menu's "Select …" selects (a row's click toggles)
+            fg.selected = if select_said.is_none() && fg.selected.as_deref() == Some(k.as_str()) {
                 None
             } else {
                 Some(k)
             };
             fg.editing = None;
+        }
+        if let Some(w) = select_said {
+            self.status = w;
         }
         self.places.extend(places);
         self.fg = Some(fg);
@@ -1757,5 +1818,51 @@ mod tests {
         // nothing it builds changes
         let run = |t: &str| forge_lang::run(t, forge_lang::Options::default(), Default::default()).0;
         assert!(run(&inch).errors.is_empty());
+    }
+}
+
+/// The statements that read `name`, in order: what a delete of it would leave reading nothing.
+fn readers(source: &str, name: &str) -> Vec<String> {
+    use forge_lang::syntax::StmtKind;
+    let Ok(prog) = forge_lang::syntax::parse(source) else {
+        return vec![];
+    };
+    prog.iter()
+        .filter_map(|s| match &s.kind {
+            StmtKind::Assign { name: n, .. } | StmtKind::Block { name: n, .. }
+                if n != name && forge_lang::edit::mentions(s).contains(name) =>
+            {
+                Some(n.clone())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// "a", "a and b", "a, b and c", "a, b, c and 2 more".
+fn listed(names: &[String]) -> String {
+    match names {
+        [] => String::new(),
+        [a] => a.clone(),
+        [a, b] => format!("{a} and {b}"),
+        [a, b, c] => format!("{a}, {b} and {c}"),
+        [a, b, c, rest @ ..] => format!("{a}, {b}, {c} and {} more", rest.len()),
+    }
+}
+
+#[cfg(test)]
+mod used_by_tests {
+    use super::{listed, readers};
+
+    #[test]
+    fn a_delete_names_up_to_three_users() {
+        let src = "sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (60, 40))\n}\n\
+plate = extrude(plan, 6)\nlid = extrude(plan, 2)\n";
+        assert_eq!(readers(src, "plan"), ["plate", "lid"]);
+        let n: Vec<String> = ["a", "b", "c", "d", "e"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(listed(&n[..1]), "a");
+        assert_eq!(listed(&n[..2]), "a and b");
+        assert_eq!(listed(&n[..3]), "a, b and c");
+        assert_eq!(listed(&n), "a, b, c and 2 more");
     }
 }

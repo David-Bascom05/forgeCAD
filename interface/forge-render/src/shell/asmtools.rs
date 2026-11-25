@@ -679,6 +679,14 @@ pub fn suppress_op(id: &str, on: bool) -> Op {
 
 /// A component suppressed with the joints and constraints that name it, as Inventor does;
 /// unsuppressed with them.
+/// A top-level part is chosen in the browser: what Pattern, Mirror and Copy act on (the ribbon
+/// draws them off until there is one, saying so).
+pub fn top_chosen(a: &AsmPanel) -> bool {
+    a.selected
+        .as_ref()
+        .is_some_and(|k| a.insts.iter().any(|i| i.path == *k && !i.path.contains('.') && !i.sub))
+}
+
 pub fn suppress_ops(a: &AsmPanel, id: &str, on: bool) -> Vec<Op> {
     let mut ops = vec![suppress_op(id, on)];
     ops.extend(
@@ -805,7 +813,8 @@ fn origin_row(
         Align2::CENTER_CENTER,
         (k + 1).to_string(),
         semi(11.0),
-        Color32::WHITE,
+        // near-black on the amber of the step being waited for (white on it was 2.2:1)
+        if waiting { super::theme::ON_FOCUS } else { Color32::WHITE },
     );
     let (label, ink) = match p {
         Some(Pick {
@@ -842,6 +851,10 @@ fn origin_row(
         ink,
     );
     places.push((format!("asm:origin:{}", k + 1), r));
+    if waiting {
+        // the dialog's focus is this pick: keys go to the view (STANDARD §9)
+        places.push(("focus:pick".into(), r));
+    }
     let c = resp.clicked();
     resp.on_hover_text(p.as_ref().map_or(label, |p| p.reference.clone()));
     c
@@ -1015,6 +1028,8 @@ impl Shell {
         if dialog_head(ui, t, "part", "Place Component", "asm:place", places) {
             return false;
         }
+        let id = egui::Id::unique("asm-place-filter");
+        super::dialog::focus_on_open(ui.ctx(), "asm-place", id, &p.filter);
         let r = ui.add(
             egui::TextEdit::singleline(&mut p.filter)
                 .id(egui::Id::unique("asm-place-filter"))
@@ -1571,7 +1586,7 @@ impl Shell {
                 // what forge-lang would refuse, said here before OK
                 f.refused = forge_lang::edit::apply_all_checked(src, o)
                     .err()
-                    .map(|e| format!("{}: {}", e.kind(), e.text()));
+                    .map(|e| e.text());
                 out.push(FgAct::AsmPreview(Some(o.clone())));
             }
             Err(_) if f.sent.is_some() => {
@@ -1808,7 +1823,13 @@ pub fn command(fg: &mut super::fg::FgPanel, c: super::FgCmd) -> String {
                     .iter()
                     .find(|i| i.path == k && !i.path.contains('.') && !i.sub)
             }) else {
-                return "Choose a top-level part in the browser first".into();
+                // each says which it is: Mirror then Copy, both refused, read as nothing
+                return if c == C::Mirror {
+                    "Mirror: choose a top-level part in the browser first"
+                } else {
+                    "Copy: choose a top-level part in the browser first"
+                }
+                .into();
             };
             let mirror = c == C::Mirror;
             let stem = i

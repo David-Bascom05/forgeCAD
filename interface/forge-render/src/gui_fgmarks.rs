@@ -199,6 +199,10 @@ impl Gui {
             .iter()
             .find(|f| f.id == id)
             .and_then(|f| crate::shell::fgdim::handle(f, &s.src, &p.issues, &p.params, a, mesh, key));
+        let units = self.shell.units;
+        if let Some(d) = &mut self.shell.fg_dim {
+            d.text = crate::shell::fgdim::words(d.value, units);
+        }
     }
 
     /// A selection window let go while a tool's edges selection takes picks: each edge it holds

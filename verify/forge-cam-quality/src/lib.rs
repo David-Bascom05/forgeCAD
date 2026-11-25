@@ -15,6 +15,7 @@
 //! The stock is a height map (map.rs) over the setup's stock box: a measurement model within
 //! about a cell of the exact sweep. Spindle rotation is taken as M03 (clockwise from above), so
 //! material right of the direction of travel is climb. Everything here is deterministic.
+pub mod crazy;
 pub mod endstate;
 pub mod foreign;
 pub mod map;
@@ -207,6 +208,12 @@ pub struct OpQ {
     pub len_cut: f64,
     pub len_air: f64,
     pub len_rapid: f64,
+    /// Of len_air: at feed on a cutting move (not a link, hop or plunge), and of that, where the
+    /// tool's axis stood in stock when the op began (passing again over what the op itself cut).
+    pub len_air_cut: f64,
+    pub len_recut: f64,
+    /// Links and hops at feed (mm), material met or not.
+    pub len_link: f64,
     /// Times from length / feed (s).
     pub t_cut: f64,
     pub t_air: f64,
@@ -748,6 +755,8 @@ pub fn measure_op_unless(
     let mut hex_tt = 0.0;
     let mut hexes: Vec<(f64, f64)> = Vec::new();
     let mut tiles = map::Tiles::of(m);
+    // the stock as the op found it: a cutting move's air over it is a re-cut
+    let m0 = m.clone();
     for (pi, p) in paths.iter().enumerate() {
         let prof = profile(p.tool);
         let r = prof.r();
@@ -854,6 +863,10 @@ pub fn measure_op_unless(
                 };
                 let removed = m.sweep_in(a, b, &prof, Some(&mut tiles));
                 q.removed += removed;
+                let link = matches!(phase, Phase::Link | Phase::Hop);
+                if link {
+                    q.len_link += len;
+                }
                 if removed > AIR_VOL {
                     if f >= FAST_FEED {
                         q.fast_cuts += 1;
@@ -935,6 +948,12 @@ pub fn measure_op_unless(
                 } else {
                     q.len_air += len;
                     q.t_air += dt;
+                    if !link && phase != Phase::Plunge {
+                        q.len_air_cut += len;
+                        if m0.top(b[0], b[1]) > b[2] + EPS_Z {
+                            q.len_recut += len;
+                        }
+                    }
                     if std::env::var_os("FORGE_QUALITY_AIR").is_some() {
                         eprintln!("air {} {:?} f={f:.0} dt={dt:.4} at={:?}", q.name, phase, b);
                     }
@@ -1358,7 +1377,7 @@ pub fn json(jobs: &[JobQ]) -> String {
             let _ = write!(
                 o,
                 "{{\"name\":{},\"setup\":{},\"kind\":{},\"status\":{},\"tool\":{},\"d\":{},\"flutes\":{},\"rpm\":{},\"moves\":{},\
-\"len_cut\":{},\"len_air\":{},\"len_rapid\":{},\"t_cut\":{},\"t_air\":{},\"t_min\":{},\"t_stop\":{},\"t_la\":{},\"t_scurve\":{},\
+\"len_cut\":{},\"len_air\":{},\"len_rapid\":{},\"len_air_cut\":{},\"len_recut\":{},\"len_link\":{},\"t_cut\":{},\"t_air\":{},\"t_min\":{},\"t_stop\":{},\"t_la\":{},\"t_scurve\":{},\
 \"retracts\":{},\"plunges\":{},\"ramps\":{},\"cycles\":{},\"corners30\":{},\"corners90\":{},\"turn_max\":{},\
 \"side\":{},\"phi_max\":{},\"phi_mean\":{},\"phi_hist\":[{}],\"climb\":{},\"conventional\":{},\"slotting\":{},\
 \"fz_target\":{},\"fz_class\":{},\"fz_class_rough\":{},\"hex_min\":{},\"hex_mean\":{},\"hex_max\":{},\"hex_p99\":{},\"thin\":{},\"thick\":{},\"removed\":{},\"mrr\":{},\
@@ -1375,6 +1394,9 @@ pub fn json(jobs: &[JobQ]) -> String {
                 jn(q.len_cut),
                 jn(q.len_air),
                 jn(q.len_rapid),
+                jn(q.len_air_cut),
+                jn(q.len_recut),
+                jn(q.len_link),
                 jn(q.t_cut),
                 jn(q.t_air),
                 jn(q.t_min),

@@ -642,9 +642,12 @@ impl Shell {
         let prefs = &mut self.prefs;
         let area = super::dialog_area(ctx);
         let h = WIN_H.min(area.height() - 16.0).max(400.0);
+        // as wide as the window allows: at 480 px it ran off the right, its close with it
+        let win_w = WIN_W.min(area.width() - 16.0).max(320.0);
+        let side_w = if win_w < 640.0 { 120.0 } else { SIDE_W };
         // centred, as a modal is, over a scrim that sets the app behind it back
         let at = pos2(
-            area.center().x - WIN_W * 0.5,
+            area.center().x - win_w * 0.5,
             (area.center().y - h * 0.5)
                 .min(area.bottom() - h - 8.0)
                 .max(area.top() + 4.0),
@@ -659,18 +662,18 @@ impl Shell {
             .movable(true)
             .fade_in(false)
             .default_pos(at)
-            .fixed_size(vec2(WIN_W, h))
+            .fixed_size(vec2(win_w, h))
             .constrain_to(area)
             // over the view's own drawings (Measure's marks), which are a layer of their own
             .order(egui::Order::Foreground)
             .frame(dialog_frame(&t).inner_margin(0))
             .show_placed(ctx, &mut places, |ui, places| {
-                let all = Rect::from_min_size(ui.max_rect().min, vec2(WIN_W, h));
+                let all = Rect::from_min_size(ui.max_rect().min, vec2(win_w, h));
                 ui.allocate_rect(all, egui::Sense::hover());
-                let head = Rect::from_min_size(all.min, vec2(WIN_W, HEAD_H));
+                let head = Rect::from_min_size(all.min, vec2(win_w, HEAD_H));
                 let side = Rect::from_min_max(
                     pos2(all.left(), head.bottom()),
-                    pos2(all.left() + SIDE_W, all.bottom()),
+                    pos2(all.left() + side_w, all.bottom()),
                 );
                 let main = Rect::from_min_max(pos2(side.right(), head.bottom()), all.max);
                 let foot = Rect::from_min_max(pos2(main.left(), main.bottom() - FOOT_H), main.max);
@@ -698,7 +701,7 @@ impl Shell {
                 let mut y = side.top() + 10.0;
                 for (k, (name, _)) in SECTIONS.iter().enumerate() {
                     let on = k == prefs.tab;
-                    let r = Rect::from_min_size(pos2(side.left() + 8.0, y), vec2(SIDE_W - 16.0, 34.0));
+                    let r = Rect::from_min_size(pos2(side.left() + 8.0, y), vec2(side_w - 16.0, 34.0));
                     y += 36.0;
                     let resp = ui.interact(r, ui.scope_id().with(("settings-tab", k)), egui::Sense::click());
                     resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Tab, true, on, *name));
@@ -740,7 +743,7 @@ impl Shell {
                         t.ink,
                     );
                     ui.add_space(28.0);
-                    ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
+                    ui.spacing_mut().scroll = super::theme::solid_scroll();
                     egui::ScrollArea::vertical()
                         .id_salt(("settings-body", tab))
                         .auto_shrink([false, false])
