@@ -53,7 +53,6 @@ Each of these is bit-identical by construction, and was diffed over the whole co
    display mesh on all cores, taking the read's kept mesh where it has one. VF-2 4.9 s -> 2.2 s.
 10. `forge_geom::budget::isolated(limit, f) -> (spent, T)`: one piece under a budget of its own,
     its spend handed back. KERNEL-STRESS is adding the same primitive on op-budget; same signature.
-11. `forge-mesh`: a face of a file's body drawn within at most `FACE` = 2^27 evaluations (see below).
 12. `forge-render`: a part with faces that cannot be meshed is drawn without them, not blank —
     **split out of this branch** at TRAIN-CONDUCTOR's request, onto `fix/undrawn-face` (off main),
     because the gap it leaves needs UX-LEAD's marking to ride with it (`ux/undrawn-faces`, stacked
@@ -101,14 +100,14 @@ more cores; on 4 cores the parallel work is already spread.
 
 ## Risks I would watch
 
-- **The per-face mesh budget's margin.** `FACE` = 2^27 (134 M) evaluations. Measured over 415,000
-  faces drawn across the corpus at the app's 16x budget, the heaviest face that actually draws
-  spends 75 M, so the headroom is about 1.8x. HRT160-2's #42930 spends 536 M and fails. If a file
-  ever has a legitimate face above 134 M it would newly be refused; the guard is the corpus
-  differential, which must be rerun if the mesher's or the NURBS evaluation's work per face changes.
-  A face that runs its own budget out ends the drawing and charges everything the drawing had left,
-  so the solid is refused exactly as it is today when a face runs the budget out itself — that is
-  what keeps the verdicts identical, and it is the part to re-check if anyone edits `face_within`.
+- **HRT160-2 (the app's 16x read spends minutes on one face) is NOT fixed.** I wrote a per-face
+  mesh cap and withdrew it: real faces spend up to 226 M (tl-3b_mld_07-2026 #52) and 141 M
+  (HFL-1313-3 #69702 #10, `forge-step/tests/mesh_budget.rs`) at that budget, the bad face 536 M,
+  so no cap has margin. My first try (2^27) refused both real faces — the app silently lost a solid
+  of tl-3b — and was caught only by that test and by the app-path differential, not by the digest
+  corpus, whose file list lacked the repository's newer fixtures. Lesson: build the differential's
+  file list from the repository as well as the Haas archives, and always run the app's 16x path
+  too. CHECKS.md has the numbers and the two routes I would try instead.
 - **Parallelism and the budget's edge**: see (c). Anything new that runs a budgeted phase on
   several threads must use the `budget::map*` helpers, not raw `par::map`, or verdicts can move with
   thread timing.
