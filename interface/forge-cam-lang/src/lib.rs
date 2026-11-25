@@ -11785,11 +11785,12 @@ mod prefetch_tests {
     /// rest is not made ahead: its key holds the setup's earlier ops' paths, which the
     /// prefetch pass does not make, so made ahead it would be made twice (once for a key the
     /// run never asks). With a zlevel, a parallel and a rest, the run makes the rest once and
-    /// the two surfacing ops once each, and is the fresh run.
+    /// the two surfacing ops once each, and is the fresh run. (Its steps are its own: no other
+    /// test's call, so no other test's memo entry.)
     #[test]
     fn rest_is_made_in_the_run_only() {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
-        let src = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 40, holder: \"bt40-er32\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01)\nrough = zlevel(op1, tool: t1, leave: 0.5, step: 3, stepover: 4, area: (-34, -28, -6, 0), grid: 1)\nfin = parallel(op1, tool: t2, stepover: 3, area: (-24, -18, -16, -10))\nleft = rest(op1, tool: t2, after: t1, stepover: 3, area: (-26, -20, -12, -6), grid: 1.5)\nprog = program(op1, post: \"fanuc\", number: 1003)\n";
+        let src = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 40, holder: \"bt40-er32\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01)\nrough = zlevel(op1, tool: t1, leave: 0.5, step: 2.5, stepover: 4, area: (-34, -28, -6, 0), grid: 1)\nfin = parallel(op1, tool: t2, stepover: 2.5, area: (-24, -18, -16, -10))\nleft = rest(op1, tool: t2, after: t1, stepover: 2.5, area: (-26, -20, -12, -6), grid: 1.25)\nprog = program(op1, post: \"fanuc\", number: 1003)\n";
         let reply = |cam: &super::Cam| {
             let mut t = cam.json().to_string();
             for p in &cam.programs {
