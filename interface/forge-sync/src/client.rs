@@ -56,6 +56,8 @@ pub struct Pending {
     pub id: u64,
     pub base: u64,
     pub ops: Vec<Op>,
+    /// An undo (its Ack's inverse is a redo, not another step to undo).
+    pub undo: bool,
 }
 
 pub struct Client {
@@ -72,8 +74,9 @@ pub struct Client {
     recent: Vec<Entry>,
     view: String,
     next_id: u64,
-    /// Own committed groups with an inverse, newest last: (seq, the inverse group).
-    undo: Vec<(u64, Vec<Op>)>,
+    /// Own committed groups, newest last: (seq, the inverse group; None: it has none, an undo
+    /// barrier, said when reached, never skipped to older history).
+    undo: Vec<(u64, Option<Vec<Op>>)>,
     /// Messages for the server, in order; the host drains and sends them.
     pub outbox: Vec<Up>,
     /// True until the first Welcome.
@@ -146,7 +149,12 @@ impl Client {
         if let Some(Json::Arr(ops)) = j.get("ops") {
             for o in ops {
                 match Up::parse(o.str()?) {
-                    Ok(Up::Op { base, id, ops }) if id < next => c.pending.push(Pending { base, id, ops }),
+                    Ok(Up::Op { base, id, ops }) if id < next => c.pending.push(Pending {
+                        base,
+                        id,
+                        ops,
+                        undo: false,
+                    }),
                     _ => return None,
                 }
             }
@@ -203,31 +211,59 @@ impl Client {
 
     /// The user's op, already applied and checked by the host on `text()` (the host's edit
     /// path: `apply_checked` succeeded and gave `after`). Queued and sent; returns its id.
-    pub fn local(&mut self, op: Op, after: String) -> u64 {
+    /// Refused (nothing queued) as [`local_group`](Self::local_group) refuses.
+    pub fn local(&mut self, op: Op, after: String) -> Result<u64, Refusal> {
         self.local_group(vec![op], after)
     }
 
     /// The user's group of ops (an apply-all: several edits that stand or fall together),
     /// already applied in order and its result checked by the host on `text()`, giving `after`.
     /// Sent as one: the server commits all of them or none. Returns its id.
-    pub fn local_group(&mut self, ops: Vec<Op>, after: String) -> u64 {
+    ///
+    /// Refused, nothing queued: before this client's first Welcome (the text the edit was made
+    /// on is no version this client knows: an op's base is the seq of the text it was made on,
+    /// never a guess, or the server would rebase it through ops it was made after and land it
+    /// on another name), and a group outside the protocol's limits (its count, each op's, its
+    /// message's bytes: sent, the server would refuse it, or close the connection on it).
+    pub fn local_group(&mut self, ops: Vec<Op>, after: String) -> Result<u64, Refusal> {
+        if self.joining {
+            return Err(Refusal::Invalid {
+                why: "not joined yet: an edit waits for the server's text".into(),
+            });
+        }
+        crate::check_group(&ops)?;
         let id = self.next_id;
+        let m = Up::Op {
+            base: self.seq,
+            id,
+            ops,
+        };
+        let bytes = m.text().len();
+        if bytes > crate::MAX_UP {
+            return Err(Refusal::Invalid {
+                why: format!("an edit of {bytes} bytes (at most {})", crate::MAX_UP),
+            });
+        }
+        let Up::Op { base, id, ops } = m else {
+            unreachable!()
+        };
         self.next_id += 1;
-        self.send_op(self.seq, id, &ops);
+        self.send_op(base, id, &ops);
         self.pending.push(Pending {
             id,
-            base: self.seq,
+            base,
             ops,
+            undo: false,
         });
         self.view = after;
-        id
+        Ok(id)
     }
 
-    /// Applies and checks `op` on `text()` itself, then [`local`](Self::local). Refused: the
-    /// typed error, nothing sent.
-    pub fn edit(&mut self, op: Op) -> Result<u64, forge_lang::error::Error> {
-        let (after, _) = forge_lang::edit::apply_checked(&self.view, &op)?;
-        Ok(self.local(op, after))
+    /// Applies and checks `op` on `text()` itself, then [`local`](Self::local). Refused: why,
+    /// nothing sent.
+    pub fn edit(&mut self, op: Op) -> Result<u64, Refusal> {
+        let (after, _) = forge_lang::edit::apply_checked(&self.view, &op).map_err(lang)?;
+        self.local(op, after)
     }
 
     /// Applies `ops` in order on `text()` and checks the result (only the result: a group may
@@ -236,7 +272,7 @@ impl Client {
     pub fn edit_group(&mut self, ops: Vec<Op>) -> Result<u64, Refusal> {
         crate::check_group(&ops)?;
         let (after, _) = crate::validate(&self.view, None, &ops, None, None)?;
-        Ok(self.local_group(ops, after))
+        self.local_group(ops, after)
     }
 
     /// Undo this client's last committed group that has an inverse: the inverse group, made on
@@ -253,6 +289,15 @@ impl Client {
             }));
         }
         let (seq, inv) = self.undo.pop()?;
+        let Some(inv) = inv else {
+            // an edit with no exact inverse: undo stops here, and says so (going on to the one
+            // before would take back an older edit while this one stays)
+            self.undo.push((seq, None));
+            return Some(Err(Refusal::Invalid {
+                why: "the last edit cannot be undone here (it has no exact inverse): make the change by hand"
+                    .into(),
+            }));
+        };
         // the inverse as it reads now: through others' renames since that seq
         let ops = match rebase_group(&inv, &self.id, self.recent.iter().filter(|e| e.seq > seq)) {
             Ok(ops) => ops,
@@ -267,18 +312,25 @@ impl Client {
                 }),
             _ => crate::validate(&self.view, None, &ops, None, None).map(|(after, _)| after),
         };
-        Some(checked.map(|after| {
-            let id = self.next_id;
-            self.next_id += 1;
-            self.send_op(seq.max(self.seq), id, &ops);
-            self.pending.push(Pending {
-                id,
-                base: seq.max(self.seq),
-                ops,
-            });
-            self.view = after;
-            id
-        }))
+        let after = match checked {
+            Ok(a) => a,
+            Err(r) => {
+                // it does not apply here now: the step stays for a later try
+                self.undo.push((seq, Some(inv)));
+                return Some(Err(r));
+            }
+        };
+        let id = self.next_id;
+        self.next_id += 1;
+        self.send_op(seq.max(self.seq), id, &ops);
+        self.pending.push(Pending {
+            id,
+            base: seq.max(self.seq),
+            ops,
+            undo: true,
+        });
+        self.view = after;
+        Some(Ok(id))
     }
 
     /// Records the hash of a body built from the text at `seq` (sent to the server).
@@ -360,7 +412,8 @@ impl Client {
                 if !self.commit(e) {
                     return self.diverged(seq);
                 }
-                if let Some(inv) = inv {
+                // an undo's inverse is a redo: not a step to undo (a second Undo would redo)
+                if !p.undo {
                     self.undo.push((seq, inv));
                 }
                 // only the client's own op landed: the view is unchanged unless the server's
@@ -471,5 +524,12 @@ impl Client {
     fn diverged(&mut self, seq: u64) -> Vec<Event> {
         self.outbox.push(Up::Resync);
         vec![Event::TextDiverged { seq }]
+    }
+}
+
+fn lang(e: forge_lang::error::Error) -> Refusal {
+    Refusal::Lang {
+        kind: e.kind().into(),
+        text: e.text(),
     }
 }

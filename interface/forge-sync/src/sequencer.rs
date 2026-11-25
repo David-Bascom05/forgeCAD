@@ -18,6 +18,11 @@ use std::sync::Arc;
 /// ([`crate::validate`], of the group's result only) in this thread; a server gives one with a
 /// time budget (one budget for the whole group, as for one op). `counts` are the head's error
 /// counts if known (then the head is not evaluated again); it returns the new text and its counts.
+/// A group's check: the head's text after it, that text's error counts, and the group's exact
+/// inverse (worked out inside the check, under its time budget: on a large group it costs as much
+/// as the check).
+pub type Checked = (String, Counts, Option<Vec<Op>>);
+
 pub trait Check {
     fn check(
         &mut self,
@@ -26,7 +31,7 @@ pub trait Check {
         ops: &[Op],
         dir: Option<PathBuf>,
         root: Option<PathBuf>,
-    ) -> Result<(String, Counts), Refusal>;
+    ) -> Result<Checked, Refusal>;
 }
 
 /// [`crate::validate`], in the caller's thread.
@@ -40,8 +45,8 @@ impl Check for Direct {
         ops: &[Op],
         dir: Option<PathBuf>,
         root: Option<PathBuf>,
-    ) -> Result<(String, Counts), Refusal> {
-        crate::validate(head, counts, ops, dir, root)
+    ) -> Result<Checked, Refusal> {
+        crate::check_and_invert(head, counts, ops, dir, root)
     }
 }
 
@@ -392,7 +397,7 @@ impl Sequencer {
             self.dir.clone(),
             self.root.clone(),
         );
-        let (text, counts) = match checked {
+        let (text, counts, inv) = match checked {
             Ok(x) => x,
             Err(r) => return Err(name_the_taker(r, &ops, client, &since)),
         };
@@ -405,7 +410,6 @@ impl Sequencer {
                 ),
             });
         }
-        let inv = group_inverse(&self.head, &ops, &text);
         let entry = Entry {
             seq: head + 1,
             author: author.into(),

@@ -54,7 +54,7 @@ pub const HANDSHAKE: Duration = Duration::from_secs(5);
 /// The most a message may hold before the Hello is accepted, and after (an op's texts are at
 /// most forge-sync's `MAX_OP_TEXT`).
 pub const PRE_HELLO_MAX: usize = 4 << 10;
-pub const UP_MAX: usize = 512 << 10;
+pub const UP_MAX: usize = forge_sync::MAX_UP;
 /// Connections that have not finished their Hello, in all.
 pub const PRE_AUTH: usize = 64;
 /// A connection with nothing read for this long is closed (clients ping every 20 s).
@@ -467,7 +467,7 @@ impl Check for Timed {
         ops: &[Op],
         dir: Option<PathBuf>,
         root: Option<PathBuf>,
-    ) -> Result<(String, Counts), Refusal> {
+    ) -> Result<forge_sync::sequencer::Checked, Refusal> {
         if self.abandoned.load(Ordering::SeqCst) >= MAX_ABANDONED {
             return Err(Refusal::Invalid {
                 why: "edits to this document took too long to check: try again later".into(),
@@ -492,7 +492,7 @@ impl Check for Timed {
         );
         let job: Box<dyn FnOnce() + Send> = Box::new(move || {
             let r = catch_unwind(AssertUnwindSafe(|| {
-                forge_sync::validate(&head, counts.as_ref(), &ops, dir, root)
+                forge_sync::check_and_invert(&head, counts.as_ref(), &ops, dir, root)
             }))
             .unwrap_or_else(|_| {
                 Err(Refusal::Invalid {
