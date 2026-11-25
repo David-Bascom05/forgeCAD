@@ -1,0 +1,16 @@
+schematic
+
+parts = library(file: "power-symbols.fg")
+shared spacing = 12mm
+main = sheet(title: "Controller")
+u = place(sheet: main, symbol: parts.MCU, at: (0, 0))
+c = place(sheet: main, symbol: parts.Cap, at: (spacing, 0))
+reg = place(sheet: main, symbol: parts.Reg, at: (-10, 0))
+supply = wire(sheet: main, from: u.vdd, to: c.plus, via: [(0, 6), (spacing, 6)])
+ret = wire(sheet: main, from: c.minus, to: u.vss)
+feed = wire(sheet: main, from: reg.out, to: u.vdd)
+ground = wire(sheet: main, from: reg.gnd, to: u.vss)
+power_name = label(sheet: main, on: reg.out, value: "3V3", at: (-6, 1))
+bypass = fulfill(sheet: main, want: u.vdd, give: c.plus, role: parts.local_bypass,
+                 return_from: c.minus, return_to: u.vss, prefer: 3mm)
+source = fulfill(sheet: main, want: u.vdd, give: reg.out, role: parts.supply_3v3)

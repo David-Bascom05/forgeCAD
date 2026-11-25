@@ -26,3 +26,12 @@ To repeat the independent extraction, obtain the two pinned boards and save them
 ```sh
 VIA_FIXTURES="$build" /usr/bin/python3 "$p/board_locality.py" koyomi-lvds-hat.kicad_pcb inkplate-2.kicad_pcb
 ```
+
+## Native schematic response time
+
+The probe builds a sheet of MCU and capacitor pairs, starts the native MCP server, and queries a supply pin. Each pair has a confirmed bypass relationship and separate supply and return wires. It checks the pin's response after every sample. The cold sample includes process startup. Subsequent timings measure the request and reply over stdio. In the move case the probe changes a capacitor's coordinates on disk before starting the timer. File reading, dependency validation, solving, and response serialization are included. GUI painting and physical-board DRC are outside this measurement.
+
+```sh
+cargo build --release --locked -p forge-cli
+python3 research/electronics/probes/schematic_latency.py target/release/forgecad --channels 256 --samples 40
+```

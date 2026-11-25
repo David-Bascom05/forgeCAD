@@ -14,8 +14,18 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// The tools a part file takes, on the command line and over `serve`/`mcp`.
-pub const COMMANDS: [&str; 10] = [
-    "build", "check", "query", "measure", "render", "export", "edit", "diff", "cam", "bend",
+pub const COMMANDS: [&str; 11] = [
+    "build",
+    "check",
+    "query",
+    "measure",
+    "render",
+    "export",
+    "edit",
+    "diff",
+    "cam",
+    "bend",
+    "schematic",
 ];
 
 /// A tool's arguments: the file, and its words (a selector, the refs to measure, the view, the
@@ -47,11 +57,12 @@ pub struct Reply {
 pub struct Session {
     root: Option<PathBuf>,
     writable: bool,
+    schematic: forge_lang::schematic::Cache,
     /// Each file's stages, by its real path.
     caches: HashMap<PathBuf, Cache>,
 }
 
-fn fail(msg: impl Into<String>) -> Reply {
+pub(crate) fn fail(msg: impl Into<String>) -> Reply {
     let msg = msg.into();
     Reply {
         ok: false,
@@ -129,6 +140,28 @@ impl Session {
             root,
             writable,
             caches: HashMap::new(),
+            schematic: Default::default(),
+        }
+    }
+
+    fn schematic_reply(&mut self, path: &Path, src: &str, words: &[String]) -> Reply {
+        let result = self.schematic.query(path, self.root.as_deref(), src, words);
+        let ok = result.is_ok();
+        let mut json = result.unwrap_or_else(|err| err.json());
+        obj_push(&mut json, "version", version(src).into());
+        Reply {
+            ok,
+            text: json.to_string(),
+            json,
+            png: None,
+        }
+    }
+    fn edited_report(&mut self, path: &Path, text: &str) -> Reply {
+        if forge_lang::schematic::is_document(text) {
+            self.schematic_reply(path, text, &[])
+        } else {
+            let run = self.run_src(path, text, true);
+            Self::report(&run, text)
         }
     }
 
@@ -205,17 +238,25 @@ impl Session {
             return fail("--base goes with edit");
         }
         let r = match cmd {
-            "build"
-                if self
-                    .read(&a.file)
-                    .is_ok_and(|(_, src)| forge_lang::robot::is_robot(&src)) =>
-            {
-                self.build_robot(a)
-            }
-            "build" => self.built(&a.file).map(|(run, src)| Self::report(&run, &src)),
-            "check" => self.read(&a.file).map(|(p, src)| {
-                let run = self.run_src(&p, &src, false);
-                Self::report(&run, &src)
+            "build" | "check" => self.read(&a.file).and_then(|(path, src)| {
+                if forge_lang::schematic::is_document(&src) {
+                    let mut r = self.schematic_reply(&path, &src, &a.words);
+                    if cmd == "check" && r.json.get("erc_ok") == Some(&Json::Bool(false)) {
+                        r.ok = false;
+                        if let Json::Obj(fields) = &mut r.json
+                            && let Some((_, ok)) = fields.iter_mut().find(|(k, _)| k == "ok")
+                        {
+                            *ok = false.into();
+                        }
+                        r.text = r.json.to_string();
+                    }
+                    return Ok(r);
+                }
+                if cmd == "build" && forge_lang::robot::is_robot(&src) {
+                    return self.build_robot(a);
+                }
+                let run = self.run_src(&path, &src, cmd == "build");
+                Ok(Self::report(&run, &src))
             }),
             "query" => self.query(a),
             "measure" => self.measure(a),
@@ -225,6 +266,9 @@ impl Session {
             "diff" => self.diff(a),
             "cam" => self.cam(a),
             "bend" => self.bend(a),
+            "schematic" => self
+                .read(&a.file)
+                .map(|(path, src)| self.schematic_reply(&path, &src, &a.words)),
             _ => Err(format!(
                 "unknown command '{cmd}' ({}; a part changes by edit F OP)",
                 COMMANDS.join(" ")
@@ -583,6 +627,20 @@ impl Session {
             )
         {
             return Err("--at goes with a selector, measure and render".into());
+        }
+        if what != "file" {
+            let (path, src) = self.read(&a.file)?;
+            if forge_lang::schematic::is_document(&src) {
+                if a.at.is_some() {
+                    return Err("--at is unsupported for schematic queries".into());
+                }
+                let words = match what {
+                    "stat" => vec!["summary".into()],
+                    "check" => vec!["erc".into()],
+                    _ => a.words.clone(),
+                };
+                return Ok(self.schematic_reply(&path, &src, &words));
+            }
         }
         match what {
             "stat" => return self.built(&a.file).map(|(run, src)| Self::report(&run, &src)),
@@ -1171,8 +1229,7 @@ impl Session {
         if let Some(s) = step {
             let text = forge_lang::undo::step(&p, s)?;
             let _ = forge_lang::vtools::save(&p, &format!("{s:?}"), Some(&agent()));
-            let run = self.run_src(&p, &text, true);
-            let mut r = Self::report(&run, &text);
+            let mut r = self.edited_report(&p, &text);
             obj_push(
                 &mut r.json,
                 "applied",
@@ -1191,7 +1248,12 @@ impl Session {
                 dir: p.parent().map(Path::to_path_buf),
                 root: self.root.clone(),
             };
-            match edit::apply_checked_at(&text, op, &at) {
+            let result = if forge_lang::schematic::is_document(&src) {
+                edit::apply_at(&text, op, &at).map(|s| (s, None))
+            } else {
+                edit::apply_checked_at(&text, op, &at)
+            };
+            match result {
                 Ok((next, reach)) => {
                     let mut j = Json::obj(vec![("op", op.json())]);
                     if let Some(r) = reach {
@@ -1216,6 +1278,22 @@ impl Session {
                 }
             }
         }
+        if forge_lang::schematic::is_document(&src) {
+            let validated = self.schematic_reply(&p, &text, &[]);
+            if !validated.ok {
+                let mut json = validated.json;
+                if let Json::Obj(fields) = &mut json {
+                    fields.retain(|(k, _)| k != "version");
+                }
+                obj_push(&mut json, "version", now.into());
+                return Ok(Reply {
+                    text: json.to_string(),
+                    json,
+                    ok: false,
+                    png: None,
+                });
+            }
+        }
         // logged, so `{"op":"Undo"}` takes it back
         forge_lang::undo::write(&p, &src, &text).map_err(|_| format!("{}: cannot write", a.file))?;
         // an agent's edit is a save of its own, where the folder keeps history
@@ -1229,8 +1307,7 @@ impl Session {
             })
             .collect();
         let _ = forge_lang::vtools::save(&p, &kinds.join(", "), Some(&agent()));
-        let run = self.run_src(&p, &text, true);
-        let mut r = Self::report(&run, &text);
+        let mut r = self.edited_report(&p, &text);
         obj_push(&mut r.json, "applied", Json::Arr(done));
         r.text = format!("applied {} ops\n{}", ops.len(), r.text);
         Ok(r)

@@ -1585,3 +1585,12 @@ fg query FILE QUERY.. [--json]
 forgecad vendor list | show ID | export ID [-o F] | import F | new ID [--from ID] [--name N] |
                 check F [--json]      sheet-metal vendor profiles (Vendor profiles)
 ```
+
+## Schematics and symbol libraries
+
+A `schematic` or `symbol_library` first statement selects the electronics language. Both use
+ordinary named .fg calls. `forgecad build FILE.fg --json` reports the model, roles and ERC.
+`forgecad check` also fails on electrical errors. `forgecad schematic FILE.fg pin main/u.vdd`
+returns the instantiated terminal, numbered pin, typed needs and offerings, compatible
+candidates and confirmed bindings. `tree main/u.vdd` traverses functional stages, bindings
+and wires and marks revisits. See docs/schematic.md and examples/electronics/controller.fg.

@@ -475,8 +475,14 @@ def robotStmt : List Name :=
 /-- The robot document's value built-ins (`Reader::value`): nested, or an assignment's. -/
 def robotValue : List Name := ["pose", "box", "cylinder", "capsule", "sphere", "mesh"]
 
+/-- Native electronics call heads. Checked against the compiler's signature table by lang_coverage. -/
+def schematicFns : List Name :=
+  ["role", "symbol", "pin", "line", "rect", "arc", "polyline", "circle", "text", "library",
+   "sheet", "place", "gate", "subsheet", "junction", "port", "wire", "label", "no_connect",
+   "note", "flow", "bus", "fulfill"]
+
 /-- The document headers that are names, not keywords (`drawing` and `harness` are keywords). -/
-def headers : List Name := ["machining", "assembly", "robot", "bending"]
+def headers : List Name := ["machining", "assembly", "robot", "bending", "schematic", "symbol_library"]
 
 /-- A table of a family: each of its names with what it does. -/
 def tab {β : Type} (names : List Name) (impl : Name → β) : List (Name × β) :=
@@ -541,11 +547,12 @@ theorem drawing_conservative (ie : Name → S → List α → Except Err α)
   have := run_ext_accepted P _ ME _ MT [] [] sts s ρ s' ρ' rs h ha
   simpa using this
 
-/-- No built-in of the machining and robot families, and no header word, is a keyword: each
+set_option maxRecDepth 4096 in
+/-- No built-in of the machining, robot and electronics families, and no header word, is a keyword: each
 lexes as an identifier, so the grammar and the proven parser are unchanged by them. -/
 theorem families_not_keywords :
     ∀ n ∈ camStmt ++ camExpr ++ turnStmt ++ turnExpr ++ robotAssign ++ robotStmt ++ robotValue ++
-      ["hull", "none"] ++ bendStmt ++ headers, codes n ∉ LL1.Impl.keywords := by
+      ["hull", "none"] ++ bendStmt ++ schematicFns ++ headers, codes n ∉ LL1.Impl.keywords := by
   decide
 
 end Families
