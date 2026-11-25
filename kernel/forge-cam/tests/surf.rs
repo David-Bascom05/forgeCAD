@@ -272,7 +272,13 @@ fn surfacing_paths_are_the_same_bits_everywhere() {
             }
         }
     }
-    assert_eq!(h, 0xb92a77bd2fd88e19, "digest {h:#018x}");
+    // per interval rule: the exact-zero rule (default), and the strict rule (feature ival-strict)
+    let pinned = if forge_cam_geom::ival::STRICT {
+        0xb92a77bd2fd88e19
+    } else {
+        0xb71b595b47a22032
+    };
+    assert_eq!(h, pinned, "digest {h:#018x}");
 }
 
 /// Z-level roughing off the prism route (the dome's sphere) traces each level's blocked region

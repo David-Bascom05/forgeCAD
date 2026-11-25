@@ -10,6 +10,10 @@ pub struct Ival {
     pub hi: f64,
 }
 
+/// Whether the build takes the strict rules (feature `ival-strict`: no exact-zero rule), for the
+/// digests pinned per rule.
+pub const STRICT: bool = cfg!(feature = "ival-strict");
+
 pub const WHOLE: Ival = Ival {
     lo: f64::NEG_INFINITY,
     hi: f64::INFINITY,
