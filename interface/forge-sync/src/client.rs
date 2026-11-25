@@ -73,6 +73,9 @@ pub struct Client {
     pub outbox: Vec<Up>,
     /// True until the first Welcome.
     pub joining: bool,
+    /// True once this connection's Welcome came: ops wait for it, then all pending ops are sent
+    /// (an op sent before the server had placed this connection could be lost with it).
+    welcomed: bool,
 }
 
 impl Client {
@@ -92,22 +95,28 @@ impl Client {
             undo: vec![],
             outbox: vec![],
             joining: true,
+            welcomed: false,
         };
         c.hello();
         c
     }
 
     /// After a reconnect: say hello again from the last seq applied; the server replays what
-    /// was missed (Acks for this client's own committed ops) and the pending ops are re-sent
-    /// (the server drops those it already committed, by id).
+    /// was missed (Acks for this client's own committed ops), and the pending ops are re-sent on
+    /// Welcome (the server answers those it already committed by id, never twice).
     pub fn reconnect(&mut self) {
         self.outbox.clear();
+        self.welcomed = false;
         self.hello();
-        for p in &self.pending {
+    }
+
+    /// Sends an op now if this connection was welcomed (else Welcome sends every pending op).
+    fn send_op(&mut self, base: u64, id: u64, op: &Op) {
+        if self.welcomed {
             self.outbox.push(Up::Op {
-                base: p.base,
-                id: p.id,
-                op: p.op.clone(),
+                base,
+                id,
+                op: op.clone(),
             });
         }
     }
@@ -143,11 +152,7 @@ impl Client {
     pub fn local(&mut self, op: Op, after: String) -> u64 {
         let id = self.next_id;
         self.next_id += 1;
-        self.outbox.push(Up::Op {
-            base: self.seq,
-            id,
-            op: op.clone(),
-        });
+        self.send_op(self.seq, id, &op);
         self.pending.push(Pending {
             id,
             base: self.seq,
@@ -182,11 +187,7 @@ impl Client {
         Some(checked.map(|(after, _)| {
             let id = self.next_id;
             self.next_id += 1;
-            self.outbox.push(Up::Op {
-                base: seq.max(self.seq),
-                id,
-                op: op.clone(),
-            });
+            self.send_op(seq.max(self.seq), id, &op);
             self.pending.push(Pending {
                 id,
                 base: seq.max(self.seq),
@@ -216,8 +217,27 @@ impl Client {
                     self.confirmed = text;
                     self.seq = seq;
                     self.recent.clear();
+                    // the pending ops now stand on this text (they replay on it here): sent from
+                    // it, they cannot fall behind the server's latest snapshot
+                    for p in &mut self.pending {
+                        p.base = seq;
+                    }
                     self.replay();
                     ev.push(Event::Changed);
+                }
+                // every Welcome (a join, a reconnect, a Resync's snapshot) sends every pending op
+                // again, in order: the server answers one it committed with its Ack again or
+                // AlreadyCommitted (by client and op id), so none is lost and none is held
+                // forever (DESIGN.md §4.2)
+                {
+                    self.welcomed = true;
+                    for p in &self.pending {
+                        self.outbox.push(Up::Op {
+                            base: p.base,
+                            id: p.id,
+                            op: p.op.clone(),
+                        });
+                    }
                 }
             }
             Down::Ack { id, seq, op, inv, th } => {

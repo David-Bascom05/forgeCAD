@@ -124,9 +124,22 @@ impl Refusal {
 /// What the sequencer's host keeps durably. The shape is a database's, not a file's (DESIGN.md
 /// §5: Postgres is the phase-2 store): a snapshot, the entries since it, an atomic append, and a
 /// compaction that makes the head the snapshot.
+/// A document at a seq, with the op ids committed before it (so a retry of one, after a restart
+/// too, is known as already committed).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Snapshot {
+    pub seq: u64,
+    pub text: String,
+    /// Per client key: (client, its highest committed op id, that op's seq). Its ids are sent in
+    /// order, so every lower id was committed too unless it is in `refused`.
+    pub seen: Vec<(String, u64, u64)>,
+    /// (client key, op id) of ops refused (a retry of one is checked again).
+    pub refused: Vec<(String, u64)>,
+}
+
 pub trait Store {
-    /// The latest snapshot: (its seq, the text at it), or None if the document was never created.
-    fn latest_snapshot(&mut self, doc: &str) -> std::io::Result<Option<(u64, String)>>;
+    /// The latest snapshot, or None if the document was never created.
+    fn latest_snapshot(&mut self, doc: &str) -> std::io::Result<Option<Snapshot>>;
     /// Every entry after `seq`, in order.
     fn read_since(&mut self, doc: &str, seq: u64) -> std::io::Result<Vec<Entry>>;
     /// Creates the document with its first text (the snapshot at seq 0).
@@ -134,9 +147,9 @@ pub trait Store {
     /// Appends one entry; returns only when it is durable (the store's definition). Failed:
     /// nothing of it is kept.
     fn append(&mut self, doc: &str, e: &Entry) -> std::io::Result<()>;
-    /// `text` is the document at `seq` (the last entry's): it becomes the snapshot, and the
-    /// entries up to it may go. Atomic: after a crash, either the old log or the new snapshot.
-    fn compact(&mut self, doc: &str, seq: u64, text: &str) -> std::io::Result<()>;
+    /// The document at `snap.seq` (the last entry's) becomes the snapshot, and the entries up to
+    /// it may go. Atomic: after a crash, either the old log or the new snapshot.
+    fn compact(&mut self, doc: &str, snap: &Snapshot) -> std::io::Result<()>;
 }
 
 /// Where a client's or server's messages go (a WebSocket, a channel in a test).
@@ -152,18 +165,18 @@ pub trait Clock {
 /// An in-memory [`Store`]: tests, and a server run with no durable store.
 #[derive(Default)]
 pub struct MemStore {
-    docs: std::collections::BTreeMap<String, (u64, String, Vec<Entry>)>,
+    docs: std::collections::BTreeMap<String, (Snapshot, Vec<Entry>)>,
 }
 
 impl Store for MemStore {
-    fn latest_snapshot(&mut self, doc: &str) -> std::io::Result<Option<(u64, String)>> {
-        Ok(self.docs.get(doc).map(|d| (d.0, d.1.clone())))
+    fn latest_snapshot(&mut self, doc: &str) -> std::io::Result<Option<Snapshot>> {
+        Ok(self.docs.get(doc).map(|d| d.0.clone()))
     }
     fn read_since(&mut self, doc: &str, seq: u64) -> std::io::Result<Vec<Entry>> {
         Ok(self
             .docs
             .get(doc)
-            .map(|d| d.2.iter().filter(|e| e.seq > seq).cloned().collect())
+            .map(|d| d.1.iter().filter(|e| e.seq > seq).cloned().collect())
             .unwrap_or_default())
     }
     fn create(&mut self, doc: &str, text: &str) -> std::io::Result<()> {
@@ -173,26 +186,31 @@ impl Store for MemStore {
                 doc.to_string(),
             ));
         }
-        self.docs.insert(doc.into(), (0, text.into(), vec![]));
+        let snap = Snapshot {
+            seq: 0,
+            text: text.into(),
+            seen: vec![],
+            refused: vec![],
+        };
+        self.docs.insert(doc.into(), (snap, vec![]));
         Ok(())
     }
     fn append(&mut self, doc: &str, e: &Entry) -> std::io::Result<()> {
         let d = self.docs.get_mut(doc).ok_or(std::io::ErrorKind::NotFound)?;
-        let last = d.2.last().map_or(d.0, |x| x.seq);
+        let last = d.1.last().map_or(d.0.seq, |x| x.seq);
         if e.seq != last + 1 {
             return Err(std::io::Error::other(format!(
                 "append of seq {} after {last}",
                 e.seq
             )));
         }
-        d.2.push(e.clone());
+        d.1.push(e.clone());
         Ok(())
     }
-    fn compact(&mut self, doc: &str, seq: u64, text: &str) -> std::io::Result<()> {
+    fn compact(&mut self, doc: &str, snap: &Snapshot) -> std::io::Result<()> {
         let d = self.docs.get_mut(doc).ok_or(std::io::ErrorKind::NotFound)?;
-        d.0 = seq;
-        d.1 = text.into();
-        d.2.retain(|e| e.seq > seq);
+        // the entries stay (the op log is the history); an open reads those after the snapshot
+        d.0 = snap.clone();
         Ok(())
     }
 }
