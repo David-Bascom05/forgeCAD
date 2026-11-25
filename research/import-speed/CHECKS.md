@@ -138,6 +138,22 @@ same computation), so it is no extra work for a viewer.
 Proof that it could go: none — its verdict (`Body::unverified`) is part of the result. It is the
 cheapest of the four once the display mesh is counted.
 
+### A face's own budget (`forge_mesh::tessellate::face_within`)
+
+Not a check of the file, but a bound on one: no face of a file's body may spend more than
+`FACE` = 2^27 evaluations of a drawing's budget, and never more than that budget has left. A face
+that runs its own out ends the drawing, with everything the drawing had left charged, so its caller
+refuses the solid as "too long to measure" exactly as it does today when a face runs the budget out
+itself. Deterministic, in the budget's own unit, with no clock, so the verdict is the same on every
+machine and whatever order the faces are drawn in.
+
+Why: the app reads display models at 16 times a read's budget, and one face of HRT160-2 (#42930)
+spent 536 M evaluations and then failed — four minutes of a read of a file the kernel otherwise
+reads in 0.9 s. With the cap that read takes 53 s, with the same result. The constant: over 415,000
+faces drawn across the corpus files at that 16x budget, the heaviest face that actually draws spends
+75 M, so the margin is about 1.8x. It will grow when a lazy cache's fills stop being charged
+(KERNEL-STRESS's `uncounted`), since a face's own spend falls.
+
 ## The budget's unit
 
 Every proposal above moves verdicts at the budget's edge, because the budget counts surface
