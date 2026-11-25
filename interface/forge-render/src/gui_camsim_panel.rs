@@ -7,6 +7,7 @@
 //! The words it uses about the program are the run's: a check's verdict and the program's
 //! certification come from the certified checker; the stock's colours are labelled a preview.
 
+use forge_math::ipow::Powi as _;
 use crate::camsim::draw::{StockColour, look};
 use crate::camsim::timeline::{Kind, clock};
 use crate::camsim::{Marker, Sim};
@@ -320,7 +321,7 @@ impl CamSimUi {
                 .min_by(|a, b| {
                     let d = |t: f64| {
                         let q = self.sim.tl.pos(t).map_or([f64::INFINITY; 3], |x| x.0);
-                        (0..3).map(|k| (q[k] - at[k]).powi(2)).sum::<f64>()
+                        (0..3).map(|k| (q[k] - at[k]).ipow(2)).sum::<f64>()
                     };
                     d(*a).total_cmp(&d(*b))
                 })

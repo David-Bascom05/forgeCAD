@@ -5,6 +5,7 @@ use crate::camera::{Camera, View};
 use crate::mesh::{EdgeRange, FaceRange, PartMesh, SEGMENT, VERTEX};
 use crate::scene::Scene;
 use crate::viewer::now_ms;
+use forge_math::ipow::Powi as _;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -2574,7 +2575,7 @@ impl Renderer {
             (c.map(|v| v - r), c.map(|v| v + r))
         });
         let reach = (0..3)
-            .map(|k| (hi[k] - lo[k]).powi(2))
+            .map(|k| (hi[k] - lo[k]).ipow(2))
             .sum::<f32>()
             .sqrt()
             .max(1e-3);
@@ -3723,7 +3724,7 @@ fn edge_length(l: &crate::mesh::Lod, e: &EdgeRange) -> f32 {
     (e.first..e.first + e.count)
         .map(|s| {
             let (a, b) = (at(s, 0), at(s, 16));
-            (0..3).map(|k| (a[k] - b[k]).powi(2)).sum::<f32>().sqrt()
+            (0..3).map(|k| (a[k] - b[k]).ipow(2)).sum::<f32>().sqrt()
         })
         .sum()
 }

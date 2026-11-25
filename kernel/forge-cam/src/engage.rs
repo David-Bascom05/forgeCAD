@@ -961,6 +961,7 @@ pub fn schedule_per_move(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use forge_math::ipow::Powi as _;
 
     fn sched(sample: f64) -> Sched {
         Sched {
@@ -1158,7 +1159,7 @@ mod tests {
                 a[1] + t * (b[1] - a[1]),
                 a[2] + t * (b[2] - a[2]),
             ];
-            let d = ((x - c[0]).powi(2) + (y - c[1]).powi(2)).sqrt();
+            let d = ((x - c[0]).ipow(2) + (y - c[1]).ipow(2)).sqrt();
             if d <= p.r() {
                 z = z.min(c[2] + p.at(d));
             }
@@ -1247,7 +1248,7 @@ mod tests {
                         let x = m.x0 + (i as f64 + u as f64 / 4.0) * m.h;
                         let y = m.y0 + (j as f64 + v as f64 / 4.0) * m.h;
                         assert!(
-                            ((x - c.x).powi(2) + (y - c.y).powi(2)).sqrt() <= 5.3 + 1e-9,
+                            ((x - c.x).ipow(2) + (y - c.y).ipow(2)).sqrt() <= 5.3 + 1e-9,
                             "cell {i} {j} pokes out"
                         );
                     }

@@ -1,6 +1,7 @@
 //! The audit's probes (research/kernel-audit/audit2.md §2.1, §2.2, §2.6): parts that failed or
 //! took the wrong construction before, each held to what it should build.
 use forge_geom::Surface;
+use forge_math::ipow::Powi as _;
 use forge_math::{Frame, Point2, dmath};
 use forge_ops::{ProfileLoop, Segment};
 use forge_sheet::{BendRule, FeatureId, Gauge, Map, Sheet, WallId, build_with};
@@ -459,7 +460,7 @@ fn a_flange_tip_resting_on_a_bends_outer_skin_is_a_touch() {
                 "{a:?} {b:?}"
             );
             // on the skin, inside the zone's width
-            let d = ((at.x - 96.0).powi(2) + (at.z + 4.0).powi(2)).sqrt();
+            let d = ((at.x - 96.0).ipow(2) + (at.z + 4.0).ipow(2)).sqrt();
             assert!((d - 4.0).abs() < 1e-4 && at.y > 9.0 && at.y < 31.0, "{at:?}");
         }
         r => panic!("a tip on the bend's skin: {r:?}"),

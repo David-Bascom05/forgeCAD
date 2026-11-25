@@ -12,6 +12,7 @@
 //! (`cam.ok`). The part is given an alloy (6061-T6) for realistic feeds.
 use forge_cam::ops::PMove;
 use forge_machine::sim::SegKind;
+use forge_math::ipow::Powi as _;
 
 const HEAD: &str = "machining
 shared tol = 0.01
@@ -99,7 +100,7 @@ struct Run {
 const BLOCK_CYCLE: f64 = 0.002;
 
 fn arc_len(at: [f64; 3], to: [f64; 3], c: [f64; 2], cw: bool) -> f64 {
-    let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
+    let r = ((at[0] - c[0]).ipow(2) + (at[1] - c[1]).ipow(2)).sqrt();
     let a0 = forge_math::dmath::atan2(at[1] - c[1], at[0] - c[0]);
     let mut a1 = forge_math::dmath::atan2(to[1] - c[1], to[0] - c[0]);
     let tau = std::f64::consts::TAU;
@@ -113,7 +114,7 @@ fn arc_len(at: [f64; 3], to: [f64; 3], c: [f64; 2], cw: bool) -> f64 {
         }
     }
     let s = r * (a1 - a0).abs();
-    (s * s + (to[2] - at[2]).powi(2)).sqrt()
+    (s * s + (to[2] - at[2]).ipow(2)).sqrt()
 }
 
 fn run(op: &str, dir: &std::path::Path) -> Run {
@@ -143,7 +144,7 @@ fn run(op: &str, dir: &std::path::Path) -> Run {
                 forge_cam::ops::PMove::Rapid { to } => (to, 0.0, "Rapid".into()),
                 _ => continue,
             };
-            let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2) + (to[2] - at[2]).powi(2)).sqrt();
+            let l = ((to[0] - at[0]).ipow(2) + (to[1] - at[1]).ipow(2) + (to[2] - at[2]).ipow(2)).sqrt();
             let e = by.entry(ph).or_insert((0usize, 0.0f64, 0.0f64));
             e.0 += 1;
             e.1 += l;
@@ -166,7 +167,7 @@ fn run(op: &str, dir: &std::path::Path) -> Run {
         match *m {
             PMove::Rapid { to } => at = to,
             PMove::Line { to, .. } => {
-                len += ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2) + (to[2] - at[2]).powi(2)).sqrt();
+                len += ((to[0] - at[0]).ipow(2) + (to[1] - at[1]).ipow(2) + (to[2] - at[2]).ipow(2)).sqrt();
                 n += 1;
                 at = to;
             }

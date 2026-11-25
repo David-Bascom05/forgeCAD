@@ -7,6 +7,7 @@
 //! what is left) comes from the run's certified checks and its exact G4 leftover, never from the
 //! dexels.
 
+use forge_math::ipow::Powi as _;
 pub mod draw;
 pub mod machine;
 pub mod timeline;
@@ -438,7 +439,7 @@ impl Sim {
                     }
                     if let Some(t) = self.tl.locate(oi, pi, c.move_index, 0.5) {
                         let (q, _) = self.tl.pos(t).unwrap_or(([f64::INFINITY; 3], 0));
-                        let d = (0..3).map(|k| (q[k] - c.at[k]).powi(2)).sum::<f64>();
+                        let d = (0..3).map(|k| (q[k] - c.at[k]).ipow(2)).sum::<f64>();
                         if best.is_none_or(|b| d < b.0) {
                             best = Some((d, t));
                         }

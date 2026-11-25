@@ -1,6 +1,7 @@
 //! The toolpath and stock simulation, headless, on real machining documents
 //! (examples/machined): the timeline, the display stock, and the certified checks as markers.
 
+use forge_math::ipow::Powi as _;
 use forge_render::camsim::timeline::{Kind, Timeline, push_path};
 use forge_render::camsim::zmap::{Compare, Cutter, ZMap, compare};
 use forge_render::camsim::{Sim, draw};
@@ -353,7 +354,7 @@ fn the_flanges_posted_program_on_its_machine() {
     for g in mv.tl.segs.iter().filter(|g| g.kind != Kind::Rapid) {
         let d = ends
             .iter()
-            .map(|q| (0..3).map(|k| (q[k] - g.b[k]).powi(2)).sum::<f64>().sqrt())
+            .map(|q| (0..3).map(|k| (q[k] - g.b[k]).ipow(2)).sum::<f64>().sqrt())
             .fold(f64::INFINITY, f64::min);
         assert!(d < 1e-6, "a machine motion ends {d} from the posted path");
     }
@@ -362,7 +363,7 @@ fn the_flanges_posted_program_on_its_machine() {
         let s = &m.tl.segments[k];
         let want = m.tip(&s.at(0.37), s.tool.unwrap()).unwrap();
         let got = g.at(0.37);
-        let d = (0..3).map(|i| (want[i] - got[i]).powi(2)).sum::<f64>().sqrt();
+        let d = (0..3).map(|i| (want[i] - got[i]).ipow(2)).sum::<f64>().sqrt();
         assert!(
             d < 1e-6,
             "piece {k} ({:?}, arc {:?}) off the machine's by {d}: {got:?} vs {want:?}",

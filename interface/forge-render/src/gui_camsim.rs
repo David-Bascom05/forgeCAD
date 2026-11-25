@@ -7,6 +7,7 @@ use crate::camsim::Sim;
 use crate::camsim::draw::{self, Eye, PathShow, StockColour};
 use crate::gui_camsim_panel::{CamSimUi, PartShow};
 use crate::origin::WorldVert;
+use forge_math::ipow::Powi as _;
 
 impl Gui {
     /// The workspace's document simulated off the window's thread whenever its run is new; a
@@ -195,7 +196,7 @@ impl Gui {
         {
             let c = [0, 1, 2].map(|k| 0.5 * (lo[k] + hi[k]));
             let r =
-                0.5 * ((hi[0] - lo[0]).powi(2) + (hi[1] - lo[1]).powi(2) + (hi[2] - lo[2]).powi(2)).sqrt();
+                0.5 * ((hi[0] - lo[0]).ipow(2) + (hi[1] - lo[1]).ipow(2) + (hi[2] - lo[2]).ipow(2)).sqrt();
             // the subject's sphere at 70 % of the uncovered area's shorter side (STANDARD §2:
             // 60–75 %), from the app's 3/4 view
             let free = (
@@ -559,7 +560,7 @@ impl Gui {
                     {
                         let c = [0, 1, 2].map(|k| 0.5 * (lo[k] + hi[k]));
                         let r = 0.5
-                            * ((hi[0] - lo[0]).powi(2) + (hi[1] - lo[1]).powi(2) + (hi[2] - lo[2]).powi(2))
+                            * ((hi[0] - lo[0]).ipow(2) + (hi[1] - lo[1]).ipow(2) + (hi[2] - lo[2]).ipow(2))
                                 .sqrt();
                         view.nav.camera = super::view_camera(c, r, self.shell.view.parallel, view.size);
                         view.dirty = true;

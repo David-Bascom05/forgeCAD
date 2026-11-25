@@ -11,6 +11,7 @@
 use super::timeline::Seg;
 use forge_cam_geom::tool::{PSeg, Part, Shape};
 use forge_math::dmath;
+use forge_math::ipow::Powi as _;
 
 /// The cutter's lower envelope: the lowest height of its cutting body above the tip at each
 /// radius, sampled every `dr`, up to `r`.
@@ -260,7 +261,7 @@ impl ZMap {
         for j in j0..j1 {
             for i in i0..i1 {
                 let c = self.centre(i, j);
-                let d = ((c[0] - p[0]).powi(2) + (c[1] - p[1]).powi(2)).sqrt();
+                let d = ((c[0] - p[0]).ipow(2) + (c[1] - p[1]).ipow(2)).sqrt();
                 if let Some(h) = tool.at(d) {
                     any |= act(self, j * self.nx + i, p[2] as f32 + h);
                 }
@@ -317,7 +318,7 @@ impl ZMap {
                         } else {
                             0.0
                         };
-                        let d = ((c[0] - a[0] - t * dx).powi(2) + (c[1] - a[1] - t * dy).powi(2)).sqrt();
+                        let d = ((c[0] - a[0] - t * dx).ipow(2) + (c[1] - a[1] - t * dy).ipow(2)).sqrt();
                         if let Some(h) = tool.at(d) {
                             any |= act(self, j * self.nx + i, z + h);
                         }
@@ -348,8 +349,8 @@ impl ZMap {
                             (rho - ar.r).abs()
                         } else {
                             let e = |t: f64| {
-                                ((c[0] - ar.c[0] - ar.r * dmath::cos(t)).powi(2)
-                                    + (c[1] - ar.c[1] - ar.r * dmath::sin(t)).powi(2))
+                                ((c[0] - ar.c[0] - ar.r * dmath::cos(t)).ipow(2)
+                                    + (c[1] - ar.c[1] - ar.r * dmath::sin(t)).ipow(2))
                                 .sqrt()
                             };
                             e(lo_a).min(e(lo_a + sw))

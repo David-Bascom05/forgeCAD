@@ -358,13 +358,14 @@ pub fn gauss_legendre(n: usize) -> Vec<(f64, f64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ipow::Powi as _;
 
     #[test]
     fn gauss_legendre_integrates_to_its_degree() {
         for n in [1, 3, 8, 16, 32] {
             let r = gauss_legendre(n);
             for d in 0..2 * n {
-                let got: f64 = r.iter().map(|&(x, w)| w * x.powi(d as i32)).sum();
+                let got: f64 = r.iter().map(|&(x, w)| w * x.ipow(d as i32)).sum();
                 let want = if d % 2 == 0 { 2.0 / (d + 1) as f64 } else { 0.0 };
                 assert!((got - want).abs() < 1e-14, "{n} {d} {got}");
             }
