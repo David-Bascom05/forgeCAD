@@ -244,6 +244,34 @@ fn field_id(name: &str) -> egui::Id {
 /// field, its text selected, as it opens. A pick-first one: the pick, keys to the view; but a
 /// digit typed with nothing focused starts the entry in its first number field (pick the edges,
 /// type 2, Enter).
+/// What a digit handed to a field replaced: Esc puts it back (STANDARD §9).
+#[derive(Clone)]
+struct DigitUndo {
+    id: egui::Id,
+    param: &'static str,
+    was: String,
+}
+
+fn undo_key() -> egui::Id {
+    egui::Id::unique("fg-digit-undo")
+}
+
+/// Esc in the field a digit started: its old value back, the keys back to the view (the pick
+/// slot still takes picks), the dialog left open. Whether it was that Esc.
+pub(super) fn digit_escape(ctx: &egui::Context, tool: &mut FgTool) -> bool {
+    let Some(u) = ctx.data(|d| d.get_temp::<DigitUndo>(undo_key())) else {
+        return false;
+    };
+    // (egui has already taken the focus from the field for this Esc; the undo is kept only while
+    // the field held it, focus_first drops it once it's left)
+    ctx.data_mut(|d| d.remove::<DigitUndo>(undo_key()));
+    if let Some(p) = tool.params.iter_mut().find(|p| p.name == u.param) {
+        p.text = u.was;
+    }
+    ctx.memory_mut(|m| m.surrender_focus(u.id));
+    true
+}
+
 fn focus_first(ctx: &egui::Context, tool: &FgTool) {
     let hide = shown_only_with_picks(tool);
     let Some(p) = tool
@@ -260,15 +288,53 @@ fn focus_first(ctx: &egui::Context, tool: &FgTool) {
     let fresh = ctx.data(|d| d.get_temp::<u64>(key)).is_none_or(|f| f + 1 < frame);
     ctx.data_mut(|d| d.insert_temp(key, frame));
     let free = ctx.memory(|m| m.focused().is_none());
+    // a digit alone: not mid-drag, no other key or modifier held
     let digit = || {
         ctx.input(|i| {
-            i.events.iter().any(|e| {
-                matches!(e, egui::Event::Text(s)
+            use egui::Key as K;
+            let alone = !i.pointer.any_down()
+                && !(i.modifiers.ctrl || i.modifiers.command || i.modifiers.alt)
+                && i.keys_down.iter().all(|k| {
+                    matches!(
+                        k,
+                        K::Num0
+                            | K::Num1
+                            | K::Num2
+                            | K::Num3
+                            | K::Num4
+                            | K::Num5
+                            | K::Num6
+                            | K::Num7
+                            | K::Num8
+                            | K::Num9
+                            | K::Period
+                            | K::Minus
+                    )
+                });
+            alone
+                && i.events.iter().any(|e| {
+                    matches!(e, egui::Event::Text(s)
                     if s.starts_with(|c: char| c.is_ascii_digit() || c == '.' || c == '-'))
-            })
+                })
         })
     };
-    if (fresh && tool.slots.is_empty()) || (free && !tool.slots.is_empty() && digit()) {
+    // the field a digit started, left (Enter, a click): nothing to put back
+    if ctx
+        .data(|d| d.get_temp::<DigitUndo>(undo_key()))
+        .is_some_and(|u| ctx.memory(|m| m.focused()) != Some(u.id))
+    {
+        ctx.data_mut(|d| d.remove::<DigitUndo>(undo_key()));
+    }
+    let handed = free && !tool.slots.is_empty() && digit();
+    if handed {
+        let u = DigitUndo {
+            id,
+            param: p.name,
+            was: p.text.clone(),
+        };
+        ctx.data_mut(|d| d.insert_temp(undo_key(), u));
+    }
+    if (fresh && tool.slots.is_empty()) || handed {
         ctx.memory_mut(|m| m.request_focus(id));
         // the text selected: what's typed replaces it
         let mut s = egui::text_edit::TextEditState::load(ctx, id).unwrap_or_default();

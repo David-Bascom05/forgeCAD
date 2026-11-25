@@ -1510,8 +1510,11 @@ impl Shell {
         } else if let Some(p) = self.fg.as_mut().filter(|p| p.renaming.is_some()) {
             p.renaming = None;
         } else if let Some(p) = self.fg.as_mut().filter(|p| p.tool.is_some()) {
-            p.tool = None;
-            self.status.clear();
+            // Esc in a number a digit started puts its old value back; else the dialog closes
+            if !p.tool.as_mut().is_some_and(|t| fgdialog::digit_escape(ctx, t)) {
+                p.tool = None;
+                self.status.clear();
+            }
         // the dialogs up over the view, each as its Cancel or × (Esc closed none of them)
         } else if self.content.open {
             self.content.open = false;
