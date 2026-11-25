@@ -18,9 +18,10 @@ Phases (seconds of wall, summed per kind of span; spans in forge-cam-lang/src/pr
   hops     links over the stock (hop_links)
   feeds    feeds from engagement (feeds_from_engagement)
   stock    the in-process stock updated with the op's voids
-  cert     certification of each posted path (certify_posted, G1-G3 and fixture) and G5
-  post     the program less its certification and round trip (lowering, posting)
-  rt       the round trip (G6: print, read back, compare)
+  post     the program statements' wall: lowering, certification, posting, round trip
+  cert     inside post: certification of each posted path (certify_posted, G1-G3 and
+           fixture) and G5, summed over the threads that ran it (can exceed post's wall)
+  rt       inside post: the round trip (G6: print, read back, compare)
   g4       the leftover (G4)
   json     the reply's JSON (the app's run_unmeasured)
   other    the rest of the wall (parse, eval, ..)
@@ -81,9 +82,10 @@ def phases(run):
             o = ops.setdefault(n, {"kind": f})
             o["gen"] = g
             o["stmt"] = s
-    ph["post"] -= ph["cert"] + ph["rt"]
+    # certification runs on the pool: its spans are summed over threads (CPU-like), inside
+    # the program's wall, as the round trip is
     ph["json"] = run["json"]
-    ph["other"] = run["wall"] - sum(ph.values())
+    ph["other"] = run["wall"] - sum(v for k, v in ph.items() if k not in ("cert", "rt"))
     return ph, ops
 
 def bench(doc, outputs, env):
@@ -188,7 +190,10 @@ def main():
     L.append(f"\nTotal cold: {tot:.2f} s over {len(res)} documents; "
              f"{sum(1 for r in res if 'runs' in r and r['runs'][0]['wall'] > 1.0)} over 1 s.\n")
     L.append("## Cold phases per document\n")
-    cols = ["part", "setup", "gen", "hops", "feeds", "stock", "cert", "post", "rt", "g4", "json", "other"]
+    L.append("`post` is the programs' wall; `cert` and `rt` are inside it, `cert` summed over the threads "
+             "that ran it. `other` is the wall outside every span: parsing, evaluation, and in a fresh process "
+             "the built-in library's first load. The turning documents have no spans (forge-turn-lang).\n")
+    cols = ["part", "setup", "gen", "hops", "feeds", "stock", "post", "cert", "rt", "g4", "json", "other"]
     L.append("| doc | cold | " + " | ".join(cols) + " |")
     L.append("|---|---|" + "---|" * len(cols))
     for r in res:
