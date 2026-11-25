@@ -572,7 +572,12 @@ fn punch_rec(file: &str, t: &Table) -> Result<PunchRec, CatalogError> {
 /// A record's `role` (`bend` when it says none) and, for an offset tool, its `z`.
 fn role_rd(r: &mut Rd) -> Result<crate::tooling::Role, CatalogError> {
     use crate::tooling::Role;
-    Ok(match r.text("role")?.as_deref() {
+    let said = r.text("role")?;
+    if said.is_some() {
+        // a role is a fact about the tool: cited like its numbers
+        r.held.push("role".into());
+    }
+    Ok(match said.as_deref() {
         None | Some("bend") => Role::Bend,
         Some("flatten") => Role::Flatten,
         Some("hem") => Role::Hem,
@@ -1084,15 +1089,27 @@ mod tests {
         for p in &c.punches {
             assert!(p.prov.real, "{}", p.id);
             if let Ok(x) = &p.punch {
-                for f in ["height", "tip_radius", "tip_angle"] {
+                // a flattening punch has a face, no tip: its height is what places it
+                let fields: &[&str] = if x.role == crate::tooling::Role::Flatten {
+                    &["height", "role"]
+                } else {
+                    &["height", "tip_radius", "tip_angle"]
+                };
+                for f in fields.iter().copied() {
                     assert_eq!(p.prov.status(f), Some(Status::Published), "{} {f}", p.id);
                 }
                 x.validate().unwrap();
             }
         }
         for d in &c.dies {
-            if d.die.is_ok() {
-                for f in ["v", "angle", "shoulder_radius", "height"] {
+            if let Ok(x) = &d.die {
+                // a flattening die is a block, no V
+                let fields: &[&str] = if x.role == crate::tooling::Role::Flatten {
+                    &["height", "role"]
+                } else {
+                    &["v", "angle", "shoulder_radius", "height"]
+                };
+                for f in fields.iter().copied() {
                     assert_eq!(d.prov.status(f), Some(Status::Published), "{} {f}", d.id);
                 }
             }

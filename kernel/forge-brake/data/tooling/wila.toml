@@ -5272,3 +5272,114 @@ source = "https://www.wilatooling.com/media/l04fzgkk/wila-catalog_2024_usa.pdf"
 taken = "2026-11-24"
 value = "Length column"
 basis = "the published single lengths, one piece of each (what a shop holds varies)"
+
+[[punch]]
+id = "wila/BIU-041"
+maker = "WILA"
+name = "Flattening top tool"
+real = true
+clamp = "wila-ns"
+kind = "straight"
+role = "flatten"
+height = 120
+width = 50
+max_thickness = 2
+segments = [{ length = 515, count = 1 }]
+
+[[punch.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.87"
+taken = "2026-11-25"
+value = "Flattening tool to be used in combination with bottom tools DDU-003 and OZU-384; NS adaption, fixed Safety-Pins"
+
+[[punch.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.87"
+taken = "2026-11-25"
+value = "Flattening tool"
+
+[[punch.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.87"
+taken = "2026-11-25"
+value = "drawing 120 mm below the clamp shoulder (156 overall)"
+
+[[punch.cite]]
+path = "width"
+status = "estimate"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.87"
+taken = "2026-11-25"
+value = "drawing 50 mm across the top"
+basis = "the one width drawn, taken as the block's width all the way down (the flat face's own width is not dimensioned)"
+
+[[punch.cite]]
+path = "max_thickness"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.87"
+taken = "2026-11-25"
+value = "Max. sheet thickness 2 mm"
+
+[[punch.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.87"
+taken = "2026-11-25"
+value = "BIU-041/1 515 mm"
+
+[[die]]
+id = "wila/OZU-384"
+maker = "WILA"
+name = "Flattening bottom tool"
+real = true
+clamp = "wila-ns"
+role = "flatten"
+height = 100
+width = 50
+max_thickness = 2
+segments = [{ length = 515, count = 1 }]
+
+[[die.cite]]
+path = "record"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.87"
+taken = "2026-11-25"
+value = "flattening bottom tool, used with top tool BIU-041"
+
+[[die.cite]]
+path = "role"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.87"
+taken = "2026-11-25"
+value = "Flattening tool"
+
+[[die.cite]]
+path = "height"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.87"
+taken = "2026-11-25"
+value = "working height 100 mm (drawing)"
+
+[[die.cite]]
+path = "width"
+status = "estimate"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.87"
+taken = "2026-11-25"
+value = "drawing 50 mm"
+basis = "the one width drawn, taken as the block's width all the way down"
+
+[[die.cite]]
+path = "max_thickness"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.87"
+taken = "2026-11-25"
+value = "Max. sheet thickness 2 mm"
+
+[[die.cite]]
+path = "segments"
+status = "published"
+source = "https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf p.87"
+taken = "2026-11-25"
+value = "OZU-384/1 515 mm"

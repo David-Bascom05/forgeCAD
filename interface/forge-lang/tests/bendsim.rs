@@ -1077,3 +1077,36 @@ lip = hem(base.edge(plan.outline[0]), kind: \"open\", gap: t, length: 10)\n";
     assert_eq!(steps[1].get("die").and_then(Json::str), Some("flat-bottom"));
     assert_eq!(steps[0].get("bend"), steps[1].get("bend"));
 }
+
+/// A hem on WILA's catalogue tools: pre-bent on a 28 degree punch in a 30 degree V, flattened
+/// on WILA's flattening pair (BIU-041 over OZU-384, cited from WILA's catalogue p.87).
+#[test]
+fn a_hem_on_wila_tools_is_flattened_on_its_flattening_pair() {
+    let src = "shared t = 1\nshared r = 1\nshared k = ratio(0.4)\n\
+sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (300, 10))\n}\n\
+base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
+lip = hem(base.edge(plan.outline[0]), kind: \"open\", gap: t, length: 10)\n";
+    let ask = forge_lang::bendsim::parse(
+        &[
+            "press",
+            "trumpf-trubend-5130",
+            "punches",
+            "wila/BIU-001,wila/BIU-041",
+            "dies",
+            "wila/OZU-061,wila/OZU-384",
+        ]
+        .map(String::from),
+    )
+    .unwrap();
+    let a = ask_src(src, None, None, &ask);
+    assert!(a.ok, "{}", a.text);
+    assert_eq!(a.json.get("feasible"), Some(&Json::Bool(true)), "{}", a.text);
+    let steps = arr(&a.json, "steps");
+    let strokes: Vec<&str> = steps
+        .iter()
+        .filter_map(|s| s.get("stroke").and_then(Json::str))
+        .collect();
+    assert_eq!(strokes, ["pre-bend", "flatten"], "{}", a.text);
+    assert_eq!(steps[1].get("punch").and_then(Json::str), Some("wila/BIU-041"));
+    assert_eq!(steps[1].get("die").and_then(Json::str), Some("wila/OZU-384"));
+}
