@@ -127,17 +127,13 @@ fn partitions_match_transitive_closure_for_every_four_terminal_graph() {
         for i in 0..4 {
             s += &format!("p{i}=junction(sheet:top,at:(0,0))\n");
         }
-        let mut reach = [[false; 4]; 4];
-        let mut bit = 0;
-        for i in 0..4 {
-            reach[i][i] = true;
-            for j in 0..i {
-                if mask & (1 << bit) != 0 {
-                    reach[i][j] = true;
-                    reach[j][i] = true;
-                    s += &format!("w{bit}=wire(sheet:top,from:p{i},to:p{j})\n");
-                }
-                bit += 1;
+        let mut reach: [[bool; 4]; 4] = std::array::from_fn(|i| std::array::from_fn(|j| i == j));
+        let edges = [(1, 0), (2, 0), (2, 1), (3, 0), (3, 1), (3, 2)];
+        for (bit, (i, j)) in edges.into_iter().enumerate() {
+            if mask & (1 << bit) != 0 {
+                reach[i][j] = true;
+                reach[j][i] = true;
+                s += &format!("w{bit}=wire(sheet:top,from:p{i},to:p{j})\n");
             }
         }
         for k in 0..4 {

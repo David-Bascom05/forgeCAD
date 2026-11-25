@@ -35,3 +35,12 @@ The probe builds a sheet of MCU and capacitor pairs, starts the native MCP serve
 cargo build --release --locked -p forge-cli
 python3 research/electronics/probes/schematic_latency.py target/release/forgecad --channels 256 --samples 40
 ```
+
+Measured on the development Linux x86-64 host with the native Cargo test-profile CLI (opt-level 1), 40 samples per case, 25 November 2026. Each cold value is one startup. Background work and hardware affect these timings.
+
+| Pins | Cold query | Unchanged p50 / p95 | After placement move p50 / p95 |
+| ---: | ---: | ---: | ---: |
+| 1,024 | 24.4 ms | 0.085 / 0.162 ms | 0.335 / 0.486 ms |
+| 4,096 | 96.8 ms | 0.297 / 0.620 ms | 1.016 / 1.372 ms |
+
+Before the coordinate-only update, the same 1,024-pin probe measured 18.6 ms median and 28.1 ms p95 after a move. Structural edits still require a fresh graph compilation.
