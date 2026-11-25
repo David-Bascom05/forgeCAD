@@ -1,6 +1,9 @@
 //! `forge-server DIR [--port P] [--bind ADDR] [--token T] [--user NAME:TOKEN]... [--store file|mem]
 //!  [--origin URL]... [--checkpoint SECONDS] [--insecure-lan]`
 //!
+//! PHASE 1: LOOPBACK / DEV ONLY. No TLS, dev tokens only, no accounts: never expose it to a
+//! network you do not trust (research/hosted/DESIGN.md phase 2 adds what that needs).
+//!
 //! Serves the project folder DIR to collaborating clients at `ws://HOST:P/sync`. Phase 1: dev
 //! tokens only (each `--user` is an author name and its token; `--token T` is the user `dev`; with
 //! none, a token is made and printed). Binds 127.0.0.1; another address only with
@@ -9,7 +12,7 @@
 use forge_server::{Config, StoreKind, random_token, start};
 use std::process::ExitCode;
 
-const USAGE: &str = "forge-server DIR [--port P] [--bind ADDR] [--token T] [--user NAME:TOKEN]... \
+const USAGE: &str = "PHASE 1: LOOPBACK / DEV ONLY (no TLS, dev tokens, no accounts): never expose it.\nforge-server DIR [--port P] [--bind ADDR] [--token T] [--user NAME:TOKEN]... \
                      [--store file|mem] [--origin URL]... [--checkpoint SECONDS] [--insecure-lan]";
 
 fn parse(args: &[String]) -> Result<Config, String> {

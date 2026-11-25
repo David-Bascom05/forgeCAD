@@ -40,6 +40,9 @@ const fn c(x: u32) -> Color32 {
     Color32::from_rgb((x >> 16) as u8, (x >> 8) as u8, x as u8)
 }
 
+/// Text on a `focus` (amber) fill, in either theme: near-black, over 8:1 (white is under 3:1).
+pub const ON_FOCUS: Color32 = Color32::from_rgb(0x1B, 0x1D, 0x21);
+
 pub const DARK: Theme = Theme {
     dark: true,
     bar: c(0x16304F),

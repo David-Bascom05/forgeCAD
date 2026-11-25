@@ -3,8 +3,8 @@
 // desktop only: a page starts no CLI (std's threads and sleeps never run there)
 #![cfg_attr(target_arch = "wasm32", allow(clippy::disallowed_methods))]
 
-use super::{Backend, Event, Out, Watch, clean_env};
-use crate::shell::agent::tool_summary;
+use super::{Backend, Event, Out, Watch, clean_env, spawn};
+use crate::shell::agent::{Answer, Mode, present, tool_summary};
 use forge_agent::json::Json;
 use std::collections::HashSet;
 use std::io::{BufRead, BufReader, Write};
@@ -26,6 +26,52 @@ pub struct Parser {
     tools: HashSet<String>,
     /// This turn already said why it failed.
     failed: bool,
+    /// Permissions asked since last taken: the request's id, the tool's input, and the
+    /// suggestions "Always" would apply.
+    pub asked: Vec<(String, Json, Json)>,
+}
+
+/// What "Always" would allow, from the request's `permission_suggestions`, in words.
+pub fn always_words(suggestions: &Json) -> Option<String> {
+    let place = |d: &str| match d {
+        "session" => "for this chat",
+        "localSettings" => "in this project, on this computer",
+        "projectSettings" => "in this project",
+        "userSettings" => "in every project",
+        _ => "",
+    };
+    let said: Vec<String> = arr(Some(suggestions))
+        .iter()
+        .filter_map(|s| match str_of(s, "type") {
+            "setMode" => Some(match str_of(s, "mode") {
+                "acceptEdits" => format!("Accept edits {}", place(str_of(s, "destination"))),
+                m => format!("Switch to {m} {}", place(str_of(s, "destination"))),
+            }),
+            "addRules" if str_of(s, "behavior") == "allow" => {
+                let rules: Vec<String> = arr(s.get("rules"))
+                    .iter()
+                    .map(|r| match str_of(r, "ruleContent") {
+                        "" => str_of(r, "toolName").to_string(),
+                        c => format!("{}({c})", str_of(r, "toolName")),
+                    })
+                    .collect();
+                (!rules.is_empty())
+                    .then(|| format!("Allow {} {}", rules.join(", "), place(str_of(s, "destination"))))
+            }
+            "addDirectories" => Some(format!(
+                "Allow {} {}",
+                arr(s.get("directories"))
+                    .iter()
+                    .filter_map(Json::str)
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                place(str_of(s, "destination"))
+            )),
+            _ => None,
+        })
+        .map(|w| w.trim().to_string())
+        .collect();
+    (!said.is_empty()).then(|| said.join("; "))
 }
 
 fn get<'a>(j: &'a Json, k: &str) -> Option<&'a Json> {
@@ -70,6 +116,52 @@ impl Parser {
             "system" if str_of(&d, "subtype") == "init" => {
                 self.session = Some(str_of(&d, "session_id").to_string());
                 self.model = Some(str_of(&d, "model").to_string());
+                if let Some(m) = d.get("permissionMode").and_then(Json::str) {
+                    out.push(Event::Mode(m.to_string()));
+                }
+                // the commands it takes in a message: the person's skills, compact, context...
+                let commands: Vec<String> = arr(get(&d, "slash_commands"))
+                    .iter()
+                    .filter_map(Json::str)
+                    .map(str::to_string)
+                    .collect();
+                if !commands.is_empty() {
+                    out.push(Event::Commands(commands));
+                }
+            }
+            "system" if str_of(&d, "subtype") == "status" => {
+                if let Some(m) = d.get("permissionMode").and_then(Json::str) {
+                    out.push(Event::Mode(m.to_string()));
+                }
+            }
+            // refused without asking (a rule, or the mode): said, not just a red dot
+            "system" if str_of(&d, "subtype") == "permission_denied" => out.push(Event::Note {
+                text: format!("Not allowed: {}", str_of(&d, "message")),
+                error: true,
+            }),
+            "control_request" => {
+                let Some(r) = get(&d, "request") else { return out };
+                if str_of(r, "subtype") == "can_use_tool" {
+                    let id = str_of(&d, "request_id").to_string();
+                    let tool = str_of(r, "tool_name").to_string();
+                    let input = r.get("input").cloned().unwrap_or(Json::Obj(vec![]));
+                    let suggestions = r
+                        .get("permission_suggestions")
+                        .cloned()
+                        .unwrap_or(Json::Arr(vec![]));
+                    let (summary, whole) = tool_summary(&tool, &input);
+                    let summary = present(&summary);
+                    out.push(Event::Permission {
+                        id: id.clone(),
+                        tool,
+                        tool_use: str_of(r, "tool_use_id").to_string(),
+                        raw: input.to_string(),
+                        summary,
+                        input: whole,
+                        always: always_words(&suggestions),
+                    });
+                    self.asked.push((id, input, suggestions));
+                }
             }
             "stream_event" => {
                 let Some(e) = get(&d, "event") else { return out };
@@ -172,7 +264,47 @@ impl Parser {
                     self.session = Some(s.to_string());
                 }
                 self.failed = false;
+                // what the turn took: its time and tokens (its cost, what the API would charge)
+                if let Some(ms) = d.get("duration_ms").and_then(Json::num) {
+                    let u = get(&d, "usage");
+                    let n = |k: &str| u.and_then(|u| u.get(k)).and_then(Json::num).unwrap_or(0.0) as u64;
+                    out.push(Event::Usage {
+                        secs: ms / 1000.0,
+                        tokens_in: n("input_tokens")
+                            + n("cache_read_input_tokens")
+                            + n("cache_creation_input_tokens"),
+                        tokens_out: n("output_tokens"),
+                        cost: d.get("total_cost_usd").and_then(Json::num).unwrap_or(0.0),
+                    });
+                }
                 out.push(Event::Done { error, stopped });
+            }
+            // the plan's limit, said when it's not simply allowed
+            "rate_limit_event" => {
+                let info = get(&d, "rate_limit_info");
+                let status = info.map_or("", |i| str_of(i, "status"));
+                if !status.is_empty() && status != "allowed" {
+                    let resets = info.and_then(|i| i.get("resetsAt")).and_then(Json::num);
+                    let when = resets.map_or(String::new(), |at| {
+                        let mins = ((at as i64 - forge_history::now()) / 60).max(0);
+                        if mins >= 120 {
+                            format!("; it resets in about {} hours", mins / 60)
+                        } else {
+                            format!("; it resets in about {mins} minutes")
+                        }
+                    });
+                    out.push(Event::Note {
+                        text: format!(
+                            "Your Claude plan's limit: {}{when}",
+                            if status == "allowed_warning" {
+                                "close to it"
+                            } else {
+                                "reached"
+                            }
+                        ),
+                        error: status != "allowed_warning",
+                    });
+                }
             }
             _ => {}
         }
@@ -212,6 +344,11 @@ pub struct ClaudeCode {
     busy: Arc<AtomicBool>,
     stops: u64,
     watch: Arc<Mutex<Watch>>,
+    /// Permissions waiting on the person, by request id: the tool's input and the suggestions.
+    asked: Arc<Mutex<std::collections::HashMap<String, (Json, Json)>>>,
+    /// What may run without asking, when the person chose it in the tab: `--permission-mode`
+    /// when it starts, and sent when it changes. None: their own settings' `defaultMode`.
+    mode: Option<Mode>,
 }
 
 impl ClaudeCode {
@@ -229,6 +366,8 @@ impl ClaudeCode {
             alive: Arc::new(Mutex::new(false)),
             busy: Arc::new(AtomicBool::new(false)),
             stops: 0,
+            asked: Default::default(),
+            mode: None,
         }
     }
 
@@ -248,6 +387,12 @@ impl ClaudeCode {
         .into_iter()
         .map(str::to_string)
         .collect();
+        // What would prompt in a terminal asks the app (a `can_use_tool` control request) instead
+        // of being refused unseen; the person's own allow and deny rules still apply first.
+        a.extend(["--permission-prompt-tool".into(), "stdio".into()]);
+        if let Some(m) = self.mode {
+            a.extend(["--permission-mode".into(), m.flag().into()]);
+        }
         // Add the app connection alongside the user's configured tools and permissions.
         if let Some(mcp) = &self.cfg.mcp {
             a.extend(["--mcp-config".into(), mcp.clone()]);
@@ -265,6 +410,9 @@ impl ClaudeCode {
         a
     }
 
+    // the error is the transcript's event saying why (sent once, at most once a turn): its size
+    // is the event's, not worth a box
+    #[allow(clippy::result_large_err)]
     fn spawn(&mut self) -> Result<(), Event> {
         let dir = self.cfg.cwd.clone();
         if let Err(e) = forge_dirs::fs::create_dir_all(&dir) {
@@ -282,7 +430,7 @@ impl ClaudeCode {
         clean_env(&mut c);
         // the folder as it is before the agent can touch it: a write in its first moment is a change
         let watch = self.watch.clone();
-        let mut child = c.spawn().map_err(|e| {
+        let mut child = spawn(&mut c).map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 Event::Problem {
                     text: "Claude Code isn't installed.".into(),
@@ -317,18 +465,26 @@ impl ClaudeCode {
                 }
             })
             .expect("a thread");
-        let (out, session, alive, busy) = (
+        let (out, session, alive, busy, asked) = (
             self.out.clone(),
             self.session.clone(),
             self.alive.clone(),
             self.busy.clone(),
+            self.asked.clone(),
         );
         std::thread::Builder::new()
             .name("agent-claude".into())
             .spawn(move || {
                 let mut parser = Parser::default();
                 for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-                    for e in parser.line(&line) {
+                    let said = parser.line(&line);
+                    if !parser.asked.is_empty() {
+                        let mut a = asked.lock().expect("no panics while held");
+                        for (id, input, sugg) in parser.asked.drain(..) {
+                            a.insert(id, (input, sugg));
+                        }
+                    }
+                    for e in said {
                         let after = matches!(e, Event::ToolDone { .. } | Event::Done { .. });
                         if after {
                             for c in watch.lock().expect("watch").check() {
@@ -337,6 +493,8 @@ impl ClaudeCode {
                         }
                         if matches!(e, Event::Done { .. } | Event::Problem { .. }) {
                             busy.store(false, Ordering::SeqCst);
+                            // a turn's over: nothing it asked is waiting any more
+                            asked.lock().expect("no panics while held").clear();
                         }
                         out.send(e);
                     }
@@ -412,6 +570,76 @@ impl Backend for ClaudeCode {
         {
             self.busy.store(false, Ordering::SeqCst);
             self.out.send(e);
+        }
+    }
+
+    fn answer(&mut self, id: &str, a: Answer) {
+        let Some((input, suggestions)) = self.asked.lock().expect("no panics while held").remove(id) else {
+            return;
+        };
+        let response = match a {
+            Answer::Allow => Json::obj(vec![("behavior", "allow".into()), ("updatedInput", input)]),
+            Answer::Always => Json::obj(vec![
+                ("behavior", "allow".into()),
+                ("updatedInput", input),
+                ("updatedPermissions", suggestions),
+            ]),
+            Answer::Deny => Json::obj(vec![
+                ("behavior", "deny".into()),
+                ("message", "The person declined this in the app.".into()),
+            ]),
+        };
+        let msg = Json::obj(vec![
+            ("type", "control_response".into()),
+            (
+                "response",
+                Json::obj(vec![
+                    ("subtype", "success".into()),
+                    ("request_id", id.into()),
+                    ("response", response),
+                ]),
+            ),
+        ]);
+        self.write(&msg);
+    }
+
+    fn set_own_mode(&mut self, flag: &str) {
+        // started again, it starts as their settings say: no `--permission-mode`
+        self.mode = None;
+        self.stops += 1;
+        let req = Json::obj(vec![
+            ("type", "control_request".into()),
+            ("request_id", format!("mode-{}", self.stops).into()),
+            (
+                "request",
+                Json::obj(vec![
+                    ("subtype", "set_permission_mode".into()),
+                    ("mode", flag.into()),
+                ]),
+            ),
+        ]);
+        if *self.alive.lock().expect("no panics while held") {
+            self.write(&req);
+        }
+    }
+
+    fn set_mode(&mut self, m: Mode) {
+        self.mode = Some(m);
+        self.stops += 1;
+        let req = Json::obj(vec![
+            ("type", "control_request".into()),
+            ("request_id", format!("mode-{}", self.stops).into()),
+            (
+                "request",
+                Json::obj(vec![
+                    ("subtype", "set_permission_mode".into()),
+                    ("mode", m.flag().into()),
+                ]),
+            ),
+        ]);
+        // not running yet: `--permission-mode` says it when it starts
+        if *self.alive.lock().expect("no panics while held") {
+            self.write(&req);
         }
     }
 
