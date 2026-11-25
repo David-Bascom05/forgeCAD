@@ -40,6 +40,8 @@ fn parse(args: &[String]) -> Result<Config, String> {
             "--origin" => c.origins.push(val()?),
             // phase 1 has no TLS: off loopback the token and every op cross the network in clear
             "--insecure-lan" => c.insecure_lan = true,
+            "--per-ip" => c.per_ip = val()?.parse().map_err(|_| "--per-ip: a number")?,
+            "--cap-loopback" => c.cap_loopback = true,
             "--checkpoint" => {
                 c.checkpoint_idle =
                     std::time::Duration::from_secs(val()?.parse().map_err(|_| "--checkpoint: seconds")?)
@@ -74,9 +76,12 @@ fn main() -> ExitCode {
     match start(c.clone()) {
         Ok(h) => {
             eprintln!("forge-server: {} at ws://{}/sync", c.root.display(), h.addr);
-            loop {
-                std::thread::park();
+            // the hub dead (a panic outside any document): serve no one, exit
+            while !h.dead() {
+                std::thread::sleep(std::time::Duration::from_millis(200));
             }
+            eprintln!("forge-server: exiting after a hub panic");
+            ExitCode::from(70)
         }
         Err(e) => {
             eprintln!("forge-server: {e}");

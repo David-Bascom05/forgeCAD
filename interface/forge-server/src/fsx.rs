@@ -39,8 +39,17 @@ pub fn canonical_doc(root: &Path, doc: &str) -> Result<PathBuf, &'static str> {
             return Err("a document's path stays inside the project (no links)");
         }
     }
-    if !std::fs::symlink_metadata(&at).is_ok_and(|m| m.is_file()) {
+    let meta = std::fs::symlink_metadata(&at).map_err(|_| "no such document")?;
+    if !meta.is_file() {
         return Err("no such document");
+    }
+    // a hard link is a second name for a file that may be anywhere (a `.git/config`, say)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if meta.nlink() != 1 {
+            return Err("a document's path stays inside the project (no links)");
+        }
     }
     // and, belt and braces, the resolved file is inside the resolved folder
     let real = at.canonicalize().map_err(|_| "no such document")?;
@@ -146,6 +155,8 @@ mod tests {
             std::os::unix::fs::symlink(d.join("a"), d.join("l")).unwrap();
             assert!(canonical_doc(&d, "notes.fg").is_err(), "a link to a dot file");
             assert!(canonical_doc(&d, "l/b.fg").is_err(), "a linked folder");
+            std::fs::hard_link(d.join(".env.fg"), d.join("hard.fg")).unwrap();
+            assert!(canonical_doc(&d, "hard.fg").is_err(), "a hard link");
             // put never writes through a planted link
             put(&d.join("a/c.fg"), b"new").unwrap();
             assert_eq!(std::fs::read(d.join("a/c.fg")).unwrap(), b"new");

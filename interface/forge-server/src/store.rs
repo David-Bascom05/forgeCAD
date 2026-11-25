@@ -33,6 +33,8 @@ const HEAD: usize = 16;
 pub struct FileLogStore {
     dir: PathBuf,
     open: HashMap<String, File>,
+    /// An open's parsed log, between `latest_snapshot` and `read_since`.
+    loaded: HashMap<String, (u64, Vec<Entry>)>,
 }
 
 /// Holds the project folder for one server: a second server on the same folder refuses to
@@ -62,6 +64,7 @@ impl FileLogStore {
         Ok(FileLogStore {
             dir,
             open: HashMap::new(),
+            loaded: HashMap::new(),
         })
     }
 
@@ -126,8 +129,9 @@ fn any_record_after(bytes: &[u8], from: usize) -> bool {
     false
 }
 
-impl Store for FileLogStore {
-    fn load(&mut self, doc: &str) -> io::Result<Option<(String, Vec<Entry>)>> {
+impl FileLogStore {
+    /// The whole log: (snapshot seq, its text, the entries after it).
+    fn load(&mut self, doc: &str) -> io::Result<Option<(u64, String, Vec<Entry>)>> {
         let p = self.path(doc);
         let mut f = match OpenOptions::new().read(true).write(true).open(&p) {
             Ok(f) => f,
@@ -141,6 +145,11 @@ impl Store for FileLogStore {
             let Some(r) = record_at(&bytes, at) else {
                 // not a whole valid record here: a torn tail only if nothing valid follows and
                 // what is here is a prefix of a record (its marker, so far as it goes)
+                // a tail of zeros: a crash after the file grew but before its data was written
+                // (ext4 writeback); never acknowledged
+                if bytes[at..].iter().all(|&b| b == 0) {
+                    break;
+                }
                 let prefix_ok = bytes[at..].iter().zip(MAGIC).all(|(a, b)| a == b);
                 let runs_past_end = bytes.len() - at < HEAD
                     || at + HEAD + u32::from_le_bytes(bytes[at + 4..at + 8].try_into().expect("4")) as usize
@@ -155,12 +164,13 @@ impl Store for FileLogStore {
                 .map_err(|_| corrupt(format!("{}: not UTF-8 at {at}", p.display())))?;
             let j = read(text).map_err(|e| corrupt(format!("{}: {e} at {at}", p.display())))?;
             if first.is_none() {
-                first = Some(
-                    j.get("first")
-                        .and_then(Json::str)
-                        .ok_or_else(|| corrupt(format!("{}: no first text", p.display())))?
-                        .to_string(),
-                );
+                let text = j
+                    .get("first")
+                    .and_then(Json::str)
+                    .ok_or_else(|| corrupt(format!("{}: no first text", p.display())))?
+                    .to_string();
+                let seq = j.get("seq").and_then(Json::num).map_or(0, |x| x as u64);
+                first = Some((seq, text));
             } else {
                 entries.push(
                     entry_from(&j).ok_or_else(|| corrupt(format!("{}: a bad entry at {at}", p.display())))?,
@@ -180,7 +190,7 @@ impl Store for FileLogStore {
         }
         f.seek(SeekFrom::End(0))?;
         match first {
-            Some(first) => Ok(Some((first, entries))),
+            Some((seq, text)) => Ok(Some((seq, text, entries))),
             // never written whole (a log from before atomic creation): no document yet
             None => {
                 drop(f);
@@ -188,6 +198,41 @@ impl Store for FileLogStore {
                 Ok(None)
             }
         }
+    }
+}
+
+impl Store for FileLogStore {
+    fn latest_snapshot(&mut self, doc: &str) -> io::Result<Option<(u64, String)>> {
+        let got = self.load(doc)?;
+        let snap = got.as_ref().map(|(s, t, _)| (*s, t.clone()));
+        // kept for the read_since that follows (an open reads both)
+        if let Some((s, _, es)) = got {
+            self.loaded.insert(doc.to_string(), (s, es));
+        }
+        Ok(snap)
+    }
+
+    fn read_since(&mut self, doc: &str, seq: u64) -> io::Result<Vec<Entry>> {
+        let es = match self.loaded.remove(doc) {
+            Some((_, es)) => es,
+            None => self.load(doc)?.map(|x| x.2).unwrap_or_default(),
+        };
+        Ok(es.into_iter().filter(|e| e.seq > seq).collect())
+    }
+
+    fn compact(&mut self, doc: &str, seq: u64, text: &str) -> io::Result<()> {
+        let j = Json::obj(vec![
+            ("first", text.into()),
+            ("seq", (seq as f64).into()),
+            ("th", format!("{:016x}", text_hash(text)).into()),
+        ]);
+        // the new log replaces the old whole (renamed over it): after a crash, one or the other
+        self.open.remove(doc);
+        crate::fsx::put(&self.path(doc), &Self::bytes(write(&j).as_bytes()))?;
+        if let Ok(d) = File::open(&self.dir) {
+            let _ = d.sync_all();
+        }
+        Ok(())
     }
 
     fn create(&mut self, doc: &str, text: &str) -> io::Result<()> {
@@ -211,8 +256,15 @@ impl Store for FileLogStore {
     fn append(&mut self, doc: &str, e: &Entry) -> io::Result<()> {
         let b = Self::bytes(write(&entry_json(e)).as_bytes());
         let f = self.file(doc)?;
-        f.write_all(&b)?;
-        f.sync_data()
+        let before = f.metadata()?.len();
+        let r = f.write_all(&b).and_then(|_| f.sync_data());
+        if r.is_err() {
+            // a part written (a full disk): cut back, so the log stays whole and appendable
+            let _ = f.set_len(before);
+            let _ = f.sync_data();
+            self.open.remove(doc);
+        }
+        r
     }
 }
 
@@ -268,12 +320,32 @@ mod tests {
         f.write_all(&whole[..HEAD + 3]).unwrap();
         drop(f);
         let mut s = FileLogStore::new(d.clone()).unwrap();
-        let (first, es) = s.load("p/a.fg").unwrap().unwrap();
+        let (_, first, es) = s.load("p/a.fg").unwrap().unwrap();
         assert_eq!(first, "shared a1 = 1\n");
         assert_eq!(es, vec![e(1), e(2), e(3)]);
         s.append("p/a.fg", &e(4)).unwrap();
         let mut s = FileLogStore::new(d.clone()).unwrap();
-        assert_eq!(s.load("p/a.fg").unwrap().unwrap().1.len(), 4);
+        assert_eq!(s.load("p/a.fg").unwrap().unwrap().2.len(), 4);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_zero_tail_is_torn_and_compaction_keeps_the_head() {
+        let (d, s) = made("zeros");
+        drop(s);
+        let mut f = OpenOptions::new().append(true).open(log_of(&d)).unwrap();
+        f.write_all(&[0; 300]).unwrap();
+        drop(f);
+        let mut s = FileLogStore::new(d.clone()).unwrap();
+        assert_eq!(s.load("p/a.fg").unwrap().unwrap().2.len(), 3);
+        s.compact("p/a.fg", 3, "shared a4 = 1\n").unwrap();
+        s.append("p/a.fg", &e(4)).unwrap();
+        let mut s = FileLogStore::new(d.clone()).unwrap();
+        assert_eq!(
+            s.latest_snapshot("p/a.fg").unwrap(),
+            Some((3, "shared a4 = 1\n".into()))
+        );
+        assert_eq!(s.read_since("p/a.fg", 3).unwrap(), vec![e(4)]);
         let _ = std::fs::remove_dir_all(&d);
     }
 

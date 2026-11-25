@@ -18,8 +18,13 @@ forge-agent = { path = "../forge-agent" }
 forge-history = { path = "../forge-history" }
 forge-git = { path = "../../kernel/forge-git" }
 
+[features]
+# a test-only op that panics a document's actor (tests/security.rs: quarantine)
+test-hooks = []
+
 [lints]
 workspace = true
 
 [dev-dependencies]
 forge-remote = { path = "../forge-remote" }
+forge-server = { path = ".", features = ["test-hooks"] }

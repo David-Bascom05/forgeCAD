@@ -71,6 +71,8 @@ fn joined(addr: &str, token: &str, client: &str) -> (forge_ws::Reader, forge_ws:
         client: client.into(),
         token: token.into(),
         seq: None,
+        proto: forge_sync::PROTOCOL,
+        kernel: forge_sync::KERNEL.into(),
     };
     w.send(&h.text()).unwrap();
     match next(&mut r) {
@@ -126,7 +128,10 @@ fn hostile_length_never_leaks_a_slot() {
 #[test]
 fn slow_upgrades_are_cut_and_one_address_is_capped() {
     let root = project("slow");
-    let (addr, h) = serve_with(&root, |_| {});
+    let (addr, h) = serve_with(&root, |c| {
+        c.cap_loopback = true;
+        c.per_ip = 3;
+    });
     let t0 = Instant::now();
     let mut s = TcpStream::connect(&addr).unwrap();
     let req = format!("GET /sync HTTP/1.1\r\nHost: {addr}\r\n");
@@ -151,10 +156,8 @@ fn slow_upgrades_are_cut_and_one_address_is_capped() {
         took < Duration::from_secs(8),
         "cut at the deadline, not per byte: {took:?}"
     );
-    // one address: at most PER_IP at once
-    let held: Vec<TcpStream> = (0..forge_server::PER_IP)
-        .map(|_| TcpStream::connect(&addr).unwrap())
-        .collect();
+    // one address (loopback, counted on request here): at most per_ip at once
+    let held: Vec<TcpStream> = (0..3).map(|_| TcpStream::connect(&addr).unwrap()).collect();
     std::thread::sleep(Duration::from_millis(100));
     let mut extra = TcpStream::connect(&addr).unwrap();
     let mut answer = String::new();
@@ -292,6 +295,8 @@ fn one_file_one_room() {
                 client: "c".into(),
                 token: ADA.into(),
                 seq: None,
+                proto: forge_sync::PROTOCOL,
+                kernel: forge_sync::KERNEL.into(),
             }
             .text(),
         )
@@ -345,6 +350,8 @@ fn outside_changes_and_one_server_per_folder() {
             client: "c".into(),
             token: ADA.into(),
             seq: None,
+            proto: forge_sync::PROTOCOL,
+            kernel: forge_sync::KERNEL.into(),
         }
         .text(),
     )
@@ -384,8 +391,8 @@ fn validation_stays_in_the_folder() {
         before: None,
         text: format!("lib_ext = use(\"../{name}\")"),
     };
-    let free = forge_sync::validate(DOC, &op, Some(root.clone()), None);
-    let held = forge_sync::validate(DOC, &op, Some(root.clone()), Some(root.clone()));
+    let free = forge_sync::validate(DOC, None, &op, Some(root.clone()), None);
+    let held = forge_sync::validate(DOC, None, &op, Some(root.clone()), Some(root.clone()));
     let _ = std::fs::remove_file(&outside);
     let _ = std::fs::remove_dir_all(&root);
     assert!(free.is_ok(), "with no root the file is read: {free:?}");
@@ -395,4 +402,325 @@ fn validation_stays_in_the_folder() {
         }
         x => panic!("read outside the root: {x:?}"),
     }
+}
+
+// ---- the re-review of 029ad8ae ----
+
+fn hello_doc(addr: &str, token: &str, client: &str, doc: &str) -> (forge_ws::Reader, forge_ws::Writer, u64) {
+    let (mut r, mut w) = forge_ws::connect(addr, "/sync", &[], 1 << 20).unwrap();
+    let h = Up::Hello {
+        doc: doc.into(),
+        client: client.into(),
+        token: token.into(),
+        seq: None,
+        proto: forge_sync::PROTOCOL,
+        kernel: forge_sync::KERNEL.into(),
+    };
+    w.send(&h.text()).unwrap();
+    match next(&mut r) {
+        Down::Welcome { seq, .. } => (r, w, seq),
+        d => panic!("{d:?}"),
+    }
+}
+
+/// A: a heavy document's checks take seconds; another document's edits are not held up by them
+/// (one actor per document), and the heavy document's own next edit still commits (its head is
+/// not evaluated again per op; abandoned checks are counted per document).
+#[test]
+fn a_heavy_document_slows_only_itself() {
+    let root = project("heavy");
+    std::fs::write(root.join("other.fg"), DOC).unwrap();
+    let (addr, h) = serve_with(&root, |_| {});
+    let (mut ra, mut wa, _) = hello_doc(&addr, ADA, "a", "part.fg");
+    let (mut rb, mut wb, _) = hello_doc(&addr, BO, "b", "other.fg");
+    let heavy = Op::AddFeature {
+        before: None,
+        text: "fn g(n) {\n  return len([i * 2 for i in 0..n])\n}\nfn hv(n) {\n  return g(n) + g(n) + g(n) + g(n)\n}\nfn hz(n) {\n  return hv(n) + hv(n) + hv(n)\n}\nshared heavy = hz(150000)".into(),
+    };
+    let t0 = Instant::now();
+    wa.send(
+        &Up::Op {
+            base: 0,
+            id: 1,
+            op: heavy,
+        }
+        .text(),
+    )
+    .unwrap();
+    std::thread::sleep(Duration::from_millis(50));
+    let t1 = Instant::now();
+    wb.send(
+        &Up::Op {
+            base: 0,
+            id: 1,
+            op: set_w(55.0),
+        }
+        .text(),
+    )
+    .unwrap();
+    assert!(matches!(next(&mut rb), Down::Ack { .. }));
+    let other = t1.elapsed();
+    match next(&mut ra) {
+        Down::Ack { .. } => {}
+        d => panic!("the heavy op: {d:?}"),
+    }
+    let heavy_took = t0.elapsed();
+    eprintln!("heavy op committed in {heavy_took:?}; the other document's op in {other:?}");
+    assert!(
+        other < heavy_took / 2,
+        "the other document waited: {other:?} of {heavy_took:?}"
+    );
+    // the heavy document's own trivial op: committed (one evaluation of the new text)
+    wa.send(
+        &Up::Op {
+            base: 1,
+            id: 2,
+            op: set_w(41.0),
+        }
+        .text(),
+    )
+    .unwrap();
+    let t2 = Instant::now();
+    match next(&mut ra) {
+        Down::Ack { .. } => eprintln!("its next op committed in {:?}", t2.elapsed()),
+        d => panic!("the heavy document's next op: {d:?}"),
+    }
+    h.stop();
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// B: a hash report at the head of a long log never makes the server replay the log; the
+/// document keeps answering.
+#[test]
+fn a_hash_report_on_a_long_log_is_answered_at_once() {
+    let root = project("longlog");
+    let (addr, h) = serve_with(&root, |_| {});
+    let (mut r, mut w, _) = hello_doc(&addr, ADA, "a", "part.fg");
+    for k in 0..400u64 {
+        w.send(
+            &Up::Op {
+                base: k,
+                id: k + 1,
+                op: set_w(10.0 + (k % 90) as f64),
+            }
+            .text(),
+        )
+        .unwrap();
+        assert!(matches!(next(&mut r), Down::Ack { .. }));
+    }
+    for seq in [400, 1, 200] {
+        w.send(&Up::BuildHash { seq, hash: 1 }.text()).unwrap();
+        let t0 = Instant::now();
+        w.send(&Up::Ping { t: 1.0 }.text()).unwrap();
+        loop {
+            match next(&mut r) {
+                Down::Pong { .. } => break,
+                Down::Diverged { .. } => continue,
+                d => panic!("{d:?}"),
+            }
+        }
+        assert!(
+            t0.elapsed() < Duration::from_millis(100),
+            "seq {seq}: {:?}",
+            t0.elapsed()
+        );
+    }
+    h.stop();
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// F: loopback is not capped per address by default (every local client, tunnel and proxy is
+/// loopback); connections that never say Hello have a cap of their own.
+#[test]
+fn many_local_clients_and_a_pre_auth_cap() {
+    let root = project("loopcap");
+    let (addr, h) = serve_with(&root, |_| {});
+    let joined_: Vec<_> = (0..40)
+        .map(|k| hello_doc(&addr, ADA, &format!("c{k}"), "part.fg"))
+        .collect();
+    assert_eq!(joined_.len(), 40);
+    drop(joined_);
+    std::thread::sleep(Duration::from_millis(300));
+    let idle: Vec<TcpStream> = (0..forge_server::PRE_AUTH)
+        .map(|_| TcpStream::connect(&addr).unwrap())
+        .collect();
+    std::thread::sleep(Duration::from_millis(200));
+    let mut extra = TcpStream::connect(&addr).unwrap();
+    let mut answer = String::new();
+    let _ = extra.set_read_timeout(Some(Duration::from_secs(3)));
+    let _ = extra.read_to_string(&mut answer);
+    assert!(answer.contains("503"), "the pre-auth cap: {answer:?}");
+    drop(idle);
+    std::thread::sleep(Duration::from_millis(300));
+    let _ok = hello_doc(&addr, ADA, "late", "part.fg");
+    h.stop();
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// G: a file edited on disk while its document is open is never written over by a version or
+/// checkpoint.
+#[test]
+fn an_edit_on_disk_while_open_is_never_overwritten() {
+    let root = project("diskopen");
+    let (addr, h) = serve_with(&root, |_| {});
+    let (mut r, mut w, _) = hello_doc(&addr, ADA, "a", "part.fg");
+    w.send(
+        &Up::Op {
+            base: 0,
+            id: 1,
+            op: set_w(60.0),
+        }
+        .text(),
+    )
+    .unwrap();
+    assert!(matches!(next(&mut r), Down::Ack { .. }));
+    let hand = DOC.replace("40", "77");
+    std::fs::write(root.join("part.fg"), &hand).unwrap();
+    w.send(&Up::Version { name: "v1".into() }.text()).unwrap();
+    match next(&mut r) {
+        Down::Error { text } => assert!(text.contains("changed on disk"), "{text}"),
+        d => panic!("{d:?}"),
+    }
+    drop((r, w));
+    h.stop();
+    assert_eq!(
+        std::fs::read_to_string(root.join("part.fg")).unwrap(),
+        hand,
+        "the hand edit is kept"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// H: versions are limited per account, not per connection (rejoining does not reset it).
+#[test]
+fn versions_are_limited_per_account() {
+    let root = project("vgap");
+    let (addr, h) = serve_with(&root, |_| {});
+    {
+        let (mut r, mut w, _) = hello_doc(&addr, ADA, "a1", "part.fg");
+        w.send(&Up::Version { name: "v1".into() }.text()).unwrap();
+        assert!(matches!(next(&mut r), Down::Versioned { .. }));
+    }
+    let (mut r, mut w, _) = hello_doc(&addr, ADA, "a2", "part.fg");
+    w.send(&Up::Version { name: "v2".into() }.text()).unwrap();
+    match next(&mut r) {
+        Down::Error { text } => assert!(text.contains("one version"), "{text}"),
+        d => panic!("{d:?}"),
+    }
+    h.stop();
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// 6: a panic handling one document quarantines it; another document goes on committing; the
+/// counters and stats are not poisoned.
+#[test]
+fn a_panic_quarantines_one_document() {
+    let root = project("panic");
+    std::fs::write(root.join("other.fg"), DOC).unwrap();
+    let (addr, h) = serve_with(&root, |_| {});
+    let (mut ra, mut wa, _) = hello_doc(&addr, ADA, "a", "part.fg");
+    let (mut rb, mut wb, _) = hello_doc(&addr, BO, "b", "other.fg");
+    let boom = Op::SetProperty {
+        key: "test_hook_panic".into(),
+        text: None,
+    };
+    wa.send(
+        &Up::Op {
+            base: 0,
+            id: 1,
+            op: boom,
+        }
+        .text(),
+    )
+    .unwrap();
+    match next(&mut ra) {
+        Down::Error { text } => assert!(text.contains("quarantined"), "{text}"),
+        d => panic!("{d:?}"),
+    }
+    wb.send(
+        &Up::Op {
+            base: 0,
+            id: 1,
+            op: set_w(50.0),
+        }
+        .text(),
+    )
+    .unwrap();
+    assert!(
+        matches!(next(&mut rb), Down::Ack { .. }),
+        "the other document still commits"
+    );
+    // the quarantined document is refused from now on
+    let (mut r2, mut w2) = forge_ws::connect(&addr, "/sync", &[], 1 << 20).unwrap();
+    let hello = Up::Hello {
+        doc: "part.fg".into(),
+        client: "c2".into(),
+        token: BO.into(),
+        seq: None,
+        proto: forge_sync::PROTOCOL,
+        kernel: forge_sync::KERNEL.into(),
+    };
+    w2.send(&hello.text()).unwrap();
+    assert!(matches!(next(&mut r2), Down::Error { .. }));
+    let st = h.stats.lock().unwrap().clone();
+    assert_eq!(st.quarantined, 1);
+    h.stop();
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// 6: a panic in the hub itself (outside any document) ends the server process with 70: it never
+/// keeps accepting with no one to serve.
+#[test]
+fn a_hub_panic_exits_70() {
+    let root = project("hubpanic");
+    std::fs::write(root.join("test_hook_hub_panic.fg"), DOC).unwrap();
+    let port = {
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        l.local_addr().unwrap().port()
+    };
+    let mut p = std::process::Command::new(env!("CARGO_BIN_EXE_forge-server"))
+        .args([
+            root.to_str().unwrap(),
+            "--port",
+            &port.to_string(),
+            "--token",
+            ADA,
+        ])
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let addr = format!("127.0.0.1:{port}");
+    let t0 = Instant::now();
+    let (mut _r, mut w) = loop {
+        if let Ok(x) = forge_ws::connect(&addr, "/sync", &[], 1 << 20) {
+            break x;
+        }
+        assert!(
+            t0.elapsed() < Duration::from_secs(10),
+            "the server never listened"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    let hello = Up::Hello {
+        doc: "test_hook_hub_panic.fg".into(),
+        client: "c".into(),
+        token: ADA.into(),
+        seq: None,
+        proto: forge_sync::PROTOCOL,
+        kernel: forge_sync::KERNEL.into(),
+    };
+    w.send(&hello.text()).unwrap();
+    let t0 = Instant::now();
+    let code = loop {
+        if let Some(s) = p.try_wait().unwrap() {
+            break s.code();
+        }
+        if t0.elapsed() > Duration::from_secs(10) {
+            let _ = p.kill();
+            panic!("the server did not exit after its hub panicked");
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    assert_eq!(code, Some(70));
+    let _ = std::fs::remove_dir_all(&root);
 }

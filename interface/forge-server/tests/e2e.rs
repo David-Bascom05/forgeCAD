@@ -9,7 +9,7 @@
 use forge_lang::error::{Literal, Op, ParamKey};
 use forge_remote::{Remote, Session};
 use forge_server::{Config, StoreKind, start_on};
-use forge_sync::{Event, hash_body};
+use forge_sync::Event;
 use std::net::TcpListener;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, channel};
@@ -182,10 +182,11 @@ fn pct(v: &mut [f64], p: f64) -> f64 {
     v[((v.len() - 1) as f64 * p).round() as usize]
 }
 
-fn hash_of(text: &str) -> u64 {
+/// What the app reports after a build: the run's hash (a part's body, an assembly's placed
+/// parts), or None when it built nothing (then nothing is reported).
+fn hash_of(text: &str) -> Option<u64> {
     let (run, _) = forge_lang::run(text, forge_lang::Options::default(), Default::default());
-    // what the app reports: the body's exact bits (the server checks against its own build)
-    run.body.as_ref().map_or(0, hash_body)
+    forge_sync::run_hash(&run)
 }
 
 #[test]
@@ -280,7 +281,9 @@ fn three_clients_converge_over_sockets_with_a_restart() {
     for p in &peers {
         let hsh = hash_of(&p.s.text());
         assert_eq!(hsh, want);
-        p.s.built(p.s.seq(), hsh);
+        if let Some(hsh) = hsh {
+            p.s.built(p.s.seq(), hsh);
+        }
     }
     // 4. a named version: a forge-history commit and tag
     peers[0].s.version("v1");
@@ -309,9 +312,12 @@ fn three_clients_converge_over_sockets_with_a_restart() {
     assert_eq!(late.s.text(), head);
     // the server checks each report against its own build of that seq
     let t0 = Instant::now();
-    while h.stats.lock().unwrap().hash_checks < 1 {
+    while want.is_some() && h.stats.lock().unwrap().hash_checks < 1 {
         assert!(t0.elapsed() < Duration::from_secs(30), "no hash was checked");
         std::thread::sleep(Duration::from_millis(10));
+    }
+    if want.is_none() {
+        eprintln!("e2e: the random edits left no body: no hash to check this run");
     }
     let stats = h.stats.lock().unwrap().clone();
     assert_eq!(stats.divergences, 0);
@@ -430,6 +436,8 @@ fn refusals_at_the_door() {
             client: "t1".into(),
             token: token.into(),
             seq: None,
+            proto: forge_sync::PROTOCOL,
+            kernel: forge_sync::KERNEL.into(),
         };
         w.send(&m.text()).unwrap();
         match r.read() {
@@ -456,6 +464,8 @@ fn refusals_at_the_door() {
         client: "t2".into(),
         token: TOKENS[0].1.into(),
         seq: None,
+        proto: forge_sync::PROTOCOL,
+        kernel: forge_sync::KERNEL.into(),
     };
     w.send(&m.text()).unwrap();
     assert!(matches!(r.read(), Ok(forge_ws::Msg::Text(_))));
@@ -472,6 +482,8 @@ fn refusals_at_the_door() {
         client: "t3".into(),
         token: TOKENS[0].1.into(),
         seq: None,
+        proto: forge_sync::PROTOCOL,
+        kernel: forge_sync::KERNEL.into(),
     };
     w.send(&m.text()).unwrap();
     let _ = r.read();

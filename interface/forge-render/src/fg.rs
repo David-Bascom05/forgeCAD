@@ -1791,6 +1791,11 @@ pub struct Session {
     pub sync_note: Option<String>,
     /// The text changed from the server since the app last looked.
     pub sync_changed: bool,
+    /// The link's first snapshot has been taken in.
+    sync_seen: bool,
+    /// A SERVED part's file on disk: kept at the server's text, watched for hand edits.
+    #[cfg(not(target_arch = "wasm32"))]
+    sync_file: Option<crate::sync_link::SyncFile>,
 }
 
 impl Drop for Session {
@@ -1891,6 +1896,9 @@ impl Session {
             sync_builds: vec![],
             sync_note: None,
             sync_changed: false,
+            sync_seen: false,
+            #[cfg(not(target_arch = "wasm32"))]
+            sync_file: None,
         };
         s.rebuild();
         s
@@ -1900,14 +1908,41 @@ impl Session {
         let src = forge_dirs::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
         // LOCAL or SERVED: looked at once, here (a broken remote.toml is said, never ignored)
         let link = crate::sync_link::open(path, waker.clone()).transpose()?;
+        // a hand edit since the app last wrote the file (an editor, a git checkout): this
+        // document is not synced (nothing is sent from a text the server does not have, and the
+        // edit is never written over); DESIGN.md §15.4, merge in phase 4
+        #[cfg(not(target_arch = "wasm32"))]
+        let file = link
+            .as_ref()
+            .and_then(|_| crate::sync_link::SyncFile::open(std::path::Path::new(path), &src));
+        #[cfg(not(target_arch = "wasm32"))]
+        let paused = file.as_ref().and_then(|f| f.paused.clone());
+        #[cfg(target_arch = "wasm32")]
+        let paused: Option<String> = None;
         let mut s = Session::new(Some(path.to_string()), src, gpu, waker);
-        if link.is_some() {
+        if let Some(why) = paused {
+            s.sync_note = Some(why);
+        } else if link.is_some() {
             s.sync = link;
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                s.sync_file = file;
+            }
             // the server's history is the undo: the file's own log is not used
             s.undo.clear();
             s.redo.clear();
         }
         Ok(s)
+    }
+
+    /// The link let go: the document stays open, LOCAL, with `why` said.
+    fn pause_sync(&mut self, why: String) {
+        self.sync = None;
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.sync_file = None;
+        }
+        self.sync_note = Some(why);
     }
 
     /// A SERVED part: the link's news since the last poll (text from collaborators, refusals,
@@ -1933,8 +1968,24 @@ impl Session {
                 forge_sync::Event::Rtt(_) => {}
             }
         }
+        // the file on disk: written with the server's text, and watched for hand edits
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(f) = &mut self.sync_file
+            && let Err(why) = f.tick(l.ready() && l.pending() == 0, || l.text())
+        {
+            return self.pause_sync(why);
+        }
+        let Some(l) = &self.sync else { return };
         let text = l.text();
+        if l.ready() && text == self.src && !self.sync_seen {
+            // the server's first word, the same text as the file's: build it as the server's (its
+            // hash is then reported; the build before the link was ready had no seq)
+            self.sync_seen = true;
+            self.rebuild();
+            return;
+        }
         if l.ready() && text != self.src {
+            self.sync_seen = true;
             // a collaborator's op (or one of ours refused): the server's text, not an undo step
             self.src = text;
             self.saved = self.src.clone();
@@ -1949,10 +2000,19 @@ impl Session {
             {
                 let server_seq = self.sync_builds[k].1;
                 self.sync_builds.drain(..=k);
-                if let Some(body) = b.inspect.as_ref().and_then(|i| i.bodies.first())
+                // a part's body, or an assembly's placed parts (forge_sync::run_hash's rule)
+                let hash = b.inspect.as_ref().and_then(|i| {
+                    if i.asm.is_some() {
+                        let placed = i.placed.iter().filter_map(|(k, f)| Some((&**i.bodies.get(*k)?, f)));
+                        Some(forge_sync::hash_placed(placed))
+                    } else {
+                        i.bodies.first().map(|b| forge_sync::hash_body(b))
+                    }
+                });
+                if let Some(h) = hash
                     && let Some(l) = &self.sync
                 {
-                    l.built(server_seq, forge_sync::hash_body(body));
+                    l.built(server_seq, h);
                 }
             }
         }

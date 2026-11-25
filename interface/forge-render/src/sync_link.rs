@@ -97,3 +97,90 @@ pub fn open(path: &str, waker: Arc<dyn Fn() + Send + Sync>) -> Option<Result<Box
 pub fn open(path: &str, waker: Arc<dyn Fn() + Send + Sync>) -> Option<Result<Box<dyn Link>, String>> {
     crate::websync::open(path, waker)
 }
+
+/// A SERVED part's file (native): the app writes the server's text to it (at most once a
+/// second, only with nothing pending) and keeps the hash of what it wrote in
+/// `<project>/.forgecad/sync/<doc>.hash`; a file whose text has another hash was edited by hand,
+/// and the document stops syncing, the edit kept (DESIGN.md §15.4: detect and pause in phase 1).
+#[cfg(not(target_arch = "wasm32"))]
+pub struct SyncFile {
+    path: std::path::PathBuf,
+    mark: std::path::PathBuf,
+    last: u64,
+    checked: std::time::Instant,
+    /// Set when opening found a hand edit.
+    pub paused: Option<String>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl SyncFile {
+    /// The file of a part being opened with its text `src` (None: not under a served folder).
+    pub fn open(file: &std::path::Path, src: &str) -> Option<SyncFile> {
+        let (root, doc) = served_root(file)?;
+        let mark = root
+            .join(".forgecad")
+            .join("sync")
+            .join(format!("{}.hash", forge_history::names::enc(&doc)));
+        let now = forge_sync::text_hash(src);
+        let kept = std::fs::read_to_string(&mark)
+            .ok()
+            .and_then(|t| u64::from_str_radix(t.trim(), 16).ok());
+        let mut f = SyncFile {
+            path: file.to_path_buf(),
+            mark,
+            last: now,
+            checked: std::time::Instant::now(),
+            paused: None,
+        };
+        match kept {
+            Some(h) if h != now => {
+                f.paused = Some(format!(
+                    "{doc} was edited outside the app since it last synced: not synced, your edit kept \
+                     (bring it in by hand; merging such edits comes later)"
+                ));
+            }
+            Some(_) => {}
+            None => {
+                let _ = f.write_mark(now);
+            }
+        }
+        Some(f)
+    }
+
+    fn write_mark(&self, h: u64) -> std::io::Result<()> {
+        if let Some(d) = self.mark.parent() {
+            std::fs::create_dir_all(d)?;
+        }
+        std::fs::write(&self.mark, format!("{h:016x}\n"))
+    }
+
+    /// Once a second: a hand edit is Err (pause); else, when `settled`, the server's text is
+    /// written if it changed.
+    pub fn tick(&mut self, settled: bool, text: impl FnOnce() -> String) -> Result<(), String> {
+        if self.checked.elapsed() < std::time::Duration::from_secs(1) {
+            return Ok(());
+        }
+        self.checked = std::time::Instant::now();
+        let on_disk = std::fs::read_to_string(&self.path).map_err(|e| format!("{}: {e}", self.path.display()))?;
+        if forge_sync::text_hash(&on_disk) != self.last {
+            return Err(format!(
+                "{} was edited outside the app: syncing paused, your edit kept",
+                self.path.display()
+            ));
+        }
+        if settled {
+            let t = text();
+            let h = forge_sync::text_hash(&t);
+            if h != self.last {
+                // whole or not at all: a file beside it, renamed over it
+                let tmp = self.path.with_extension("fg.forgecad-sync");
+                std::fs::write(&tmp, &t)
+                    .and_then(|_| std::fs::rename(&tmp, &self.path))
+                    .map_err(|e| format!("{}: {e}", self.path.display()))?;
+                self.last = h;
+                self.write_mark(h).map_err(|e| e.to_string())?;
+            }
+        }
+        Ok(())
+    }
+}

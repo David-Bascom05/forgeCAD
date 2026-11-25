@@ -65,6 +65,12 @@ pub enum Refusal {
     Invalid { why: String },
     /// The store could not append it.
     Store { why: String },
+    /// A retry of an op committed (at `seq`) before the latest snapshot: the client's snapshot
+    /// already holds it (the client drops it silently).
+    AlreadyCommitted { seq: u64 },
+    /// The client's protocol or kernel differs from the server's (bit-identical geometry holds
+    /// only for one kernel build).
+    Mismatch { why: String },
 }
 
 impl Refusal {
@@ -76,6 +82,8 @@ impl Refusal {
             Refusal::BadBase { .. } => "BadBase".into(),
             Refusal::Invalid { .. } => "Invalid".into(),
             Refusal::Store { .. } => "Store".into(),
+            Refusal::AlreadyCommitted { .. } => "AlreadyCommitted".into(),
+            Refusal::Mismatch { .. } => "Mismatch".into(),
         }
     }
     pub fn text(&self) -> String {
@@ -88,6 +96,8 @@ impl Refusal {
             }
             Refusal::Invalid { why } => why.clone(),
             Refusal::Store { why } => format!("not saved: {why}"),
+            Refusal::AlreadyCommitted { seq } => format!("already committed at seq {seq}"),
+            Refusal::Mismatch { why } => why.clone(),
         }
     }
     /// The refusal a client reads back from the wire.
@@ -99,6 +109,10 @@ impl Refusal {
             "StaleSpan" => Refusal::StaleSpan,
             "Invalid" => Refusal::Invalid { why: text.into() },
             "Store" => Refusal::Store { why: text.into() },
+            "AlreadyCommitted" => Refusal::AlreadyCommitted {
+                seq: text.rsplit(' ').next().and_then(|x| x.parse().ok()).unwrap_or(0),
+            },
+            "Mismatch" => Refusal::Mismatch { why: text.into() },
             _ => Refusal::Lang {
                 kind: kind.into(),
                 text: text.into(),
@@ -107,14 +121,22 @@ impl Refusal {
     }
 }
 
-/// What the sequencer's host keeps durably: the document's first text and its log.
+/// What the sequencer's host keeps durably. The shape is a database's, not a file's (DESIGN.md
+/// §5: Postgres is the phase-2 store): a snapshot, the entries since it, an atomic append, and a
+/// compaction that makes the head the snapshot.
 pub trait Store {
-    /// The first text and every entry since, or None if the document was never created.
-    fn load(&mut self, doc: &str) -> std::io::Result<Option<(String, Vec<Entry>)>>;
-    /// Creates the document with its first text (seq 0).
+    /// The latest snapshot: (its seq, the text at it), or None if the document was never created.
+    fn latest_snapshot(&mut self, doc: &str) -> std::io::Result<Option<(u64, String)>>;
+    /// Every entry after `seq`, in order.
+    fn read_since(&mut self, doc: &str, seq: u64) -> std::io::Result<Vec<Entry>>;
+    /// Creates the document with its first text (the snapshot at seq 0).
     fn create(&mut self, doc: &str, text: &str) -> std::io::Result<()>;
-    /// Appends one entry; returns only when it is durable (the store's definition).
+    /// Appends one entry; returns only when it is durable (the store's definition). Failed:
+    /// nothing of it is kept.
     fn append(&mut self, doc: &str, e: &Entry) -> std::io::Result<()>;
+    /// `text` is the document at `seq` (the last entry's): it becomes the snapshot, and the
+    /// entries up to it may go. Atomic: after a crash, either the old log or the new snapshot.
+    fn compact(&mut self, doc: &str, seq: u64, text: &str) -> std::io::Result<()>;
 }
 
 /// Where a client's or server's messages go (a WebSocket, a channel in a test).
@@ -130,12 +152,19 @@ pub trait Clock {
 /// An in-memory [`Store`]: tests, and a server run with no durable store.
 #[derive(Default)]
 pub struct MemStore {
-    docs: std::collections::BTreeMap<String, (String, Vec<Entry>)>,
+    docs: std::collections::BTreeMap<String, (u64, String, Vec<Entry>)>,
 }
 
 impl Store for MemStore {
-    fn load(&mut self, doc: &str) -> std::io::Result<Option<(String, Vec<Entry>)>> {
-        Ok(self.docs.get(doc).cloned())
+    fn latest_snapshot(&mut self, doc: &str) -> std::io::Result<Option<(u64, String)>> {
+        Ok(self.docs.get(doc).map(|d| (d.0, d.1.clone())))
+    }
+    fn read_since(&mut self, doc: &str, seq: u64) -> std::io::Result<Vec<Entry>> {
+        Ok(self
+            .docs
+            .get(doc)
+            .map(|d| d.2.iter().filter(|e| e.seq > seq).cloned().collect())
+            .unwrap_or_default())
     }
     fn create(&mut self, doc: &str, text: &str) -> std::io::Result<()> {
         if self.docs.contains_key(doc) {
@@ -144,19 +173,26 @@ impl Store for MemStore {
                 doc.to_string(),
             ));
         }
-        self.docs.insert(doc.into(), (text.into(), vec![]));
+        self.docs.insert(doc.into(), (0, text.into(), vec![]));
         Ok(())
     }
     fn append(&mut self, doc: &str, e: &Entry) -> std::io::Result<()> {
         let d = self.docs.get_mut(doc).ok_or(std::io::ErrorKind::NotFound)?;
-        if e.seq != d.1.len() as u64 + 1 {
+        let last = d.2.last().map_or(d.0, |x| x.seq);
+        if e.seq != last + 1 {
             return Err(std::io::Error::other(format!(
-                "append of seq {} after {}",
-                e.seq,
-                d.1.len()
+                "append of seq {} after {last}",
+                e.seq
             )));
         }
-        d.1.push(e.clone());
+        d.2.push(e.clone());
+        Ok(())
+    }
+    fn compact(&mut self, doc: &str, seq: u64, text: &str) -> std::io::Result<()> {
+        let d = self.docs.get_mut(doc).ok_or(std::io::ErrorKind::NotFound)?;
+        d.0 = seq;
+        d.1 = text.into();
+        d.2.retain(|e| e.seq > seq);
         Ok(())
     }
 }
@@ -267,16 +303,29 @@ pub fn path_ok(n: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || "_.[],".contains(c))
 }
 
+/// A run's errors counted by kind: what an op's check compares (a new error is one of a kind
+/// the head had fewer of).
+pub type Counts = std::collections::BTreeMap<&'static str, usize>;
+
+fn counts(r: &forge_lang::Run) -> Counts {
+    let mut c = Counts::new();
+    for e in &r.errors {
+        *c.entry(e.kind()).or_default() += 1;
+    }
+    c
+}
+
 /// forge-lang's check of an op on `head` (as `edit::apply_checked`, without the reach): applied,
 /// then refused with the first new typed error the result has that `head` had not, counted by
-/// kind. `root` confines what files the evaluation may read (a server passes its project
-/// folder).
+/// kind. `head_counts`, if known, spare evaluating the head again. `root` confines what files the
+/// evaluation may read (a server passes its project folder). Returns the new text and its counts.
 pub fn validate(
     head: &str,
+    head_counts: Option<&Counts>,
     op: &Op,
     dir: Option<std::path::PathBuf>,
     root: Option<std::path::PathBuf>,
-) -> Result<String, Refusal> {
+) -> Result<(String, Counts), Refusal> {
     let lang = |e: forge_lang::error::Error| Refusal::Lang {
         kind: e.kind().into(),
         text: e.text(),
@@ -288,15 +337,62 @@ pub fn validate(
         root,
         ..forge_lang::Options::default()
     };
-    let (before, _) = forge_lang::run(head, opts.clone(), Default::default());
+    let before = match head_counts {
+        Some(c) => c.clone(),
+        None => counts(&forge_lang::run(head, opts.clone(), Default::default()).0),
+    };
     let (after, _) = forge_lang::run(&text, opts, Default::default());
-    let count = |r: &forge_lang::Run, k: &str| r.errors.iter().filter(|e| e.kind() == k).count();
+    let now = counts(&after);
     if let Some(e) = after
         .errors
         .iter()
-        .find(|e| count(&after, e.kind()) > count(&before, e.kind()))
+        .find(|e| now.get(e.kind()) > before.get(e.kind()).or(Some(&0)))
     {
         return Err(lang(e.clone()));
     }
-    Ok(text)
+    Ok((text, now))
+}
+
+/// The wire protocol's version: a client of another version is refused at Hello.
+pub const PROTOCOL: u32 = 1;
+
+/// This build's kernel: the pinned toolchain and the hash of the kernel's and the language's
+/// sources (build.rs). Geometry is bit-identical only between equal kernels, so a room holds one.
+pub const KERNEL: &str = env!("FORGE_KERNEL_ID");
+
+/// The exact hash of placed bodies (an assembly's occurrences: each part's body and its pose),
+/// independent of their order: each occurrence's hash, sorted, then hashed.
+pub fn hash_placed<'a>(
+    placed: impl IntoIterator<Item = (&'a forge_topo::Body, &'a forge_math::Frame)>,
+) -> u64 {
+    let mut each: Vec<u64> = placed
+        .into_iter()
+        .map(|(b, f)| {
+            let mut h = forge_math::hash::BitHasher::new();
+            h.u64(hash_body(b));
+            h.p3(f.origin);
+            h.v3(f.x().get());
+            h.v3(f.y().get());
+            h.v3(f.z().get());
+            h.finish()
+        })
+        .collect();
+    each.sort_unstable();
+    let mut h = forge_math::hash::BitHasher::new();
+    h.u64(each.len() as u64);
+    for x in each {
+        h.u64(x);
+    }
+    h.finish()
+}
+
+/// What a client reports after a build of a run: the body's hash for a part, the placed
+/// occurrences' for an assembly (whose run has no single body), none if it built nothing.
+pub fn run_hash(run: &forge_lang::Run) -> Option<u64> {
+    if let Some(a) = &run.asm
+        && !a.draw.is_empty()
+    {
+        return Some(hash_placed(a.draw.iter().map(|(b, f)| (&**b, f))));
+    }
+    run.body.as_ref().map(hash_body)
 }

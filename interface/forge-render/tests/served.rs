@@ -187,7 +187,59 @@ fn two_app_sessions_edit_one_served_part() {
         "served app sessions: committed {}, refused {}, build hashes {}, checked against the server's build {}",
         st.committed, st.refused, st.hashes, st.hash_checks
     );
+
+    // an assembly reports its placed parts' hash, and it matches the server's own build
+    std::fs::copy(t_repo().join("examples/unified/hinged_box.fg"), root.join("parts/box.fg")).unwrap();
+    let mut asm = open(&root.join("parts/box.fg"));
+    let checks = h.stats.lock().unwrap().hash_checks;
+    let t0 = Instant::now();
+    let mut built_ok = vec![];
+    while h.stats.lock().unwrap().hash_checks <= checks {
+        for m in asm.poll() {
+            if let Msg::Built(b) = m {
+                built_ok.push((b.seq, b.ok, b.checked, b.inspect.as_ref().map(|i| (i.asm.is_some(), i.placed.len(), i.bodies.len()))));
+            }
+        }
+        assert!(t0.elapsed() < Duration::from_secs(60), "asm builds: {built_ok:?}");
+        assert!(
+            t0.elapsed() < Duration::from_secs(60),
+            "the assembly's hash was never checked: {:?}; note {:?}",
+            h.stats.lock().unwrap(),
+            asm.sync_note
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(h.stats.lock().unwrap().divergences, 0, "the app's assembly hash is the server's");
+    drop(asm);
+
+    // the served file follows the server's text...
+    let file_now = || std::fs::read_to_string(&file).unwrap();
+    let t0 = Instant::now();
+    while file_now() != a.src {
+        assert!(t0.elapsed() < Duration::from_secs(10), "the file never took the server's text");
+        a.poll();
+        b.poll();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    // ...and a hand edit to it pauses syncing, the edit kept, never written over
+    let hand = format!("{}# a hand edit\n", a.src);
+    std::fs::write(&file, &hand).unwrap();
+    let t0 = Instant::now();
+    while a.sync.is_some() {
+        assert!(t0.elapsed() < Duration::from_secs(10), "a hand edit was never noticed");
+        a.poll();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(a.sync_note.as_deref().is_some_and(|n| n.contains("edited outside")), "{:?}", a.sync_note);
+    assert_eq!(file_now(), hand, "the hand edit is kept");
+    // reopening it now: still paused (the mark says the file is not what the app wrote)
+    let again = open(&file);
+    assert!(again.sync.is_none() && again.sync_note.is_some());
     let _ = std::fs::remove_dir_all(&root);
+}
+
+fn t_repo() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
 #[test]

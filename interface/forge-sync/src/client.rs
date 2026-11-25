@@ -118,6 +118,8 @@ impl Client {
             client: self.id.clone(),
             token: self.token.clone(),
             seq: (!self.joining).then_some(self.seq),
+            proto: crate::PROTOCOL,
+            kernel: crate::KERNEL.into(),
         });
     }
 
@@ -204,9 +206,11 @@ impl Client {
     pub fn receive(&mut self, m: Down) -> Vec<Event> {
         let mut ev = vec![];
         match m {
-            Down::Welcome { seq, text, you } => {
+            Down::Welcome { seq, text, you, snap } => {
                 self.you = you;
-                if self.joining || seq < self.seq {
+                // a catch-up: the entries follow
+                self.joining = false;
+                if snap {
                     // a snapshot: the head as it is (pending ops, if any, replay on it)
                     self.joining = false;
                     self.confirmed = text;
@@ -261,7 +265,10 @@ impl Client {
                     self.replay();
                     ev.push(Event::Changed);
                 }
-                ev.push(Event::Refused { id, refusal });
+                // a retry of an op the snapshot already holds: nothing to tell
+                if !matches!(refusal, Refusal::AlreadyCommitted { .. }) {
+                    ev.push(Event::Refused { id, refusal });
+                }
             }
             Down::Applied { seq, author, op, th } => {
                 if seq <= self.seq {
@@ -345,11 +352,10 @@ impl Client {
         self.view = t;
     }
 
-    /// The text differs from the server's: start over from a snapshot (pending ops are re-sent;
-    /// the server drops the ones it committed).
+    /// The text differs from the server's: ask for a snapshot on this connection (pending ops
+    /// replay on it; the server drops retries of the ones it committed).
     fn diverged(&mut self, seq: u64) -> Vec<Event> {
-        self.joining = true;
-        self.reconnect();
+        self.outbox.push(Up::Resync);
         vec![Event::TextDiverged { seq }]
     }
 }
