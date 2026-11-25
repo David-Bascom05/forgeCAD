@@ -10,7 +10,8 @@ comes from `MEASUREMENTS.md` (measured here) or `PRIOR-ART.md` (cited sources, f
 |---|---|---|
 | sync model | **server-ordered log of typed ops; a late op is re-applied to the head (rebase) and re-validated; Rename rewrites later ops' names; same-param edits are last-writer-wins** | 251 real documents, ~19k op pairs both orders: 96.9% of different-target pairs commute exactly; every non-commuting case is Rename-before-a-user-of-the-old-name (fixable by substitution) or list position (both apply, server order decides). Lean: SetParam commute and LWW proven (`lean/Merge.lean`). |
 | where geometry is computed | **hybrid: every client rebuilds the document locally (as today); compute workers produce heavy, slow-changing results (imports, bend sim, thermoform, CAM, exports, first-open meshes), cached by content hash** | warm rebuild after an edit is 1.5 ms p50 / 38 ms p90 locally, below any network round trip; 0 of 276 documents differ in body or mesh bits across x86-64-v3, v2, one core, wasm/Node and wasm/Chromium (223 that loaded); but the Haas VF-2 takes 13.8 s to open natively and its STEP cannot be meshed on main, and bend sim takes 3.85 s for a 21.7 KB result. |
-| op-log store | **Postgres, PROVISIONAL** until FoundationDB and MongoDB are measured (op log, documents, permissions in one transactional store); **content-addressed blobs** (snapshots, meshes, STEP, results) on a filesystem or object store | every durable candidate appends in 0.12–0.20 ms p50 on the same disk, so latency does not decide; Postgres is needed anyway for accounts and sharing, and lets permission check + append be one transaction. FoundationDB and MongoDB: UNKNOWN (their server binaries were refused by this session's permission system; David's approval has to be given in this session). |
+| op-log store | **Postgres** (op log, documents, permissions in one transactional store; LISTEN/NOTIFY for fan-out between servers); **content-addressed blobs** (snapshots, meshes, STEP, results) on a filesystem or object store | measured on one disk: durable append p50 Postgres 0.24 ms, SQLite 0.19, MongoDB 0.45, FoundationDB 1.02; change feed p50/p99 Postgres 0.40/0.85 ms, MongoDB 1.08/2.27, FoundationDB 2.02/12.3; Postgres is needed anyway for accounts and sharing and lets permission check + append be one transaction |
+| fan-out between servers | **in the sequencer's own process** (it holds every connected client of its document); a store's change feed only for other servers' read replicas | Postgres LISTEN/NOTIFY 0.40 ms p50, enough for that |
 | determinism | **a requirement, enforced**: every client gets bit-identical geometry from the same op stream; a standing cross-platform determinism gate (§13) | 0 differences measured on every platform this VM can run; sources of divergence listed and closed one by one in §13 |
 | desktop app | **a full client of the hosted server** in SERVED mode; LOCAL mode (any folder, plain files + git, no network) unchanged and never slowed (§14–§15) | one protocol crate shared by native forge-render and the wasm build |
 | history and git | **op seq = the live history (microversions); git stays the version and interchange layer**: a named version or an idle checkpoint becomes a forge-history commit and tag | forge-history save per edit: 3.4–5.2 ms p50, 17–21 ms p99 = 20–30× an op append; git commit per keystroke-level op would also be the wrong granularity for versions. |
@@ -195,7 +196,8 @@ local single-user undo log stays as it is (B5).
 ## 5. Decision: storage, history, git
 
 **Measured** (MEASUREMENTS §d, same disk, durable appends): Postgres 0.197 ms, SQLite WAL FULL
-0.156 ms, libSQL 0.167 ms, file + fdatasync 0.119 ms, Redis AOF always 0.202 ms p50;
+0.156 ms, libSQL 0.167 ms, file + fdatasync 0.119 ms, Redis AOF always 0.202 ms, MongoDB 0.449 ms,
+FoundationDB 1.023 ms p50 (the last two in a second run, where Postgres measured 0.244 ms);
 forge-history git save 3.4–5.2 ms p50. Reads of 200 ops: 0.07–0.7 ms. Open = snapshot + 200
 ops: 0.09 ms (SQLite) to 1.15 ms (Postgres). SQLite NORMAL is not durable on power loss
 (PRIOR-ART §9) and is excluded.
@@ -210,11 +212,16 @@ What does:
   single-server phase and for the **local** store, but HA needs extra tooling (UNKNOWN cost).
 - Plain append-only file: fastest append; we would re-build indexing, permissions and backup.
 - Redis AOF: slower reads (0.7 ms) and memory-bound history.
-- FoundationDB: strict serializability, versionstamps for ordering, but 10 MB transaction / 100 KB
-  value / 5 s limits (PRIOR-ART §9) and its latency **UNKNOWN** here (its downloaded server binary
-  could not be run in this sandbox). MongoDB: **UNKNOWN**, same reason. Measure both with
-  `bench/oplog_bench.py` on a machine that may run them before phase 2 if Postgres shows a
-  problem.
+- FoundationDB (measured, single process): append 1.02 / 2.49 ms p50/p99, 4× Postgres; read of
+  200 ops 1.85 ms; watch-based fan-out 2.0 / 12.3 ms; 100 KB value and 10 MB / 5 s transaction
+  limits (PRIOR-ART §9) split snapshots. Its strengths (strict serializability across machines,
+  versionstamps) answer a scale problem one sequencer per document does not have. Not chosen.
+- MongoDB (measured, one-node replica set, `j:true`): append 0.45 / 1.16 ms, read 0.54 ms,
+  change-stream fan-out 1.08 / 2.27 ms; 2,829 ops/s with 16 writers (p99 15.6 ms). Works, slower
+  than Postgres on every line here, and we would still need a relational store for accounts.
+  Not chosen.
+- Not measured: either one as a multi-machine cluster (each replicated durable write adds a
+  network round trip in any of them, Postgres included).
 - Object storage: for content-addressed blobs only (snapshots, meshes, imported files, results);
   latency UNKNOWN (needs an account); Figma keeps checkpoints in S3 and the journal in DynamoDB
   (PRIOR-ART §2), the same split.
@@ -328,7 +335,7 @@ passes the speed gate with 0 regressions on local lines.
 1. **Phase 0 — measurements to close the UNKNOWNs (S).** Firefox/WebKit/ARM hash runs of
    `det.wasm`; fix the WASI shim so the 53 assemblies run in the browser harness; build-hash cost;
    span-op rebase rate; LiftLiteral/Respell/SetArg/SetProperty/Suppress in `merge.rs`; the
-   threaded-artifact hash run once the race pointer arrives; FDB/MongoDB where they may run;
+   threaded-artifact hash run once the race pointer arrives; 
    WebSocket RTT probe.
 2. **Phase 1 — single-server collaboration (M).** `forge-sync` (op envelope, rebase, Rename
    transform, inverse ops), sequencer in `forgecad web` (one process, SQLite-or-Postgres behind a
@@ -500,9 +507,7 @@ consecutive versions of the corpus (git history of `examples/`).
 ## 16. Plan additions
 
 - Phase 0 gains: the determinism gate's harness (13.2 step 4), ARM/Firefox/WebKit/Windows runs,
-  the clippy lint list check, unpinned multi-seed runs; FoundationDB/MongoDB benchmark once
-  approved in this session (append, read since seq, snapshot, plus FDB watches and MongoDB change
-  streams as fan-out); compare → ops exactness rate.
+  the clippy lint list check, unpinned multi-seed runs;  compare → ops exactness rate.
 - Phase 1 builds `forge-sync` sans-I/O with **both hosts from day one** (desktop and wasm), and
   LOCAL/SERVED identification, publish and checkout (M → M+, about +1–2 weeks).
 - Phase 4 (offline and branches) includes hand-edit reconciliation and `SetText` with

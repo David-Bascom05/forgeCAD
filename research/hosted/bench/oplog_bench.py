@@ -196,6 +196,87 @@ class Redis:
     def close(self):
         self.proc.terminate(); self.proc.wait()
 
+
+DBBIN = os.environ.get("DBBIN", "")
+
+class FDB:
+    """FoundationDB 7.3.63, one process, `configure new single ssd`: a commit returns once durable.
+    Keys (doc, seq) by the tuple layer; a snapshot is split into 90 KB values (the 100 KB value
+    limit), all in one transaction; each append also sets (doc, 'head') so a watch can fan out."""
+    name = "foundationdb 7.3.63 (single ssd, local process)"
+    def __init__(self):
+        import fdb
+        fdb.api_version(730)
+        self.fdb = fdb
+        self.db = fdb.open(os.path.join(DBBIN, "fdb.cluster"))
+        self.db.clear_range(b"", b"\xff")
+    def writer(self):
+        fdb, db = self.fdb, self.db
+        @fdb.transactional
+        def tx(tr, doc, seq, p):
+            tr[fdb.tuple.pack(("o", doc, seq))] = p
+            tr[fdb.tuple.pack(("h", doc))] = seq.to_bytes(8, "little")
+        def append(doc, seq, p):
+            tx(db, doc, seq, p)
+        return append
+    def reader(self):
+        fdb, db = self.fdb, self.db
+        @fdb.transactional
+        def since_tx(tr, doc, seq):
+            return [(fdb.tuple.unpack(kv.key)[2], kv.value) for kv in tr.get_range(fdb.tuple.pack(("o", doc, seq + 1)), fdb.tuple.pack(("o", doc + 1)))]
+        @fdb.transactional
+        def snap_w_tx(tr, doc, seq, b):
+            for i in range(0, len(b), 90_000):
+                tr[fdb.tuple.pack(("s", doc, seq, i))] = b[i:i + 90_000]
+        @fdb.transactional
+        def snap_r_tx(tr, doc):
+            r = tr.get_range(fdb.tuple.pack(("s", doc)), fdb.tuple.pack(("s", doc + 1)), reverse=True, limit=1)
+            last = list(r)[0]
+            seq = fdb.tuple.unpack(last.key)[2]
+            parts = [kv.value for kv in tr.get_range(fdb.tuple.pack(("s", doc, seq)), fdb.tuple.pack(("s", doc, seq + 1)))]
+            return seq, b"".join(parts)
+        def since(doc, seq):
+            return since_tx(db, doc, seq)
+        def snap_w(doc, seq, b):
+            snap_w_tx(db, doc, seq, b)
+        def snap_r(doc):
+            seq, b = snap_r_tx(db, doc)
+            return (seq, b), since(doc, seq)
+        return since, snap_w, snap_r
+
+class Mongo:
+    """MongoDB 8.0.4, single-node replica set (change streams need one), WiredTiger; each write
+    with write concern {w: 1, j: true}: acknowledged after the journal is on disk."""
+    name = "mongodb 8.0.4 (1-node replica set, w:1 j:true)"
+    def __init__(self):
+        import pymongo
+        self.pm = pymongo
+        c = self.client()
+        c.drop_database("oplog")
+        db = c["oplog"]
+        db.ops.create_index([("doc", 1), ("seq", 1)], unique=True)
+        db.snaps.create_index([("doc", 1), ("seq", -1)])
+    def client(self):
+        return self.pm.MongoClient("mongodb://127.0.0.1:27099/?directConnection=true")
+    def writer(self):
+        from pymongo import WriteConcern
+        ops = self.client()["oplog"].get_collection("ops", write_concern=WriteConcern(w=1, j=True))
+        def append(doc, seq, p):
+            ops.insert_one({"doc": doc, "seq": seq, "p": p})
+        return append
+    def reader(self):
+        from pymongo import WriteConcern
+        db = self.client()["oplog"]
+        snaps = db.get_collection("snaps", write_concern=WriteConcern(w=1, j=True))
+        def since(doc, seq):
+            return [(d["seq"], d["p"]) for d in db.ops.find({"doc": doc, "seq": {"$gt": seq}}, {"_id": 0}).sort("seq", 1)]
+        def snap_w(doc, seq, b):
+            snaps.insert_one({"doc": doc, "seq": seq, "b": b})
+        def snap_r(doc):
+            s = db.snaps.find_one({"doc": doc}, sort=[("seq", -1)])
+            return (s["seq"], s["b"]), since(doc, s["seq"])
+        return since, snap_w, snap_r
+
 CANDS = {
     "postgres": Postgres,
     "sqlite-full": lambda: Sqlite("FULL"),
@@ -204,6 +285,8 @@ CANDS = {
     "filelog": lambda: FileLog(False),
     "filelog-group": lambda: FileLog(True),
     "redis-always": Redis,
+    "fdb": FDB,
+    "mongo": Mongo,
 }
 
 def run(key):

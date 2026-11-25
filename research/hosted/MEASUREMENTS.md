@@ -200,13 +200,45 @@ numbers are client-bound and understate the servers).
 | append-only file per doc, group commit (one flusher) | 0.128 / 0.241 ms | 7,015, 3.4 ms | 0.174 ms | 0.55 ms | 0.185 / 0.246 ms |
 | Redis 7.0.15 streams, AOF appendfsync=always | 0.202 / 0.410 ms | 5,647, 7.8 ms | 0.708 ms | 1.3 ms | 0.867 / 1.42 ms |
 | forge-history git save (today's per-edit history), `proto/src/bin/gitsave.rs` | **3.4 / 17.1 ms** (640 B doc); **5.2 / 21.3 ms** (85 KB doc) | | | | |
-| FoundationDB 7.3 | UNKNOWN: running its downloaded server binary was refused in this sandbox | | | | |
-| MongoDB 8.0 | UNKNOWN: same | | | | |
+| FoundationDB 7.3.63 (see the second run below) | 1.02 / 2.49 ms | 3,353, 6.4 ms | 1.85 ms | 2.6 ms (3 × 90 KB values) | 2.92 / 3.76 ms |
+| MongoDB 8.0.4 (see the second run below) | 0.45 / 1.16 ms | 2,829, 15.6 ms | 0.54 ms | 2.1 ms | 0.85 / 1.19 ms |
 | object storage (S3 and kin) | UNKNOWN: needs an account; not measured | | | | |
 
-How to settle the UNKNOWNs: run `oplog_bench.py` with an FDB and a MongoDB class (each a
-local single-node install) on a machine where those servers may run; object storage only as
-the snapshot tier, measured from the target region.
+**Second run, FoundationDB and MongoDB** (2026-11-25, after David approved running their
+official builds in this session): `bench/oplog-results-2-fdb-mongo.jsonl`, the same script, same
+VM and disk, with Postgres and SQLite re-run beside them (their numbers moved by ~0.05 ms between
+the runs: disk floor 0.09/0.28 ms this time). Binaries from the official sources only, published
+SHA-256 checked (`fdbserver.x86_64`, `libfdb_c.x86_64.so`, `fdbcli.x86_64` 7.3.63 from
+github.com/apple/foundationdb releases; `mongodb-linux-x86_64-ubuntu2404-8.0.4.tgz` from
+fastdl.mongodb.org: all OK), run from their own scratch folder, bound to 127.0.0.1, deleted
+after. FoundationDB: one process, `configure new single ssd` (a commit is acknowledged when
+durable); Python binding 7.3.63 from its PyPI source (its setup.py does not build on Python 3.13;
+the package is pure Python and was used from the unpacked source). MongoDB: one-node replica set
+(change streams need one), WiredTiger, every write `{w: 1, j: true}` (journaled before the ack).
+
+| candidate (second run) | append p50 / p99 | 16 writers: ops/s, p99 | read 200 since (p50) | 200 KB snapshot write | open p50 / p99 |
+|---|---|---|---|---|---|
+| Postgres 16 | 0.244 / 0.432 ms | 8,622, 5.1 ms | 0.328 ms | 7.4 ms | 1.34 / 2.23 ms |
+| SQLite WAL FULL | 0.192 / 0.309 ms | 6,274, 4.3 ms | 0.077 ms | 3.0 ms | 0.094 / 0.170 ms |
+| FoundationDB 7.3.63 | 1.023 / 2.485 ms | 3,353, 6.4 ms | 1.849 ms | 2.6 ms | 2.92 / 3.76 ms |
+| MongoDB 8.0.4 | 0.449 / 1.160 ms | 2,829, 15.6 ms | 0.541 ms | 2.1 ms | 0.85 / 1.19 ms |
+
+FoundationDB's append is two round trips (read version, commit) through a 3-proxy single
+process; its range read pays the Python binding per key. Its 100 KB value limit made the
+snapshot three values (PRIOR-ART §9). Not measured: a multi-machine FDB or Mongo cluster
+(replication adds a network round trip to every durable write in either), object storage.
+
+**Fan-out** (`bench/fanout_bench.py`, `bench/fanout-results.jsonl`): one writer appends 300 ops
+to a document 5 ms apart; a subscriber learns of each through the store's own change feed and
+holds the op; time from the start of the append (durable commit included) to the subscriber:
+
+| feed | p50 | p99 | max |
+|---|---|---|---|
+| Postgres LISTEN/NOTIFY (in the insert's transaction, op in the payload) | 0.40 ms | 0.85 ms | 2.6 ms |
+| MongoDB change stream (filtered by doc, fullDocument) | 1.08 ms | 2.27 ms | 3.9 ms |
+| FoundationDB watch on the doc's head key + range read | 2.02 ms | 12.3 ms | 12.7 ms |
+
+All three delivered all 300, in order.
 
 Reading: on this disk every durable choice costs ≤ 0.2 ms p50 per op, well below network
 round-trip times (§ budgets in DESIGN.md), so storage choice does not decide latency. Git per
