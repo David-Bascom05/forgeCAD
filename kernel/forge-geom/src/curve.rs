@@ -852,6 +852,7 @@ pub fn sinh(x: f64) -> f64 {
 mod tests {
     use super::*;
     use crate::testing::*;
+    use forge_math::ipow::Powi as _;
     use forge_math::rng::Rng;
 
     /// The ellipses and points the foot point must get right: near-circular to flat (and b = 0),
@@ -861,10 +862,10 @@ mod tests {
         let mut out = vec![];
         let mut shapes: Vec<(f64, f64)> = vec![];
         for k in [0, 3, 6, 9, 12, 15] {
-            shapes.push((1.0, 1.0 - if k == 0 { 0.0 } else { 10f64.powi(-k) }));
+            shapes.push((1.0, 1.0 - if k == 0 { 0.0 } else { 10f64.ipow(-k) }));
         }
         for k in 1..=8 {
-            shapes.push((1.0, 10f64.powi(-k)));
+            shapes.push((1.0, 10f64.ipow(-k)));
         }
         shapes.push((1.0, 0.0));
         for _ in 0..40 {
