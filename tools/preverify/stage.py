@@ -50,9 +50,11 @@ log = os.path.join(logs, f"{stage}-{sha[:12]}.log")
 t, code = time.time(), 0
 with open(log, "w") as fh:
     if stage == "gate":
-        # the train against main measured here: main is the commit's first parent
-        base = subprocess.run(["git", "-C", repo, "rev-parse", f"{sha}^1"], capture_output=True,
-                              text=True, check=True).stdout.strip()
+        # the train against the main it was built on, both measured here: its merge base with main
+        # (a train head is often a merge commit, whose first parent is the train, not main)
+        subprocess.run(["git", "-C", repo, "fetch", "-q", "origin", "main"], check=True)
+        base = subprocess.run(["git", "-C", repo, "merge-base", "FETCH_HEAD", sha],
+                              capture_output=True, text=True, check=True).stdout.strip()
         r = subprocess.run([py, os.path.join(os.path.dirname(os.path.abspath(__file__)), "run.py"), "--base", base, "--only", "gate", "--always-gate"],
                            cwd=repo, env=env, stdout=fh, stderr=subprocess.STDOUT)
         code = r.returncode
