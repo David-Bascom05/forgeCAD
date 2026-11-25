@@ -756,8 +756,12 @@ Still to settle: RSS rose 56 → 154 MB over the 24,000 ops (~4.1 KB/op; HOSTED-
 document) or it is warm-up; a longer constant-rate run decides. With the Postgres store an
 actor needs only the entries since the oldest base it may rebase from.
 
-So a server is **CPU-bound**: 2 vCPUs commit ~2,400 ops/s at 0.8 ms; 8 GB holds tens of
-thousands of open documents.
+So a server is **CPU-bound**: 2 vCPUs commit ~2,400 ops/s at 0.8 ms. Memory per open document is
+~210 KB when idle and up to ~1.2 MB when hot: the actor keeps its recent ops in memory up to a
+1 MiB cap (HOSTED-BUILD's soak: 5 documents flat at 30 MB from 22k to 44k ops, so the ~4 KB/op
+growth above was the log filling toward its cap). 8 GB holds ~6,500 hot or tens of thousands of
+idle documents. The cap can be smaller: the in-memory log need only reach the oldest base still
+pending among connected clients, since older bases rebase from the store (§4.2).
 
 Cost, from cited on-demand prices (us-east-1, PRIOR-ART-PHASE2 §1–4); users' op rate and
 concurrency are **UNKNOWN** (measure in beta), so per open document:
