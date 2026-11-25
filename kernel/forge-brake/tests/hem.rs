@@ -166,3 +166,40 @@ fn a_hem_with_no_flattening_tool_is_refused() {
         rejected
     );
 }
+
+/// The scene through a hem: every instant of both strokes draws the part; the flattening starts
+/// where the pre-bend left the part (the handover joins), and ends with the hem closed on the
+/// die: the part's top at two thicknesses and the gap.
+#[test]
+fn the_scene_draws_a_hem_through_both_strokes() {
+    use forge_brake::scene::Scene;
+    use forge_brake::{Options, plan};
+    let m = Model::new(&strip()).unwrap();
+    let tl = with_flattening();
+    let p = plan(&m, &tl, &Options::default());
+    assert!(p.feasible);
+    let mut sc = Scene::new(&m, &tl, &p);
+    for k in 0..p.steps.len() {
+        for t in [0.0, 0.1, 0.2, 0.3, 0.5, 0.7, 0.8, 0.9, 1.0] {
+            let bs = sc.bodies(k, t);
+            assert!(bs.iter().any(|b| b.look.is_sheet()), "step {k} t {t}");
+        }
+    }
+    let sheet_z = |bs: &[forge_brake::scene::Body]| {
+        bs.iter()
+            .filter(|b| b.look.is_sheet())
+            .fold((f32::MAX, f32::MIN), |acc, b| {
+                let (lo, hi) = b.mesh.bounds().unwrap();
+                (acc.0.min(lo[2]), acc.1.max(hi[2]))
+            })
+    };
+    // the end of the springback, then the return: the flattened hem on the die
+    let (lo, hi) = sheet_z(&sc.bodies(1, 0.84));
+    assert!(lo.abs() < 1e-3 && (hi - 3.0).abs() < 1e-3, "{lo} {hi}");
+    // the handover: where the pre-bend leaves the part is where the flattening's handling starts
+    let (a, b) = (sheet_z(&sc.bodies(0, 1.0)), sheet_z(&sc.bodies(1, 0.0)));
+    assert!(
+        (a.0 - b.0).abs() < 0.05 && (a.1 - b.1).abs() < 0.05,
+        "{a:?} vs {b:?}"
+    );
+}

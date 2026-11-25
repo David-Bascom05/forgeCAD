@@ -801,12 +801,14 @@ impl<'a> Scene<'a> {
         // the punch's top: top dead centre, but never below the flat sheet it meets (tools taller
         // than the open height leave it there: the open height check fails, and the punch is drawn
         // standing on the sheet, not through it, as the checks' own approach and return do)
-        let top = ctx.z_tdc.max(ctx.ztip(ctx.phi0()));
+        // the stroke starts at phi0: flat for an air bend, a hem's pre-bend for its flattening
+        let phi0 = ctx.phi0();
+        let top = ctx.z_tdc.max(ctx.ztip(phi0));
         let (phi, tip) = match stage {
-            Stage::Handle | Stage::Gauge => (0.0, top),
-            Stage::Approach => (0.0, lerp(top, ctx.ztip(ctx.phi0()), f)),
+            Stage::Handle | Stage::Gauge => (phi0, top),
+            Stage::Approach => (phi0, lerp(top, ctx.ztip(phi0), f)),
             Stage::Bend => {
-                let phi = ctx.phimax * f;
+                let phi = phi0 + (ctx.phimax - phi0) * f;
                 (phi, ctx.ztip(phi))
             }
             Stage::Springback => {
@@ -886,7 +888,7 @@ impl<'a> Scene<'a> {
             let own = |p: Point2| tb.inverse().apply(p);
             let ps = [lo, Point2::new(hi.x, lo.y), Point2::new(lo.x, hi.y)].map(own);
             let qa = ps.map(|p| part_point(&a, pa, tpa.apply(p), 0.0, ta));
-            let qb = ps.map(|p| part_point(&b, pb, tb.apply(p), 0.0, 0.0));
+            let qb = ps.map(|p| part_point(&b, pb, tb.apply(p), 0.0, b.phi0()));
             let fa = Rigid3::on(qa[0], qa[1], qa[2]);
             let fb = Rigid3::on(qb[0], qb[1], qb[2]);
             // from where step k places the part back to where step k - 1 left it
@@ -911,7 +913,7 @@ impl<'a> Scene<'a> {
             let mut v = Vec::with_capacity(2 * pts.len());
             for w in [0.0, -ctx.t] {
                 for p in &pts {
-                    v.push(part_point(&ctx, pc, *p, w, 0.0));
+                    v.push(part_point(&ctx, pc, *p, w, ctx.phi0()));
                 }
             }
             out.push(v);
