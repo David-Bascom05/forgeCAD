@@ -41,3 +41,28 @@ Validation on train 7's two failures, each branch alone against the main it was 
 | ux/part-box with UX-LEAD's fix @12c1090c | (not in train 7) | GREEN, 1024 s |
 
 The verdicts are identical. Both failures would have been found on the branch, before the freeze.
+
+## B. Sharded train verification: train 7's head, both ways (2026-11-25)
+
+The same commit runs both ways: train 7 @8ca1a573, which is b3b3cae1 plus main's #58/#59. The old way is TRAIN-CONDUCTOR's
+serial script on one VM. The new way is the three verifier sessions running at once, each on the exact sha. All runs are on the pinned
+toolchain, rustc 1.99.1.
+
+| stage | old way (serial) | new way (verifier, in parallel) | verdict |
+|---|---|---|---|
+| native (native-tests.py --workspace, JOBS=3) | 29 min; 0 failed; local budget notes | 1699 s (near-cold); 0 failed; exit 1 from the 2 s budget only (75 over; main has 76) | same |
+| forge-render debug tests | 19 min; 1 failure, cam_ui document_text_is_a_bottom_panel (a known focus race, fixed for train 8) | 1148 s (near-cold); 0 failed | same except the race, which did not recur |
+| forge-render release tests (CI's gpu job) | not run locally; CI went RED on studio_model | 1156 s; studio_model render_image_shows_its_progress_at_once_then_its_result FAILED (first frame 3.20 s vs <100 ms) | same as CI, now caught before the PR |
+| wasm (wasm-tests.py) | about 15 min; green | 940 s; 403 binaries, 0 failed | same |
+| **wall-clock** | **about 77 min** (native + render + wasm + 2 gates, one after another, target/ deleted between stages) | **about 28 min near-cold** (the slowest shard), with the gate on the conductor's VM at the same time (119 s; 1 s on a memo hit) | |
+
+These are near-cold numbers, since each verifier had built main once first. Warm numbers will come from train 8.
+
+## Found and fixed along the way
+- Pre-verify judged relative to main. A failure or slow test that main has too is "main-identical", not RED (clippy, native, render, wasm).
+  Fixed a hole: under -D warnings, a lint main has stopped clippy at its crate and left the crates after it unlinted. The comparison now runs warned.
+- forge-lang tests: the bench font is written once per process and renamed into place (tests/faster-slow @36058798). This was the
+  "block.ttf WrongKind" flake, two test threads in one process sharing the file. Pre-verify also gives each run a private TMPDIR.
+- Slow tests: main has 76 tests over the 2 s budget on a 4-core VM. contour fuzz_random_profiles (178–322 s) is one
+  of its 250 cases, a folded-clash search refining an at-the-limit stretch to 2^-48 (24M+ intervals). The diagnosis went to forge-sheet's
+  owner. reparse runs the same edits (18519 patched, 50467 refused) in 7.5 s instead of 16.2 s.
