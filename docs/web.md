@@ -58,9 +58,37 @@ refused with 428.
   trusted network: the token travels with every request.
 - Nothing outside `DIR` is reachable: paths with `..`, absolute paths, backslashes, colons and
   empty segments are refused; a link that leads out of `DIR` is not followed; dot files and dot
-  folders (`.git`) are neither listed nor served.
+  folders are neither listed nor served.
+- The project's own repository, `DIR/.git`, is served for the page's Versions, but only the
+  files ForgeCAD's git keeps there (objects, refs, logs, HEAD, index, a checked config, ...):
+  nothing git would run or follow (hooks, `commondir`, `modules/`, alternates, ...), by any
+  case of their names, and nothing in `.git` through a link (`g -> .git`). A `.git` deeper
+  in `DIR` isn't served at all.
+- A bare repository kept as plain folders inside `DIR` (not under `.git`) is just files to
+  this server, and the page can write them. If you run `git` inside such a folder, its config
+  is git's to run: set `git config --global safe.bareRepository explicit` so git uses only
+  the repositories you name.
 - `--read-only` refuses every write.
 - Writes are atomic (a file beside it, renamed over it) and one at a time.
+
+### The agent, with your own Claude Code: `--agent`
+
+```
+forgecad web DIR --agent
+```
+
+The page's Agent tab drives Claude Code running on this machine in `DIR`, with your own Claude
+login and plan, settings, CLAUDE.md, memory, skills and permissions: it behaves as `claude` does
+in a terminal. What would ask you in a terminal asks you in the page (a card: Allow, Always,
+Deny), and each turn's edits show as diffs you can undo. Claude Code gets ForgeCAD's tools from
+`forgecad mcp --root DIR --writable`.
+
+The URL it prints ends `#agent=TOKEN`: open that link. The page keeps the token in memory only
+(it takes it off the address bar and stores it nowhere), so after a reload, open the link again.
+Every agent call needs the token, a localhost Host and the page's own origin; `--agent` is
+served on loopback only (from another machine, use an SSH tunnel). The page never names a
+program, argument, folder or prompt: only messages, answers, a mode (Ask first, Accept edits,
+Plan only) and Stop. The threat model is research/agent-tab/bridge-threat-model.md.
 
 ## Run it from static files
 
