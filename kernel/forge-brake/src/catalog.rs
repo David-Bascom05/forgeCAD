@@ -488,6 +488,8 @@ fn punch_rec(file: &str, t: &Table) -> Result<PunchRec, CatalogError> {
     let width = r.num("width")?;
     let tip_height = r.num("tip_height")?;
     let max_load = r.num("max_load")?;
+    let role = role_rd(&mut r)?;
+    let max_thickness = r.num("max_thickness")?;
     let rd = (r.num("relief.depth")?, r.num("relief.z0")?, r.num("relief.z1")?);
     let segments = r.segments()?;
     let outline = r.outline()?;
@@ -495,6 +497,12 @@ fn punch_rec(file: &str, t: &Table) -> Result<PunchRec, CatalogError> {
     let prov = r.prov("punch")?;
     r.check_cites(&prov)?;
     let mut unknown = Vec::new();
+    // a flattening punch has no tip: its face is flat
+    let (tip_radius, tip_angle) = if role == crate::tooling::Role::Flatten {
+        (tip_radius.or(Some(0.0)), tip_angle.or(Some(90.0)))
+    } else {
+        (tip_radius, tip_angle)
+    };
     for (k, v) in [
         ("height", height),
         ("tip_radius", tip_radius),
@@ -528,8 +536,8 @@ fn punch_rec(file: &str, t: &Table) -> Result<PunchRec, CatalogError> {
             profile: outline,
             segments,
             max_load,
-            role: crate::tooling::Role::Bend,
-            max_thickness: None,
+            role,
+            max_thickness,
             // a width that is the envelope of a published dimension (twice it, about the tip
             // line): the dimension itself is what is drawn
             // (a drawn section is what it is: drawn and checked alike)
@@ -561,6 +569,21 @@ fn punch_rec(file: &str, t: &Table) -> Result<PunchRec, CatalogError> {
     })
 }
 
+/// A record's `role` (`bend` when it says none) and, for an offset tool, its `z`.
+fn role_rd(r: &mut Rd) -> Result<crate::tooling::Role, CatalogError> {
+    use crate::tooling::Role;
+    Ok(match r.text("role")?.as_deref() {
+        None | Some("bend") => Role::Bend,
+        Some("flatten") => Role::Flatten,
+        Some("hem") => Role::Hem,
+        Some("offset") => Role::Offset {
+            z: r.num("z")?
+                .ok_or_else(|| r.bad("z", "an offset tool's offset, mm"))?,
+        },
+        _ => return Err(r.bad("role", "bend, flatten, hem or offset")),
+    })
+}
+
 fn die_rec(file: &str, t: &Table) -> Result<DieRec, CatalogError> {
     let id = match t.get("id") {
         Some(Item::Str(s)) => s.clone(),
@@ -587,11 +610,20 @@ fn die_rec(file: &str, t: &Table) -> Result<DieRec, CatalogError> {
     let width = r.num("width")?;
     let floor = r.num("floor")?;
     let max_load = r.num("max_load")?;
+    let role = role_rd(&mut r)?;
+    let max_thickness = r.num("max_thickness")?;
     let segments = r.segments()?;
     let outline = r.outline()?;
     let prov = r.prov("die")?;
     r.check_cites(&prov)?;
     let mut unknown = Vec::new();
+    // a flattening die has no V: its top is flat
+    let flat = role == crate::tooling::Role::Flatten;
+    let (v, angle, rs) = if flat {
+        (v.or(Some(0.0)), angle.or(Some(90.0)), rs.or(Some(0.0)))
+    } else {
+        (v, angle, rs)
+    };
     for (k, x) in [
         ("v", v),
         ("angle", angle),
@@ -616,8 +648,8 @@ fn die_rec(file: &str, t: &Table) -> Result<DieRec, CatalogError> {
             profile: outline,
             segments,
             max_load,
-            role: crate::tooling::Role::Bend,
-            max_thickness: None,
+            role,
+            max_thickness,
         };
         match d.validate() {
             Ok(()) => Ok(d),

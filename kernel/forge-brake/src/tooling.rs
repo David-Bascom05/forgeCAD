@@ -490,6 +490,15 @@ impl Punch {
 impl Die {
     pub fn validate(&self) -> Result<(), ToolingError> {
         let id = &self.id;
+        if self.role == Role::Flatten {
+            // a block, its top flat: no V to hold to anything
+            check(id, "height", self.height, 1.0, 2000.0)?;
+            check(id, "width", self.width, 1.0, 1000.0)?;
+            for s in &self.segments {
+                check(id, "segments.length", s.length, 1.0, 10000.0)?;
+            }
+            return Ok(());
+        }
         check(id, "v", self.v, 1.0, 1000.0)?;
         check(id, "angle", self.angle, 0.1, dmath::PI - 0.01)?;
         check(id, "shoulder_radius", self.shoulder_radius, 0.0, self.v)?;
