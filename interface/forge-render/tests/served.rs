@@ -299,7 +299,11 @@ fn two_app_sessions_edit_one_served_part() {
             .expect("the pending ops were kept")
     };
     let kept = std::fs::read_to_string(&pending).unwrap();
-    let back = forge_sync::Client::restore("parts/part.fg", TOKEN, &kept).expect("a saved client");
+    // kept with the server it is for (forge-remote's wrapper), the client inside
+    let j = forge_sync::wire::read(&kept).expect("json");
+    assert!(j.get("server").and_then(|v| v.str()).is_some_and(|s| s.starts_with("ws://")));
+    let inner = j.get("client").and_then(|v| v.str()).expect("the client");
+    let back = forge_sync::Client::restore("parts/part.fg", TOKEN, inner).expect("a saved client");
     assert_eq!(back.pending().len(), 1, "kept: the op");
     let h = serve();
     remotes(&h.addr, TOKEN);

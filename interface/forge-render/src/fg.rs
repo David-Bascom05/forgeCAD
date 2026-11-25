@@ -2080,18 +2080,18 @@ impl Session {
             match e {
                 forge_sync::Event::Changed => {}
                 forge_sync::Event::Refused { refusal, .. } => {
-                    self.sync_note = Some(format!("Not shared: {}: {}", refusal.kind(), refusal.text()));
+                    self.sync_note = Some(format!("Not shared: {}", refusal.text()));
                 }
-                forge_sync::Event::TextDiverged { seq } => {
-                    self.sync_note = Some(format!("Text differed from the server's at {seq}: reloading it"));
+                forge_sync::Event::TextDiverged { .. } => {
+                    self.sync_note = Some("Your copy differed from the server's: reloaded it".to_string());
                 }
-                forge_sync::Event::BuildDiverged { seq, by, .. } => {
+                forge_sync::Event::BuildDiverged { by, .. } => {
                     self.sync_note = Some(format!(
-                        "DIVERGENCE: {by} built different geometry at {seq} (reported)"
+                        "{by}'s build of this part came out different from yours: reported to the server"
                     ));
                 }
-                forge_sync::Event::Versioned { name, seq, .. } => {
-                    self.sync_note = Some(format!("Version {name} written (at {seq})"));
+                forge_sync::Event::Versioned { name, .. } => {
+                    self.sync_note = Some(format!("Version {name} written"));
                 }
                 forge_sync::Event::Closed(why) => {
                     self.sync_note = Some(format!("Server: {why} (reconnecting)"));
@@ -2327,7 +2327,7 @@ impl Session {
         if self.sync.is_some() {
             if text != self.src {
                 self.sync_note =
-                    Some("In a served project only typed edits are shared yet: this one was not made".into());
+                    Some("Not made: in a served project only typed edits are shared for now".into());
             }
             return;
         }
