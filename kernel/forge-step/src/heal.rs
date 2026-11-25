@@ -726,6 +726,52 @@ impl Proto {
                 });
                 Ok(())
             }
+            // a whole ring (an O-ring: 05-0335, Haas Tooling): two half rings, between meridians at
+            // its frame's x and -x, each a band then seamed as any band with two rims
+            Surface::Torus(t) => {
+                let (o, x, z): (Point3, Vec3, Vec3) =
+                    (t.frame.origin, t.frame.x().into(), t.frame.z().into());
+                let mut meridian = |dir: Vec3| -> Option<usize> {
+                    let centre = o + dir * t.major;
+                    let frame = Frame::from_zx(centre, z.cross(dir).normalize()?, dir)?;
+                    let name = self.fresh();
+                    self.verts.push((centre + dir * t.minor, name));
+                    let v = self.verts.len() - 1;
+                    let name = self.fresh();
+                    self.edges.push(PEdge {
+                        curve: Curve::Circle(Circle {
+                            frame,
+                            radius: t.minor,
+                        }),
+                        range: Interval::new(0.0, 2.0 * dmath::PI),
+                        start: v,
+                        end: v,
+                        name,
+                    });
+                    Some(self.edges.len() - 1)
+                };
+                let m0 = meridian(x).ok_or("no meridian")?;
+                let m1 = meridian(-x).ok_or("no meridian")?;
+                self.faces[f].loops = vec![vec![(m0, true)], vec![(m1, false)]];
+                let (name, same_sense, shell) = (self.fresh(), self.faces[f].same_sense, self.faces[f].shell);
+                self.faces.push(PFace {
+                    surface: s.clone(),
+                    same_sense,
+                    name,
+                    shell,
+                    loops: vec![vec![(m1, true)], vec![(m0, false)]],
+                });
+                // (added after `add_seams` took its count of faces: seamed here)
+                for g in [f, self.faces.len() - 1] {
+                    let w: Vec<(i64, i64)> =
+                        self.faces[g].loops.iter().map(|l| self.winding(l, &s)).collect();
+                    if w.len() != 2 || w[0] == (0, 0) || w[1] == (0, 0) {
+                        return Err("a whole torus's half rings do not wind round it".into());
+                    }
+                    self.join(g, 0, 1, w[0])?;
+                }
+                Ok(())
+            }
             _ => Err(format!("a whole {} with no edges", kind(&s))),
         }
     }
@@ -1004,7 +1050,13 @@ impl Proto {
             let m = lo + (hi - lo) * 0.5;
             let r = list.iter().map(|q| q.distance(m)).fold(0.0, f64::max);
             self.verts[v].0 = m;
-            self.vtol[v] = if r > tol::LINEAR { r } else { 0.0 };
+            // with room over the gap, as an edge's (`record_deviations`): measured again after a
+            // move, the gap must not come out over its own tolerance by the last bit
+            self.vtol[v] = if r > tol::LINEAR {
+                r * (1.0 + 1e-6) + 1e-9
+            } else {
+                0.0
+            };
         }
     }
 

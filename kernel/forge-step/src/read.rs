@@ -330,6 +330,14 @@ impl<'a> Reader<'a> {
             self.real(id, "DIRECTION", c.get(1))?,
             self.real(id, "DIRECTION", c.get(2))?,
         );
+        // a ratio below 2^-100 of the largest is noise where 0 was meant (05-0182, Haas Tooling: a
+        // plane's axes with parts of 8e-65, 8e-97 and 7e-161, which laid its face out over a span
+        // of 1e-160 in its parameters, past what the predicates take): 0, turning the direction by
+        // under 1e-30 radians; a direction with none is as it was, to the bit
+        let big = v.x.abs().max(v.y.abs()).max(v.z.abs());
+        let floor = big * f64::from_bits((1023 - 100) << 52);
+        let small = |c: f64| if c.abs() < floor { 0.0 } else { c };
+        let v = Vec3::new(small(v.x), small(v.y), small(v.z));
         match v.normalize() {
             Some(u) => Ok(u),
             None => refuse(id, "DIRECTION", "zero length"),
@@ -1270,8 +1278,13 @@ impl Build<'_, '_> {
         } else {
             (id, flip)
         };
-        let a = self.r.args_of(id, "CLOSED_SHELL")?;
-        let faces = self.r.list(id, "CLOSED_SHELL", a.get(1))?;
+        let kind = if kw(self.r.f, id) == Some("OPEN_SHELL") {
+            "OPEN_SHELL"
+        } else {
+            "CLOSED_SHELL"
+        };
+        let a = self.r.args_of(id, kind)?;
+        let faces = self.r.list(id, kind, a.get(1))?;
         let shell = self.p.shells;
         self.p.shells += 1;
         for x in faces {
@@ -1353,7 +1366,9 @@ fn record_deviations(body: &mut Body, stats: &mut Stats) {
             || faces
                 .iter()
                 .any(|&f| matches!(body.face(f).surface, Surface::Procedural(_)));
-        let measure = |n: usize| {
+        let measure = |n: usize, refine: bool| {
+            let x = body.edge(e);
+            let at = |i: usize| x.range.lo + x.range.width() * (i as f64 / n as f64);
             let pts = body.edge_points(e, n);
             faces
                 .iter()
@@ -1361,23 +1376,59 @@ fn record_deviations(body: &mut Body, stats: &mut Stats) {
                     let s = &body.face(f).surface;
                     // each point from the one before, where the walk holds
                     let mut near = None;
-                    let mut worst = 0.0_f64;
+                    let mut gaps: Vec<(f64, forge_math::Point2)> = Vec::with_capacity(pts.len());
                     for &p in &pts {
                         let uv = near.map_or_else(|| s.project(p), |uv| s.project_near(p, uv));
                         near = Some(uv);
-                        worst = worst.max(s.eval(uv).distance(p));
+                        gaps.push((s.eval(uv).distance(p), uv));
+                    }
+                    let mut worst = gaps.iter().fold(0.0_f64, |m, g| m.max(g.0));
+                    if refine && gaps.len() > 2 {
+                        // a gap can peak sharply between samples (a free-form edge's came out 1.15%
+                        // over 256 samples' on MM 2024): around the three highest local peaks, 32
+                        // more each, what 2048 evenly would find at a twentieth of the work
+                        let mut peaks: Vec<usize> = (0..gaps.len())
+                            .filter(|&i| {
+                                (i == 0 || gaps[i].0 >= gaps[i - 1].0)
+                                    && (i + 1 == gaps.len() || gaps[i].0 >= gaps[i + 1].0)
+                            })
+                            .collect();
+                        peaks.sort_by(|&a, &b| gaps[b].0.total_cmp(&gaps[a].0));
+                        for &i in peaks.iter().take(3) {
+                            let (lo, hi) = (at(i.saturating_sub(1)), at((i + 1).min(n)));
+                            let mut uv = gaps[i].1;
+                            for k in 0..=32 {
+                                let t = lo + (hi - lo) * (k as f64 / 32.0);
+                                let p = x.curve.eval(t.min(x.range.hi));
+                                uv = s.project_near(p, uv);
+                                worst = worst.max(s.eval(uv).distance(p));
+                            }
+                        }
                     }
                     worst
                 })
                 .fold(0.0, f64::max)
         };
-        let dev = measure(16);
+        let dev = measure(16, false);
         let dev = if free_form || dev > LINEAR {
-            dev.max(measure(256))
+            let fine = measure(256, false);
+            // an edge off its faces: its peaks looked at closely, as `check` will ask between these
+            // samples once a boolean has trimmed it
+            if fine > LINEAR {
+                dev.max(measure(256, true))
+            } else {
+                dev.max(fine)
+            }
         } else {
             dev
         };
         if dev > LINEAR {
+            // with room over what was measured: `check` measures again, after any rigid move and,
+            // once a boolean has trimmed the edge, at other points, where a gap that peaks between
+            // these samples comes out larger (by 1.7e-5 of it on a spline edge of GM2-5AX, by
+            // 1.3e-3 on a piece of TRT210's cylinder-cylinder intersection a boolean split off): a
+            // tolerance of exactly the gap fails it. A hundredth of the gap is room for both
+            let dev = dev * (1.0 + 1e-2) + 1e-9;
             body.edges[e.index()].tol = dev;
             stats.tolerant_edges += 1;
             stats.max_edge_tol = stats.max_edge_tol.max(dev);
@@ -1540,6 +1591,109 @@ fn debug_head(x: &impl std::fmt::Debug, n: usize) -> String {
 }
 
 /// How far a file's geometry misses itself, before anything is changed.
+/// The holes of an open shell (its edges each one face uses, in closed chains) that lie in a
+/// plane within `tol`, every vertex and 16 points of every edge: each filled with the plane's
+/// face, which goes along each edge the other way from the face that has it. A hole not flat, or
+/// not one closed chain, stays: the shell is refused as a sheet, as before.
+fn fill_flat_holes(proto: &mut Proto, tol: f64) {
+    use forge_geom::CurveGeom;
+    // a lone face is a sheet, whatever its rim: no hole to fill
+    if proto.faces.len() < 2 {
+        return;
+    }
+    let mut uses: Vec<Vec<(usize, bool, usize)>> = vec![Vec::new(); proto.edges.len()];
+    for (fi, face) in proto.faces.iter().enumerate() {
+        for l in &face.loops {
+            for &(e, fw) in l {
+                uses[e].push((fi, fw, face.shell));
+            }
+        }
+    }
+    // each once-used edge as the hole's face would walk it: the other way
+    let mut open: Vec<(usize, bool)> = (0..proto.edges.len())
+        .filter(|&e| uses[e].len() == 1)
+        .map(|e| (e, !uses[e][0].1))
+        .collect();
+    let from = |p: &Proto, u: (usize, bool)| if u.1 { p.edges[u.0].start } else { p.edges[u.0].end };
+    let to = |p: &Proto, u: (usize, bool)| if u.1 { p.edges[u.0].end } else { p.edges[u.0].start };
+    while let Some(first) = open.first().copied() {
+        open.remove(0);
+        // the chain from `first`, each next edge the one that starts where the last ends
+        let mut chain = vec![first];
+        let mut ok = true;
+        while to(proto, *chain.last().expect("a chain")) != from(proto, first) {
+            let end = to(proto, *chain.last().expect("a chain"));
+            let next: Vec<usize> = (0..open.len()).filter(|&k| from(proto, open[k]) == end).collect();
+            if next.len() != 1 {
+                ok = false;
+                break;
+            }
+            chain.push(open.remove(next[0]));
+        }
+        if !ok {
+            continue;
+        }
+        // the hole's points: its vertices and 16 along each edge, in the chain's order
+        let mut pts: Vec<Point3> = Vec::new();
+        for &(e, fw) in &chain {
+            let x = &proto.edges[e];
+            for k in 0..16 {
+                let t = if fw {
+                    x.range.lo + x.range.width() * (k as f64 / 16.0)
+                } else {
+                    x.range.hi - x.range.width() * (k as f64 / 16.0)
+                };
+                pts.push(x.curve.eval(t));
+            }
+        }
+        // Newell's normal: the chain runs anticlockwise about it, the face on its left
+        let mut n = Vec3::ZERO;
+        let c = pts.iter().fold(Vec3::ZERO, |a, p| a + (*p - Point3::ORIGIN)) * (1.0 / pts.len() as f64);
+        let centre = Point3::ORIGIN + c;
+        for i in 0..pts.len() {
+            let (a, b) = (pts[i] - centre, pts[(i + 1) % pts.len()] - centre);
+            n += a.cross(b);
+        }
+        let Some(z) = n.normalize() else { continue };
+        if pts.iter().any(|p| (*p - centre).dot(z.get()).abs() > tol) {
+            continue;
+        }
+        // a face beside the hole in its plane and facing the other way: the cap would close on
+        // that face with nothing between (a sheet's own rim), not fill a missing face. (One
+        // facing the same way is a flat face split, as files write them.)
+        let flat_beside = chain.iter().any(|&(e, _)| {
+            uses[e].iter().any(|&(fi, _, _)| match &proto.faces[fi].surface {
+                Surface::Plane(pl) => {
+                    let out = pl.frame.z().get() * if proto.faces[fi].same_sense { 1.0 } else { -1.0 };
+                    out.cross(z.get()).length() < 1e-9
+                        && out.dot(z.get()) < 0.0
+                        && (pl.frame.origin - centre).dot(z.get()).abs() <= tol
+                }
+                _ => false,
+            })
+        });
+        if flat_beside {
+            continue;
+        }
+        let Some(frame) = Frame::from_zx(
+            centre,
+            z,
+            (pts[0] - centre).normalize().map_or(Vec3::X, |v| v.get()),
+        ) else {
+            continue;
+        };
+        let shell = uses[first.0][0].2;
+        let name = proto.salt.with_str("hole").with(chain[0].0 as u64);
+        proto.faces.push(PFace {
+            surface: Surface::Plane(Plane { frame }),
+            same_sense: true,
+            name,
+            shell,
+            loops: vec![chain],
+        });
+    }
+}
+
 fn measure_gaps(proto: &Proto, stats: &mut Stats) {
     for fa in &proto.faces {
         for u in fa.loops.iter().flatten() {
@@ -1673,12 +1827,29 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
     let mut ctx_of: BTreeMap<u32, u32> = BTreeMap::new();
     let mut any_ctx = None;
     let mut roots = Vec::new();
+    // open shells read as solids, and the surface model each is in (for its context)
+    let mut open_of: Vec<(u32, u32)> = Vec::new();
     for &(id, at, n) in &f.ids {
         let recs = &f.records[at as usize..(at + n) as usize];
         for r in recs {
             let name = f.name(r);
             if name == "MANIFOLD_SOLID_BREP" || name == "BREP_WITH_VOIDS" {
                 roots.push((id, *r));
+            }
+            // a surface model's shells: SolidWorks writes some whole machines so (TRT160), each
+            // body a shell of faces that closes; read as a solid when it does
+            if name == "SHELL_BASED_SURFACE_MODEL"
+                && let Some(Value::List(l, ln)) = f.args(r).get(1)
+            {
+                for v in f.run(*l, *ln) {
+                    if let Value::Ref(x) = v
+                        && kw(&f, *x) == Some("OPEN_SHELL")
+                        && let Some(sr) = f.records_of(*x).and_then(|rs| rs.first())
+                    {
+                        roots.push((*x, *sr));
+                        open_of.push((*x, id));
+                    }
+                }
             }
             if name.ends_with("_REPRESENTATION") || name == "SHAPE_REPRESENTATION" {
                 let a = f.args(r);
@@ -1691,6 +1862,11 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
                     }
                 }
             }
+        }
+    }
+    for &(shell, model) in &open_of {
+        if let Some(&c) = ctx_of.get(&model) {
+            ctx_of.entry(shell).or_insert(c);
         }
     }
     let mut uses = Vec::new();
@@ -1733,6 +1909,9 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
                 salt: Name::feature(u64::from(id)).with_str("step"),
             };
             let built = (|| {
+                if f.name(&r) == "OPEN_SHELL" {
+                    return b.shell(id, false);
+                }
                 let a = f.args(&r);
                 let outer = b.r.reference(id, "solid", a.get(1))?;
                 b.shell(outer, false)?;
@@ -1744,7 +1923,34 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
                 }
                 Ok(())
             })();
-            let proto = b.p;
+            let mut proto = b.p;
+            // a surface model's shell missing flat faces (a hole's cap: 08-1865, 05-0807, Haas
+            // Tooling): each hole that lies in a plane, within the file's tolerance, filled
+            if built.is_ok() && f.name(&r) == "OPEN_SHELL" {
+                fill_flat_holes(&mut proto, (10.0 * forge_math::tol::LINEAR).max(u.uncertainty));
+            }
+            // an open shell is a solid only if it closes: every edge between two faces' uses
+            let built = built.and_then(|()| {
+                if f.name(&r) != "OPEN_SHELL" {
+                    return Ok(());
+                }
+                let mut uses = vec![0u32; proto.edges.len()];
+                for face in &proto.faces {
+                    for l in &face.loops {
+                        for &(e, _) in l {
+                            uses[e] += 1;
+                        }
+                    }
+                }
+                match uses.iter().filter(|&&n| n != 2).count() {
+                    0 => Ok(()),
+                    n => refuse(
+                        id,
+                        "OPEN_SHELL",
+                        format!("a sheet, not a solid: {n} edges not between two faces"),
+                    ),
+                }
+            });
             match built {
                 Ok(()) => {
                     if only_measure {
