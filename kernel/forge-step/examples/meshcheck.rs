@@ -50,6 +50,16 @@ fn main() {
                     worst = worst.max(d / allow);
                 }
             }
+            // each face's triangle count, for counting the faces whose mesh changed
+            let mut per = vec![0u32; b.faces.len()];
+            for &f in &m.face_of {
+                per[f as usize] += 1;
+            }
+            println!(
+                "{p}\t#{}\tfaces\t{}",
+                s.entity,
+                per.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(",")
+            );
             println!(
                 "{p}\t#{}\ttris {}\tworst {:.3}\topen {}\tpinched {}\tunverified {}",
                 s.entity,
