@@ -77,13 +77,21 @@ impl Snap {
             fills,
             status: h.gui.shell.status.clone(),
             status_drawn: String::new(),
-            names: h
-                .gui
-                .shell
-                .fg
-                .as_ref()
-                .map(|f| f.feats.iter().map(|x| x.id.clone()).collect())
-                .unwrap_or_default(),
+            names: {
+                let s = &h.gui.shell;
+                let mut n: Vec<String> =
+                    s.fg.as_ref()
+                        .map(|f| f.feats.iter().map(|x| x.id.clone()).collect())
+                        .unwrap_or_default();
+                // a CAM document's statements (setups, ops, programs) and the op or setup
+                // being named in its dialog: names the person gives, shown as Fusion shows them
+                if let Some(c) = &s.cam {
+                    n.extend(c.stmts.iter().map(|x| x.name.clone()));
+                    n.extend(c.op_dlg.iter().map(|d| d.name.clone()));
+                    n.extend(c.setup_dlg.iter().map(|d| d.name.clone()));
+                }
+                n
+            },
             tab: h.gui.shell.tab,
             env: h.gui.shell.env,
             focus,

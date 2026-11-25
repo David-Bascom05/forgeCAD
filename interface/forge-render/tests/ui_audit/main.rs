@@ -1052,20 +1052,29 @@ impl Crawl {
                 let close_icon = after
                     .new_places(&before)
                     .iter()
-                    .any(|(k, _)| k.ends_with(":close") || k.ends_with(":cancel"));
+                    .any(|(k, _)| k.ends_with(":close") || k.ends_with(":cancel") || k.ends_with(":back"));
                 let exits = close_icon
                     || words.iter().any(|w| {
                         matches!(
                             w.as_str(),
                             "Cancel" | "Close" | "×" | "✕" | "Done" | "OK" | "Finish"
-                        )
+                        ) || w.starts_with("Back to ")
                     });
                 h.key(egui::Key::Escape);
                 for _ in 0..8 {
                     step(&mut h);
                 }
                 let esc = Snap::take(&mut h);
-                let still = popup_region(&before, &esc);
+                // the dialog's own layer (its largest new one) gone is the dialog closed: a docked
+                // column showing what's chosen now may take its place (CAM's properties column)
+                let main = after
+                    .new_layers(&before)
+                    .into_iter()
+                    .max_by(|a, b| a.1.area().total_cmp(&b.1.area()));
+                let still = match main {
+                    Some((l, _)) if !esc.layers.iter().any(|(x, _)| *x == l) => Vec::new(),
+                    _ => popup_region(&before, &esc),
+                };
                 if !still.is_empty() {
                     rec.findings.push(judge::finding(
                         if exits { "esc" } else { "no-exit" },
