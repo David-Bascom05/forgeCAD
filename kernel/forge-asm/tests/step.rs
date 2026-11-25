@@ -176,3 +176,36 @@ fn a_part_with_no_body_is_named() {
         })
     );
 }
+
+/// A part read from a file keeps what it was read with when placed: each edge's and vertex's
+/// tolerance (an interference boolean on a copy at LINEAR understated them) and that it is a file's
+/// body. The part: a sheet-metal flange from the Haas GM2-5AX model, its spline edges up to 1.3e-4
+/// mm off their faces.
+#[test]
+fn a_placed_file_part_keeps_its_tolerances() {
+    let p = format!(
+        "{}/../forge-step/tests/data/haas/edge_flange_48faces.step",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let imp = forge_step::import(&std::fs::read(p).unwrap(), &forge_step::Limits::default()).unwrap();
+    let b = &imp.solids[0].body;
+    let tolerant = b
+        .edge_ids()
+        .filter(|&e| b.edge(e).tol > forge_math::tol::LINEAR)
+        .count();
+    assert!(tolerant > 0, "the part has tolerant edges");
+    let f = Frame::from_z(
+        forge_math::Point3::new(120.0, -40.0, 7.5),
+        forge_math::UnitVec3::Y,
+    )
+    .rotated_about_z(0.3);
+    let c = forge_asm::check::rigid_copy(b, &f);
+    assert!(c.from_file);
+    let mut got: Vec<f64> = c.edge_ids().map(|e| c.edge(e).tol).collect();
+    let mut want: Vec<f64> = b.edge_ids().map(|e| b.edge(e).tol).collect();
+    got.sort_by(f64::total_cmp);
+    want.sort_by(f64::total_cmp);
+    assert_eq!(got, want);
+    let p = forge_topo::check(&c);
+    assert!(p.is_empty(), "{p:?}");
+}

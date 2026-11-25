@@ -1,0 +1,128 @@
+id	class	zip	file	ents	op	then	detail
+K001	boolean refused: Internal(HoleOutside)	hrt210_10-2020.zip	HRT210_STEP_10-29-2020.STEP	28339	union_over	refused	Internal(HoleOutside { face: FaceRef { name: #dacde5e730c83959, surface: 'plane', near: Point3 { x: 8.248891971046787, y
+K002	boolean refused: Internal(HoleOutside)	hrt210_10-2020.zip	HRT210_STEP_10-29-2020.STEP	28339	int_over	refused	Internal(HoleOutside { face: FaceRef { name: #dacde5e730c83959, surface: 'plane', near: Point3 { x: 8.248891971046787, y
+K003	boolean refused: Internal(HoleOutside)	rpl-25kg_solid_models_12_2024.zip	rpl-25kg_solid_models_12_2024/RPL-25KG_12_2024.STEP	2189	union_over	refused	Internal(HoleOutside { face: FaceRef { name: #a242b4c35fcc9473, surface: 'plane', near: Point3 { x: 1061.4288164269365, 
+K004	boolean refused: Internal(InconsistentClassification)	HRTA6_2019-08.zip	HRTA6_STEP_2019-08.STEP	14022	union_over	refused	Internal(InconsistentClassification { a: FaceRef { name: #1eb65c9df62d9e7a, surface: 'torus', near: Point3 { x: 0.0, y: 
+K005	boolean refused: Internal(InconsistentClassification)	HRTA6_2019-08.zip	HRTA6_STEP_2019-08.STEP	14022	int_over	refused	Internal(InconsistentClassification { a: FaceRef { name: #1eb65c9df62d9e7a, surface: 'torus', near: Point3 { x: 0.0, y: 
+K006	boolean refused: Internal(InconsistentClassification)	trt210_4-2021.zip	TRT210_STEP_4-2021.STEP	66296	union_over	refused	Internal(InconsistentClassification { a: FaceRef { name: #fe00f6fe9daffa7d, surface: 'torus', near: Point3 { x: 11.77242
+K007	boolean refused: Internal(NoNormal)	umc-1500-duo_2020-07.zip	UMC-1500-DUO_STEP_2020-07.STEP	215476	union_over	refused	Internal(NoNormal { face: FaceRef { name: #ef0e6bc9efe2f9eb, surface: 'sphere', near: Point3 { x: 529.6843933790146, y: 
+K008	boolean refused: Internal(NoNormal)	umc-1500-duo_2020-07.zip	UMC-1500-DUO_STEP_2020-07.STEP	215476	int_over	refused	Internal(NoNormal { face: FaceRef { name: #ef0e6bc9efe2f9eb, surface: 'sphere', near: Point3 { x: 529.6843933790146, y: 
+K009	boolean refused: Internal(RetryInvalid)	rpl_modular_solid_models_09_2026.zip	rpm_modular_solid_models_09_2026/rpl_modular_stand-alone_09-2026.STEP	11287	int_over	refused	Internal(RetryInvalid)
+K010	boolean refused: Internal(RetryInvalid)	rpl_modular_solid_models_09_2026.zip	rpm_modular_solid_models_09_2026/rpl_modular_stand-alone_09-2026.STEP	107885	int_over	refused	Internal(RetryInvalid)
+K011	boolean refused: Internal(RetryInvalid)	rpl_modular_solid_models_09_2026.zip	rpm_modular_solid_models_09_2026/rpl_modular_stand-alone_09-2026.STEP	212293	int_over	refused	Internal(RetryInvalid)
+K012	boolean refused: Internal(SplitCrossed)	HA5C-T_11-2019.zip	HA5C-T_STEP_11-2019.STEP	51342	box_sub	refused	Internal(SplitCrossed { face: FaceRef { name: #748de1584c37f9ae, surface: 'plane', near: Point3 { x: -73.87829977716935,
+K013	boolean refused: Internal(SplitCrossed)	HA5C-T_11-2019.zip	HA5C-T_STEP_11-2019.STEP	51342	box_int	refused	Internal(SplitCrossed { face: FaceRef { name: #748de1584c37f9ae, surface: 'plane', near: Point3 { x: -73.87829977716935,
+K014	boolean refused: Internal(SplitCrossed)	gm-1xt_solid_models_04_2025.zip	gm-1xt_solid_models_04_2025/GM-1XT_4_2025.STEP	103336	union_over	refused	Internal(SplitCrossed { face: FaceRef { name: #d451288d473a0cd7, surface: 'nurbs', near: Point3 { x: 695.0711283686785, 
+K015	boolean refused: Internal(Uncut)	hqda5_solid_models_07_2025.zip	hqda5_solid_models_07_2025/HQDA5_7_2025.STEP	3461	box_sub	refused	Internal(Uncut { a: FaceRef { name: #7e0fe5c5b83bb21e, surface: 'nurbs', near: Point3 { x: -31.35974683998753, y: -54.64
+K016	boolean refused: Internal(Uncut)	hqda5_solid_models_07_2025.zip	hqda5_solid_models_07_2025/HQDA5_7_2025.STEP	3461	box_int	refused	Internal(Uncut { a: FaceRef { name: #7e0fe5c5b83bb21e, surface: 'nurbs', near: Point3 { x: -31.35974683998753, y: -54.64
+K017	boolean refused: Internal(Uncut)	trt210_4-2021.zip	TRT210_STEP_4-2021.STEP	141956	box_sub	refused	Internal(Uncut { a: FaceRef { name: #056a08eeae818ff6, surface: 'nurbs', near: Point3 { x: -9.959292143518748, y: 220.05
+K018	boolean refused: Unsupported(NoClosedForm)	st-28l_solid_models_02_2025.zip	st-28l_solid_models_02_2025/ST-28L- 2_2025.STEP	645206	box_sub	refused	Unsupported(NoClosedForm { a: FaceRef { name: #2c13e890211d6250, surface: 'nurbs', near: Point3 { x: 507.99612200118236,
+K019	boolean refused: Unsupported(NoClosedForm)	st-28l_solid_models_02_2025.zip	st-28l_solid_models_02_2025/ST-28L- 2_2025.STEP	645206	box_int	refused	Unsupported(NoClosedForm { a: FaceRef { name: #2c13e890211d6250, surface: 'nurbs', near: Point3 { x: 507.99612200118236,
+K020	boolean refused: Unsupported(NoClosedForm)	st-28l_solid_models_02_2025.zip	st-28l_solid_models_02_2025/ST-28L- 2_2025.STEP	645206	bore_sub	refused	Unsupported(NoClosedForm { a: FaceRef { name: #2c13e890211d6250, surface: 'nurbs', near: Point3 { x: 507.99612200118236,
+K021	boolean refused: Unsupported(SplitThroughSingular)	HA5C2-T_11-2019.zip	HA5C2-T_STEP_11-2019.STEP	38155	box_sub	refused	Unsupported(SplitThroughSingular { face: FaceRef { name: #5cdda7b09d274d51, surface: 'sphere', near: Point3 { x: 165.337
+K022	boolean refused: Unsupported(SplitThroughSingular)	HA5C2-T_11-2019.zip	HA5C2-T_STEP_11-2019.STEP	38155	box_int	refused	Unsupported(SplitThroughSingular { face: FaceRef { name: #5cdda7b09d274d51, surface: 'sphere', near: Point3 { x: 165.337
+K023	boolean refused: Unsupported(SplitThroughSingular)	HA5C2-T_11-2019.zip	HA5C2-T_STEP_11-2019.STEP	106823	box_sub	refused	Unsupported(SplitThroughSingular { face: FaceRef { name: #eafe9d75cdf4f45e, surface: 'sphere', near: Point3 { x: 38.3370
+K024	boolean refused: Unsupported(UntouchedOnOther)	GM2-5AX_Solid_Model.zip	10000100371 lightweight v1.STEP	499513	union_over	refused	Unsupported(UntouchedOnOther { face: FaceRef { name: #bbc81003c8ac1d06, surface: 'plane', near: Point3 { x: 396.74674000
+K025	boolean refused: Unsupported(UntouchedOnOther)	GM2-5AX_Solid_Model.zip	10000100371 lightweight v1.STEP	499513	int_over	refused	Unsupported(UntouchedOnOther { face: FaceRef { name: #bbc81003c8ac1d06, surface: 'plane', near: Point3 { x: 396.74674000
+K026	boolean refused: ZeroThickness	HRT160SP_10-2019.zip	HRT160SP_STEP_10-2019.STEP	46035	union_over	refused	ZeroThickness { at: Point3 { x: 10.019506386309654, y: 139.05590275026054, z: -82.44852931503756 } }
+K027	boolean refused: ZeroThickness	HRTA6_2019-08.zip	HRTA6_STEP_2019-08.STEP	54786	union_over	refused	ZeroThickness { at: Point3 { x: 11.544305000000007, y: -19.518157191895728, z: -0.9529328322298837 } }
+K028	boolean refused: ZeroThickness	cobot_20kg-f_st-20_solid_models_09_2026.zip	cobot_pkg_1_7kg_st-20_solid_models_09_2026/cobot_pkg-7_st-20_09-2026.STEP	307093	union_over	refused	ZeroThickness { at: Point3 { x: 873.0286309316463, y: 497.22558633938064, z: -348.54755945439774 } }
+K029	boolean wrong: check: EdgeOffFace	trt210_4-2021.zip	TRT210_STEP_4-2021.STEP	204568	int_over	wrong	check: EdgeOffFace:1 | EdgeOffFace { edge: EdgeId(44), face: FaceId(18), distance: 0.0003027796041398269 } [edge Procedu
+K030	boolean wrong: check: EdgeOffFace	mm_solid_models_01_2024.zip	mm_solid_models_01_2024.STEP	376050	bore_sub	wrong	check: EdgeOffFace:1 | EdgeOffFace { edge: EdgeId(2448), face: FaceId(909), distance: 0.00019299999343766447 } [edge Pro
+K031	boolean wrong: check: EdgeOffFace	mm_solid_models_01_2024.zip	mm_solid_models_01_2024.STEP	376050	union_beside	wrong	check: EdgeOffFace:1 | EdgeOffFace { edge: EdgeId(2449), face: FaceId(913), distance: 0.00019299999343766447 } [edge Pro
+K032	boolean wrong: check: EdgeUses	vf-6_50_tr_solid_models_2_2022.zip	VF-6_50_TR_SOLID_MODELS_2_2022/VF-6_50_TR_EXTENDED Z-AXIS CLEARANCE_STEP__2_2022.step	836408	union_over	wrong	check: EdgeUses:82,Euler:1 | EdgeUses { edge: EdgeId(1), uses: 1 } [edge Line tol 1e-5 on plane]
+K033	boolean wrong: check: EdgeUses	vf-6_50_tr_solid_models_2_2022.zip	VF-6_50_TR_SOLID_MODELS_2_2022/VF-6_50_TR_EXTENDED Z-AXIS CLEARANCE_STEP__2_2022.step	836408	int_over	wrong	check: EdgeUses:82,Euler:1 | EdgeUses { edge: EdgeId(3), uses: 1 } [edge Line tol 1e-5 on plane]
+K034	boolean wrong: check: EdgeUses	HRTA5_2019-08.zip	HRTA5_Solid_Model_2019-08.STEP	79185,42133	int_pair	wrong	check: EdgeUses:2,Euler:1 | EdgeUses { edge: EdgeId(222), uses: 1 } [edge Circle tol 1e-5 on plane]
+K035	boolean wrong: check: FaceNoLoops	hrt210_10-2020.zip	HRT210_STEP_10-29-2020.STEP	68108	int_over	wrong	check: FaceNoLoops:1 | FaceNoLoops { face: FaceId(25) } [face plane]
+K036	boolean wrong: check: FaceNoLoops	gm-1xt_solid_models_04_2025.zip	gm-1xt_solid_models_04_2025/GM-1XT_4_2025.STEP	258577	int_over	wrong	check: FaceNoLoops:1 | FaceNoLoops { face: FaceId(191) } [face plane]
+K037	boolean wrong: check: FaceNoLoops	gm-1xt_solid_models_04_2025.zip	gm-1xt_solid_models_04_2025/GM-1XT_4_2025.STEP	414607	int_over	wrong	check: FaceNoLoops:2 | FaceNoLoops { face: FaceId(103) } [face plane]
+K038	boolean wrong: check: FaceWrongSide	HRP3_10-2020.zip	HRP3_STEP_10-2020.STEP	424881	union_over	wrong	check: FaceWrongSide:2 | FaceWrongSide { face: FaceId(14), coedge: CoedgeId(64) } [face cone]
+K039	boolean wrong: check: FaceWrongSide	trt210_4-2021.zip	TRT210_STEP_4-2021.STEP	65625	union_over	wrong	check: FaceWrongSide:2 | FaceWrongSide { face: FaceId(54), coedge: CoedgeId(203) } [face cone]
+K040	boolean wrong: check: FaceWrongSide	trt210_4-2021.zip	TRT210_STEP_4-2021.STEP	65625	int_over	wrong	check: FaceWrongSide:14 | FaceWrongSide { face: FaceId(5), coedge: CoedgeId(16) } [face cone]
+K041	boolean wrong: check: LoopsCross	hbf-12_solid_models_07_2025.zip	hbf-12_solid_models_07_2025/Haas Bar Feeder 12_7_2025.STEP	24138	int_over	wrong	check: LoopsCross:1 | LoopsCross { face: FaceId(112) } [face plane]
+K042	boolean wrong: check: VertexOffEdge	ST20LY-25LY_3-2021.zip	ST20LY-25LY_STEP_3-2021.STEP	140177	bore_sub	wrong	check: VertexOffEdge:1 | VertexOffEdge { edge: EdgeId(73), vertex: VertexId(44), distance: 2.0963422518140388e-5 } [edge
+K043	boolean wrong: check: VertexOffEdge	ST20LY-25LY_3-2021.zip	ST20LY-25LY_STEP_3-2021.STEP	140177	bore_int	wrong	check: VertexOffEdge:1 | VertexOffEdge { edge: EdgeId(5), vertex: VertexId(1), distance: 2.0963422518140388e-5 } [edge I
+K044	boolean wrong: check: VertexOffEdge	hbf-12_solid_models_07_2025.zip	hbf-12_solid_models_07_2025/Haas Bar Feeder 12_7_2025.STEP	7407	union_over	wrong	check: VertexOffEdge:1 | VertexOffEdge { edge: EdgeId(129), vertex: VertexId(91), distance: 4.57421296428618e-5 } [edge 
+K045	boolean wrong: mass: face	hrt210_10-2020.zip	HRT210_STEP_10-29-2020.STEP	68108	union_over	wrong	mass: face 59: the face's loops draw no region
+K046	boolean wrong: mass: face	HA2TS_2019-08.zip	HA2TS_2019-08/HA2TS_STEP_11-2019.STEP	26141	int_over	wrong	mass: face 75: the face's loops draw no region
+K047	boolean wrong: mass: face	ec-1600zt_pallet_pool_solid_models_10_2025.zip	ec-1600zt_pallet_pool_solid_models_10_2025/EC-1600ZT- Pallet Pool -10_2025.STEP	395674	union_over	wrong	mass: face 1856: the face's loops draw no region
+K048	boolean wrong: mesh not watertight: open N vol N	mini_mill_solid_models_2_2022.zip	MINI MILL_SOLID_MODELS_2_2022/MINI MILL_STEP__2_2022.step	228632	int_over	wrong	mesh not watertight: open 3698 vol 50641.86983895386
+K049	boolean wrong: mesh not watertight: open N vol N	mini_mill_solid_models_2_2022.zip	MINI MILL_SOLID_MODELS_2_2022/MINI MILL_Z-AXIS CLEARANCE_STEP__2_2022.step	334075	int_over	wrong	mesh not watertight: open 3698 vol 50641.869838926155
+K050	boolean wrong: mesh not watertight: open N vol N	hfl-3015d-6_solid_models_06_2026.zip	hfl-3015d-6_solid_models_06_2026/HFL-3015D-6 06-30-2026.STEP	456315	union_over	wrong	mesh not watertight: open 2 vol 40538885.111981906
+K051	bore_int hang	umc-400_ss_solid_models_02_2025.zip	umc-400_ss_solid_models_02_2025/UMC 400_2_2025.STEP	63060	bore_int	hang	
+K052	bore_sub hang	umc-400_ss_solid_models_02_2025.zip	umc-400_ss_solid_models_02_2025/UMC 400_2_2025.STEP	63060	bore_sub	hang	
+K053	box_int hang	HRTA5_2019-08.zip	HRTA5_Solid_Model_2019-08.STEP	4418	box_int	hang	
+K054	box_int hang	HRTA6_2019-08.zip	HRTA6_STEP_2019-08.STEP	96133	box_int	hang	
+K055	box_int hang	hrt210_10-2020.zip	HRT210_STEP_10-29-2020.STEP	30052	box_int	hang	
+K056	box_sub hang	HRTA5_2019-08.zip	HRTA5_Solid_Model_2019-08.STEP	4418	box_sub	hang	
+K057	box_sub hang	HRTA6_2019-08.zip	HRTA6_STEP_2019-08.STEP	96133	box_sub	hang	
+K058	box_sub hang	hrt210_10-2020.zip	HRT210_STEP_10-29-2020.STEP	30052	box_sub	hang	
+K059	import: check EdgeDegenerate	hcs-80_solid_models_04_2026.zip	hcs-80_solid_models_04_2026/HCS-80_04_2026.STEP	339396	solid	fail	EdgeDegenerate:1 | EdgeDegenerate { edge: EdgeId(574) } [edge Circle tol 1e-5 on sphere sphere]
+K060	import: check EdgeDegenerate	rpl_modular_umc_500_solid_models_09_2026.zip	rpm_modular_umc_500_solid_models_09_2026/rpl_modular_umc-500_09-2026.STEP	399258	solid	fail	EdgeDegenerate:4 | EdgeDegenerate { edge: EdgeId(1446) } [edge Circle tol 1e-5 on sphere sphere]
+K061	import: check EdgeDegenerate	rpl_modular_umc_750_solid_models_09_2026.zip	rpm_modular_umc_750_solid_models_09_2026/rpl_modular_umc-750_09-2026 1.STEP	108041	solid	fail	EdgeDegenerate:4 | EdgeDegenerate { edge: EdgeId(1446) } [edge Circle tol 1e-5 on sphere sphere]
+K062	import: check EdgeUses	vs-3_solid_models_06_2024.zip	vs-3_solid_models_06_2024/VS-3_STEP__6_2024.STEP	738262	solid	fail	EdgeUses:12,ShellDisconnected:1 | EdgeUses { edge: EdgeId(620), uses: 1 } [edge Line tol 1e-5 on plane]
+K063	import: check EdgeUses	vs-3_solid_models_06_2024.zip	vs-3_solid_models_06_2024/VS-3_STEP__6_2024.STEP	478011	solid	fail	EdgeUses:2315,Euler:1,ShellDisconnected:1 | EdgeUses { edge: EdgeId(2), uses: 1 } [edge Procedural tol 7.159353619056813
+K064	import: check FaceWrongSide	VF-3YT50_2019-11.zip	VF-3YT50_STEP_2019-11.x_t.STEP	618511	solid	fail	FaceWrongSide:9 | FaceWrongSide { face: FaceId(3), coedge: CoedgeId(12) } [face nurbs]
+K065	import: check FaceWrongSide	Haas_5kg_Cobot_Package_Model.zip	Haas 5kg Cobot Package Model/Haas 5kg Cobot Package.STEP	244473	solid	fail	FaceWrongSide:3,LoopsCross:1 | LoopsCross { face: FaceId(0) } [face cylinder]
+K066	import: check FaceWrongSide	ST-20-25_Reboot_Solid_Model_2019-05r2.zip	ST20-25_Reboot_2-axis_STEP_2019-05.STEP	681422	solid	fail	FaceWrongSide:3 | FaceWrongSide { face: FaceId(20), coedge: CoedgeId(86) } [face nurbs]
+K067	import: check LoopsCross	hrp-2_solid_models_1_2022.zip	HRP-2_SOLID_MODELS_1_2022/HRP-2_STEP__1_2022.step	398200	solid	fail	LoopsCross:2 | LoopsCross { face: FaceId(1) } [face nurbs]
+K068	import: check LoopsCross	08-1949.zip	08-1949/08-1949_STEP_04_02_2024.STEP	96088	solid	fail	LoopsCross:1 | LoopsCross { face: FaceId(79) } [face nurbs]
+K069	import: check LoopsCross	vf-1_11_2021.zip	VF-1_11_2021/VF-1_STEP_11_2021.STEP	478688	solid	fail	LoopsCross:2 | LoopsCross { face: FaceId(39) } [face cylinder]
+K070	import: check VertexTolerance	vf-5_40_ss_tr_solid_models_3_2022.zip	VF-5_40_SS_TR_SOLID_MODELS_3_2022/VF-5_40_SS_TR_STEP__3_2022.step	292777	solid	fail	VertexTolerance:1 | VertexTolerance { vertex: VertexId(454), tol: 0.16224982509990585 }
+K071	import: check VertexTolerance	vf-5_40_ss_tr_solid_models_3_2022.zip	VF-5_40_SS_TR_SOLID_MODELS_3_2022/VF-5_40_SS_TR_STEP__3_2022.step	10138	solid	fail	VertexTolerance:1 | VertexTolerance { vertex: VertexId(178), tol: 0.19510359018735446 }
+K072	import: check VertexTolerance	vf-11_40_solid_models_7_2022.zip	vf-11_40_solid_models_7_2022/VF-11_40_STEP__7_2022.step	415060	solid	fail	VertexTolerance:4 | VertexTolerance { vertex: VertexId(656), tol: 0.3919175423632751 }
+K073	import: mass face N: the face's loops draw no region	st-28l_solid_models_02_2025.zip	st-28l_solid_models_02_2025/ST-28L- 2_2025.STEP	668380	solid	fail	face 18: the face's loops draw no region
+K074	import: mass face N: the face's loops draw no region	st-40_solid_models_05_2024.zip	st-40_solid_models_05_2024/st-40_solid_models_05_2024.STEP	48809	solid	fail	face 10: the face's loops draw no region
+K075	import: mass face N: the face's loops draw no region	st-45_solid_models_05_2024.zip	st-45_solid_models_05_2024/st-45_solid_models_05_2024.STEP	342645	solid	fail	face 10: the face's loops draw no region
+K076	import: mass face N: too many runs between singular points	vf-2yt_2ssyt_solid_models_11_2021.zip	VF-2YT_2SSYT_SOLID_MODELS_11_2021/VF-2YT_2SSYT_STEP__11_2021.step	103628	solid	fail	face 0: too many runs between singular points
+K077	import: mass face N: too many runs between singular points	tl-3b_solid_models_07_2026.zip	tl-3b_solid_models_07_2026/tl-3b_mld_07-2026.STEP	530793	solid	fail	face 16: too many runs between singular points
+K078	import: mesh open	st-30(y)-35(y)_2009-2020+.zip	ST-30Y-35Y_2020+/ST-30Y-35Y_STEP_2020-03.STEP	870773	solid	fail	mesh open
+K079	import: mesh open	Haas_5kg_Cobot_Package_Model.zip	Haas 5kg Cobot Package Model/Haas 5kg Cobot Package.STEP	1057936	solid	fail	mesh open
+K080	import: mesh open	Haas_5kg_Cobot_Package_Model.zip	Haas 5kg Cobot Package Model/Haas 5kg Cobot Package.STEP	1121740	solid	fail	mesh open
+K081	import: refused a reference is missing	robot_pkg-1_7_front_solid_models_06_2025.zip	robot pkg-1_7_front_solid_models_06_2025/ROBOT PKG-1_7KG_FRONT_06_2025.STEP	34102	import	refused	a reference is missing
+K082	import: refused a reference is missing	robot_pkg-1_7_side_solid_models_06_2025.zip	robot pkg-1_7_side_solid_models_06_2025/ROBOT_PKG-1_7KG_SIDE_06_2025.STEP	1976	import	refused	a reference is missing
+K083	import: refused a reference is missing	vr-9_solid_models_07_2024.zip	vr-9_solid_models_07_2024/VR-9_7_2024.STEP	264734	import	refused	a reference is missing
+K084	import: refused a sheet, not a solid: N edges not between two faces	hfl-3015_solid_models_02_2026.zip	hfl-3015_solid_models_02_2026/HFL-3015_02_2026.STEP	639632	import	refused	a sheet, not a solid: 26 edges not between two faces
+K085	import: refused a sheet, not a solid: N edges not between two faces	hfl-3015_solid_models_02_2026.zip	hfl-3015_solid_models_02_2026/HFL-3015_02_2026.STEP	811197	import	refused	a sheet, not a solid: 4 edges not between two faces
+K086	import: refused a sheet, not a solid: N edges not between two faces	hfl-3015_solid_models_02_2026.zip	hfl-3015_solid_models_02_2026/HFL-3015_02_2026.STEP	487144	import	refused	a sheet, not a solid: 4 edges not between two faces
+K087	import: refused a whole spline surface with no edges	08-1949.zip	08-1949/08-1949_STEP_04_02_2024.STEP	525424	import	refused	a whole spline surface with no edges
+K088	import: refused a whole spline surface with no edges	08-1949.zip	08-1949/08-1949_STEP_04_02_2024.STEP	926676	import	refused	a whole spline surface with no edges
+K089	import: refused a whole spline surface with no edges	Haas_5kg_Cobot_Package_Model.zip	Haas 5kg Cobot Package Model/Haas 5kg Cobot Package.STEP	556288	import	refused	a whole spline surface with no edges
+K090	import: refused its surfaces would take too long to measure	HRT160-2-XT_2019-08.zip	HRT160-2-STEP_2019-08.STEP	13299	import	refused	its surfaces would take too long to measure
+K091	import: refused its surfaces would take too long to measure	ST-20-25_Reboot_Solid_Model_2019-05r2.zip	ST20-25_Reboot_2-axis_STEP_2019-05.STEP	135861	import	refused	its surfaces would take too long to measure
+K092	import: refused its surfaces would take too long to measure	ST-20Y-25Y_Reboot_2019-03.zip	ST-20Y-25Y_STEP_2019-03.STEP	606999	import	refused	its surfaces would take too long to measure
+K093	import: refused no place on the rim for a second meridian	TR200Y_10-2019.zip	TR200Y_STEP_10-2019.STEP	71139	import	refused	no place on the rim for a second meridian
+K094	import: refused no place on the rim for a second meridian	cobot_20kg-f_solid_models_09_2026.zip	cobot_20kg-f_solid_models_09_2026/cobot 20kg-F_09-26.STEP	122021	import	refused	no place on the rim for a second meridian
+K095	import: refused no place on the rim for a second meridian	cobot_20kg-f_st-20_solid_models_09_2026.zip	cobot_pkg_1_7kg_st-20_solid_models_09_2026/cobot_pkg-7_st-20_09-2026.STEP	328382	import	refused	no place on the rim for a second meridian
+K096	import: refused outside the N km model box	ST-20-25_Reboot_Solid_Model_2019-05r2.zip	ST20-25_Reboot_2-axis_STEP_2019-05.STEP	300337	import	refused	outside the 1 km model box
+K097	import: refused outside the N km model box	ST20LY-25LY_3-2021.zip	ST20LY-25LY_STEP_3-2021.STEP	464967	import	refused	outside the 1 km model box
+K098	import: refused outside the N km model box	ST30L-LY-35L-LY__2020-06.zip	ST30L-35L-LY_STEP_2020-06.x_t.STEP	630221	import	refused	outside the 1 km model box
+K099	import: refused the entity is missing or of another kind	Haas_5kg_Cobot_Package_Model.zip	Haas 5kg Cobot Package Model/Haas 5kg Cobot Package.STEP	681642	import	refused	the entity is missing or of another kind
+K100	import: refused the entity is missing or of another kind	Haas_5kg_Cobot_Package_Model.zip	Haas 5kg Cobot Package Model/Haas 5kg Cobot Package.STEP	1359504	import	refused	the entity is missing or of another kind
+K101	import: refused the entity is missing or of another kind	Haas_5kg_Cobot_Package_Model.zip	Haas 5kg Cobot Package Model/Haas 5kg Cobot Package.STEP	165284	import	refused	the entity is missing or of another kind
+K102	int_over crash rc 137	gm-1-5ax_solid_models_07_2026.zip	gm-1-5ax_solid_models_07_2026/GM-1-5AX 07-01-2026.STEP	63372	int_over	crash rc 137	
+K103	int_over crash rc 137	gm-1xt-5ax_solid_models_07_2026.zip	gm-1xt-5ax_solid_models_07_2026/GM-1XT-5AX-07-2026.STEP	356015	int_over	crash rc 137	
+K104	int_over hang	HRP3_10-2020.zip	HRP3_STEP_10-2020.STEP	180774	int_over	hang	
+K105	int_over hang	umc-500_ss_10_station_pp_solid_models_03_2026.zip	umc-500_10_station_pp_solid_models_03_2026/UMC-500 w 10 Station PP_3_2026.STEP	460720	int_over	hang	
+K106	int_over hang	HRP3_10-2020.zip	HRP3_STEP_10-2020.STEP	196670	int_over	hang	
+K107	int_over memory	gm-1-5ax_solid_models_07_2026.zip	gm-1-5ax_solid_models_07_2026/GM-1-5AX 07-01-2026.STEP	311479	int_over	memory	
+K108	oracle wrong: volumes do not add up	tm_1_1p_10_2021.zip	TM_1_1P_10_2021/TM-1_1P_STEP_10_2021.STEP	132532	beside_sum	wrong	volumes do not add up
+K109	oracle wrong: volumes do not add up	vf-2yt_2ssyt_solid_models_11_2021.zip	VF-2YT_2SSYT_SOLID_MODELS_11_2021/VF-2YT_2SSYT_STEP__11_2021.step	293439	box_sum	wrong	volumes do not add up
+K110	oracle wrong: volumes do not add up	vf-2yt_2ssyt_solid_models_11_2021.zip	VF-2YT_2SSYT_SOLID_MODELS_11_2021/VF-2YT_2SSYT_STEP__11_2021.step	293439	beside_sum	wrong	volumes do not add up
+K111	section wrong: N open loops	tl-2p_solid_models_12_2024.zip	tl-2p_solid_models_12_2024/TL-2P_12_2024.STEP	54516	section	wrong	5 open loops
+K112	section wrong: N open loops	vf-5_40_ss_tr_solid_models_3_2022.zip	VF-5_40_SS_TR_SOLID_MODELS_3_2022/VF-5_40_SS_TR_STEP__3_2022.step	532896	section	wrong	5 open loops
+K113	section wrong: N open loops	TR160_10-2019.zip	TRT160_STEP_10-2019.STEP	165744	section	wrong	5 open loops
+K114	section wrong: negative area	Small_VF_APL_2019-10-r1.zip	Small_VF_APL_STEP_2019-10-r1.STEP	71442	section	wrong	negative area
+K115	section wrong: negative area	hrt160ss_step_10-2021.zip	HRT160SS_STEP_10-2021.STEP	173460	section	wrong	negative area
+K116	section wrong: negative area	desktop_lathe_solid_models_new_08_2024.zip	desktop_lathe_solid_models_08_2024/desktop_lathe_solid_models_08_2024.STEP	105490	section	wrong	negative area
+K117	union_over crash rc 137	gm-1-5ax_solid_models_07_2026.zip	gm-1-5ax_solid_models_07_2026/GM-1-5AX 07-01-2026.STEP	63372	union_over	crash rc 137	
+K118	union_over crash rc 137	gm-1xt-5ax_solid_models_07_2026.zip	gm-1xt-5ax_solid_models_07_2026/GM-1XT-5AX-07-2026.STEP	356015	union_over	crash rc 137	
+K119	union_over hang	HRP3_10-2020.zip	HRP3_STEP_10-2020.STEP	180774	union_over	hang	
+K120	union_over hang	umc-500_ss_10_station_pp_solid_models_03_2026.zip	umc-500_10_station_pp_solid_models_03_2026/UMC-500 w 10 Station PP_3_2026.STEP	460720	union_over	hang	
+K121	union_over hang	rpl_modular_solid_models_09_2026.zip	rpm_modular_solid_models_09_2026/rpl_modular_stand-alone_09-2026.STEP	11287	union_over	hang	
+K122	union_over memory	gm-1-5ax_solid_models_07_2026.zip	gm-1-5ax_solid_models_07_2026/GM-1-5AX 07-01-2026.STEP	311479	union_over	memory	
+K123	union_over memory	gm-1-5ax_solid_models_07_2026.zip	gm-1-5ax_solid_models_07_2026/GM-1-5AX 07-01-2026.STEP	535560	union_over	memory	
+K124	union_over memory	gm-1xt-5ax_solid_models_07_2026.zip	gm-1xt-5ax_solid_models_07_2026/GM-1XT-5AX-07-2026.STEP	611404	union_over	memory	
+K125	section wrong: negative area	HRT160SP_10-2019.zip	HRT160SP_STEP_10-2019.STEP	71564	section	wrong	negative area (sec_x, sec_x_off)
+K126	section wrong: negative area	HRTA6_2019-08.zip	HRTA6_STEP_2019-08.STEP	87677	section	wrong	negative area (sec_z37)
+K127	boolean wrong: check: EdgeOffFace	trt210_4-2021.zip	TRT210_STEP_4-2021.STEP	204568	int_over	wrong	EdgeOffFace 0.00074 on main; also K029
