@@ -52,6 +52,10 @@ pub struct BendView {
     envelope: Option<(usize, [f32; 3], [f32; 3])>,
     /// The bodies drawn, in placement order: what see-through tests against.
     bodies: Vec<Body>,
+    /// Each step's contact regions (BENDSIM-TOOLS' contacts_of), for the simulation they came
+    /// from (its address): made once a step, only for a step whose collision checks fail or are
+    /// near.
+    contacts: Option<(usize, std::collections::HashMap<usize, Vec<forge_brake::Contact>>)>,
     /// See-through's faces drawn as ghosts (the bodies that hide the bend, whole).
     pub ghosts: Vec<crate::render::FaceColour>,
     /// Each body's see-through state: frames it has blocked running, and how far it has faded
@@ -216,6 +220,10 @@ fn appearances() -> &'static crate::studio::appearance::Appearances {
 /// its neutral default), black-oxide backgauge, concrete floor; the sheet in its forge-material's
 /// appearance, or a neutral matte sheet when the material is not known; failing bodies red.
 pub fn tint(b: &Body, material: Option<&str>) -> [f32; 4] {
+    // a contact region (Collisions): red where a collision is proven, amber where near
+    if b.name.starts_with("contact:") {
+        return if b.hit { CONTACT_HIT } else { CONTACT_NEAR };
+    }
     let t = own_tint(b, material);
     // the other stations' tools dimmed (UX-LEAD, BENDSIM-TOOLS): the station working is the
     // tools as they are, solid steel; the others there, set back, a light neutral and matte
@@ -227,6 +235,10 @@ pub fn tint(b: &Body, material: Option<&str>) -> [f32; 4] {
     }
     t
 }
+
+/// A contact region's colours: a proven collision, a near one (linear rgb, matte).
+pub const CONTACT_HIT: [f32; 4] = [0.95, 0.06, 0.04, 0.0];
+pub const CONTACT_NEAR: [f32; 4] = [0.98, 0.62, 0.08, 0.0];
 
 /// How far the other stations' tools are set back toward a light neutral, that neutral, and what
 /// of their metal's sheen they keep.
@@ -769,7 +781,8 @@ impl Gui {
             return;
         }
         let step = b.step.min(n - 1);
-        let key = (sim as *const _ as usize, step, b.t.to_bits());
+        // (the Collisions switch in the key: turned, the bodies are drawn again)
+        let key = (sim as *const _ as usize, step * 2 + usize::from(b.collisions), b.t.to_bits());
         if self.bend.shown == Some(key) && b.frame.is_none() {
             self.bendsim_follow();
             self.bendsim_see_through();
@@ -779,7 +792,44 @@ impl Gui {
         if let Some(h) = b.table_height {
             sc.table_height = h;
         }
-        let bodies = sc.bodies(step, b.t);
+        let mut bodies = sc.bodies(step, b.t);
+        // the contact regions at this instant, on the part (Collisions)
+        if b.collisions {
+            let id = sim as *const _ as usize;
+            if self.bend.contacts.as_ref().is_none_or(|c| c.0 != id) {
+                self.bend.contacts = Some((id, Default::default()));
+            }
+            let cache = &mut self.bend.contacts.as_mut().unwrap().1;
+            let cs = cache.entry(step).or_insert_with(|| {
+                let st = &sim.plan.steps[step];
+                let colliding = st.checks.iter().any(|c| {
+                    matches!(
+                        c.rule,
+                        forge_brake::Rule::ToolCollision
+                            | forge_brake::Rule::ClosesOnPunch
+                            | forge_brake::Rule::Withdraw
+                            | forge_brake::Rule::SelfCollision
+                    ) && (!c.pass || c.near.is_some())
+                });
+                if !colliding {
+                    return Vec::new();
+                }
+                let mut done = vec![false; sim.model.bends.len()];
+                for s in &sim.plan.steps[..step] {
+                    done[s.bend] = true;
+                }
+                forge_brake::contacts_of(&sim.model, &sim.tooling, &done, st)
+            });
+            let regions = sc.contact_bodies(step, b.t, cs);
+            if !regions.is_empty() {
+                // the regions say where: the part's pieces keep their own colour under them (the
+                // whole piece red would hide the region); the tools met stay red
+                for x in bodies.iter_mut().filter(|x| x.name.starts_with("part:")) {
+                    x.hit = false;
+                }
+            }
+            bodies.extend(regions);
+        }
         // the station the step works at (along the bed)
         let at = {
             let st = &sim.plan.steps[step];

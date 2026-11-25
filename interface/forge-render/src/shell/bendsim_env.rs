@@ -23,6 +23,7 @@ const LAST: u16 = 110;
 const FOLLOW: u16 = 111;
 const SEE: u16 = 112;
 const PLAN: u16 = 113;
+const COLLIDE: u16 = 114;
 
 fn tool(name: &'static str, icon: &'static str, action: Option<Action>, on: bool) -> Tool {
     Tool {
@@ -176,7 +177,13 @@ pub(super) fn infeasible(b: &BendSimUi) -> Option<String> {
             .iter()
             .filter(|c| !c.pass)
             .map(|c| super::bendsim_cards::rule_failed(c.rule).to_string())
-            .collect();
+            .fold(Vec::new(), |mut v: Vec<String>, w| {
+                // each clause once ("it hits a tool" for the die's two checks)
+                if !v.contains(&w) {
+                    v.push(w);
+                }
+                v
+            });
         format!(
             "bend {} ({}) fails: {} (best tried: {} on {})",
             k.bend + 1,
@@ -261,6 +268,7 @@ pub(super) fn groups(s: &Shell) -> Vec<Group> {
             vec![
                 tool("Follow Bend", "eye", cmd(FOLLOW), b.is_some_and(|b| b.follow)),
                 tool("See Through", "hide", cmd(SEE), b.is_some_and(|b| b.see_through)),
+                tool("Collisions", "warning", cmd(COLLIDE), b.is_some_and(|b| b.collisions)),
             ],
         ),
     ]
@@ -468,6 +476,7 @@ pub(super) fn command(s: &mut Shell, c: u16) {
             }
         }
         SEE => b.see_through = !b.see_through,
+        COLLIDE => b.collisions = !b.collisions,
         MACHINE => b.pane = super::bendsim::Pane::Setup,
         SUGGEST => {
             b.pane = super::bendsim::Pane::Program;

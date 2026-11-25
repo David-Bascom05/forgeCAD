@@ -1298,9 +1298,14 @@ fn contacts_json(
         }
         items.push((None, d, &b.attempt));
     }
-    for (n, done, st) in items {
-        for c in fb::contacts_of(m, tl, &done, st) {
-            out.push(contact_json(sh, m, &c, n, st, names));
+    // each step's contacts are its own: on all cores, in step order
+    let found = forge_math::par::map(items.len(), |i| {
+        let (_, done, st) = &items[i];
+        fb::contacts_of(m, tl, done, st)
+    });
+    for ((n, _, st), cs) in items.iter().zip(found) {
+        for c in cs {
+            out.push(contact_json(sh, m, &c, *n, st, names));
         }
     }
     out

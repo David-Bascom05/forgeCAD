@@ -10,7 +10,9 @@ use crate::geo::{Region, Seg};
 use crate::model::Model;
 use crate::num::Sc;
 use crate::plan::Plan;
-use crate::sim::{Check, HandleTarget, Kind, Moving, Phase, Piece, Rule, Severity, Step, StepCtx};
+use crate::sim::{
+    Check, Contact, HandleTarget, Kind, Moving, Phase, Piece, Rule, Severity, Step, StepCtx, Surface,
+};
 use crate::tooling::{Punch, Segment, Tooling};
 use forge_math::{Interval, Point2, dmath};
 use forge_sheet::Strip;
@@ -81,6 +83,76 @@ impl Mesh {
             )
         }))
     }
+}
+
+/// How far a contact's region is drawn off the part's skin (mm), so it shows over it.
+pub const CONTACT_LIFT: f64 = 0.05;
+
+/// Zone pieces of a contact's footprint are drawn no longer than this (mm), so they follow the
+/// bend's curve.
+const CONTACT_STEP: f64 = 0.5;
+
+/// The (u, v) rectangles of contact cells (any depth, any motion), the same ones once, and merged
+/// where they touch: first along u in rows of the same v span, then along v in columns of the
+/// same u span. Their union is the cells'.
+fn footprint(cells: &[&[Interval; 4]]) -> Vec<(Point2, Point2)> {
+    let mut r: Vec<[f64; 4]> = cells
+        .iter()
+        .map(|c| [c[0].lo, c[0].hi, c[1].lo, c[1].hi])
+        .collect();
+    r.sort_by(|a, b| {
+        a.iter()
+            .zip(b)
+            .map(|(x, y)| x.total_cmp(y))
+            .find(|o| o.is_ne())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    r.dedup();
+    // rows: the same v span, touching in u
+    let merge = |r: &mut Vec<[f64; 4]>, along: usize, key: [usize; 2]| {
+        r.sort_by(|a, b| {
+            a[key[0]]
+                .total_cmp(&b[key[0]])
+                .then(a[key[1]].total_cmp(&b[key[1]]))
+                .then(a[along].total_cmp(&b[along]))
+        });
+        let mut out: Vec<[f64; 4]> = Vec::with_capacity(r.len());
+        for x in r.drain(..) {
+            if let Some(l) = out.last_mut()
+                && l[key[0]] == x[key[0]]
+                && l[key[1]] == x[key[1]]
+                && x[along] <= l[along + 1]
+            {
+                l[along + 1] = l[along + 1].max(x[along + 1]);
+                continue;
+            }
+            out.push(x);
+        }
+        *r = out;
+    };
+    merge(&mut r, 0, [2, 3]);
+    merge(&mut r, 2, [0, 1]);
+    r.into_iter()
+        .map(|x| (Point2::new(x[0], x[2]), Point2::new(x[1], x[3])))
+        .collect()
+}
+
+/// The part of the segment a -> b inside the rectangle [lo, hi], as parameters along it.
+fn clip_segment(a: Point2, b: Point2, lo: Point2, hi: Point2) -> Option<(f64, f64)> {
+    let (mut t0, mut t1) = (0.0f64, 1.0f64);
+    for (p, d, l, h) in [(a.x, b.x - a.x, lo.x, hi.x), (a.y, b.y - a.y, lo.y, hi.y)] {
+        if d.abs() < 1e-15 {
+            if p < l || p > h {
+                return None;
+            }
+            continue;
+        }
+        let (u, v) = ((l - p) / d, (h - p) / d);
+        let (u, v) = if u < v { (u, v) } else { (v, u) };
+        t0 = t0.max(u);
+        t1 = t1.min(v);
+    }
+    (t1 > t0).then_some((t0, t1))
 }
 
 fn f3(p: [f64; 3]) -> [f32; 3] {
@@ -1056,6 +1128,189 @@ impl<'a> Scene<'a> {
         self.bodies_of(k, t, true)
     }
 
+    /// Where step `k`'s contacts are at the instant `t`: for each contact, the part's faces in
+    /// its cells whose motion span holds the instant's (the turn in the bend, the ram's height in
+    /// approach and return; a static contact's always), posed as `bodies` poses the part and lifted
+    /// `CONTACT_LIFT` off the skin so they draw over it. A triangle (or a side's quad) is kept when
+    /// its (u, v) box meets a cell's: the drawn region is never smaller than the cells. A
+    /// self-collision's other faces are the triangles of those faces inside the contact's box.
+    /// One body a contact, `contact:<i>`, its `hit` a proven depth; none for a contact with
+    /// nothing in span at `t`.
+    pub fn contact_bodies(&mut self, k: usize, t: f64, contacts: &[Contact]) -> Vec<Body> {
+        let ctx = self.ctx(k);
+        let pose = self.pose(k, t);
+        let path = if pose.stage == Stage::Handle {
+            self.handling_path(k)
+        } else {
+            None
+        };
+        let moved = |p: [f64; 3]| match &path {
+            Some(hp) => hp.place(p, pose.handle),
+            None => p,
+        };
+        let phi = pose.phi;
+        let ts = ctx.t;
+        let pcs: Vec<Piece> = ctx.pieces.clone();
+        let meshes: Vec<Option<(Tess, Strip)>> = self
+            .piece_meshes(k, &ctx)
+            .iter()
+            .map(|m| {
+                m.as_ref()
+                    .map(|m| ((m.pts.clone(), m.tris.clone(), m.edges.clone()), m.strip))
+            })
+            .collect();
+        let value = |ph: Phase| -> Option<f64> {
+            match (ph, pose.stage) {
+                (Phase::Static, _) => None,
+                (Phase::Bend, Stage::Bend | Stage::Springback) => Some(phi),
+                (Phase::Approach, Stage::Approach) | (Phase::Return, Stage::Return) => Some(pose.tip),
+                _ => Some(f64::NAN),
+            }
+        };
+        let mut out = Vec::new();
+        for (i, c) in contacts.iter().enumerate() {
+            // a static (and a self) contact holds through the step; another only in its stretch
+            let s = if c.rule == Rule::SelfCollision {
+                None
+            } else {
+                value(c.phase)
+            };
+            let in_span =
+                |cell: &[Interval; 4]| s.is_none_or(|s| cell[3].lo - 1e-9 <= s && s <= cell[3].hi + 1e-9);
+            let mut mesh = Mesh::default();
+            for f in &c.faces {
+                let cells: Vec<&[Interval; 4]> = f.cells.iter().filter(|x| in_span(x)).collect();
+                if cells.is_empty() {
+                    continue;
+                }
+                // the cells' footprint: their (u, v) rectangles, merged where they touch
+                let rects = footprint(&cells);
+                for (pc, pm) in pcs.iter().zip(&meshes) {
+                    let Some(((pts, _, edges), strip)) = pm else {
+                        continue;
+                    };
+                    if *strip != f.part.strip {
+                        continue;
+                    }
+                    let at = |p: Point2, w: f64| moved(part_point(&ctx, pc, p, w, phi));
+                    let region = pc.region();
+                    let (plo, phi_) = pts.iter().fold(
+                        (
+                            Point2::new(f64::INFINITY, f64::INFINITY),
+                            Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+                        ),
+                        |(lo, hi), p| {
+                            (
+                                Point2::new(lo.x.min(p.x), lo.y.min(p.y)),
+                                Point2::new(hi.x.max(p.x), hi.y.max(p.y)),
+                            )
+                        },
+                    );
+                    // a zone curves: its pieces short enough to follow it
+                    let step = if matches!(pc.kind, Kind::Wall { .. }) {
+                        f64::INFINITY
+                    } else {
+                        CONTACT_STEP
+                    };
+                    // the region's material, drawn as its shell: both skins over the footprint
+                    // and the sides it reaches (a cell lies in the sheet, at any depth; its face
+                    // names only where the tool is nearest)
+                    for &(lo, hi) in &rects {
+                        let lo = Point2::new(lo.x.max(plo.x), lo.y.max(plo.y));
+                        let hi = Point2::new(hi.x.min(phi_.x), hi.y.min(phi_.y));
+                        if lo.x >= hi.x || lo.y >= hi.y {
+                            continue;
+                        }
+                        let nu = ((hi.x - lo.x) / step).ceil().max(1.0) as usize;
+                        let nv = ((hi.y - lo.y) / step).ceil().max(1.0) as usize;
+                        let g = |i: usize, j: usize| {
+                            Point2::new(
+                                lo.x + (hi.x - lo.x) * i as f64 / nu as f64,
+                                lo.y + (hi.y - lo.y) * j as f64 / nv as f64,
+                            )
+                        };
+                        for i in 0..nu {
+                            for j in 0..nv {
+                                let q = [g(i, j), g(i + 1, j), g(i + 1, j + 1), g(i, j + 1)];
+                                let mid = Point2::new(0.5 * (q[0].x + q[2].x), 0.5 * (q[0].y + q[2].y));
+                                // over a hole or past the outline: nothing to draw
+                                if !q.iter().chain([&mid]).any(|p| region.contains(*p)) {
+                                    continue;
+                                }
+                                for w in [CONTACT_LIFT, -ts - CONTACT_LIFT] {
+                                    let [a, b, c2, d] = q.map(|p| at(p, w));
+                                    // both windings: seen from either side
+                                    mesh.push_quad(a, b, c2, d);
+                                    mesh.push_quad(a, d, c2, b);
+                                }
+                            }
+                        }
+                    }
+                    for &(ea, eb) in edges {
+                        let (pa, pb) = (pts[ea as usize], pts[eb as usize]);
+                        // out of the region by the lift
+                        let d = pb - pa;
+                        let len = d.length().max(1e-12);
+                        let nl = Point2::new(-d.y / len, d.x / len);
+                        let mid = Point2::new(0.5 * (pa.x + pb.x), 0.5 * (pa.y + pb.y));
+                        let inside_left =
+                            region.contains(Point2::new(mid.x + nl.x * 1e-3, mid.y + nl.y * 1e-3));
+                        let o = if inside_left { -CONTACT_LIFT } else { CONTACT_LIFT };
+                        let off = |p: Point2| Point2::new(p.x + nl.x * o, p.y + nl.y * o);
+                        for &(lo, hi) in &rects {
+                            // the edge's stretch inside the rectangle
+                            let Some((t0, t1)) = clip_segment(pa, pb, lo, hi) else {
+                                continue;
+                            };
+                            let qa = off(Point2::new(pa.x + d.x * t0, pa.y + d.y * t0));
+                            let qb = off(Point2::new(pa.x + d.x * t1, pa.y + d.y * t1));
+                            mesh.push_quad(at(qa, 0.0), at(qb, 0.0), at(qb, -ts), at(qa, -ts));
+                            mesh.push_quad(at(qa, 0.0), at(qa, -ts), at(qb, -ts), at(qb, 0.0));
+                        }
+                    }
+                }
+            }
+            // the part it meets: those faces' triangles inside the contact's box
+            if !c.others.is_empty() && !mesh.tri.is_empty() {
+                let (blo, bhi) = c.bbox;
+                let inside = |p: [f64; 3]| (0..3).all(|j| blo[j] - 1e-6 <= p[j] && p[j] <= bhi[j] + 1e-6);
+                for o in &c.others {
+                    let w = match o.surface {
+                        Surface::Top => CONTACT_LIFT,
+                        Surface::Bottom => -ts - CONTACT_LIFT,
+                        Surface::Side => -0.5 * ts,
+                    };
+                    for (pc, pm) in pcs.iter().zip(&meshes) {
+                        let Some(((pts, tris, _), strip)) = pm else {
+                            continue;
+                        };
+                        if *strip != o.strip {
+                            continue;
+                        }
+                        for tr in tris {
+                            let q = tr.map(|v| moved(part_point(&ctx, pc, pts[v as usize], w, phi)));
+                            if q.iter().any(|p| inside(*p)) {
+                                mesh.push_tri(q[0], q[1], q[2]);
+                                mesh.push_tri(q[0], q[2], q[1]);
+                            }
+                        }
+                    }
+                }
+            }
+            if mesh.tri.is_empty() {
+                continue;
+            }
+            out.push(Body {
+                name: format!("contact:{i}"),
+                look: Look::Witness,
+                mesh,
+                hit: c.depth.is_some(),
+                strip: c.faces.first().map(|f| f.part.strip),
+            });
+        }
+        out
+    }
+
     /// The bodies, the part's pieces among them only with `part`.
     fn bodies_of(&mut self, k: usize, t: f64, part: bool) -> Vec<Body> {
         let ctx = self.ctx(k);
@@ -1582,6 +1837,214 @@ mod tests {
             }
         }
         Ok(())
+    }
+
+    /// A narrow, tall channel on straight punches, its second bend closing the first flange on
+    /// the punch: in the bend, at a turn inside a contact's cell, the contact is drawn, its hit
+    /// its proven depth, and the cell's centre on the part's skin lies on the drawn region
+    /// (within a triangle and the lift); while the operator handles the part, a bend's contact is
+    /// not drawn.
+    #[test]
+    fn contacts_are_drawn_where_and_when_they_are() {
+        let pts = [(0.0, 0.0), (30.0, 0.0), (30.0, 200.0), (0.0, 200.0)];
+        let lp = ProfileLoop::new(
+            (0..4)
+                .map(|i| {
+                    let (a, b) = (pts[i], pts[(i + 1) % 4]);
+                    (
+                        Segment::Line {
+                            a: Point2::new(a.0, a.1),
+                            b: Point2::new(b.0, b.1),
+                        },
+                        i as u64,
+                    )
+                })
+                .collect(),
+        );
+        let (mut s, base) = Sheet::face(
+            FeatureId(1),
+            Gauge {
+                thickness: 2.0,
+                radius: 2.0,
+                rule: BendRule::K(0.4),
+            },
+            F3::WORLD,
+            &[lp],
+        )
+        .unwrap();
+        s.flange(base, 1, dmath::PI / 2.0, 60.0).unwrap();
+        s.flange(base, 3, dmath::PI / 2.0, 60.0).unwrap();
+        let m = Model::new(&s).unwrap();
+        let tl = library::std_eu();
+        let straight: Vec<usize> = (0..tl.punches.len())
+            .filter(|&k| tl.punches[k].kind == crate::tooling::PunchKind::Straight)
+            .collect();
+        let p = plan(
+            &m,
+            &tl,
+            &Options {
+                punches: Some(straight),
+                sequence: Some(vec![0, 1]),
+                ..Options::default()
+            },
+        );
+        let k = 1;
+        let st = &p.steps[k];
+        let done = vec![st.bend != 0, st.bend != 1];
+        let cs = crate::sim::contacts_of(&m, &tl, &done, st);
+        let bends: Vec<usize> = (0..cs.len()).filter(|&i| cs[i].phase == Phase::Bend).collect();
+        assert!(!bends.is_empty(), "{cs:?}");
+        let mut sc = Scene::new(&m, &tl, &p);
+        let ctx = sc.ctx(k);
+        let (_, b0, b1) = STAGES.iter().copied().find(|x| x.0 == Stage::Bend).unwrap();
+        let mut drawn = 0;
+        for &i in &bends {
+            let c = &cs[i];
+            for f in &c.faces {
+                for cell in f.cells.iter().take(3) {
+                    let s = cell[3].mid();
+                    let t = b0 + (b1 - b0) * s / ctx.phimax;
+                    let bs = sc.contact_bodies(k, t, &cs);
+                    let b = bs
+                        .iter()
+                        .find(|b| b.name == format!("contact:{i}"))
+                        .expect("a contact in its stretch is drawn");
+                    assert_eq!(b.hit, c.depth.is_some());
+                    assert_eq!(b.look, Look::Witness);
+                    let phi = sc.pose(k, t).phi;
+                    let centre = Point2::new(cell[0].mid(), cell[1].mid());
+                    for pc in ctx.pieces.iter().filter(|pc| pc.strip == f.part.strip) {
+                        if !pc.region().contains(centre) {
+                            continue;
+                        }
+                        let q = part_point(&ctx, pc, centre, cell[2].mid(), phi);
+                        let near = b
+                            .mesh
+                            .tri
+                            .iter()
+                            .map(|tr| {
+                                let [a, b2, c2] = tr.map(|v| b.mesh.pos[v as usize].map(f64::from));
+                                tri_dist(q, a, b2, c2)
+                            })
+                            .fold(f64::INFINITY, f64::min);
+                        // on a skin over it (half the sheet away at most, and the lift)
+                        assert!(
+                            near <= 0.5 * ctx.t + CONTACT_LIFT + 0.01,
+                            "contact {i}: the cell's centre {near} from the drawn region"
+                        );
+                        drawn += 1;
+                    }
+                }
+            }
+        }
+        assert!(drawn > 0);
+        // a flange's contact is drawn where its cells are, not as the whole flange: in its box,
+        // and its box shorter than the flange's by a millimetre or more on some axis
+        let t = b0 + 0.5 * (b1 - b0);
+        let parts = sc.bodies(k, t);
+        let mut walls = 0;
+        for b in sc.contact_bodies(k, t, &cs) {
+            let strip = b.strip.unwrap();
+            if !matches!(strip, Strip::Wall(_)) {
+                continue;
+            }
+            let (lo, hi) = b.mesh.bounds().unwrap();
+            let part = parts.iter().find(|p| p.strip == Some(strip)).unwrap();
+            let (plo, phi) = part.mesh.bounds().unwrap();
+            assert!(
+                (0..3).any(|j| (phi[j] - plo[j]) - (hi[j] - lo[j]) > 1.0),
+                "{}: {lo:?}..{hi:?}, the flange {plo:?}..{phi:?}",
+                b.name
+            );
+            walls += 1;
+        }
+        assert!(walls > 0);
+        // handling: no bend contact is drawn
+        let bs = sc.contact_bodies(k, 0.05, &cs);
+        for &i in &bends {
+            assert!(bs.iter().all(|b| b.name != format!("contact:{i}")));
+        }
+        // nothing asked, nothing drawn
+        assert!(sc.contact_bodies(k, 0.5, &[]).is_empty());
+    }
+
+    /// A point's distance to a triangle.
+    fn tri_dist(p: [f64; 3], a: [f64; 3], b: [f64; 3], c: [f64; 3]) -> f64 {
+        let n = cross(sub(b, a), sub(c, a));
+        let nn = dot(n, n);
+        let seg = |a: [f64; 3], b: [f64; 3]| {
+            let d = sub(b, a);
+            let t = (dot(sub(p, a), d) / dot(d, d).max(1e-300)).clamp(0.0, 1.0);
+            let q = [a[0] + d[0] * t, a[1] + d[1] * t, a[2] + d[2] * t];
+            dot(sub(p, q), sub(p, q)).sqrt()
+        };
+        let edges = seg(a, b).min(seg(b, c)).min(seg(c, a));
+        if nn < 1e-300 {
+            return edges;
+        }
+        // the foot on the plane, inside when on the inner side of all three edges
+        let h = dot(sub(p, a), n) / nn;
+        let f = [p[0] - n[0] * h, p[1] - n[1] * h, p[2] - n[2] * h];
+        let inside = [(a, b), (b, c), (c, a)]
+            .iter()
+            .all(|(u, v)| dot(cross(sub(*v, *u), sub(f, *u)), n) >= 0.0);
+        if inside { (h * h * nn).sqrt() } else { edges }
+    }
+
+    /// The footprint's union is the cells': every cell's rectangle lies in it, and no point
+    /// outside every cell is in it; touching cells merge, the same cell is once.
+    #[test]
+    fn the_footprint_is_the_cells_union() {
+        let c = |u0: f64, u1: f64, v0: f64, v1: f64, w0: f64| {
+            [
+                Interval::new(u0, u1),
+                Interval::new(v0, v1),
+                Interval::new(w0, w0 + 0.5),
+                Interval::new(0.0, 1.0),
+            ]
+        };
+        let cells = [
+            c(0.0, 1.0, 0.0, 1.0, -1.0),
+            c(0.0, 1.0, 0.0, 1.0, -0.5),
+            c(1.0, 2.0, 0.0, 1.0, -1.0),
+            c(0.0, 2.0, 1.0, 2.0, -1.0),
+            c(5.0, 5.5, 0.0, 0.25, -1.0),
+        ];
+        let refs: Vec<&[Interval; 4]> = cells.iter().collect();
+        let f = footprint(&refs);
+        assert_eq!(f.len(), 2, "{f:?}");
+        let inside = |p: Point2, r: &[(Point2, Point2)]| {
+            r.iter()
+                .any(|(lo, hi)| lo.x <= p.x && p.x <= hi.x && lo.y <= p.y && p.y <= hi.y)
+        };
+        let cell_rects: Vec<(Point2, Point2)> = cells
+            .iter()
+            .map(|x| (Point2::new(x[0].lo, x[1].lo), Point2::new(x[0].hi, x[1].hi)))
+            .collect();
+        for i in 0..=60 {
+            for j in 0..=25 {
+                let p = Point2::new(i as f64 * 0.1, j as f64 * 0.1);
+                assert_eq!(inside(p, &f), inside(p, &cell_rects), "{p:?}");
+            }
+        }
+        // a segment through a rectangle: the stretch inside
+        let (t0, t1) = clip_segment(
+            Point2::new(-1.0, 0.5),
+            Point2::new(3.0, 0.5),
+            Point2::new(0.0, 0.0),
+            Point2::new(2.0, 1.0),
+        )
+        .unwrap();
+        assert!((t0 - 0.25).abs() < 1e-12 && (t1 - 0.75).abs() < 1e-12);
+        assert!(
+            clip_segment(
+                Point2::new(-1.0, 2.0),
+                Point2::new(3.0, 2.0),
+                Point2::new(0.0, 0.0),
+                Point2::new(2.0, 1.0)
+            )
+            .is_none()
+        );
     }
 
     #[test]

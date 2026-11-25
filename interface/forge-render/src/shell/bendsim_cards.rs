@@ -113,49 +113,59 @@ pub fn body_words(cat: Option<&fb::catalog::Catalog>, name: &str) -> String {
 
 /// A check's name as an engineer says it (its key on hover).
 pub fn rule_label(r: fb::Rule) -> &'static str {
-    use fb::Rule::*;
-    match r {
-        ToolCollision => "Tool collision",
-        ClosesOnPunch => "Closes on punch",
-        SelfCollision => "Part on itself",
-        MinFlange => "Minimum flange",
-        VTooNarrow => "V too narrow",
-        VDepth => "V depth",
-        DieAngle => "Die angle",
-        PunchAngle => "Punch angle",
-        PunchRadius => "Punch radius",
-        BackgaugeReach => "Backgauge reach",
-        OpenHeight => "Open height",
-        Stroke => "Stroke",
-        BedLength => "Bed length",
-        Segments => "Stack segments",
-        Tonnage => "Tonnage",
-        Withdraw => "Punch withdrawal",
-        Handling => "Operator handling",
+    // by the rule's word, not its variant: a rule the simulator adds reads as its word until it
+    // is named here (BENDSIM-TOOLS adds rules on their own branch)
+    match r.word() {
+        "tool_collision" => "Tool collision",
+        "closes_on_punch" => "Closes on punch",
+        "self_collision" => "Part on itself",
+        "min_flange" => "Minimum flange",
+        "v_too_narrow" => "V too narrow",
+        "v_depth" => "V depth",
+        "die_angle" => "Die angle",
+        "punch_angle" => "Punch angle",
+        "punch_radius" => "Punch radius",
+        "backgauge_reach" => "Backgauge reach",
+        "open_height" => "Open height",
+        "stroke" => "Stroke",
+        "bed_length" => "Bed length",
+        "segments" => "Stack segments",
+        "tonnage" => "Tonnage",
+        "withdraw" => "Punch withdrawal",
+        "handling" => "Operator handling",
+        "tool_rating" => "Tool rating",
+        "no_flattening" => "No flattening tool",
+        "offset" => "Offset",
+        w => w,
     }
 }
 
 /// What a failed check means, as a clause ("it closes on the punch"; UX-LEAD).
 pub fn rule_failed(r: fb::Rule) -> &'static str {
-    use fb::Rule::*;
-    match r {
-        ToolCollision => "it hits a tool",
-        ClosesOnPunch => "it closes on the punch",
-        SelfCollision => "the part meets itself",
-        MinFlange => "a flange is shorter than the die allows",
-        VTooNarrow => "the V is too narrow for it",
-        VDepth => "the V is not deep enough",
-        DieAngle => "the die's angle is too open for the turn",
-        PunchAngle => "the punch's angle is too open for the turn",
-        PunchRadius => "the punch's radius is larger than the bend's",
-        BackgaugeReach => "the backgauge cannot reach a stop",
-        OpenHeight => "the tools leave no room under the open height",
-        Stroke => "the ram's stroke is too short",
-        BedLength => "it does not fit the bed",
-        Segments => "no stack of segments covers it",
-        Tonnage => "it needs more force than the press or tools give",
-        Withdraw => "the punch cannot be withdrawn",
-        Handling => "the operator's move is not clear",
+    // by the rule's word, not its variant: a rule the simulator adds reads as its word until it
+    // is named here (BENDSIM-TOOLS adds rules on their own branch)
+    match r.word() {
+        "tool_collision" => "it hits a tool",
+        "closes_on_punch" => "it closes on the punch",
+        "self_collision" => "the part meets itself",
+        "min_flange" => "a flange is shorter than the die allows",
+        "v_too_narrow" => "the V is too narrow for it",
+        "v_depth" => "the V is not deep enough",
+        "die_angle" => "the die's angle is too open for the turn",
+        "punch_angle" => "the punch's angle is too open for the turn",
+        "punch_radius" => "the punch's radius is larger than the bend's",
+        "backgauge_reach" => "the backgauge cannot reach a stop",
+        "open_height" => "the tools leave no room under the open height",
+        "stroke" => "the ram's stroke is too short",
+        "bed_length" => "it does not fit the bed",
+        "segments" => "no stack of segments covers it",
+        "tonnage" => "it needs more force than the press or tools give",
+        "withdraw" => "the punch cannot be withdrawn",
+        "handling" => "the operator's move is not clear",
+        "tool_rating" => "the sheet is thicker than the tool is rated for",
+        "no_flattening" => "no mounted tool can flatten the hem",
+        "offset" => "the offset does not fit the tool",
+        w => w,
     }
 }
 
@@ -353,4 +363,16 @@ pub fn step_pictures(sim: &Sim) -> Vec<Picture> {
             ]
         })
         .collect()
+}
+
+#[cfg(test)]
+mod rule_words_tests {
+    /// Every rule the simulator has today is named in words (none falls through to its key).
+    #[test]
+    fn every_rule_is_named() {
+        for r in forge_brake::Rule::ALL {
+            assert_ne!(super::rule_label(r), r.word(), "{r:?}");
+            assert_ne!(super::rule_failed(r), r.word(), "{r:?}");
+        }
+    }
 }

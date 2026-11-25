@@ -767,65 +767,98 @@ fn a_locked_bend_is_made_at_its_station() {
 }
 
 /// The planner a little at a time (`Planner::step`, what a page's frames or a worker drive) gives
-/// the very plan `plan()` gives: stepped one setup at a time and seven at a time, on parts that
-/// plan, a box too deep for its width (refuted), a narrow channel with straight punches only
-/// (refuted), a box searched with a budget too small (cut short), and a stated sequence.
+/// the very plan `plan()` gives: stepped one setup at a time and seven at a time. The parts are
+/// split into tests of their own (each within the test-time budget): parts that plan, a box too
+/// deep for its width (refuted), a narrow channel with straight punches only (refuted), a box
+/// searched with a budget too small (cut short), and a stated sequence.
+fn stepped_is_the_plan(s: &Sheet, opts: &Options) {
+    let tl = eu();
+    let m = Model::new(s).unwrap();
+    // the plan whole and the two stepped runs are independent: run side by side
+    let stepped = |n: usize| {
+        let mut pl = forge_brake::Planner::new(&m, &tl, opts);
+        let mut last = 0;
+        let mut ticks = 0;
+        loop {
+            let pr = pl.step(n);
+            assert!(pr.setups_tried >= last && pr.bends_planned <= pr.bends);
+            last = pr.setups_tried;
+            ticks += 1;
+            if pr.done {
+                break;
+            }
+            assert!(ticks < 100_000, "no end");
+        }
+        (pl.plan().expect("done"), ticks)
+    };
+    let (whole, runs) = std::thread::scope(|sc| {
+        let runs: Vec<_> = [1, 7].map(|n| (n, sc.spawn(move || stepped(n)))).into();
+        let whole = plan(&m, &tl, opts);
+        (
+            whole,
+            runs.into_iter()
+                .map(|(n, h)| (n, h.join().unwrap()))
+                .collect::<Vec<_>>(),
+        )
+    });
+    for (n, (p, ticks)) in runs {
+        assert_eq!(p, whole, "{n} at a time");
+        if opts.sequence.is_none() && n == 1 && m.bends.len() > 1 {
+            assert!(ticks > 1, "stepped, not all at once");
+        }
+    }
+}
+
 #[test]
-fn the_planner_stepped_is_the_plan() {
+fn the_planner_stepped_is_the_plan_on_an_ell() {
+    stepped_is_the_plan(&ell(30.0), &Options::default());
+}
+
+#[test]
+fn the_planner_stepped_is_the_plan_on_a_box() {
+    stepped_is_the_plan(&boxed(80.0, 60.0, 25.0), &Options::default());
+}
+
+#[test]
+fn the_planner_stepped_is_the_plan_on_a_box_too_deep() {
+    stepped_is_the_plan(&boxed(120.0, 40.0, 30.0), &Options::default());
+}
+
+#[test]
+fn the_planner_stepped_is_the_plan_on_a_channel_with_straight_punches() {
     let tl = eu();
     let straight: Vec<usize> = (0..tl.punches.len())
         .filter(|&k| tl.punches[k].kind == PunchKind::Straight)
         .collect();
-    let cases: Vec<(Sheet, Options)> = vec![
-        (ell(30.0), Options::default()),
-        (boxed(80.0, 60.0, 25.0), Options::default()),
-        (boxed(120.0, 40.0, 30.0), Options::default()),
-        (
-            channel(30.0, 200.0, 60.0),
-            Options {
-                punches: Some(straight.clone()),
-                ..Options::default()
-            },
-        ),
-        (
-            boxed(80.0, 60.0, 25.0),
-            Options {
-                budget: 9,
-                ..Options::default()
-            },
-        ),
-        (
-            boxed(80.0, 60.0, 25.0),
-            Options {
-                sequence: Some(vec![3, 2, 1, 0]),
-                ..Options::default()
-            },
-        ),
-    ];
-    for (k, (s, opts)) in cases.iter().enumerate() {
-        let m = Model::new(s).unwrap();
-        let whole = plan(&m, &tl, opts);
-        for n in [1, 7] {
-            let mut pl = forge_brake::Planner::new(&m, &tl, opts);
-            let mut last = 0;
-            let mut ticks = 0;
-            loop {
-                let pr = pl.step(n);
-                assert!(pr.setups_tried >= last && pr.bends_planned <= pr.bends);
-                last = pr.setups_tried;
-                ticks += 1;
-                if pr.done {
-                    break;
-                }
-                assert!(ticks < 100_000, "case {k}: no end");
-            }
-            let p = pl.plan().expect("done");
-            assert_eq!(p, whole, "case {k}, {n} at a time");
-            if opts.sequence.is_none() && n == 1 && m.bends.len() > 1 {
-                assert!(ticks > 1, "case {k}: stepped, not all at once");
-            }
-        }
-    }
+    stepped_is_the_plan(
+        &channel(30.0, 200.0, 60.0),
+        &Options {
+            punches: Some(straight),
+            ..Options::default()
+        },
+    );
+}
+
+#[test]
+fn the_planner_stepped_is_the_plan_cut_short() {
+    stepped_is_the_plan(
+        &boxed(80.0, 60.0, 25.0),
+        &Options {
+            budget: 9,
+            ..Options::default()
+        },
+    );
+}
+
+#[test]
+fn the_planner_stepped_is_the_plan_in_a_stated_sequence() {
+    stepped_is_the_plan(
+        &boxed(80.0, 60.0, 25.0),
+        &Options {
+            sequence: Some(vec![3, 2, 1, 0]),
+            ..Options::default()
+        },
+    );
 }
 
 /// Planning is deterministic: the same question twice, from nothing each time, gives the same
