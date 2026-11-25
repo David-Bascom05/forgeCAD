@@ -139,7 +139,10 @@ rather than unlikely).
   `commit_unknown_result`, PRIOR-ART §9).
 - **Same-target rules**, as measured: SetParam/SetParam → later wins (`setLit_lww`, proven);
   Delete vs Rename/Replace/Move of the same feature, Rename vs Rename of the same name → the
-  later one is refused with its typed error; Add/Add, Add/Move, Move/Move at the same place →
+  later one is refused with its typed error (`RenameConflict`); two Renames of **different**
+  names to the **same** target (`a→c`, `b→c`) do not commute either (Lean:
+  `rename_same_target_refused`) → the later one is refused by re-validation on the head
+  (`NameTaken`: `c` is already bound), not by the transform; Add/Add, Add/Move, Move/Move at the same place →
   both apply, server order decides position.
 - Ops with byte spans (LiftLiteral, Respell) are valid only at their base text: rebased, they
   are refused unless the text in the span is unchanged (UNKNOWN how often in practice: they were
