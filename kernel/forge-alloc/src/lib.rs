@@ -662,7 +662,15 @@ mod global {
     /// its own. Those allocations take the heaps directly.
     use super::Cache;
 
+    /// Whether threads keep their own small blocks (`Cache`). Off: a threaded page died with an
+    /// out-of-bounds access in realloc (CI, parity shard 1/3, rack18u) not reproduced since; until
+    /// it is understood every block goes through the heaps, as before the caches.
+    const THREAD_CACHE: bool = false;
+
     fn cache() -> Option<*mut Cache> {
+        if !THREAD_CACHE {
+            return None;
+        }
         let c = CACHE.with(|c| c.get());
         (c as usize >= 1 << 16).then_some(c)
     }

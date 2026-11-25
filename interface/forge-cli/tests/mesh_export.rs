@@ -310,6 +310,42 @@ fn mcp_exports_a_mesh_inline_or_to_a_file() {
         ]),
     );
     assert_eq!(r.get("isError"), Some(&Json::Bool(true)), "{r}");
+    // the review's: no write through a link planted at `out` (`model.stl -> ~/.bashrc`), nor
+    // into the repository's .git, by name or through a link (git runs what's written there)
+    #[cfg(unix)]
+    {
+        let outside = dir
+            .parent()
+            .unwrap()
+            .join(format!("{}-target", dir.file_name().unwrap().to_string_lossy()));
+        std::fs::write(&outside, "untouched").unwrap();
+        std::os::unix::fs::symlink(&outside, dir.join("planted.stl")).unwrap();
+        std::fs::create_dir_all(dir.join(".git")).unwrap();
+        std::fs::write(dir.join(".git/config"), "[core]\n").unwrap();
+        std::os::unix::fs::symlink(".git", dir.join("g")).unwrap();
+        for (k, out) in ["planted.stl", ".git/config", ".GIT/hooks/post-commit", "g/config"]
+            .into_iter()
+            .enumerate()
+        {
+            let r = ask(
+                5 + k,
+                "tools/call",
+                call(vec![
+                    ("file", part.to_str().unwrap().into()),
+                    ("format", "stl".into()),
+                    ("out", out.into()),
+                ]),
+            );
+            assert_eq!(r.get("isError"), Some(&Json::Bool(true)), "{out}: {r}");
+        }
+        assert_eq!(std::fs::read_to_string(&outside).unwrap(), "untouched");
+        assert_eq!(
+            std::fs::read_to_string(dir.join(".git/config")).unwrap(),
+            "[core]\n"
+        );
+        assert!(!dir.join(".git/hooks/post-commit").exists());
+        let _ = std::fs::remove_file(outside);
+    }
     let _ = child.kill();
     let _ = child.wait();
     let _ = std::fs::remove_dir_all(&dir);
