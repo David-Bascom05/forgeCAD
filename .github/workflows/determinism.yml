@@ -159,6 +159,11 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       # the browser build's profile (fat LTO, one codegen unit): the arithmetic a page runs
       - run: cargo build --profile wasm --locked --target wasm32-wasip1 -p forge-det
+      # forge_math::ipow under wasm, in the browser build's profile (its folds are this
+      # profile's): run through Node's WASI (.cargo/config.toml's runner, tools/wasi-run.mjs)
+      - name: ipow under wasm32-wasip1 (forge-math tests/ipow.rs)
+        if: ${{ hashFiles('kernel/forge-math/tests/ipow.rs') != '' }}
+        run: cargo test --profile wasm --locked --target wasm32-wasip1 -p forge-math --test ipow
       - uses: actions/upload-artifact@v4
         if: ${{ needs.plan.outputs.check == 'true' }}
         with:
