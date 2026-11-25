@@ -528,6 +528,8 @@ fn punch_rec(file: &str, t: &Table) -> Result<PunchRec, CatalogError> {
             profile: outline,
             segments,
             max_load,
+            role: crate::tooling::Role::Bend,
+            max_thickness: None,
             // a width that is the envelope of a published dimension (twice it, about the tip
             // line): the dimension itself is what is drawn
             // (a drawn section is what it is: drawn and checked alike)
@@ -614,6 +616,8 @@ fn die_rec(file: &str, t: &Table) -> Result<DieRec, CatalogError> {
             profile: outline,
             segments,
             max_load,
+            role: crate::tooling::Role::Bend,
+            max_thickness: None,
         };
         match d.validate() {
             Ok(()) => Ok(d),

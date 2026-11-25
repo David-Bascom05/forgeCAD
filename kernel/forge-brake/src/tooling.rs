@@ -82,6 +82,44 @@ pub struct Punch {
     /// The body's published width, for drawing only, where `width` is an envelope wider than it
     /// (the checks read `width`: it errs large).
     pub drawn_width: Option<f64>,
+    pub role: Role,
+    /// The thickest sheet the maker rates it for, where published.
+    pub max_thickness: Option<f64>,
+}
+
+/// What a tool is for. Air bending is every tool's but these: a hem's flattening (a flat punch
+/// face, a flat die), a combination hem die (an acute V for the pre-bend beside a spring pad that
+/// flattens), an offset (Z) pair forming two bends in one stroke, `z` apart.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum Role {
+    #[default]
+    Bend,
+    Flatten,
+    Hem,
+    Offset {
+        z: f64,
+    },
+}
+
+impl Role {
+    pub fn word(self) -> &'static str {
+        match self {
+            Role::Bend => "bend",
+            Role::Flatten => "flatten",
+            Role::Hem => "hem",
+            Role::Offset { .. } => "offset",
+        }
+    }
+
+    /// An air bend's tool: a plain one, or a combination hem die's V.
+    pub fn bends(self) -> bool {
+        matches!(self, Role::Bend | Role::Hem)
+    }
+
+    /// A tool that flattens a hem: a flattening one, or a combination hem die's pad.
+    pub fn flattens(self) -> bool {
+        matches!(self, Role::Flatten | Role::Hem)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -101,6 +139,9 @@ pub struct Die {
     pub profile: Option<Vec<Seg>>,
     pub segments: Vec<Segment>,
     pub max_load: Option<f64>,
+    pub role: Role,
+    /// The thickest sheet the maker rates it for, where published.
+    pub max_thickness: Option<f64>,
 }
 
 /// A beam's envelope across the bed: from `front` before the tool line (-x) to `back` behind it.

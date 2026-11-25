@@ -32,7 +32,7 @@ pub use sim::{
 };
 pub use stage::{StageFail, Staged, StationUse, stage};
 pub use tooling::{
-    Backgauge, Die, Finger, Press, Punch, PunchKind, Segment, Springback, Style, Tooling, ToolingError,
+    Backgauge, Die, Finger, Press, Punch, PunchKind, Role, Segment, Springback, Style, Tooling, ToolingError,
 };
 
 #[cfg(test)]

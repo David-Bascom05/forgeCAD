@@ -1724,6 +1724,8 @@ fn punch_of(j: &Json) -> Result<fb::Punch, Answer> {
         segments: segments(j),
         max_load: num(j, "max_load"),
         drawn_width: None,
+        role: fb::tooling::Role::Bend,
+        max_thickness: num(j, "max_thickness"),
         id,
     })
 }
@@ -1746,6 +1748,8 @@ fn die_of(j: &Json) -> Result<fb::Die, Answer> {
         profile: profile(j)?,
         segments: segments(j),
         max_load: num(j, "max_load"),
+        role: fb::tooling::Role::Bend,
+        max_thickness: num(j, "max_thickness"),
         id,
     })
 }
