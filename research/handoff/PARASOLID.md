@@ -95,6 +95,12 @@ release):
   A Parasolid release that changes a node type's fields would read wrongly before it refused. The
   embedded-schema path, which SolidWorks and Onshape exports mostly use, has no such risk.
 - Binary .x_b is covered only by hand-built fixtures; no real binary export has been read.
+- IMPORT-SPEED's import/speed-ks (train 8) gives the mesher a per-face budget (2^27
+  evaluations, charged to the read's budget; the heaviest Haas STEP face drawn spends 75 M).
+  After both are in main, check that no XT face, blends especially, costs much more than its
+  STEP twin, and tell KERNEL-STRESS if one does. The same branch makes NURBS evaluation cheaper
+  (the 17% above) without changing which solids are refused. Its research/import-speed/CORPUS.md
+  takes the .x_t exports once this reader is in main.
 - IMPORT-SPEED's branch changes `finish` to return a mesh too. On merge, xt/build.rs's
   `Solid { .. }` takes `Ok((body, mass, mesh))`. machine_model.rs should use
   `Solid::display_mesh()`, with the chord taken from the edges' box, not `faces_box`.
