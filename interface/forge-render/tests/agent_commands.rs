@@ -36,7 +36,7 @@ fn a_command_is_the_boxs_first_word_after_a_slash() {
     );
     assert_eq!(&names[7..], ["compact", "me:skill"]);
     assert_eq!(all[7].what, "Summarise the conversation so far, to free context");
-    assert_eq!(all[8].what, "Skill (Claude Code)");
+    assert_eq!((all[8].what.as_str(), all[8].source), ("A skill", "skill"));
 }
 
 fn run(tab: &mut AgentTab, text: &str) {
@@ -59,10 +59,19 @@ fn the_apps_own_commands_run_here_and_never_reach_the_model() {
     ));
     run(&mut tab, "/model");
     assert!(tab.switcher);
+    tab.commands = vec!["compact".into(), "me:skill".into(), "mystery".into()];
     run(&mut tab, "/help");
+    let Some(Entry::Note { text, .. }) = tab.entries.last() else {
+        panic!()
+    };
+    // one row a command, and whose when it isn't the app's
+    let rows: Vec<&str> = text.lines().collect();
     assert!(
-        matches!(tab.entries.last(), Some(Entry::Note { text, .. }) if text.contains("/undo: Take back"))
+        rows.contains(&"/undo · Take back the last turn's changes"),
+        "{text}"
     );
+    assert!(rows.contains(&"/me:skill · A skill · skill"), "{text}");
+    assert!(rows.contains(&"/mystery · Claude Code"), "{text}");
     run(&mut tab, "/undo");
     assert!(
         matches!(tab.entries.last(), Some(Entry::Note { text, .. }) if text.starts_with("Nothing to undo"))
@@ -85,10 +94,15 @@ fn the_apps_own_commands_run_here_and_never_reach_the_model() {
     assert_eq!(tab.out, [AgentAct::Undo(1, 0), AgentAct::Undo(1, 1)]);
     run(&mut tab, "/clear");
     assert_eq!(tab.out.last(), Some(&AgentAct::NewChat));
+    // where the last one went: said in the empty chat, not kept in it
+    assert!(tab.entries.is_empty());
+    assert!(tab.started_new);
     assert!(
         !tab.entries.iter().any(|e| matches!(e, Entry::User { .. })),
         "none was sent"
     );
+    run(&mut tab, "thicker");
+    assert!(!tab.started_new, "gone once there's a chat");
 }
 
 #[test]

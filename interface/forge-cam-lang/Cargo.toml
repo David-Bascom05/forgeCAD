@@ -26,5 +26,9 @@ forge-model = { path = "../../kernel/forge-model" }
 forge-math = { path = "../../kernel/forge-math" }
 forge-sketch = { path = "../../kernel/forge-sketch" }
 
+[dev-dependencies]
+# cam_bench (research/cam-speed) times the turning documents on their own path
+forge-turn-lang = { path = "../forge-turn-lang" }
+
 [lints]
 workspace = true
