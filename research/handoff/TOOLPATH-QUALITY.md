@@ -5,7 +5,7 @@
 | branch | sha | state |
 |---|---|---|
 | `cam/hop-map-under` | 6a7b384d | **train 8**. PRE-VERIFY GREEN, sent. Conservative hop map, adaptive's descent check, guard: nothing fast meets material, ledger row, re-posted examples |
-| `cam/adaptive-only` | see WOUND DOWN | **train 8**. Contains `cam/hop-map-under`, since the two conflicted in adaptive.rs and the resolution is in its merge. Adds the shallow-level hint (1f0fb8e7), second-round crumbs (0cfa31b9) and the refreshed adaptive-vs-clear docs table |
+| `cam/adaptive-only` | a7d36860 | **train 9**. Only the shallow-level hint (1f0fb8e7) now. The second-round crumb take-back (0cfa31b9) and its docs were reverted: main's engagement-cap guard showed it hands more of deep_islands to the over-cap rings (538 → 641 mm over). It was a cycle-time change (−9 % two-way islands); it comes back only with rings that hold the cap |
 | `cam/crazy-guards` | see WOUND DOWN | **train 8**. Contains `cam/hop-map-under`. The crazy-path guards: `forge_cam_quality::crazy`, `guards.rs` for the parts, a `corpus_guard_<doc>` per example. CAM-2D-FINISH (`cam/crazy-2d`) and CAM-3D-FINISH (`cam/rest-air`) build on it |
 | `cam/park-descent` | daa6c225 | CAM-CORE's to merge. The same two map commits plus `Field::park_clear`, on their pass-start WIP |
 | `cam/rings-cap` | this branch | **WIP, not for a train.** Rings within the cap, option B's ring half, behind switches. This file |
