@@ -101,9 +101,10 @@ fn main() {
                 .collect::<Vec<_>>()
         ));
         let st = hash(&format!("{:?}", imp.stats));
-        (r, st, &imp.schema, &imp.system).hash(&mut all);
+        let oc = hash(&format!("{:?}", imp.occurrences));
+        (r, st, oc, &imp.schema, &imp.system).hash(&mut all);
         println!(
-            "{path} solids {} refused {} all {:016x} refusals {r:016x} stats {st:016x} read {read_s:.3}s mesh {mesh_s:.3}s",
+            "{path} solids {} refused {} all {:016x} refusals {r:016x} stats {st:016x} uses {oc:016x} read {read_s:.3}s mesh {mesh_s:.3}s",
             imp.solids.len(),
             imp.refusals.len(),
             all.finish()

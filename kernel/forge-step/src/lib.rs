@@ -13,5 +13,5 @@ pub mod write;
 
 pub use fit::{DEFAULT_TOL, Fit, SHEET_TOL};
 pub use part21::Limits;
-pub use read::{ImportError, Imported, Opened, Refusal, Solid, import, import_drawn, open};
+pub use read::{ImportError, Imported, Occurrence, Opened, Refusal, Solid, import, import_drawn, open};
 pub use write::{Export, ExportError, Options, Schema, export};

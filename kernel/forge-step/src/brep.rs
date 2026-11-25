@@ -1262,6 +1262,7 @@ pub fn import(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
     Ok(Imported {
         solids,
         refusals,
+        occurrences: Vec::new(),
         schema: "OpenCascade brep".into(),
         system: String::new(),
         stats: r.stats,
