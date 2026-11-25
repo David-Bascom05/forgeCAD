@@ -82,3 +82,13 @@ Solids valid in A, not in B: 0; the other way: 0. Imports ok in A, not in B: 0; 
 - -1.1 s: umc-500_ss_solid_models_04_2026 / UMC-500_4_2026.STEP #275604 union_over (1867 -> 742 ms)
 - -1.1 s: st-28l_solid_models_02_2025 / ST-28L- 2_2025.STEP #673016 int_pair66 (1862 -> 755 ms)
 - -1.1 s: umc-500_ss_solid_models_04_2026 / UMC-500_4_2026.STEP #275604 int_over (1766 -> 682 ms)
+
+## The bound's trade (coordinator's ruling, 2026-11-25)
+
+`budget::cap_total(CARRIED)`, CARRIED = 2^24, set the first time an op ends a branch at a spline
+patch's rim. Measured spends (st-28l, umc-500_ss, TR160 with op-budget): the answers the rim
+carry gives spend at most 5.6M, but for UMC-500 #264610's four (about 21M: given up, back to
+refused); ST-28L #673016 union_pair66, which answered before, carries and spends 14.5M; the ops
+refused after it spend 5.3M to 359M uncapped (up to 33 s). A cap of 6 * 2^20 would end every such
+refusal in under 2 s but refuse union_pair66; 2^24 keeps it, and those refusals end in 2 to 3.8 s.
+Ruled: keep 2^24 (a real answer before 1.8 s off a refusal; net -19% op time, the 33 s gone).
