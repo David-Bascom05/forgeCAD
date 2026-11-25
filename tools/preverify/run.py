@@ -220,6 +220,31 @@ def relative(name, cmd_for, pkgs_of):
     judge(name, e, mine, theirs, log, base_alone)
 
 
+def retime(target, test):
+    """The test alone (--exact, one thread), on the branch's build and on main's, back to back,
+    twice each: the least seconds of each, or None where it would not run."""
+    def once(cwd, env):
+        pk = sorted(target_pkgs(target))
+        if not pk:
+            return None
+        lib = target.replace("-", "_") == pk[0].replace("-", "_")
+        cmd = ["cargo", "test", "-q", "--locked", "-p", pk[0]] + (["--lib"] if lib else ["--test", target]) + \
+              ["--", "--exact", test, "--test-threads=1"]
+        t = time.time()
+        r = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True)
+        return time.time() - t if r.returncode == 0 else None
+    benv = dict(os.environ, **test_env)
+    if not os.path.isdir(BASE_WT):
+        base_checkout()
+    tb, tm = [], []
+    for _ in range(2):
+        tb.append(once(root, benv))
+        tm.append(once(BASE_WT, base_env()))
+    tb = [x for x in tb if x is not None]
+    tm = [x for x in tm if x is not None]
+    return (min(tb) if tb else None), (min(tm) if tm else None)
+
+
 WORSE = 1.2  # a test of main's already over the budget: RED only if over 20% slower alone than main's
 
 
@@ -234,11 +259,15 @@ def judge(name, e, mine, theirs, log, base_alone=None):
         if x[0] == "slow" and x in ALONE:
             b = base_alone.get(x, SLOW_RED / 2 if ("slowish",) + x[1:] in theirs else None)
             if b is not None and ALONE[x] > WORSE * b:
-                worse.append(f"{' '.join(x)} ({ALONE[x]:.1f} s alone vs main {b:.1f} s)")
+                # the two times came from runs under different load: timed again back to back,
+                # branch then main, the least of two each, before it counts
+                tb, tm = retime(x[1], x[2])
+                if tb is not None and tm is not None and tb > WORSE * tm:
+                    worse.append(f"{' '.join(x)} ({tb:.1f} s alone vs main {tm:.1f} s, back to back)")
     e["worse"] = worse
     new += worse
     e["main_identical"] = sorted(" ".join(x) for x in mine & theirs)
-    e["new"] = [" ".join(x) for x in new]
+    e["new"] = [x if isinstance(x, str) else " ".join(x) for x in new]
     e["base_log"] = log
     if not new:
         e["ok"] = True
