@@ -106,6 +106,55 @@ impl Client {
         c
     }
 
+    /// What must outlive the app: this client's id, its next op id and its pending ops, as one
+    /// JSON text (DESIGN.md §14: `.forgecad/sync/<doc>.pending`). Restored, the same ids are
+    /// sent again, so the server answers one it already committed by (client, op id) and never
+    /// applies it twice.
+    pub fn saved(&self) -> String {
+        use crate::wire::write;
+        use forge_agent::json::Json;
+        let ops = self
+            .pending
+            .iter()
+            .map(|p| {
+                Json::Str(
+                    Up::Op {
+                        base: p.base,
+                        id: p.id,
+                        op: p.op.clone(),
+                    }
+                    .text(),
+                )
+            })
+            .collect();
+        write(&Json::obj(vec![
+            ("client", self.id.as_str().into()),
+            ("next", (self.next_id as f64).into()),
+            ("ops", Json::Arr(ops)),
+        ]))
+    }
+
+    /// A client for `doc` that takes up a [`saved`](Self::saved) one: its id, its op ids and its
+    /// pending ops (sent on its first Welcome). None: not a saved client's text.
+    pub fn restore(doc: &str, token: &str, saved: &str) -> Option<Client> {
+        use crate::wire::read;
+        use forge_agent::json::Json;
+        let j = read(saved).ok()?;
+        let id = j.get("client")?.str()?;
+        let next = j.get("next")?.num()? as u64;
+        let mut c = Client::new(doc, id, token);
+        if let Some(Json::Arr(ops)) = j.get("ops") {
+            for o in ops {
+                match Up::parse(o.str()?) {
+                    Ok(Up::Op { base, id, op }) if id < next => c.pending.push(Pending { base, id, op }),
+                    _ => return None,
+                }
+            }
+        }
+        c.next_id = next.max(1);
+        Some(c)
+    }
+
     /// After a reconnect: say hello again from the last seq applied; the server replays what
     /// was missed (Acks for this client's own committed ops), and the pending ops are re-sent on
     /// Welcome (the server answers those it already committed by id, never twice).

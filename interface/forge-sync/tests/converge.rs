@@ -604,3 +604,44 @@ fn a_snapshot_welcome_resends_pending_and_a_committed_one_clears() {
     assert!(c.pending().is_empty(), "the committed op is no longer pending");
     assert_eq!(c.text(), c.confirmed());
 }
+
+/// The clients review, H2(a): a client saved when the app closes and restored when it opens
+/// again keeps its id, its op ids and its pending ops (sent on the first Welcome, under the same
+/// ids: the server answers one it committed by id, never twice), and new ops continue its ids.
+#[test]
+fn a_saved_client_restores_its_pending_ops_and_ids() {
+    let mut c = Client::new("part.fg", "n0123", "t");
+    c.receive(Down::Welcome {
+        seq: 3,
+        text: DOC.into(),
+        you: "ada".into(),
+        snap: true,
+    });
+    c.edit(set_w(41.0)).unwrap();
+    c.edit(set_w(42.0)).unwrap();
+    let saved = c.saved();
+    let mut back = Client::restore("part.fg", "t", &saved).expect("restored");
+    assert_eq!(back.id, "n0123");
+    assert_eq!(
+        back.pending().iter().map(|p| p.id).collect::<Vec<_>>(),
+        vec![1, 2]
+    );
+    back.outbox.clear();
+    back.receive(Down::Welcome {
+        seq: 5,
+        text: DOC.into(),
+        you: "ada".into(),
+        snap: true,
+    });
+    assert!(
+        matches!(
+            back.outbox.as_slice(),
+            [Up::Op { id: 1, base: 5, .. }, Up::Op { id: 2, base: 5, .. }]
+        ),
+        "{:?}",
+        back.outbox
+    );
+    back.outbox.clear();
+    assert_eq!(back.edit(set_w(43.0)).unwrap(), 3, "op ids continue");
+    assert!(Client::restore("part.fg", "t", "not json").is_none());
+}
