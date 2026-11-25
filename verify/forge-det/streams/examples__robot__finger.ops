@@ -1,0 +1,3 @@
+{"doc":"examples/robot/finger.fg"}
+{"op":"SetParam","param":"s","value":{"value":12.600000000000001,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}

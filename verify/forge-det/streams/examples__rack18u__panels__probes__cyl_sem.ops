@@ -1,0 +1,5 @@
+{"doc":"examples/rack18u/panels/probes/cyl_sem.fg"}
+{"op":"SetParam","param":"tr","value":{"value":31.499999999999996,"dim":"Angle"}}
+{"op":"SetParam","param":"al","value":{"value":5.25,"dim":"Length"}}
+{"op":"Rename","from":"base","to":"base_r"}
+{"op":"MoveFeature","id":"j","before":null}

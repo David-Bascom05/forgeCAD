@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/hw/pem_ss_m5_0_t3.fg"}
+{"op":"SetParam","param":"tsh","value":{"value":3.1710000000000003,"dim":"Length"}}
+{"op":"SetParam","param":"d","value":{"value":5.25,"dim":"Length"}}
+{"op":"SetParam","param":"P","value":{"value":0.8400000000000001,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}
+{"op":"MoveFeature","id":"body","before":null}

@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/casters/bearing_608.fg"}
+{"op":"SetParam","param":"k_cage","value":{"value":-0.663915,"dim":"Ratio"}}
+{"op":"SetParam","param":"outer_turn","value":{"value":0.5,"dim":"Angle"}}
+{"op":"SetParam","param":"pr","value":{"value":7.875,"dim":"Length"}}
+{"op":"Rename","from":"inner","to":"inner_r"}
+{"op":"MoveFeature","id":"f_sb_out","before":null}

@@ -1,0 +1,4 @@
+{"doc":"examples/rack18u/asm/probes/unused_at_param.fg"}
+{"op":"SetParam","param":"w","value":{"value":31.499999999999996,"dim":"Angle"}}
+{"op":"SetParam","param":"j.turn","value":{"value":0.5,"dim":"Angle"}}
+{"op":"Rename","from":"a","to":"a_r"}

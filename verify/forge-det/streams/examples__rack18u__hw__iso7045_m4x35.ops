@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/hw/iso7045_m4x35.fg"}
+{"op":"SetParam","param":"d","value":{"value":4.2,"dim":"Length"}}
+{"op":"SetParam","param":"P","value":{"value":0.735,"dim":"Length"}}
+{"op":"SetParam","param":"l","value":{"value":36.75,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}
+{"op":"MoveFeature","id":"recess","before":null}

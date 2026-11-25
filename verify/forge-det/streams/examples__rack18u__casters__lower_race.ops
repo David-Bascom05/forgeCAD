@@ -1,0 +1,7 @@
+{"doc":"examples/rack18u/casters/lower_race.fg"}
+{"op":"SetParam","param":"zt","value":{"value":15.7815,"dim":"Length"}}
+{"op":"SetParam","param":"tr","value":{"value":2.625,"dim":"Length"}}
+{"op":"SetParam","param":"ro","value":{"value":26.775000000000002,"dim":"Length"}}
+{"op":"Rename","from":"ref","to":"ref_r"}
+{"op":"MoveFeature","id":"ring","before":null}
+{"op":"ReplaceFeature","id":"nt","text":"sketch nt(on: plan) {\n  for k in 0..24 {\n    s = slot((rp * cos(a0 + 360deg * k / nn), rp * sin(a0 + 360deg * k / nn)), (rx * cos(a0 + 360deg * k / nn), rx * sin(a0 + 360deg * k / nn)), wn / 2)\n  }\n}\n"}

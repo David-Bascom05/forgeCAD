@@ -1,0 +1,5 @@
+{"doc":"examples/rack18u/hw/nylon_spacer_8x14x8.fg"}
+{"op":"SetParam","param":"di","value":{"value":8.61,"dim":"Length"}}
+{"op":"SetParam","param":"do","value":{"value":14.700000000000001,"dim":"Length"}}
+{"op":"SetParam","param":"h","value":{"value":8.4,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}

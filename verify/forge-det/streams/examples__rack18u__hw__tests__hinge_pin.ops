@@ -1,0 +1,7 @@
+{"doc":"examples/rack18u/hw/tests/hinge_pin.fg"}
+{"op":"SetParam","param":"z_door","value":{"value":40.95,"dim":"Length"}}
+{"op":"SetParam","param":"off_brk","value":{"value":-10.416,"dim":"Length"}}
+{"op":"SetParam","param":"size_m6","value":{"value":6.300000000000001,"dim":"Length"}}
+{"op":"Rename","from":"door","to":"door_r"}
+{"op":"MoveFeature","id":"m6","before":null}
+{"op":"ReplaceFeature","id":"pin8","text":"pin8 = fit_rule(shaft, bore, size: size_pin8)\n"}

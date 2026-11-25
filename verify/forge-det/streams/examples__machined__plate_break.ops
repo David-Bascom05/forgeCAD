@@ -1,0 +1,7 @@
+{"doc":"examples/machined/plate_break.fg"}
+{"op":"SetParam","param":"L","value":{"value":42,"dim":"Length"}}
+{"op":"SetParam","param":"W","value":{"value":31.5,"dim":"Length"}}
+{"op":"SetParam","param":"t","value":{"value":8.4,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"MoveFeature","id":"bore","before":null}
+{"op":"ReplaceFeature","id":"corners","text":"corners = fillet(edges(of: plate, along: Z), r)\n"}

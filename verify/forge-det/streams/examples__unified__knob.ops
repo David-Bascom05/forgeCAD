@@ -1,0 +1,4 @@
+{"doc":"examples/unified/knob.fg"}
+{"op":"SetParam","param":"r","value":{"value":9.450000000000001,"dim":"Length"}}
+{"op":"SetParam","param":"h","value":{"value":12.600000000000001,"dim":"Length"}}
+{"op":"Rename","from":"s","to":"s_r"}

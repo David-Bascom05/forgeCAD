@@ -1,0 +1,5 @@
+{"doc":"examples/rack18u/casters/tread.fg"}
+{"op":"SetParam","param":"ro","value":{"value":42,"dim":"Length"}}
+{"op":"SetParam","param":"ri","value":{"value":33.6,"dim":"Length"}}
+{"op":"SetParam","param":"hw","value":{"value":16.8,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}

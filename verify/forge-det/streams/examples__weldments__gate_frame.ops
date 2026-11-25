@@ -1,0 +1,7 @@
+{"doc":"examples/weldments/gate_frame.fg"}
+{"op":"SetParam","param":"W","value":{"value":1050,"dim":"Length"}}
+{"op":"SetParam","param":"H","value":{"value":1260,"dim":"Length"}}
+{"op":"SetParam","param":"rise","value":{"value":157.5,"dim":"Length"}}
+{"op":"Rename","from":"leaf","to":"leaf_r"}
+{"op":"MoveFeature","id":"seat0","before":null}
+{"op":"ReplaceFeature","id":"seat1","text":"seat1 = end_trim(brace[0], to: [outer[1], outer[2]])\n"}

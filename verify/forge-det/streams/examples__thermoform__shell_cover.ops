@@ -1,0 +1,6 @@
+{"doc":"examples/thermoform/shell_cover.fg"}
+{"op":"SetParam","param":"W","value":{"value":105,"dim":"Length"}}
+{"op":"SetParam","param":"L","value":{"value":73.5,"dim":"Length"}}
+{"op":"SetParam","param":"H","value":{"value":31.5,"dim":"Length"}}
+{"op":"Rename","from":"footprint","to":"footprint_r"}
+{"op":"ReplaceFeature","id":"cover","text":"cover = thermoform(skin, from: \"wall\", material: \"ABS\")\n"}

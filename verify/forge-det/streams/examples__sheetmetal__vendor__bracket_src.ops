@@ -1,0 +1,6 @@
+{"doc":"examples/sheetmetal/vendor/bracket_src.fg"}
+{"op":"SetParam","param":"t","value":{"value":1.26,"dim":"Length"}}
+{"op":"SetParam","param":"w","value":{"value":42,"dim":"Length"}}
+{"op":"SetParam","param":"d","value":{"value":31.5,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"ReplaceFeature","id":"up_hole","text":"up_hole = cutout(uh, wall: up)\n"}

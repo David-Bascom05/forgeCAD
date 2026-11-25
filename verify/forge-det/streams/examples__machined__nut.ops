@@ -1,0 +1,5 @@
+{"doc":"examples/machined/nut.fg"}
+{"op":"SetParam","param":"d","value":{"value":52.5,"dim":"Length"}}
+{"op":"SetParam","param":"d1","value":{"value":29.795012486299388,"dim":"Length"}}
+{"op":"SetParam","param":"l","value":{"value":31.5,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}

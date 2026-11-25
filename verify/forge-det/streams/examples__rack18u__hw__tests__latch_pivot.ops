@@ -1,0 +1,7 @@
+{"doc":"examples/rack18u/hw/tests/latch_pivot.fg"}
+{"op":"SetParam","param":"z_base","value":{"value":1.596,"dim":"Length"}}
+{"op":"SetParam","param":"off_door","value":{"value":-1.596,"dim":"Length"}}
+{"op":"SetParam","param":"off_hdl","value":{"value":-8.5785,"dim":"Length"}}
+{"op":"Rename","from":"base","to":"base_r"}
+{"op":"MoveFeature","id":"at_spr","before":null}
+{"op":"ReplaceFeature","id":"m6","text":"m6 = fit_rule(external_thread, internal_thread, size: size_m6, min_engagement: min_m6)\n"}

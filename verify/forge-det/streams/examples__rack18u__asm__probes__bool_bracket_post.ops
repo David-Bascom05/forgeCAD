@@ -1,0 +1,4 @@
+{"doc":"examples/rack18u/asm/probes/bool_bracket_post.fg"}
+{"op":"Rename","from":"post_f","to":"post_f_r"}
+{"op":"MoveFeature","id":"m6","before":null}
+{"op":"ReplaceFeature","id":"press","text":"press = fit_rule(\"../../hw/pem_fh_m6_20.fg\", \"../../frame/post.fg\")\n"}

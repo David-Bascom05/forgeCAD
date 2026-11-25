@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/casters/lock_pin.fg"}
+{"op":"SetParam","param":"xp","value":{"value":14.70158865,"dim":"Length"}}
+{"op":"SetParam","param":"yp","value":{"value":19.15948335,"dim":"Length"}}
+{"op":"SetParam","param":"rp","value":{"value":2.625,"dim":"Length"}}
+{"op":"Rename","from":"ref","to":"ref_r"}
+{"op":"MoveFeature","id":"foot","before":null}

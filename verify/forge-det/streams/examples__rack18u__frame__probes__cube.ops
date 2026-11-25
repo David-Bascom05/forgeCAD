@@ -1,0 +1,3 @@
+{"doc":"examples/rack18u/frame/probes/cube.fg"}
+{"op":"SetParam","param":"s","value":{"value":0.21000000000000002,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}

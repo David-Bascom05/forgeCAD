@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/casters/kingpin.fg"}
+{"op":"SetParam","param":"rs","value":{"value":5.25,"dim":"Length"}}
+{"op":"SetParam","param":"rh","value":{"value":8.4,"dim":"Length"}}
+{"op":"SetParam","param":"hk","value":{"value":3.1500000000000004,"dim":"Length"}}
+{"op":"Rename","from":"ref","to":"ref_r"}
+{"op":"ReplaceFeature","id":"pin","text":"pin = revolve(prof.o, axis: prof.zax)\n"}

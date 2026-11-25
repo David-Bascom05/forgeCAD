@@ -1,0 +1,7 @@
+{"doc":"examples/rack18u/panels/door_asm.fg"}
+{"op":"SetParam","param":"latch_rest","value":{"value":8.5785,"dim":"Length"}}
+{"op":"SetParam","param":"latch_lift","value":{"value":0.5,"dim":"Length"}}
+{"op":"SetParam","param":"hinge_off","value":{"value":-10.416,"dim":"Length"}}
+{"op":"Rename","from":"brk_b","to":"brk_b_r"}
+{"op":"MoveFeature","id":"pin8","before":null}
+{"op":"ReplaceFeature","id":"press","text":"press = fit_rule(\"../hw/pem_fh_m4_12.fg\", \"door.fg\")\n"}

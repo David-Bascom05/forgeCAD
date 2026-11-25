@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/casters/pedal.fg"}
+{"op":"SetParam","param":"xc","value":{"value":13.65,"dim":"Length"}}
+{"op":"SetParam","param":"tc","value":{"value":2.1,"dim":"Length"}}
+{"op":"SetParam","param":"yq","value":{"value":31.5,"dim":"Length"}}
+{"op":"Rename","from":"ref","to":"ref_r"}
+{"op":"MoveFeature","id":"pad_plate","before":null}

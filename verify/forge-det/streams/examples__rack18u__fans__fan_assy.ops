@@ -1,0 +1,5 @@
+{"doc":"examples/rack18u/fans/fan_assy.fg"}
+{"op":"SetParam","param":"m4","value":{"value":4.2,"dim":"Length"}}
+{"op":"SetParam","param":"min_m4","value":{"value":2.9085,"dim":"Length"}}
+{"op":"Rename","from":"tray","to":"tray_r"}
+{"op":"ReplaceFeature","id":"thread_m4","text":"thread_m4 = fit_rule(external_thread, internal_thread, size: m4, min_engagement: min_m4)\n"}

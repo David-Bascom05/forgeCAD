@@ -1,0 +1,5 @@
+{"doc":"examples/rack18u/casters/seal.fg"}
+{"op":"SetParam","param":"ri","value":{"value":6.578775,"dim":"Length"}}
+{"op":"SetParam","param":"ro","value":{"value":10.185,"dim":"Length"}}
+{"op":"SetParam","param":"z0","value":{"value":2.6774999999999998,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}

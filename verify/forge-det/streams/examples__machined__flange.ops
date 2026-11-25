@@ -1,0 +1,6 @@
+{"doc":"examples/machined/flange.fg"}
+{"op":"SetParam","param":"side","value":{"value":84,"dim":"Length"}}
+{"op":"SetParam","param":"t","value":{"value":12.600000000000001,"dim":"Length"}}
+{"op":"SetParam","param":"boss_d","value":{"value":42,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"ReplaceFeature","id":"bolts","text":"bolts = hole(at: [hs.h0, hs.h1, hs.h2, hs.h3], d: bolt, depth: thru)\n"}

@@ -1,0 +1,4 @@
+{"doc":"examples/rack18u/casters/probes/sub_fits.fg"}
+{"op":"Rename","from":"base","to":"base_r"}
+{"op":"MoveFeature","id":"r15","before":null}
+{"op":"ReplaceFeature","id":"r16","text":"r16 = fit_rule(\"../seal.fg\", \"../bearing_inner.fg\")\n"}

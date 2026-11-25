@@ -1,0 +1,7 @@
+{"doc":"examples/rack18u/hw/tests/fan_screw.fg"}
+{"op":"SetParam","param":"z_fan","value":{"value":0.5,"dim":"Length"}}
+{"op":"SetParam","param":"off_pan","value":{"value":10.08,"dim":"Length"}}
+{"op":"SetParam","param":"size_m4","value":{"value":4.2,"dim":"Length"}}
+{"op":"Rename","from":"fan","to":"fan_r"}
+{"op":"MoveFeature","id":"at_scr","before":null}
+{"op":"ReplaceFeature","id":"m4","text":"m4 = fit_rule(external_thread, internal_thread, size: size_m4, min_engagement: min_m4)\n"}
