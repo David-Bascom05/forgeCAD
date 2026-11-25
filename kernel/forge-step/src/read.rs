@@ -1963,6 +1963,8 @@ fn healed(
     }
     measure_gaps(&proto, stats);
     let budget = forge_geom::budget::scoped(lim.max_evals);
+    // a loop running out and back along two edges that lie on each other (a slit of no width)
+    proto.cancel_slits(uncertainty.max(forge_math::tol::LINEAR));
     proto.split_closed_splines();
     proto.add_seams()?;
     let size = Box3::from_points(proto.verts.iter().map(|v| v.0)).diagonal();

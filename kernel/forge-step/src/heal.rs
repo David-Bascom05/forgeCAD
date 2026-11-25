@@ -110,6 +110,119 @@ impl Proto {
         }
     }
 
+    /// A face's loop that runs out along a straight edge and straight back along another lying on
+    /// it, within `near` (the file's stated uncertainty), bounds nothing there: a slit of no
+    /// width. HRT160-2's #13299 draws a 5 um fillet so, its loop going 176 mm out and back along
+    /// the planes beside it on one side and 181 mm on the other, where the fillet is 80 mm long;
+    /// no mesh recovers such a boundary. The two edges are one edge between the faces on their
+    /// other sides: the longer is split where the shorter ends (at the shorter's own vertex), the
+    /// overlapping pair taken out of the loop, and the other faces' use of the longer's piece
+    /// given to the shorter's edge. Nothing moves farther than `near`; a loop with no such pair is
+    /// left as it is.
+    pub fn cancel_slits(&mut self, near: f64) {
+        let line_of = |p: &Proto, u: (usize, bool)| match &p.edges[u.0].curve {
+            Curve::Line(l) => Some(*l),
+            _ => None,
+        };
+        let off = |l: &Line, q: Point3| {
+            let d = q - l.origin;
+            (d - l.dir.get() * d.dot(l.dir.get())).length()
+        };
+        // each round changes at most one pair; a loop of n uses has at most n / 2 pairs
+        let mut rounds = 0usize;
+        let most: usize = self.faces.iter().flat_map(|f| f.loops.iter()).map(|l| l.len()).sum();
+        'again: while rounds < most {
+            rounds += 1;
+            for fi in 0..self.faces.len() {
+                for li in 0..self.faces[fi].loops.len() {
+                    let n = self.faces[fi].loops[li].len();
+                    if n < 3 {
+                        continue;
+                    }
+                    for i in 0..n {
+                        let l = &self.faces[fi].loops[li];
+                        let (a, b) = (l[i], l[(i + 1) % n]);
+                        if a.0 == b.0 {
+                            continue;
+                        }
+                        let (Some(la), Some(lb)) = (line_of(self, a), line_of(self, b)) else {
+                            continue;
+                        };
+                        let tip = self.start_of(b);
+                        let a_end = if a.1 { self.edges[a.0].end } else { self.edges[a.0].start };
+                        if a_end != tip {
+                            continue;
+                        }
+                        let (from, to) = (self.start_of(a), if b.1 { self.edges[b.0].end } else { self.edges[b.0].start });
+                        let (pf, pt, pv) = (self.verts[from].0, self.verts[to].0, self.verts[tip].0);
+                        let (da, db) = (pv - pf, pt - pv);
+                        let (na, nb) = (da.length(), db.length());
+                        if na <= near || nb <= near || da.dot(db) >= 0.0 {
+                            continue;
+                        }
+                        // the two lie on each other, within `near`
+                        if off(&la, pt) > near || off(&lb, pf) > near || off(&lb, pv) > near || off(&la, pv) > near {
+                            continue;
+                        }
+                        if (na - nb).abs() <= near && from != to {
+                            // ends a hair apart, not one vertex: left alone
+                            continue;
+                        }
+                        // the longer split at the shorter's far vertex
+                        let (keep, gone) = if na < nb {
+                            let t = (pf - lb.origin).dot(lb.dir.get());
+                            self.split_edge_at(b.0, t, from);
+                            (a, from)
+                        } else if nb < na {
+                            let t = (pt - la.origin).dot(la.dir.get());
+                            self.split_edge_at(a.0, t, to);
+                            (b, to)
+                        } else {
+                            (a, from)
+                        };
+                        let _ = gone;
+                        // the loop again, after the split: the pair at the tip
+                        let l = &self.faces[fi].loops[li];
+                        let n = l.len();
+                        let Some(k) = (0..n).find(|&k| {
+                            let (x, y) = (l[k], l[(k + 1) % n]);
+                            let xe = if x.1 { self.edges[x.0].end } else { self.edges[x.0].start };
+                            xe == tip && (x.0 == keep.0 || y.0 == keep.0) && x.0 != y.0
+                        }) else {
+                            continue 'again;
+                        };
+                        let (x, y) = (l[k], l[(k + 1) % n]);
+                        let (stay, drop) = if x.0 == keep.0 { (x, y) } else { (y, x) };
+                        // `drop`'s edge leaves every loop; its other uses become `stay`'s edge
+                        let (ds, de) = (self.edges[drop.0].start, self.edges[drop.0].end);
+                        let (ss, se) = (self.edges[stay.0].start, self.edges[stay.0].end);
+                        if !((ds == ss && de == se) || (ds == se && de == ss)) {
+                            continue 'again;
+                        }
+                        let loop_ = &mut self.faces[fi].loops[li];
+                        let (k1, k2) = (k, (k + 1) % n);
+                        let (hi, lo) = (k1.max(k2), k1.min(k2));
+                        loop_.remove(hi);
+                        loop_.remove(lo);
+                        for f in &mut self.faces {
+                            for lp in &mut f.loops {
+                                for u in lp.iter_mut() {
+                                    if u.0 == drop.0 {
+                                        // the same way between the same vertices
+                                        let from_v = if u.1 { ds } else { de };
+                                        *u = (stay.0, ss == from_v);
+                                    }
+                                }
+                            }
+                        }
+                        continue 'again;
+                    }
+                }
+            }
+            break;
+        }
+    }
+
     /// A closed edge whose curve has no period (a spline ending where it starts) cannot be one
     /// edge in a body: it becomes two.
     pub fn split_closed_splines(&mut self) {
@@ -1602,6 +1715,86 @@ mod tests {
             !(lo..=hi).contains(&u),
             "the seam starts at {u}, in the hole's {lo}..{hi}"
         );
+    }
+
+    /// A unit square face whose left side goes up past its corner and comes back down (a slit
+    /// of no width, as HRT160-2's #13299 draws a fillet): edge `up` from (x, 1) to (x, 2), edge
+    /// `down` from (0, 2) to (0, 0), each also used by a face beside it. `x` is how far `up` lies
+    /// off `down`'s line.
+    fn slit(x: f64) -> (Proto, usize, usize) {
+        let mut p = Proto::default();
+        for (i, q) in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (x, 1.0), (0.0, 2.0)].iter().enumerate() {
+            p.verts.push((Point3::new(q.0, q.1, 0.0), Name::feature(1 + i as u64)));
+        }
+        let line = |p: &mut Proto, a: usize, b: usize| {
+            let (pa, pb) = (p.verts[a].0, p.verts[b].0);
+            p.edges.push(PEdge {
+                curve: Curve::Line(Line {
+                    origin: pa,
+                    dir: (pb - pa).normalize().unwrap(),
+                }),
+                range: Interval::new(0.0, pa.distance(pb)),
+                start: a,
+                end: b,
+                name: Name::feature(100 + p.edges.len() as u64),
+            });
+            p.edges.len() - 1
+        };
+        let (e0, e1, e2) = (line(&mut p, 0, 1), line(&mut p, 1, 2), line(&mut p, 2, 3));
+        let up = line(&mut p, 3, 4);
+        let down = line(&mut p, 4, 0);
+        let plane = |n: Vec3| {
+            Surface::Plane(Plane {
+                frame: Frame::from_z(Point3::ORIGIN, n.normalize().unwrap()),
+            })
+        };
+        let face = |p: &mut Proto, s: Surface, l: Vec<(usize, bool)>| {
+            p.faces.push(PFace {
+                surface: s,
+                same_sense: true,
+                name: Name::feature(200 + p.faces.len() as u64),
+                shell: 0,
+                loops: vec![l],
+            });
+        };
+        face(&mut p, plane(Vec3::Z), vec![(e0, true), (e1, true), (e2, true), (up, true), (down, true)]);
+        // the faces beside the slit, each using one of its edges the other way
+        face(&mut p, plane(Vec3::X), vec![(up, false)]);
+        face(&mut p, plane(-Vec3::X), vec![(down, false)]);
+        p.shells = 1;
+        (p, up, down)
+    }
+
+    #[test]
+    fn a_slit_of_no_width_is_taken_out_of_its_loop() {
+        // 5e-6 off: within 1e-5, one edge between the faces beside it
+        let (mut p, up, down) = slit(5e-6);
+        p.cancel_slits(1e-5);
+        let square = &p.faces[0].loops[0];
+        assert_eq!(square.len(), 4, "{square:?}");
+        assert!(square.iter().all(|u| u.0 != up), "{square:?}");
+        // what is left of `down` runs from (x, 1) to (0, 0), the square's real left side
+        let last = square[3];
+        let (a, b) = (p.start_of(last), if last.1 { p.edges[last.0].end } else { p.edges[last.0].start });
+        assert_eq!((a, b), (3, 0));
+        // the face that used `down`'s upper part now uses `up`, the other way round from the
+        // face that already did; `down`'s upper part is used by no one
+        assert_eq!(p.faces[1].loops[0], vec![(up, false)]);
+        let beside: Vec<_> = p.faces[2].loops[0].clone();
+        assert!(beside.contains(&(up, true)), "{beside:?}");
+        let used: Vec<usize> = p.faces.iter().flat_map(|f| f.loops.iter().flatten().map(|u| u.0)).collect();
+        assert!(used.iter().filter(|&&e| e == up).count() == 2);
+        assert!(p.edges.len() == 6 && !used.contains(&down) || used.iter().filter(|&&e| e == down).count() <= 2);
+        // the square's loop closes
+        for k in 0..4 {
+            let (x, y) = (square[k], square[(k + 1) % 4]);
+            let xe = if x.1 { p.edges[x.0].end } else { p.edges[x.0].start };
+            assert_eq!(xe, p.start_of(y));
+        }
+        // a slit as wide as 1e-3 is no slit at that uncertainty: left alone
+        let (mut p, _, _) = slit(1e-3);
+        p.cancel_slits(1e-5);
+        assert_eq!(p.faces[0].loops[0].len(), 5);
     }
 
     /// Two tetrahedra touching only at a corner: one vertex in the file, two fans of faces.
