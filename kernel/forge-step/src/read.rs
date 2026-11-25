@@ -330,6 +330,14 @@ impl<'a> Reader<'a> {
             self.real(id, "DIRECTION", c.get(1))?,
             self.real(id, "DIRECTION", c.get(2))?,
         );
+        // a ratio below 2^-100 of the largest is noise where 0 was meant (05-0182, Haas Tooling: a
+        // plane's axes with parts of 8e-65, 8e-97 and 7e-161, which laid its face out over a span
+        // of 1e-160 in its parameters, past what the predicates take): 0, turning the direction by
+        // under 1e-30 radians; a direction with none is as it was, to the bit
+        let big = v.x.abs().max(v.y.abs()).max(v.z.abs());
+        let floor = big * f64::from_bits((1023 - 100) << 52);
+        let small = |c: f64| if c.abs() < floor { 0.0 } else { c };
+        let v = Vec3::new(small(v.x), small(v.y), small(v.z));
         match v.normalize() {
             Some(u) => Ok(u),
             None => refuse(id, "DIRECTION", "zero length"),

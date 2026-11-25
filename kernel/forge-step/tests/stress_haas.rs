@@ -414,3 +414,41 @@ END-ISO-10303-21;
         );
     }
 }
+
+/// A direction written with noise where 0 was meant: 05-0182 (Haas Tooling, a CarvLock vise) gives
+/// a plane's axes parts of 8e-65, 8e-97 and 7e-161, which laid its face out over a span of 1e-160
+/// in its parameters; two of its solids were refused ("a face laid out over a span of its
+/// parameters below 2^-433"). A part below 2^-100 of the largest is now 0.
+#[test]
+fn a_direction_with_noise_for_its_zeros_is_read() {
+    let clean = export(&bar(5.0, 10.0), &Options::default()).unwrap().text;
+    // every 0 in a direction made 7e-161, every other part left
+    let noise = "6.568047796523286E-161";
+    let noisy: String = clean
+        .lines()
+        .map(|line| {
+            if !line.contains("DIRECTION(") {
+                return format!("{line}\n");
+            }
+            let l = line
+                .replace("(0.,", &format!("({noise},"))
+                .replace(",0.,", &format!(",{noise},"))
+                .replace(",0.)", &format!(",{noise})"));
+            format!("{l}\n")
+        })
+        .collect();
+    assert_ne!(noisy, clean, "no direction had a 0 to make noise of");
+    let a = import(clean.as_bytes(), &Limits::default()).unwrap();
+    let b = import(noisy.as_bytes(), &Limits::default()).unwrap();
+    assert!(b.refusals.is_empty(), "{:?}", b.refusals);
+    let (ba, bb) = (&a.solids[0].body, &b.solids[0].body);
+    assert!(check(bb).is_empty(), "{:?}", check(bb));
+    // the same part as without the noise, to the bit
+    let bits = |x: &Body| {
+        x.vertices
+            .iter()
+            .flat_map(|v| [v.point.x, v.point.y, v.point.z].map(f64::to_bits))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(bits(bb), bits(ba));
+}
