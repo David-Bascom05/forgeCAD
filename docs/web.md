@@ -71,6 +71,25 @@ refused with 428.
 - `--read-only` refuses every write.
 - Writes are atomic (a file beside it, renamed over it) and one at a time.
 
+### The agent, with your own Claude Code: `--agent`
+
+```
+forgecad web DIR --agent
+```
+
+The page's Agent tab drives Claude Code running on this machine in `DIR`, with your own Claude
+login and plan, settings, CLAUDE.md, memory, skills and permissions: it behaves as `claude` does
+in a terminal. What would ask you in a terminal asks you in the page (a card: Allow, Always,
+Deny), and each turn's edits show as diffs you can undo. Claude Code gets ForgeCAD's tools from
+`forgecad mcp --root DIR --writable`.
+
+The URL it prints ends `#agent=TOKEN`: open that link. The page keeps the token in memory only
+(it takes it off the address bar and stores it nowhere), so after a reload, open the link again.
+Every agent call needs the token, a localhost Host and the page's own origin; `--agent` is
+served on loopback only (from another machine, use an SSH tunnel). The page never names a
+program, argument, folder or prompt: only messages, answers, a mode (Ask first, Accept edits,
+Plan only) and Stop. The threat model is research/agent-tab/bridge-threat-model.md.
+
 ## Run it from static files
 
 Serve `OUT` from any static host (a CDN, GitHub Pages, `python3 -m http.server`). With no

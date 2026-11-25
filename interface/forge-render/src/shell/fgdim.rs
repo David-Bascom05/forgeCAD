@@ -440,12 +440,14 @@ impl Shell {
             .x
             + 18.0;
         let at = tip + way * 14.0 + vec2(if way.x < 0.0 { -FIELD_W } else { word_w }, -13.0);
+        // in the view where it fits; in a view too small for the field and its word (a narrow
+        // window), at its left and top, the field running on past the right (a clamp whose bounds
+        // crossed panicked: selecting a feature in a 480 px window crashed the app)
+        let x_lo = view.left() + 4.0 + word_w;
+        let y_lo = view.top() + 4.0;
         let at = pos2(
-            at.x.clamp(
-                view.left() + 4.0 + word_w,
-                (view.right() - FIELD_W - 60.0).max(view.left()),
-            ),
-            at.y.clamp(view.top() + 4.0, (view.bottom() - 60.0).max(view.top())),
+            at.x.clamp(x_lo, (view.right() - FIELD_W - 60.0).max(x_lo)),
+            at.y.clamp(y_lo, (view.bottom() - 60.0).max(y_lo)),
         );
         egui::Area::new(egui::Id::unique("fg-dim-field"))
             .fixed_pos(at)

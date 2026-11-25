@@ -79,7 +79,7 @@ fn nothing_cuts_below_the_stock_without_workholding() {
         .expect("the support check");
     assert!(c.other.contains("support under the stock"), "{c:?}");
     assert!(
-        o.fix.as_deref().is_some_and(|f| f.contains("below the stock")),
+        o.fix.as_deref().is_some_and(|f| f.contains("below: 0.5")),
         "{:?}",
         o.fix
     );
@@ -1822,9 +1822,10 @@ fn stock_is_a_bar_a_tube_or_a_modelled_solid() {
     ok(&stocked_to("solid(\"blank.fg\")", &tmp, 0.5), "solid");
     let cam = stocked("solid(\"blank.fg\")", &tmp);
     assert!(cam.ops.iter().any(|o| {
-        o.refusal
-            .as_deref()
-            .is_some_and(|r| r.contains("support under the stock"))
+        o.code.as_deref() == Some("fixture_collision")
+            && o.refusal
+                .as_deref()
+                .is_some_and(|r| r.contains("where no workholding is modelled"))
     }));
     // a blank whose section changes with height is not taken
     std::fs::write(
