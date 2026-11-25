@@ -37,7 +37,7 @@ outcomes counted on inputs the exact reference judges, as the worklist for the f
    262579 boolean.rs:5095:12         136339   126240  48.077  if di.abs() < 1e-300 {
    244534 nary.rs:1514:16             58916   185618  24.093  if vx.point.distance(c.point) <= vx.tol.max(c.tol) {
    180672 unify.rs:298:21             36296   144376  20.089  if ka.0 == 0 || ka.0 != kb.0 || (ka.1 - kb.1).abs() > 1e-3 {
-   151248 boolean.rs:3521:16          29615   121633  19.580  if f != 0.5 && curve.eval(t0).distance(p).min(curve.eval(t1).distance(p)) <= 4.0 * tol::LINEAR 
+   151248 boolean.rs:3521:16          29615   121633  19.580  if f != 0.5 && curve.eval(t0).distance(p).min(curve.eval(t1).distance(p)) <= 4.0 * tol::LINEAR
    144376 unify.rs:298:37            125909    18467  12.791  if ka.0 == 0 || ka.0 != kb.0 || (ka.1 - kb.1).abs() > 1e-3 {
    122771 boolean.rs:3611:12              8   122763   0.007  if t1 - t0 <= 1e-12 {
     99275 boolean.rs:4728:20            196    99079   0.197  if w[1] - w[0] <= 1e-12 * (1.0 + edge.range.width()) {
@@ -49,7 +49,7 @@ outcomes counted on inputs the exact reference judges, as the worklist for the f
     46700 boolean.rs:4695:32          40737     5963  12.769  if let Some((s2, tol)) = on_edge(db, e2, h.point) {
     32380 nary.rs:3576:19             32320       60   0.185  while step > tol::LINEAR {
     30736 shape.rs:131:20             16924    13812  44.938  if sweep.abs() < dmath::TAU - 1e-12 {
-    29615 boolean.rs:3521:28             18    29597   0.061  if f != 0.5 && curve.eval(t0).distance(p).min(curve.eval(t1).distance(p)) <= 4.0 * tol::LINEAR 
+    29615 boolean.rs:3521:28             18    29597   0.061  if f != 0.5 && curve.eval(t0).distance(p).min(curve.eval(t1).distance(p)) <= 4.0 * tol::LINEAR
     28830 boolean.rs:2715:32          16812    12018  41.686  if let Some((s, tol)) = on_edge(body, e, h.point) {
     21408 boolean.rs:3337:12           2927    18481  13.672  if gap <= 1.2 * cuts[i].tol.max(cuts[j].tol) || gap > 0.3 {
     20102 classify.rs:1104:45            28    20074   0.139  if side.abs() <= tol::LINEAR || along.abs() <= 10.0 * tol::LINEAR {
@@ -73,7 +73,7 @@ outcomes counted on inputs the exact reference judges, as the worklist for the f
      3310 nary.rs:1240:32              3225       85   2.568  if let Some((_, tol)) = on_edge(body, e, hit.point) {
      2972 boolean.rs:3193:24           2438      534  17.968  if let Some((s, tol)) = on_edge(body, e, p) {
      2951 classify.rs:1089:24            23     2928   0.779  if at.abs() <= tol::LINEAR && (l.origin - frame.origin).dot(radial) > 0.0 {
-     2162 boolean.rs:4289:16             24     2138   1.110  if d <= 1e-3 * r || (d - (r1 + r2)).abs() <= 1e-3 * r || (d - (r1 - r2).abs()).abs() <= 1e-3 * 
+     2162 boolean.rs:4289:16             24     2138   1.110  if d <= 1e-3 * r || (d - (r1 + r2)).abs() <= 1e-3 * r || (d - (r1 - r2).abs()).abs() <= 1e-3 *
      2039 classify.rs:582:24           1823      216  10.593  && t > e.range.lo + 1e-9 * (1.0 + e.range.width())
      1865 boolean.rs:1939:16           1836       29   1.555  if other.curve.eval(t).distance(mid) <= tol::LINEAR {
      1828 ssi.rs:335:8                 1053      775  42.396  if a.cross(d.frame.z()).length() > tol::ANGULAR {
