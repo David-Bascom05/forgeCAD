@@ -1,13 +1,14 @@
-//! shape.rs's screen takes an arc within 1e-12 rad of a whole turn as whole (`on_sweep`, and the
-//! ray's arc-end graze test skipped). Taken whole while another segment closes the profile, the
-//! ray's parity counts both the arc across its gap and the closing segment: the disc's centre,
-//! far from every boundary, reads Out. What keeps that case out of every part is not the model's
-//! size but the profile's own refusal: `Segment::degenerate` (forge-ops profile.rs) refuses an arc
-//! whose sweep is within `ANGULAR` = 1e-11 rad of a whole turn, at any radius, so the only whole
-//! turns a shape meets are circles (sweep exactly 2pi, alone in their loop: `CircleNotAlone`).
-//! Here the adversarial part: a 12 km and a 16 km arc (the second at `InputSize`'s 1.6e7, past
-//! the 5e5 model half size) 1e-12 rad short of whole, closed by a line longer than `MIN_LENGTH`,
-//! so the line is legitimate and only the near-whole arc can refuse it.
+//! shape.rs's screen once took an arc within 1e-12 rad of a whole turn as whole (`on_sweep`,
+//! and the ray's arc-end graze test skipped). Taken whole while another segment closed the
+//! profile, the ray's parity counted both the arc across its gap and the closing segment: the
+//! disc's centre, far from every boundary, read Out. It now takes only an exact whole turn as
+//! whole; and the profile's own refusal keeps the case out of every part whatever the size:
+//! `Segment::degenerate` (forge-ops profile.rs) refuses an arc whose sweep is within `ANGULAR` =
+//! 1e-11 rad of a whole turn, at any radius, so the only whole turns a shape meets are circles
+//! (sweep exactly 2pi, alone in their loop: `CircleNotAlone`). Here the adversarial part: a 12 km
+//! and a 16 km arc (the second at `InputSize`'s 1.6e7, past the 5e5 model half size) 1e-12 rad
+//! short of whole, closed by a line longer than `MIN_LENGTH`, so the line is legitimate and only
+//! the near-whole arc can refuse it.
 
 use forge_lang::{Options, Run};
 
