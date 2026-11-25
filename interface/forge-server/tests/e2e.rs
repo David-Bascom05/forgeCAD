@@ -5,6 +5,7 @@
 //! text and build the same body hash, the server saw no divergence, and a named version is a
 //! forge-history tag. The latency budgets of DESIGN.md §2 are measured on loopback and printed
 //! (and written to $FORGE_E2E_REPORT if set).
+#![cfg(not(target_os = "wasi"))] // sockets, threads and file locks: not in WASI
 
 use forge_lang::error::{Literal, Op, ParamKey};
 use forge_remote::{Remote, Session};
@@ -236,18 +237,20 @@ fn three_clients_converge_over_sockets_with_a_restart() {
         t.contains("hub = extrude") ^ t.contains("pin = extrude"),
         "exactly one rename won:\n{t}"
     );
-    let refusals: usize = peers
+    // refused for sure: the losing Rename (RenameConflict). Delete vs Replace of `post` depends on
+    // the order: a Replace first leaves a Delete that still applies; a Delete first leaves a
+    // Replace with nothing to replace (refused). Either way every client agrees (checked above).
+    let refusals: Vec<String> = peers
         .iter()
-        .map(|p| {
-            p.s.poll()
-                .iter()
-                .filter(|e| matches!(e, Event::Refused { .. }))
-                .count()
+        .flat_map(|p| p.s.poll())
+        .filter_map(|e| match e {
+            Event::Refused { refusal, .. } => Some(refusal.kind()),
+            _ => None,
         })
-        .sum();
+        .collect();
     assert!(
-        refusals >= 2,
-        "the losing rename (and what used its name) and one of delete/replace were refused: {refusals}"
+        refusals.iter().any(|k| k == "RenameConflict"),
+        "the losing rename was refused as RenameConflict: {refusals:?}"
     );
 
     // 2. random concurrent edits from three threads, one connection dropped midway

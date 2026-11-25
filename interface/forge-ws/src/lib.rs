@@ -489,7 +489,8 @@ impl Reader {
 /// The most fragments one message may come in (empty continuations are frames too).
 pub const MAX_FRAGMENTS: usize = 64;
 
-#[cfg(test)]
+// sockets, threads, links and file locks: not in WASI (the wasm suite runs the workspace there)
+#[cfg(all(test, not(target_os = "wasi")))]
 mod tests {
     use super::*;
     use std::net::TcpListener;
