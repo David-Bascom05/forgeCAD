@@ -1854,10 +1854,37 @@ fn trim_air(
     // each move: (from, to, air at depth, length)
     let mut info: Vec<([f64; 3], [f64; 3], bool, f64)> = Vec::with_capacity(mv.len());
     let mut at = start;
-    // the straight level moves cut so far, by their ends (either way): one that repeats a
-    // segment already cut at its depth is air (the tool's body swept those very places)
-    let key = |p: [f64; 3]| [p[0].to_bits(), p[1].to_bits(), p[2].to_bits()];
-    let mut done: std::collections::BTreeSet<([u64; 3], [u64; 3])> = std::collections::BTreeSet::new();
+    // the straight level moves cut so far: one that repeats a segment already cut at its depth
+    // (either way, each end within REPEAT_EPS of that segment's: the offsets that make two
+    // passes of one line round apart by under a micrometre, and −0 is not +0) is air: the
+    // tool's body swept those places, to a sliver far under any tolerance, and what replaces the
+    // run is certified as every move is. Kept by midpoint on a grid of REPEAT_CELL, so a repeat
+    // is looked for in the neighbouring cells only.
+    const REPEAT_EPS: f64 = 1e-5;
+    const REPEAT_CELL: f64 = 1e-3;
+    let cell = |a: [f64; 3], b: [f64; 3]| {
+        (
+            (0.5 * (a[0] + b[0]) / REPEAT_CELL).floor() as i64,
+            (0.5 * (a[1] + b[1]) / REPEAT_CELL).floor() as i64,
+            a[2].to_bits(),
+        )
+    };
+    let near =
+        |p: [f64; 3], q: [f64; 3]| (p[0] - q[0]).abs() <= REPEAT_EPS && (p[1] - q[1]).abs() <= REPEAT_EPS;
+    // the segments cut, by their midpoint's cell and their depth
+    type Done = std::collections::BTreeMap<(i64, i64, u64), Vec<([f64; 3], [f64; 3])>>;
+    let mut done = Done::new();
+    let repeats = |done: &Done, a: [f64; 3], b: [f64; 3]| {
+        let (i, j, z) = cell(a, b);
+        (-1..=1).any(|di| {
+            (-1..=1).any(|dj| {
+                done.get(&(i + di, j + dj, z)).is_some_and(|v| {
+                    v.iter()
+                        .any(|&(p, q)| (near(a, p) && near(b, q)) || (near(a, q) && near(b, p)))
+                })
+            })
+        })
+    };
     for m in mv {
         let to = match *m {
             PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
@@ -1877,9 +1904,9 @@ fn trim_air(
         let (air, len) = match *m {
             PMove::Line { phase, .. } if level && matches!(phase, Phase::Cut | Phase::Link | Phase::Hop) => {
                 let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
-                let again = done.contains(&(key(at), key(to))) || done.contains(&(key(to), key(at)));
+                let again = at[2] == to[2] && repeats(&done, at, to);
                 if phase == Phase::Cut {
-                    done.insert((key(at), key(to)));
+                    done.entry(cell(at, to)).or_default().push((at, to));
                 }
                 (
                     again || seg_box_dist([at[0], at[1]], [to[0], to[1]], lo, hi) >= need,
@@ -2028,7 +2055,44 @@ fn trim_air(
             );
         }
     }
-    out
+    // rapids one after another at one height (the ends of runs taken out above, each its own
+    // way across) go straight: a → b → c at the retract height becomes a → c, as the passes'
+    // own rapids between loops go (the posted rapids are certified as every move is)
+    let mut merged: Vec<PMove> = Vec::with_capacity(out.len());
+    let mut from: Vec<[f64; 3]> = Vec::with_capacity(out.len());
+    let mut at = start;
+    for m in out {
+        if let PMove::Rapid { to } = m
+            && let (Some(PMove::Rapid { to: p }), Some(&a)) = (merged.last().copied(), from.last())
+            && a[2] == p[2]
+            && p[2] == to[2]
+        {
+            // a → p → to, all at one height: a → to (none at all if it comes back to a)
+            merged.pop();
+            from.pop();
+            if to != a {
+                merged.push(PMove::Rapid { to });
+                from.push(a);
+            }
+            at = to;
+            continue;
+        }
+        let end = match m {
+            PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
+            PMove::Probe { to, back, .. } => {
+                if back {
+                    at
+                } else {
+                    to
+                }
+            }
+            PMove::Cycle { .. } => at,
+        };
+        merged.push(m);
+        from.push(at);
+        at = end;
+    }
+    merged
 }
 
 /// Where the tool is after the moves `out` (the start if none).
@@ -2581,5 +2645,83 @@ mod tests {
                 "limit {bad}"
             );
         }
+    }
+
+    /// trim_air: a slot exactly one tool wide between two islands is one centre line that each
+    /// island's offset loop runs, one each way (rptu1's nut). The second pass, its ends off the
+    /// first's by a fraction of a micrometre and at −0 where the first is at +0, removes nothing:
+    /// it goes (up, across, down), and the rapids that leaves at one height go straight.
+    #[test]
+    fn a_line_cut_again_the_other_way_is_air_and_rapids_go_straight() {
+        let (z, r, retract) = (-4.0, 3.0, 3.0);
+        let lo = [0.0, 0.0];
+        let hi = [80.0, 80.0];
+        let cut = |to: [f64; 3]| PMove::Line {
+            to,
+            f: 400.0,
+            phase: Phase::Cut,
+        };
+        let start = [80.0, 40.0, retract];
+        let mv = vec![
+            PMove::Line {
+                to: [80.0, 40.0, z],
+                f: 100.0,
+                phase: Phase::Plunge,
+            },
+            cut([0.0, 40.0 + 4.5e-8, z]),
+            // up, across and down: the start of the next island's loop
+            PMove::Line {
+                to: [0.0, 40.0, retract],
+                f: 400.0,
+                phase: Phase::Link,
+            },
+            PMove::Rapid {
+                to: [-20.0, 60.0, retract],
+            },
+            PMove::Rapid {
+                to: [-6e-7, 40.0 - 4.5e-8, retract],
+            },
+            PMove::Line {
+                to: [-6e-7, 40.0 - 4.5e-8, z],
+                f: 100.0,
+                phase: Phase::Plunge,
+            },
+            // the same line the other way
+            cut([80.0, -0.0 + 40.0 - 4.5e-8, z]),
+        ];
+        let out = trim_air(&mv, start, (lo, hi), r, retract, (400.0, 100.0));
+        let mut at = start;
+        let mut cuts = 0;
+        let mut last_rapid_z: Option<f64> = None;
+        for m in &out {
+            let to = match *m {
+                PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
+                _ => continue,
+            };
+            if let PMove::Line {
+                phase: Phase::Cut, ..
+            } = *m
+                && to[2] == at[2]
+                && to[2] == z
+            {
+                cuts += 1;
+                assert!(
+                    to[0] < at[0],
+                    "the slot cut again, from {at:?} to {to:?}: {out:?}"
+                );
+            }
+            if let PMove::Rapid { .. } = *m {
+                assert!(
+                    !(last_rapid_z == Some(to[2]) && at[2] == to[2]),
+                    "two rapids one after another at z {}: {out:?}",
+                    to[2]
+                );
+                last_rapid_z = Some(to[2]);
+            } else {
+                last_rapid_z = None;
+            }
+            at = to;
+        }
+        assert_eq!(cuts, 1, "{out:?}");
     }
 }
