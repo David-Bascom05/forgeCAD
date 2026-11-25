@@ -8,8 +8,8 @@ wind-down (2026-11-25).
 
 | branch | head | state |
 |---|---|---|
-| `render/studio-model` | this file's commit, on 02e52375 | train 8. 02e52375: PRE-VERIFY GREEN on main c135b274 (tools/preverify @35d9ccbe; record clean of compile errors), UX-LEAD OK. Re-run on this head with /tmp/pv @13d78f06. |
-| `render/studio-polish` | 31d5b85c | **unmerged**, off 02e52375. UX-LEAD's P2/P3 items from the 11-13 shots, done before the wind-down notice reached this session. Gates passed (clippy native + wasm32, Studio and photo tests in release); not pre-verified; UX-LEAD not yet OK'd. |
+| `render/studio-model` | 02e52375 | in train 8 (merge-train/8), TRAIN-CONDUCTOR keeping that sha. PRE-VERIFY GREEN on main c135b274 (tools/preverify @35d9ccbe; its record checks clean of compile errors), UX-LEAD OK. Its later commit 0f230871 (this file) rides with studio-polish. |
+| `render/studio-polish` | the commit carrying this line | for train 9: 31d5b85c (UX-LEAD's P2/P3 items from the 11-13 shots, UX-LEAD OK on 31d5b85c) with render/studio-model (0f230871, this file) merged in. Pre-verify with /tmp/pv @13d78f06 on this head; its line goes to TRAIN-CONDUCTOR. |
 | `render/studio-model-t7fix` | c69ea889 | landed in train 7 (main c135b274). |
 | `render/nickel` | 1fe0102a | landed in train 5. |
 | `render/studio`, `-2`, `-3`, `-ui` | | in main (trains 5 and earlier); nothing to merge. |
@@ -34,7 +34,8 @@ wind-down (2026-11-25).
 
 ## Not done / next steps
 
-1. `render/studio-polish` (31d5b85c): review with UX-LEAD, pre-verify, a train. Its items:
+1. `render/studio-polish` into train 9 (UX OK; its pre-verify line is with TRAIN-CONDUCTOR, or
+   re-run it if that's missing). Its items:
    - P2: the Appearance card's words wrapped beside Apply to parts, or the button below them in a
      panel under 300 px.
    - P3: spinner on Preparing / Starting again.
