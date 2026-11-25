@@ -582,9 +582,13 @@ impl Shell {
                 let r = Rect::from_points(&[a, b, c, d]).expand(6.0);
                 Some(r.contains(hover))
             };
+            // nor while a dialog or a floating window of the workspace is open over the view
+            // (STANDARD §0 rule 1: nothing floats over the view behind a dialog)
+            let dialog = self.cam.as_ref().is_some_and(|w| w.escape_level());
             if st.tool
                 && !self.view_hidden
                 && !st.playing
+                && !dialog
                 && let Some((tool, p, _)) = st.tool_now()
                 && let Some(lk) = st.sim.looks.get(tool)
                 && let Some((at, note)) = lk.note.as_ref()
@@ -1010,7 +1014,16 @@ fn verdict(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
     if s.is_empty() {
         // certified: the workspace's words (a rule left unchecked named, its meaning on hover)
         let (words, hover, amber) = crate::shell::cam::certified_words(cam.certification());
-        let r = ui.colored_label(if amber { t.warn } else if hover.is_some() { t.ink2 } else { c }, words);
+        let r = ui.colored_label(
+            if amber {
+                t.warn
+            } else if hover.is_some() {
+                t.ink2
+            } else {
+                c
+            },
+            words,
+        );
         if let Some(h) = hover {
             r.on_hover_text(h);
         }
