@@ -315,11 +315,13 @@ fn end(m: &PMove) -> [f64; 3] {
     }
 }
 
-/// The map lowered by the move from `at` (an arc as chords no longer than a cell).
+/// The map lowered by the move from `at` (an arc as chords no longer than a cell), never below
+/// material (`HeightMap::sweep_under`: a sliver the tool's edge left inside a cell keeps the
+/// cell up, so the hops' clearance sees it).
 fn sweep(map: &mut HeightMap, prof: &Profile, at: [f64; 3], m: &PMove) {
     match *m {
         PMove::Rapid { to } | PMove::Line { to, .. } => {
-            map.sweep(at, to, prof);
+            map.sweep_under(at, to, prof);
         }
         PMove::Arc { to, c, cw, .. } => {
             let (a0, a1) = (
@@ -344,7 +346,7 @@ fn sweep(map: &mut HeightMap, prof: &Profile, at: [f64; 3], m: &PMove) {
                 let t = i as f64 / k as f64;
                 let (sn, cs) = dmath::sin_cos(a0 + t * sw);
                 let q = [c[0] + rad * cs, c[1] + rad * sn, at[2] + t * (to[2] - at[2])];
-                map.sweep(p, q, prof);
+                map.sweep_under(p, q, prof);
                 p = q;
             }
         }
