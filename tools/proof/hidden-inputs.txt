@@ -810,3 +810,13 @@ no-output (prints only: FORGE_CAM_DEBUG traces each sign refinement to stderr)  
 no-output (prints only: the FORGE_CAM_DEBUG flag, read once)  @ forge-num/src/real.rs|lazy|static DBG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 no-output (prints only: the FORGE_CAM_DEBUG flag, read once)  @ forge-num/src/real.rs|static|static DBG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 no-output (lookups only: get/insert/remove, never iterated; a fixed unseeded hasher, Fx)  @ forge-num/src/real.rs|hash-order|struct Memo(std::collections::HashMap<Key, R, std::hash::BuildHasherDefault<Fx>>);
+# 2026-11-25 (CAM-MACHINE, reviewing WORKHOLDING's cam/workholding-any2 as merged into machines/real-collision):
+speed (a model's compiled faces by its name: a built-in's is fixed, a runtime import's is its content's hash; each answer a function of its key)  @ forge-cam/src/fixture.rs|lazy|static CACHE: std::sync::OnceLock<std::sync::Mutex<Vec<(String, Read)>>> = std::sync::OnceLock::new();
+speed (a model's compiled faces by its name: a built-in's is fixed, a runtime import's is its content's hash; each answer a function of its key)  @ forge-cam/src/fixture.rs|static|static CACHE: std::sync::OnceLock<std::sync::Mutex<Vec<(String, Read)>>> = std::sync::OnceLock::new();
+no-output (the built-in models' compiled faces, generated at build time into the binary: the same every run)  @ forge-workholding/src/model.rs|env|include!(concat!(env!("OUT_DIR"), "/checks.rs"));
+no-output (where a group's drawn mesh is: display only, never a face the checker takes)  @ forge-workholding/src/model.rs|env|std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+speed (the built-in specs, parsed once from the embedded data/models.toml)  @ forge-workholding/src/model.rs|lazy|static M: OnceLock<Vec<Model>> = OnceLock::new();
+speed (runtime-compiled models, each kept by its name, its content's hash: a model found is that content's; one not yet compiled is not found, and its run compiles it first)  @ forge-workholding/src/model.rs|lazy|static R: OnceLock<std::sync::Mutex<Vec<&'static Model>>> = OnceLock::new();
+speed (OnceLock for the two lines above)  @ forge-workholding/src/model.rs|lazy|use std::sync::OnceLock;
+speed (the built-in specs, parsed once from the embedded data/models.toml)  @ forge-workholding/src/model.rs|static|static M: OnceLock<Vec<Model>> = OnceLock::new();
+speed (runtime-compiled models, each kept by its name, its content's hash: a model found is that content's; one not yet compiled is not found, and its run compiles it first)  @ forge-workholding/src/model.rs|static|static R: OnceLock<std::sync::Mutex<Vec<&'static Model>>> = OnceLock::new();
