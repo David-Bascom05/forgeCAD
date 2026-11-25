@@ -3005,7 +3005,8 @@ impl<'a> Strips<'a> {
 
 /// How far a segment's or an arc's points lie from its middle `m`, given its ends: the farther
 /// end (a segment by convexity; an arc parametrised by angle, each half turning at most a half
-/// turn, by 2R sin(phi / 2) rising in phi), widened past the rounding of the computed points.
+/// turn (the whole stretch at most a full turn, since |t1 - t0| <= 2 pi and its width <= 1), by
+/// 2R sin(phi / 2) rising in phi), widened past the rounding of the computed points.
 /// That rounding scales with the inputs' magnitude `mag` (the frame's origin, the arc's centre
 /// and radius, the bend's radius), not the points' (which cancellation can make small): 1e-12
 /// of it is past a few dozen ulps of any of them.
