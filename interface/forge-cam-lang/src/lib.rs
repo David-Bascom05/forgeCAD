@@ -99,9 +99,12 @@ fn adaptive_memo(
         ramp_feed,
         lead_feed,
     } = cut;
+    // of the tool, only what the generator reads: the cutter's record (`tool.tool`), not its
+    // number, holder, stickout or assembled shape (pinned by
+    // adaptive_reads_no_other_part_of_the_tool), so a stickout or holder edit reuses the path
     let key = format!(
-        "adaptive/1 {:?}",
-        (rg, (tool, tidx, h, feed, ramp_feed, lead_feed), span, ip, prm)
+        "adaptive/2 {:?}",
+        (rg, (&tool.tool, tidx, h, feed, ramp_feed, lead_feed), span, ip, prm)
     );
     ADAPTIVE.get_or(key, || {
         forge_cam::adaptive::adaptive(rg, cut, span, ip, prm)
@@ -109,6 +112,13 @@ fn adaptive_memo(
             .map_err(|e| e.refusal(""))
     })
 }
+
+/// An op's paths with their links hopped (`Cam::hop_links`), the setup's height map they left,
+/// and that map's identity: the number of the call that made it (`HOP_ID`), never reused, so a
+/// later op's key names the map it starts from exactly without printing it.
+type Hopped = (Vec<OpPath>, forge_cam::engage::HeightMap, u64);
+static HOPPED: memo::Memo<Hopped> = memo::Memo::new();
+static HOP_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 /// A 3-axis finishing op's paths (or refusal), the lines it adds to the plan, and its finish record.
 type Finished = (Result<Vec<OpPath>, String>, Vec<String>, Option<Finish>);
@@ -1419,7 +1429,8 @@ pub struct Cam {
     /// op's moves swept into it (the map hops plan against, carried from op to op so a later op
     /// starts from what earlier ones cut, not only from the recorded voids). None until one ran,
     /// or after an op of the setup did not build.
-    hop_maps: Vec<Option<forge_cam::engage::HeightMap>>,
+    /// With each map its identity (`HOPPED`): the number of the call that made it.
+    hop_maps: Vec<Option<(forge_cam::engage::HeightMap, u64)>>,
     setups: Vec<SetupIn>,
     pub ops: Vec<OpOut>,
     pub programs: Vec<ProgramOut>,
@@ -4546,28 +4557,48 @@ impl Cam {
             .hop_maps
             .get(su)
             .and_then(|m| m.as_ref())
-            .filter(|m| m.h == cell && trusted)
-            .cloned();
-        let mut map = match carried {
-            Some(mut m) => {
-                m.lower_voids(&s.ip);
-                m
-            }
-            None if trusted => HeightMap::of_stock(&s.ip, cell),
-            None => HeightMap::new(s.ip.min, s.ip.max, cell),
-        };
-        let paths = paths
-            .into_iter()
-            .map(|mut p| {
-                let (moves, _) = forge_cam::hop::hops(&p.moves, p.start, &mut map, &prof, &bodies, feed);
-                p.moves = moves;
-                p
-            })
-            .collect();
+            .filter(|m| m.0.h == cell && trusted);
+        // from an earlier run when every input is the same (memo.rs): `hops` is a function of
+        // the moves, start, map, profile, bodies and feed alone, and the map of the one it
+        // starts from (by identity) or of the stock (by its full text), the trust and the cell
+        let key = format!(
+            "hop_links/1 {:?}",
+            (
+                carried.map(|m| m.1),
+                &s.ip,
+                trusted,
+                cell,
+                &paths,
+                &prof,
+                &bodies,
+                feed
+            )
+        );
+        let weigh = |v: &Hopped| v.1.z.len() * std::mem::size_of::<f64>();
+        let (paths, map, id) = HOPPED.get_or_weighed(key, weigh, || {
+            let mut map = match carried {
+                Some((m, _)) => {
+                    let mut m = m.clone();
+                    m.lower_voids(&s.ip);
+                    m
+                }
+                None if trusted => HeightMap::of_stock(&s.ip, cell),
+                None => HeightMap::new(s.ip.min, s.ip.max, cell),
+            };
+            let paths = paths
+                .into_iter()
+                .map(|mut p| {
+                    let (moves, _) = forge_cam::hop::hops(&p.moves, p.start, &mut map, &prof, &bodies, feed);
+                    p.moves = moves;
+                    p
+                })
+                .collect();
+            (paths, map, HOP_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+        });
         if self.hop_maps.len() <= su {
             self.hop_maps.resize(su + 1, None);
         }
-        self.hop_maps[su] = trusted.then_some(map);
+        self.hop_maps[su] = trusted.then_some((map, id));
         paths
     }
 
@@ -11449,7 +11480,126 @@ mod frame_tests {
 }
 
 #[cfg(test)]
+mod hop_memo_tests {
+    /// The hops are taken from an earlier run only when every input is the same, the map the
+    /// op starts from included (named by the number of the call that made it): an edit to an
+    /// earlier op of the setup, which changes the map a later op starts from, hops both anew,
+    /// and the run is the fresh one (every memo bypassed); the same text takes both from the
+    /// memo.
+    #[test]
+    fn an_earlier_op_edited_hops_the_later_anew() {
+        let src_dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../verify/forge-cam-quality/parts");
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/hop_memo_test");
+        forge_dirs::fs::create_dir_all(&dir).unwrap();
+        let part = forge_dirs::fs::read_to_string(src_dir.join("boss.fg")).unwrap();
+        forge_dirs::fs::write(dir.join("boss.fg"), &part).unwrap();
+        let doc = "machining\nf = part(\"boss.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 1)), origin: \"top-corner\", tol: 0.01)\nrough = clear(op1, tool: t1, from: 25, to: 10.5, step: 3)\nfin = contour(op1, tool: t1, side: \"outside\", from: 25, to: 10, step: 15)\nprog = program(op1, post: \"fanuc\", number: 5001)\n";
+        let reply = |cam: &super::Cam| {
+            let mut t = cam.json().to_string();
+            for p in &cam.programs {
+                t.push_str(&format!("\n{:?}", p.text));
+            }
+            t
+        };
+        let run = |d: &str| {
+            let before = super::HOPPED.computed();
+            let cam = super::run(d, &dir);
+            assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+            (super::HOPPED.computed() - before, reply(&cam))
+        };
+        let fresh = |d: &str| {
+            super::memo::bypass(true);
+            let cam = super::run(d, &dir);
+            super::memo::bypass(false);
+            reply(&cam)
+        };
+        let (n, first) = run(doc);
+        assert_eq!(n, 2, "both ops hopped");
+        assert_eq!(first, fresh(doc));
+        assert_eq!(run(doc), (0, first.clone()), "the same text hopped again");
+        let d = doc.replace("to: 10.5, step: 3)", "to: 10.5, step: 2.5)");
+        let (n, got) = run(&d);
+        assert_eq!(n, 2, "an earlier op edited: the later op's hops not made anew");
+        assert_eq!(got, fresh(&d), "not the fresh run");
+        let _ = forge_dirs::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
 mod adaptive_memo_tests {
+    /// `forge_cam::adaptive::adaptive` reads of its tool only the cutter's record
+    /// (`ToolUse::tool`): two tool uses alike in that and different in all else (number,
+    /// holder, stickout, assembled shape) clear alike. adaptive_memo's key holds no more of the
+    /// tool than that.
+    #[test]
+    fn adaptive_reads_no_other_part_of_the_tool() {
+        use forge_cam::ops::{Cut, Heights, Span, ToolUse};
+        use forge_cam_geom::region::{Loop, Region, Seg, p2};
+        let lib = forge_tooling::Library::builtin();
+        let tl = lib.tool("flat-6").unwrap().clone();
+        let a = ToolUse {
+            t: 1,
+            tool: tl.clone(),
+            holder: Some("bt40-er32".into()),
+            stickout: 30.0,
+            shape: tl.shape(30.0, Some(lib.holder("bt40-er32").unwrap())).unwrap(),
+            probe: false,
+        };
+        let b = ToolUse {
+            t: 7,
+            tool: tl.clone(),
+            holder: None,
+            stickout: 52.0,
+            shape: tl.shape(52.0, None).unwrap(),
+            probe: false,
+        };
+        let sq = |x0: f64, y0: f64, x1: f64, y1: f64| {
+            let p = [p2(x0, y0), p2(x1, y0), p2(x1, y1), p2(x0, y1)];
+            Loop {
+                segs: (0..4).map(|i| Seg::Line { a: p[i], b: p[(i + 1) % 4] }).collect(),
+            }
+        };
+        let rg = Region {
+            loops: vec![sq(0.0, 0.0, 30.0, 20.0)],
+        };
+        let ip = forge_cam::stock::InProcess::new([-2.0, -2.0, 0.0], [32.0, 22.0, 10.0]);
+        let prm = forge_cam::adaptive::Adaptive {
+            phi_max: 40.0,
+            step: 0.0,
+            leave: 0.0,
+            wall_pass: false,
+            sweep: 0.0,
+            two_way: false,
+            link_feed: 0.0,
+        };
+        let cut = |t: &ToolUse| {
+            let c = Cut {
+                tool: t,
+                tidx: 0,
+                h: Heights {
+                    clear: 20.0,
+                    retract: 12.0,
+                },
+                feed: (1200.0, 400.0),
+                ramp_feed: None,
+                lead_feed: None,
+            };
+            let sp = Span {
+                top: 10.0,
+                bottom: 6.0,
+                step: 4.0,
+            };
+            format!(
+                "{:?}",
+                forge_cam::adaptive::adaptive(&rg, c, sp, &ip, &prm).map(|o| (o.path, o.voids, o.notes))
+            )
+        };
+        let (pa, pb) = (cut(&a), cut(&b));
+        assert!(pa.contains("moves"), "adaptive made no path: {pa}");
+        assert_eq!(pa, pb, "adaptive read the tool beyond its record");
+    }
+
     /// Every input class of an adaptive op is in its memo key: its engagement, levels (from,
     /// to, step), the tool, the in-process stock before it (the facing above it) and the part's
     /// section each cut it anew, and that run is the fresh one (every memo bypassed); the same
@@ -11489,6 +11639,16 @@ mod adaptive_memo_tests {
         assert_eq!(run(doc), (0, first.clone()), "the same text cut it again");
         let r = run(&doc.replace("number: 5008", "number: 5009"));
         assert_eq!(r.0, 0, "the program's number: cut again");
+        // the tool's stickout and holder: adaptive does not read them (only the certificate
+        // does), so the path is taken from the memo, and the run is still the fresh one
+        for (what, d) in [
+            ("stickout", doc.replace("stickout: 30", "stickout: 34")),
+            ("holder", doc.replace(", holder: \"bt40-er32\"", "")),
+        ] {
+            let (n, got) = run(&d);
+            assert_eq!(n, 0, "{what}: cut again");
+            assert_eq!(got, fresh(&d), "{what}: not the fresh run");
+        }
         for (what, d) in [
             ("engagement", doc.replace("engagement: 40", "engagement: 35")),
             // read only by adaptive itself (not the feeds, as engagement is)
