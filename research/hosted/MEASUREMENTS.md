@@ -279,3 +279,26 @@ target/release/gitsave DOC.fg 300 /var/tmp/gitsave
 python3 research/hosted/bench/oplog_bench.py OUTDIR  # needs Postgres on /var/tmp:5433, redis-server, psycopg2, redis, libsql-experimental
 cd research/forge-lang/lean && lake env lean ../../hosted/lean/Merge.lean
 ```
+
+## Slow assembly edits: the overlap check, exact vs certified (2026-11-25)
+
+`bench/overlap_corpus.py` over 164 builds: the 48 example assemblies, 114 variants (each of the
+first four `shared` numbers × 1.05) and the two thread repros (`hinge_pin` size_m6 and `post_kit`
+m6 6 → 6.3); one core each, `FORGECAD_CACHE=off`. Data: `data/overlap-corpus-main.jsonl` (main
+50af9c42) and `data/overlap-corpus-curved-sites-254f5a9e.jsonl` (CURVED-SITES' kernel fix:
+anti-parallel screws in closed form, a thread's band on its bore Coincident).
+
+| | main | kernel fix |
+|---|---|---|
+| total overlap time | 228.4 s | 157.8 s |
+| exact booleans refused (interference reported unconfirmed, no volume) | 18 | 0 |
+| interfering pairs | same sets in all 164 builds | |
+| hinge_pin 6.3 | 5.96 s, unconfirmed | 31 ms, exact 10.688 mm³ |
+| post_kit 6.3 | 9.28 s, 4 unconfirmed | 120 ms, 4 × exact 14.641 mm³ |
+
+The mesh certificate (branch `fix/overlap-interference-speed`, held) gave lower bounds of 0.039
+and 0.024 mm³ on the repros: true (below the exact volumes) but far from them. On the kernel fix
+the slowest edit-induced case left is `frame/test.fg` rail_front × 1.05: 16 new interferences,
+overlap 2.40 → 4.24 s (~115 ms per new exact boolean); the certificate on top settles 8 of them,
+4.24 → 3.39 s. Decision (coordinator's rule): exact everywhere; the certificate is dropped, its
+cost on unedited assemblies (+0.2–1.1% instructions) buys too little once the exact path is fast.
