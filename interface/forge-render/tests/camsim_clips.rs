@@ -192,22 +192,24 @@ fn the_flange_on_the_vf2_clip() {
     {
         let st = h.gui.shell.camsim.as_ref().unwrap();
         assert!(st.sim.cam.ok, "{:?}", st.sim.cam.errors);
-        let mv = st.sim.machine().expect("the VF-2 runs it");
+        let mv = st.sim.machines[0]
+            .as_ref()
+            .unwrap_or_else(|e| panic!("the VF-2 runs it: {e}"));
         assert_eq!(mv.run.seat, Some(0.0), "the vise on the table");
     }
     let total = h.gui.shell.camsim.as_ref().unwrap().total();
-    // the eye anchored in the machine at the cut, back from it: the head moves only in Z, so the
-    // cut stays there while the table carries the part and the vise under it
+    // the eye on the vise and the stock in it, held in the machine (the operator's view), back
+    // far enough for the head over them: the table carries the part and the vise under the
+    // still head
     h.gui
         .camsim_command(&format!(
-            "source=machine;machine=1;fixture=1;tab=program;colour=material;part=hidden;played=1;follow=0;eye=shop;t={};fit=tool",
+            "source=machine;machine=1;fixture=1;tab=program;colour=material;part=hidden;played=1;follow=0;t={};fit=holding;eye=shop",
             0.3 * total
         ))
         .unwrap();
     if let Some(v) = h.gui.view.as_mut() {
-        v.nav.camera.dist *= 10.0;
-        v.nav.camera.yaw += 1.4;
-        v.nav.camera.pitch = 20f32.to_radians();
+        v.nav.camera.dist *= 2.4;
+        v.nav.camera.pitch = 22f32.to_radians();
         v.mark_dirty();
     }
     let total = h.gui.shell.camsim.as_ref().unwrap().total();

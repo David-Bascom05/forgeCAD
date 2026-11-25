@@ -1057,10 +1057,9 @@ fn the_vise_sits_on_the_vf2s_table() {
 
 /// What's drawn is what's checked (David): for every body of every built-in machine, the
 /// source the simulation draws it from against the one the collision check takes
-/// (camsim::machine::sources). Today the check takes each body's record primitives while the
-/// drawing takes its `.fg` part or a maker's model: every such body is a gap, counted here and
-/// listed (CAM-MACHINE's collision meshes close them: the real model, drawn and checked, one
-/// source). The count may only fall; a body drawn that the check leaves out entirely is a gap
+/// (camsim::machine::sources: its real part where forge_machine_lang::real_trees compiled it,
+/// else its record's primitives). A body drawn from one and checked by another is a gap,
+/// counted here and listed. The count may only fall; a body drawn that the check leaves out entirely is a gap
 /// too. The workholding is drawn from the boxes the run checks (the vise test).
 #[test]
 fn what_is_drawn_against_what_is_checked() {
@@ -1102,10 +1101,11 @@ fn what_is_drawn_against_what_is_checked() {
             );
         }
     }
-    // the ratchet: lower it as gaps close, never raise it (1170: every body of every built-in
-    // machine, 2026-11-25: each drawn from its `.fg` part, or a maker's model, while the check
-    // takes its record's primitives)
-    const GAPS_AT_MOST: usize = 1170;
+    // the ratchet: lower it as gaps close, never raise it. 1170 of 1170 on 2026-11-25 (each body
+    // drawn from its `.fg` part, checked by its record's primitives); 3 with CAM-MACHINE's real
+    // trees (machines/real-collision): the display-only bodies (`check = false`: the Haas
+    // enclosures, whose parts are solid blocks, and the VF-2's way covers), drawn, not checked
+    const GAPS_AT_MOST: usize = 3;
     assert!(gaps.len() <= GAPS_AT_MOST, "{} gaps", gaps.len());
 }
 
