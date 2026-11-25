@@ -302,3 +302,68 @@ the slowest edit-induced case left is `frame/test.fg` rail_front × 1.05: 16 new
 overlap 2.40 → 4.24 s (~115 ms per new exact boolean); the certificate on top settles 8 of them,
 4.24 → 3.39 s. Decision (coordinator's rule): exact everywhere; the certificate is dropped, its
 cost on unedited assemblies (+0.2–1.1% instructions) buys too little once the exact path is fast.
+
+## (p2) Phase 2: Postgres store, replication, failover, backup, server load (2026-11-25)
+
+Machine: this 4-vCPU container, quiet (load average < 1 before each run), Postgres 16.15,
+`synchronous_commit = on`, `fsync = on`, unix sockets. Data: `data/phase2-pg.json`,
+`data/phase2-ha.json`, `data/server-load-1.json`, `data/server-load-2-fixed-5df9cf74.json`.
+
+**Store (`bench/phase2_pg.py`, schema in DESIGN §17.1):**
+
+| workload | p50 / p99 | throughput |
+|---|---|---|
+| append, fenced + role-checked, 1 writer (3,000 ops) | 0.40 / 0.53 ms | |
+| bare insert, 1 writer | 0.25 / 0.52 ms | |
+| append, fenced + role-checked, 16 writers on 16 docs | 2.56 / 7.05 ms | 5,487 ops/s |
+| bare insert + separate head update, 16 writers | 1.64 / 4.60 ms | 4,465 ops/s (two commits per op) |
+| retried op: the dedup index lookup | 0.12 / 0.18 ms | |
+| open: latest 12 KB snapshot + 200 ops | 0.56 / 0.74 ms | |
+| job claim, SKIP LOCKED, 1 / 4 / 16 workers (8,001 jobs) | 0.30 / 0.39 / 1.62 ms p50 | 1,771 / 5,240 / 4,662 jobs/s; 0 double claims |
+| enqueue + NOTIFY → idle worker wakes | 0.30 / 0.50 ms | |
+| storage | 301 B per op (203 B row, 96 B both indexes) | |
+
+Checks: a stale sequencer appending at the head, 5 back and at 1: **0 accepted**; a viewer's
+append: **0 accepted**.
+
+**Replication and failover (`bench/phase2_ha.py`, primary + streaming standby on loopback):**
+
+| commit mode | append p50 / p99 |
+|---|---|
+| no standby | 0.12 / 0.22 ms |
+| async standby | 0.16 / 0.27 ms |
+| sync, `synchronous_commit = on` | 0.31 / 0.49 ms |
+| sync, `remote_apply` | 0.35 / 0.51 ms |
+
+Kill the primary (immediate stop) while a writer appends, promote the standby: promoted 0.21 s
+after the kill, first write accepted 0.21 s after. Acked ops missing on the new primary:
+sync 0 of 261 (smoke) and 0 of 5,705; **async 1 of 920 (smoke) and 0 of 11,701**.
+
+**Backup (`phase2_ha.py`):** base backup (tar, gzip, WAL streamed) of a 663 MB database (2.16 M
+op-sized rows) in 4.3 s (154 MB/s); restore + replay to a named restore point in 3.4 s, with
+exactly the rows before the point and none after. Found: a restore reaches only archived WAL; a
+first run lost the last 10,000 rows because the archiver had not shipped the final segment —
+the script now waits on `pg_stat_archiver`, and DESIGN §17.3 makes archive lag an alert.
+
+**Server load (`bench/server_load.rs`: forge-server as its own process, file store, 240 docs, one
+connection each, then 240 and 960 ops/s for 20 s each):**
+
+| | hosted/server-hardening 266a07f3 | 5df9cf74 (both memory fixes) |
+|---|---|---|
+| RSS, 240 open documents | 792 MB | 56 MB |
+| per document + connection / per extra connection | 3.2 MB / 3.1 MB | 210 KB / 43 KB |
+| server CPU per committed op | 1.08–1.30 ms | 0.80–0.86 ms |
+| ack p50 / p99 | 17–53 / ~150–170 ms | 3.6–5.9 / 47–64 ms |
+| RSS after 24,000 ops | 3,185 MB | 154 MB |
+
+Causes (heaptrack): the per-connection outbox `sync_channel(65536)` allocates every slot up front;
+and every validation's `forge_lang::run` kept its sketches (`forge_keep`; an `Rc` cycle by
+design, released by each host between builds), which forge-server never released.
+`bench/runleak.rs`: 16.2 KB per run of the load test's part without the release, 0.0 KB with it.
+Open: ~4.1 KB per op of RSS growth remains over 24,000 ops (HOSTED-BUILD's own 120 s soak:
+680 B/op) — warm-up or in-memory entries kept, to settle with a longer run.
+
+**Auth costs:** Argon2id m=19 MiB, t=2, p=1: 17.8 ms p50 hash and verify (under load average ~6;
+an upper bound); m=46 MiB, t=1: 32.3 ms; scrypt N=2^17, r=8: 240 ms. TLS server crypto per
+handshake (OpenSSL 3.0.13 `speed`): ECDSA P-256 sign 52,460/s, X25519 35,474/s, so ~50 µs a
+handshake; RSA-2048 sign 3,704/s.

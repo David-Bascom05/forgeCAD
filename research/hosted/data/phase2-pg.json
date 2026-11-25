@@ -1,0 +1,99 @@
+{
+ "server": {
+  "synchronous_commit": "on",
+  "fsync": "on",
+  "version": "PostgreSQL 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, 64-bit"
+ },
+ "params": {
+  "N": 3000,
+  "W": 16,
+  "N_CONC": 400,
+  "K": 200,
+  "JOBS": 8000
+ },
+ "append_1": {
+  "n": 3000,
+  "p50_ms": 0.396,
+  "p99_ms": 0.534,
+  "mean_ms": 0.407
+ },
+ "append_bare_1": {
+  "n": 3000,
+  "p50_ms": 0.25,
+  "p99_ms": 0.518,
+  "mean_ms": 0.267
+ },
+ "append_W": {
+  "n": 6400,
+  "p50_ms": 2.559,
+  "p99_ms": 7.047,
+  "mean_ms": 2.818,
+  "writers": 16,
+  "ops_per_s": 5487
+ },
+ "append_bare_W": {
+  "n": 6400,
+  "p50_ms": 1.637,
+  "p99_ms": 4.595,
+  "mean_ms": 1.793,
+  "writers": 16,
+  "ops_per_s": 4465
+ },
+ "retry_lookup": {
+  "n": 500,
+  "p50_ms": 0.121,
+  "p99_ms": 0.181,
+  "mean_ms": 0.126
+ },
+ "stale_sequencer_accepted": 0,
+ "viewer_accepted": 0,
+ "open": {
+  "n": 300,
+  "p50_ms": 0.558,
+  "p99_ms": 0.738,
+  "mean_ms": 0.562,
+  "ops_after_snapshot": 200,
+  "snapshot_bytes": 12000
+ },
+ "queue": [
+  {
+   "n": 8001,
+   "p50_ms": 0.297,
+   "p99_ms": 0.437,
+   "mean_ms": 0.305,
+   "workers": 1,
+   "jobs": 8001,
+   "completed": 8001,
+   "double_claims": 0,
+   "jobs_per_s": 1771
+  },
+  {
+   "n": 8001,
+   "p50_ms": 0.391,
+   "p99_ms": 0.691,
+   "mean_ms": 0.408,
+   "workers": 4,
+   "jobs": 8001,
+   "completed": 8001,
+   "double_claims": 0,
+   "jobs_per_s": 5240
+  },
+  {
+   "n": 8001,
+   "p50_ms": 1.618,
+   "p99_ms": 4.552,
+   "mean_ms": 1.798,
+   "workers": 16,
+   "jobs": 8001,
+   "completed": 8001,
+   "double_claims": 0,
+   "jobs_per_s": 4662
+  }
+ ],
+ "wakeup": {
+  "n": 300,
+  "p50_ms": 0.296,
+  "p99_ms": 0.496,
+  "mean_ms": 0.311
+ }
+}

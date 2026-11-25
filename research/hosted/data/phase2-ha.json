@@ -1,0 +1,55 @@
+{
+ "params": {
+  "N": 1500,
+  "MB": 512
+ },
+ "commit": [
+  {
+   "n": 1500,
+   "p50_ms": 0.122,
+   "p99_ms": 0.222,
+   "mode": "no standby"
+  },
+  {
+   "n": 1500,
+   "p50_ms": 0.162,
+   "p99_ms": 0.269,
+   "mode": "async standby"
+  },
+  {
+   "n": 1500,
+   "p50_ms": 0.313,
+   "p99_ms": 0.49,
+   "mode": "sync standby, synchronous_commit=on"
+  },
+  {
+   "n": 1500,
+   "p50_ms": 0.35,
+   "p99_ms": 0.512,
+   "mode": "sync standby, remote_apply"
+  }
+ ],
+ "failover_sync": {
+  "sync": true,
+  "acked": 5705,
+  "acked_lost": 0,
+  "kill_to_promoted_s": 0.211,
+  "kill_to_first_write_s": 0.214
+ },
+ "failover_async": {
+  "sync": false,
+  "acked": 11701,
+  "acked_lost": 0,
+  "kill_to_promoted_s": 0.215,
+  "kill_to_first_write_s": 0.219
+ },
+ "backup": {
+  "db_bytes": 662780951,
+  "base_backup_s": 4.29,
+  "base_MB_per_s": 154.5,
+  "restore_to_point_s": 3.38,
+  "rows_restored": 2157483,
+  "rows_wanted": 2157483,
+  "late_rows_excluded": true
+ }
+}

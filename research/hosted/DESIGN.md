@@ -1,6 +1,7 @@
 # Hosted, multi-user forgeCAD: design
 
-Status: design only, 2026-11-25, branch `design/hosted`. No product code changed. Every number
+Status: design only, 2026-11-25, branch `design/hosted`. Phase 1 is built (HOSTED-BUILD); §17
+adds phase 2. No product code changed. Every number
 comes from `MEASUREMENTS.md` (measured here) or `PRIOR-ART.md` (cited sources, fetched
 2026-11-25). Where neither settles a question, it says **UNKNOWN** and how to find out.
 
@@ -17,6 +18,7 @@ comes from `MEASUREMENTS.md` (measured here) or `PRIOR-ART.md` (cited sources, f
 | history and git | **op seq = the live history (microversions); git stays the version and interchange layer**: a named version or an idle checkpoint becomes a forge-history commit and tag | forge-history save per edit: 3.4–5.2 ms p50, 17–21 ms p99 = 20–30× an op append; git commit per keystroke-level op would also be the wrong granularity for versions. |
 | transport | **WebSocket** for ops and presence; **HTTPS GET** of content-addressed blobs (CDN-cacheable) | WebSocket works in every browser; WebTransport is "Baseline 2026" (Safari 26.4, March 2026). Ops are ~150–250 B. |
 | offline / local | **unchanged**: local forgeCAD keeps files, `F.fg.log`, forge-history; the hosted code lives in new crates and is never linked into the gate binaries | the speed gate's binaries (regen1, bench) do not need a line of the sync code. |
+| phase 2 | **§17**: Postgres with a fenced, role-checked append (0.40 ms p50); synchronous standby; managed failover; WAL archive + PITR; jobs by SKIP LOCKED; server CPU-bound at 0.8 ms/op after two memory bugs found and fixed | `phase2_pg.py`, `phase2_ha.py`, `server_load.rs`; cited prices in PRIOR-ART-PHASE2 |
 | agents | **(1) local Claude Code bridge (user's own plan) talking MCP to the hosted document as that user; (2) bring-your-own API key; (3) operator API key, optional.** Never route users' Pro/Max credentials through our server | Anthropic: third parties may not offer claude.ai login or route plan credentials; the unmodified Claude Code binary signed into by the user is allowed (PRIOR-ART §10). |
 
 The coordinator's hypothesis ("the server orders and stores typed ops and does git; clients
@@ -145,6 +147,17 @@ rather than unlikely).
 - Ops with byte spans (LiftLiteral, Respell) are valid only at their base text: rebased, they
   are refused unless the text in the span is unchanged (UNKNOWN how often in practice: they were
   not in the pair experiment; add them in phase 1).
+
+**Resend and rebase (added 2026-11-25, from the phase-1 reviews).** A client sends no op before
+its connection's first Welcome, then resends every pending op in order. A Resync's snapshot on a
+live connection resends nothing. Every op always carries **its real base**, including ops
+restored from disk after a restart (`.forgecad/sync/<doc>.pending`, bound to the server it came
+from). A base older than the sequencer's in-memory entries is rebased through the kept ops
+(read from the store; ops are never deleted, §17.1). Only if those ops are truly gone is it
+refused (`RebaseGone`). Never re-base an op to a snapshot's seq: that skips the Rename
+transform, and the op lands on the wrong target (reproduced in `reviews/N1-N9-rereview.md`).
+Retries are answered by (client, op id), whether committed or refused, so a resend never turns a
+refusal into a commit.
 
 ### 4.3 Can it be proven?
 
@@ -349,7 +362,8 @@ passes the speed gate with 0 regressions on local lines.
    trait so the choice is swappable), WebSocket, presence, build-hash reports, hosted undo,
    named versions as forge-history commits. Lean: Rename transform lemma, different-statement
    commutation. Exit: two browsers + an agent editing one part; B1/B2 measured on a LAN.
-3. **Phase 2 — hosted service (L).** Accounts, projects, sharing, Postgres store with replica
+3. **Phase 2 — hosted service (L).** *Decided in detail in §17 (plan §17.9; users, orgs and auth in
+   `USERS-ORGS-AUTH.md`).* Accounts, projects, sharing, Postgres store with replica
    (failover measured), blob store, snapshots, cached first-open meshes, compute workers
    (imports, bend sim, thermoform, exports) keyed by content hash. Exit: B2/B3/B4 measured from
    two regions; Haas VF-2 opens with a first picture in ≤ 1 s + download.
@@ -519,3 +533,273 @@ consecutive versions of the corpus (git history of `examples/`).
   LOCAL/SERVED identification, publish and checkout (M → M+, about +1–2 weeks).
 - Phase 4 (offline and branches) includes hand-edit reconciliation and `SetText` with
   three-way merge (M).
+
+## 17. Phase 2: the hosted service
+
+Status 2026-11-25. Phase 1 (one forge-server process, file log, dev tokens, loopback) exists on
+`hosted/server` and was reviewed (`reviews/N1-N9.md`, `reviews/clients.md`). This section
+decides what phase 2 adds, one decision per choice, each from a measurement here
+(MEASUREMENTS §p2, scripts in `bench/phase2_*.py`, `bench/server_load.rs`) or a cited source
+(`PRIOR-ART-PHASE2.md`, fetched 2026-11-25). Where neither decides, **UNKNOWN** says how to find
+out.
+
+### 17.0 Decisions in one table
+
+| choice | decision | evidence |
+|---|---|---|
+| store | **Postgres 16+**, one database: accounts, projects, members, documents, ops, snapshots, jobs; ops never deleted | §5's measurements; the fenced, role-checked append 0.40 / 0.53 ms p50/p99 |
+| one writer per document | **the document's `head_seq` is the fence**: an append commits only if `head_seq = seq − 1` and the author may edit, in one statement | a stale sequencer: 0 of its appends accepted; a viewer: 0 (`phase2_pg.py`) |
+| retries | **`unique (doc, client, op_id)` on `ops`** answers a retried op; no in-memory dedup set, nothing in snapshots | lookup 0.12 / 0.18 ms p50/p99; replaces N5/N6 (review M3) |
+| replication | **synchronous standby** (`synchronous_commit = on`), never async | async acks before the standby has the commit: it lost 1 acked op of 920 in one run (0 of 11,701 in another), sync 0 in both; commit cost 0.31 ms p50 vs 0.12 ms with no standby (loopback) |
+| failover | **managed first (RDS Multi-AZ or Cloud SQL HA)**, measured against documented 60–120 s / ~60 s | promotion itself is 0.21 s here; the managed products' outage is detection + DNS (PRIOR-ART-PHASE2 §2) |
+| backups | **continuous WAL archive + daily base backup to object storage; restore drill monthly** | PITR to a named point restored exactly the rows before it and none after; base backup of 663 MB in 4.3 s; restore to a named point in 3.4 s, exact |
+| blobs | **content-addressed objects in R2** (S3-compatible, no egress fee) | R2 $0.015/GB-mo, $0 egress; S3 $0.023 + $0.09/GB egress |
+| accounts | **email + password (Argon2id m=19 MiB, t=2, p=1) and passkeys (WebAuthn)**; 15-char minimum for password-only | OWASP and NIST SP 800-63B rev 4; hash 17.8 ms p50 here |
+| sessions | **opaque 256-bit token in an HttpOnly, Secure, SameSite=Lax cookie; stored as SHA-256** | verify cost is one hash + one index lookup; nothing for page script to steal (client review L) |
+| sharing | **per-project roles owner / edit / comment / view; view-only links** | Onshape (view-only links) and Figma (owner/edit/view, edit links) |
+| TLS | **terminated in front of each server by Caddy (ACME, automatic)**; ALB only if a cloud LB is wanted for other reasons | 50 µs of crypto per handshake (≈20k/s/core); ALB $16.43/mo + LCUs and no routing by document |
+| routing | **a document lives on one server; Hello to any server, `Redirect` to the owner** | the sequencer must be one process per document (§4.2) |
+| compute jobs | **a `jobs` table: unique (kind, input hash), claimed with `FOR UPDATE SKIP LOCKED`, leased, woken by NOTIFY** | 1,771 jobs/s with 1 worker (claim 0.30 ms p50), 5,240/s with 4 (0.39 ms), 4,662/s with 16 (1.62 ms; past the 4 vCPUs here); 0 double claims; wakeup 0.30 / 0.50 ms p50/p99 |
+| result cache | **key = SHA-256(kind, inputs, FORGE_KERNEL_ID)**; value in R2 | determinism gate (§13) makes a result valid on every client of that kernel |
+| capacity unit | **CPU**: 0.8 ms per committed op; 210 KB per open document | `server_load.rs` on 5df9cf74 (17.7); the 3.2 MB/doc first measured was two bugs, now fixed |
+
+### 17.1 Postgres schema and the append
+
+```sql
+accounts  (id, email unique, name, created_at)
+credentials (account, kind 'password'|'passkey', data, created_at)   -- argon2id PHC string / COSE key
+sessions  (token_sha256 primary key, account, created_at, last_seen, expires_at, device text)
+projects  (id, owner, name, created_at)
+members   (project, account, role smallint 0 view 1 comment 2 edit 3 owner, primary key (project, account))
+links     (token_sha256 primary key, project, role 0 only, expires_at null)
+documents (id, project, path, head_seq, owner_server, lease_until, unique (project, path))
+ops       (doc, seq, author, client, op_id, base, op jsonb, inv jsonb, text_hash, at,
+           primary key (doc, seq), unique (doc, client, op_id))
+snapshots (doc, seq, text, text_hash, primary key (doc, seq))        -- every N ops; ops are kept
+jobs      (id, kind, input bytea, state, worker, lease_until, attempts, result bytea, unique (kind, input))
+```
+
+The sequencer's append is one statement (`bench/phase2_pg.py` `APPEND`): update `documents`
+setting `head_seq = seq` **where** `head_seq = seq − 1` **and** the author has role ≥ edit on the
+document's project; insert the op only if that update returned a row. Three properties follow
+from the database, not from code:
+
+1. **One writer.** Two sequencers for one document (a slow one after a failover, a
+   misrouted one) cannot both append seq n: the second's update matches no row. Measured: a
+   stale sequencer appending at the head, five back and at 1: 0 accepted.
+2. **Permission at commit.** A member demoted to view between their op's arrival and its commit
+   cannot have it committed. Measured: 0 accepted.
+3. **Retries exact for ever.** The unique index answers "already committed at seq s" for any op
+   id, after any number of restarts and compactions, with no memory cost (review M3's growth
+   disappears). Measured lookup: 0.12 / 0.18 ms p50/p99.
+
+Cost of the checks: 0.40 / 0.53 ms p50/p99 against the bare insert 0.25 / 0.52 ms (1 writer; 16 writers:
+2.56 / 7.05 ms p50/p99 at 5,487 ops/s with the checks). Open = latest snapshot + the ops after it: 0.56 / 0.74 ms p50/p99 for 200 ops after a 12 KB
+snapshot.
+
+**Ops are never deleted** (review M1). Snapshots are rows beside them; "compaction" in phase 2
+means writing a snapshot row, not removing history. Storage: ~250 B of op JSON + index per op;
+301 B (203 B row + 96 B for both indexes), i.e. ~0.3 GB per million ops. Retention beyond N years is a product decision (§12).
+
+**Fan-out across servers** stays as §4.2 says: the owner server holds every connection of its
+document; NOTIFY is only for other servers' caches (0.40 ms p50, §5).
+
+### 17.2 Replication, failover, and what a client sees
+
+Measured on loopback (`phase2_ha.py`; a real standby in another zone adds that zone's round
+trip to every synchronous commit):
+
+| commit mode | append p50 / p99 |
+|---|---|
+| no standby | 0.12 / 0.22 ms |
+| async standby | 0.16 / 0.27 ms |
+| sync standby, `on` (flushed there) | 0.31 / 0.49 ms |
+| sync standby, `remote_apply` | 0.35 / 0.51 ms |
+
+Failover with the primary killed (no shutdown checkpoint) while a writer appends: promote
+returns in 0.21 s and the first write on the new primary succeeds 0.21 s after the kill.
+**Async lost 1 of 920 acked ops in the first (smoke) run and 0 of 11,701 in the second; sync lost 0 of 261 and 0 of 5,705.** A loss is a matter of timing (async acks before the standby has the record), so zero in one run proves nothing; one observed loss shows it happens.
+
+Why async is ruled out, beyond losing an edit: an acked op that vanishes leaves its seq free.
+The new primary commits a *different* op at that seq, and every client that applied the old one
+now holds a different text at the same seq — the divergence §13 exists to prevent, and a
+silent one, since both texts hash consistently on their own. So: synchronous replication only.
+And the Hello carries the client's last seq; a server that sees a client's seq **above** its head
+answers with a snapshot (the client's pending ops replay on it), never with entries.
+
+The managed products' failover is not the promotion (0.21 s here) but detection and DNS:
+RDS Multi-AZ "typically 60–120 seconds", Multi-AZ DB cluster "under 35 seconds" (not on
+db.m7g); Cloud SQL HA "about sixty seconds" (PRIOR-ART-PHASE2 §2). During it, edits wait as
+pending on every client and are resent on the next Welcome (the protocol rule both reviews
+arrived at). Nothing is lost; collaborators stop seeing each other for that long.
+**UNKNOWN**: whether 60–120 s pauses are acceptable to users. Decide from phase-2 beta;
+if not, self-managed Postgres with an automated failover tool (detection seconds) is the
+next step, at the cost of running it.
+
+### 17.3 Backups and restore
+
+Continuous WAL archiving plus a base backup; measured: base backup of a 663 MB database (2.16 M rows of op-sized records) in
+4.3 s (154 MB/s, compressed tar), restore to a named point in 3.4 s, with exactly
+the rows before the point and none after.
+
+Found while measuring: **a restore reaches only what is archived.** The first run lost the last
+10,000 rows because the archiver had not shipped the final segment when the primary stopped.
+So the recovery point objective is the archive lag, which must be watched: `archive_timeout = 60 s`
+bounds it to a minute of ops (still all on the synchronous standby); `pg_stat_archiver` lag is an
+alert. A monthly automated restore into a scratch instance, compared row counts and the head's
+text hash per document, is the only proof a backup works.
+
+Blobs: R2 objects are content-addressed and immutable; losing one is recoverable by recomputing
+it (every blob is a function of ops and inputs) except **imported files**, which are inputs.
+Those get a second copy in another provider's bucket.
+
+### 17.4 Accounts, sessions, sharing
+
+- **Passwords** (NIST SP 800-63B rev 4, PRIOR-ART-PHASE2 §5): 15 characters minimum when the
+  password is the only factor, 8 with a second; at least 64 allowed; no composition rules, no
+  periodic change; checked against a breached-password list; stored as Argon2id m=19 MiB, t=2,
+  p=1 (OWASP). Measured: 17.8 ms p50 per hash or verify on this (loaded) CPU, 19 MiB each. A
+  semaphore of 4 concurrent hashes caps login memory at 76 MB and login CPU at ~225 logins/s per
+  4 cores; per-account and per-IP rate limits keep guessing below that.
+- **Passkeys (WebAuthn)** are offered from day one: NIST requires at least one
+  phishing-resistant option at AAL2, and syncable authenticators are allowed up to AAL2.
+- **Sessions**: a random 256-bit token in an HttpOnly, Secure, SameSite=Lax cookie; the server
+  keeps only its SHA-256, with expiry and last-seen. The WebSocket opens same-origin, so the
+  browser sends the cookie on the upgrade: **no token is ever visible to page script** (closes
+  the client review's stored-`sync_token` finding). The desktop app gets a per-device token by a
+  browser sign-in that hands it back over a loopback redirect, stored in the OS keychain, revocable
+  in the account page.
+- **Sharing** (Onshape and Figma, PRIOR-ART-PHASE2 §6): roles per project — owner, edit, comment,
+  view. Only owner and editors share. Links are **view-only** (Onshape's choice; Figma allows edit
+  links, which turns a leaked URL into a write credential). Documents inherit the project's
+  roles; per-document overrides are left out of phase 2 (Figma lets a file grant more than its
+  folder; not needed until asked for).
+- The role check is in the append (17.1), so a revoked editor's in-flight ops are refused at
+  commit, not just at connect.
+
+### 17.5 TLS, deployment, routing
+
+- **TLS 1.3 at Caddy** in front of each server: automatic ACME certificates (Let's Encrypt, with
+  ZeroSSL as fallback), WebSocket passthrough. Cost per handshake on the server is about one
+  ECDSA P-256 signature (19 µs) plus one X25519 (28 µs) here, roughly 20,000 handshakes/s per
+  core: a reconnect storm of every client at once is not a TLS problem. Let's Encrypt's limits
+  (50 certificates per domain per 7 days; renewals via ARI exempt) fit one wildcard or a handful
+  of hostnames.
+- An AWS ALB costs $16.43/mo plus $5.84 per LCU-month (one LCU per 3,000 active connections per
+  minute) and supports WebSockets, but it cannot route a connection to the server that owns a
+  document. So routing is in the protocol: **Hello to any server; a non-owner answers
+  `Redirect { url }` and closes**. One extra round trip at open, none afterwards. Ownership is
+  `documents.owner_server` with `lease_until`; a server renews leases for its open documents
+  every few seconds, and a document whose lease expired is taken by the next server a client
+  reaches. The `head_seq` fence (17.1) makes a lease race harmless: the loser's appends fail.
+- **Deploy**: one binary (forge-server with the Postgres store) per machine, systemd, behind
+  Caddy; rolling restart drains a server by redirecting its documents' clients elsewhere (they
+  resend pending ops on the new Welcome).
+
+### 17.6 Compute workers and the result cache
+
+- **Queue** in Postgres: `jobs (kind, input)` unique, so the same request from ten collaborators
+  is one job. Workers claim with `FOR UPDATE SKIP LOCKED` (the documented use: "avoid lock
+  contention with multiple consumers accessing a queue-like table"), hold a lease
+  (`lease_until`), and a job whose lease expires is claimable again (`attempts` capped; past the
+  cap it is failed with the worker's last error). Measured: 1,771 jobs/s with 1 worker (claim 0.30 ms p50), 5,240/s with 4 (0.39 ms), 4,662/s with 16 (1.62 ms; past the 4 vCPUs here), 0 double claims at
+  1/4/16 workers. Idle workers wait on `LISTEN jobs`; enqueue + `NOTIFY` in one transaction wakes
+  one in 0.30 / 0.50 ms p50/p99 (NOTIFY is delivered only at commit, so a worker never sees a job that does
+  not exist yet).
+- **Key** = SHA-256(kind, canonical inputs, `FORGE_KERNEL_ID`). The kernel id is part of the key
+  because only same-kernel results are guaranteed bit-identical (§13); a kernel upgrade misses
+  the cache once per input.
+- **Value** in R2 at `/blob/<hash>`, immutable, served with permanent cache headers.
+- **Sizing**: Haas VF-2 open 13.8 s and bend sim 3.85 s are single jobs; at c7i.2xlarge spot
+  ($0.163/h, 8 vCPU) a vCPU-second costs $0.0000057, so the VF-2 import is $0.00008 once and a
+  download for everyone after. Worker count follows queue wait, not cost.
+
+### 17.7 Capacity and cost
+
+Measured (`bench/server_load.rs`, forge-server as its own process, file store, loopback, this
+4-vCPU container, 240 documents with one connection each):
+
+| | value |
+|---|---|
+| RSS per open document + its connection | 3.2 MB |
+| RSS per further connection to an open document | 3.1 MB |
+| server CPU per committed op (validate + append + broadcast) | 1.08–1.14 ms (at 240 and 960 ops/s) |
+| ack latency on loopback under that load | p50 17–24 ms, p99 ~150 ms |
+
+Both memory costs were found with a heap profile (heaptrack) and are fixable, so the table above
+is **phase 1's server, not phase 2's**:
+
+- **3.1 MB per connection** is the outbox: `sync_channel(65536)`, whose slots std allocates and
+  initialises up front (~48 B × 65,536). The byte bound (`QUEUE_BYTES`) already limits the
+  queue, so ~1,024 slots (~48 KB) do.
+- **RSS growth under load** (0.79 → 3.18 GB over 24,000 ops; the same with
+  `MALLOC_ARENA_MAX=2`) is not the allocator. Every `forge_lang::run` keeps its sketches on its
+  thread (`forge_keep`); a sketch with a named entity is an `Rc` cycle; hosts must release them
+  between builds (forge-render and the CLI server do; forge-server did not). Validation runs
+  forge-lang two or three times per op on a per-check thread, so every op leaked its sketches.
+  Repro `bench/runleak.rs`: 16.2 KB per run of the load test's 3-sketch part as is, **0.0 KB** with
+  the release (RSS flat over 3,000 runs).
+
+After both fixes (hosted/server-hardening 5df9cf74), the same test on the same machine:
+
+| | before | after |
+|---|---|---|
+| 240 open documents | 792 MB | **56 MB** |
+| per document + connection | 3.2 MB | **210 KB** |
+| per extra connection | 3.1 MB | **43 KB** |
+| server CPU per committed op | 1.30 ms | **0.80–0.86 ms** |
+| ack p50 / p99 (loopback, shared CPU) | 44–53 / 158–170 ms | **3.6–5.9 / 47–64 ms** |
+| RSS after 24,000 ops | 3,185 MB | **154 MB** |
+
+Still to settle: RSS rose 56 → 154 MB over the 24,000 ops (~4.1 KB/op; HOSTED-BUILD's own
+120 s soak measured 680 B/op). Either the actors keep every entry in memory (unbounded per
+document) or it is warm-up; a longer constant-rate run decides. With the Postgres store an
+actor needs only the entries since the oldest base it may rebase from.
+
+So a server is **CPU-bound**: 2 vCPUs commit ~2,400 ops/s at 0.8 ms; 8 GB holds tens of
+thousands of open documents.
+
+Cost, from cited on-demand prices (us-east-1, PRIOR-ART-PHASE2 §1–4); users' op rate and
+concurrency are **UNKNOWN** (measure in beta), so per open document:
+
+| item | choice | $/month |
+|---|---|---|
+| sequencer server | m7i.large (2 vCPU / 8 GiB): ~2,400 committed ops/s at 0.8 ms each | 73.58 |
+| Postgres | RDS db.m7g.large Multi-AZ | 246.01 + $0.23/GB |
+| TLS | Caddy on the server | 0 |
+| blobs | R2 | $0.015/GB, egress 0 |
+| compute | c7i.2xlarge spot, scaled by queue | $0.163/h while running |
+
+A minimal highly available deployment is about **$320/month**, three quarters of it the
+database with its standby (RDS Multi-AZ $246 of ~$320). The servers are cheap: at 1 op per
+active editor per minute (**UNKNOWN**, a guess until beta telemetry), one m7i.large commits for
+~140,000 concurrently active editors. The database, not the servers, is the cost floor until
+far beyond that.
+
+### 17.8 Risks and UNKNOWNs added by phase 2
+
+| item | how to find out |
+|---|---|
+| the RSS growth under load | fixed (unreleased `forge_keep` sketches): 3,185 → 154 MB after 24k ops; the remaining ~4.1 KB/op to explain |
+| 3.1 MB per connection | fixed (the outbox's 65,536 preallocated slots): 43 KB now |
+| users' op rate and concurrency | phase-2 beta telemetry (ops/min per active editor) |
+| managed failover pauses of 60–120 s | beta; then self-managed with automated failover if needed |
+| a standby in another zone's commit cost | rerun `phase2_ha.py` across zones once a cloud account exists |
+| RDS Multi-AZ DB cluster price (under-35-s failover) | price page for an eligible class |
+| GCP us-east prices | the pricing page with us-east1 selected |
+| threaded wasm (`THREAD_CACHE`) | the realloc out-of-bounds crash has no root cause yet (CAM-PERF, `research/handoff/CAM-PERF.md` on alloc/threaded-stress); hosted browser clients stay on the unthreaded build (§8) until it has one |
+
+### 17.9 Phase 2 plan (replaces §11's phase 2 line)
+
+1. Fix the review highs first (N1-N9 H1–H3, clients H1–H3) and add "resend pending ops on every
+   Welcome" to the protocol (§4.2). **S**
+2. Release forge-lang's kept sketches after every validation and hash build; shrink the outbox's
+   slot count; soak test with `server_load.rs` (17.7). **S**
+3. `PgStore` behind the existing `Store` trait: the 17.1 schema, the fenced append, the
+   unique-index dedup, snapshots as rows, ops kept. Run `phase2_pg.py`'s checks as tests. **M**
+4. Accounts, sessions, passkeys, roles, view links (17.4). **M**
+5. Caddy + Redirect routing + leases (17.5). **S**
+6. Jobs, workers, result cache in R2 (17.6). **M**
+7. Replica, managed failover drill, backups and the monthly restore drill (17.2–17.3). **S**
+Exit: two regions' B2/B3/B4 measured; a failover drill under load with 0 acked ops lost and every
+client converged; a restore drill matching every document's head hash.

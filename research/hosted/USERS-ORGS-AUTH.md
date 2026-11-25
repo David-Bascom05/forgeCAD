@@ -228,7 +228,7 @@ Logging (A§7), and to OWASP Top 10 A01 Broken Access Control.
 | path | added work | measured or estimated | budget |
 |---|---|---|---|
 | LOCAL edit (B5) | none | 0 instructions (no code on the path) | 0 — enforced by the gate |
-| SERVED edit → commit (B2) | the role check inside the append | smoke run: the fenced, role-checked append vs the bare insert were equal within noise; the quiet-machine run fills §17.1's numbers | < 0.1 ms target; a regression shows in `phase2_pg.py` |
+| SERVED edit → commit (B2) | the role check inside the append | measured on a quiet machine (DESIGN §17.1, `phase2_pg.py`): the fenced, role-checked append 0.40 / 0.53 ms p50/p99 vs the bare insert 0.25 / 0.52 ms, i.e. +0.15 ms p50 for the fence's update and the role check together | **over the < 0.1 ms target** I set: still well inside B2 (the network is ≥ 1 ms), so it stands; if it matters, split the role check into a per-connection cache invalidated by NOTIFY and keep only the fence in the append |
 | SERVED edit → collaborator (B2) | none beyond the commit | — | — |
 | open a document | session or token lookup: one SHA-256 + one index read; effective-role query | µs (SHA-256) + an index lookup, the same order as the retry lookup measured at 0.03 ms (smoke) | once per connection |
 | live connection | revalidation every 30 min; NOTIFY on grant changes | negligible | — |
@@ -236,7 +236,7 @@ Logging (A§7), and to OWASP Top 10 A01 Broken Access Control.
 | blob download | authorization + signed URL | one query per download | B3 adds < 1 ms to a download |
 
 No per-op crypto, no extra round trip, nothing on the client's edit path. The one per-op cost
-is the role check in the append, already measured as part of §17.1.
+is the fence and role check in the append: +0.15 ms p50, measured (§17.1).
 
 ## 9. Migration from today
 
@@ -274,4 +274,4 @@ S ≤ 1 week, M 2–4 weeks, L 1–2 months, for one agent with review.
 | own SAML SP vs a self-hosted IdP | a one-week spike at phase C start |
 | managed identity service prices | fetch vendors' price pages at phase C |
 | the cost of encrypting served documents' local cache | only if customers ask for "no local copies" |
-| the role check's cost in the append on a quiet machine | `phase2_pg.py` (queued) |
+| the role check's cost in the append | measured: +0.15 ms p50 with the fence (§8); split it out only if B2 ever needs the time |

@@ -49,7 +49,8 @@ def summary(xs):
 
 
 def ctl(d, what, port, extra=""):
-    return sh(f"{BIN}/pg_ctl -D {d} -o '-p {port} -k {WORK}' -l {d}.log -w {what} {extra}")
+    # unix sockets only: a TCP listen can collide with a transient ephemeral port on this host
+    return sh(f"{BIN}/pg_ctl -D {d} -o \"-p {port} -k {WORK} -c listen_addresses=''\" -l {d}.log -w {what} {extra}")
 
 
 def setup():
