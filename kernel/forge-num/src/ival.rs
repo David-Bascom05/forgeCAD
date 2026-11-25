@@ -78,19 +78,15 @@ impl Ival {
         }
         Ival { lo, hi }
     }
+    /// The sum, outward. `down`/`up` alone give every case the branches on infinities once did:
+    /// −∞ + x and −∞ + ∞ (NaN) round down to −∞, +∞ + x and NaN up to +∞, and neither returns
+    /// NaN, so no fix is needed (`tests::add_and_mul_are_the_reference_bit_for_bit`).
     #[inline]
     pub fn add(self, o: Ival) -> Ival {
-        let lo = if self.lo == f64::NEG_INFINITY || o.lo == f64::NEG_INFINITY {
-            f64::NEG_INFINITY
-        } else {
-            down(self.lo + o.lo)
-        };
-        let hi = if self.hi == f64::INFINITY || o.hi == f64::INFINITY {
-            f64::INFINITY
-        } else {
-            up(self.hi + o.hi)
-        };
-        Ival::fix(lo, hi)
+        Ival {
+            lo: down(self.lo + o.lo),
+            hi: up(self.hi + o.hi),
+        }
     }
     #[inline]
     pub fn neg(self) -> Ival {
@@ -103,17 +99,59 @@ impl Ival {
     pub fn sub(self, o: Ival) -> Ival {
         self.add(o.neg())
     }
+    /// The product, outward. With every end finite and each interval ordered (lo <= hi) no product
+    /// is NaN, and rounding is monotone, so the operands' signs pick which of the four end products are the least and the greatest
+    /// (two products, not four and their comparisons); any other case is the general rule. Every
+    /// result is the general rule's, bit for bit (`tests::add_and_mul_are_the_reference_bit_for_bit`).
     #[inline]
     pub fn mul(self, o: Ival) -> Ival {
-        if self.lo == self.hi && o.lo == o.hi {
-            let p = self.lo * o.lo;
+        let (a0, a1, b0, b1) = (self.lo, self.hi, o.lo, o.hi);
+        if a0.is_finite() && a1.is_finite() && b0.is_finite() && b1.is_finite() && a0 <= a1 && b0 <= b1 {
+            if a0 == a1 && b0 == b1 {
+                // exact when the product is exact; else one ulp each way
+                let p = a0 * b0;
+                return Ival {
+                    lo: down(p),
+                    hi: up(p),
+                };
+            }
+            let (lo, hi) = if a0 >= 0.0 {
+                if b0 >= 0.0 {
+                    (a0 * b0, a1 * b1)
+                } else if b1 <= 0.0 {
+                    (a1 * b0, a0 * b1)
+                } else {
+                    (a1 * b0, a1 * b1)
+                }
+            } else if a1 <= 0.0 {
+                if b0 >= 0.0 {
+                    (a0 * b1, a1 * b0)
+                } else if b1 <= 0.0 {
+                    (a1 * b1, a0 * b0)
+                } else {
+                    (a0 * b1, a0 * b0)
+                }
+            } else if b0 >= 0.0 {
+                (a0 * b1, a1 * b1)
+            } else if b1 <= 0.0 {
+                (a1 * b0, a0 * b0)
+            } else {
+                let (l1, l2, h1, h2) = (a0 * b1, a1 * b0, a0 * b0, a1 * b1);
+                (if l2 < l1 { l2 } else { l1 }, if h2 > h1 { h2 } else { h1 })
+            };
+            return Ival {
+                lo: down(lo),
+                hi: up(hi),
+            };
+        }
+        if a0 == a1 && b0 == b1 {
+            let p = a0 * b0;
             if p.is_nan() {
                 return WHOLE;
             }
-            // exact when the product is exact; else one ulp each way
             return Ival::fix(down(p), up(p));
         }
-        let (a, b, c, d) = (self.lo * o.lo, self.lo * o.hi, self.hi * o.lo, self.hi * o.hi);
+        let (a, b, c, d) = (a0 * b0, a0 * b1, a1 * b0, a1 * b1);
         if a.is_nan() || b.is_nan() || c.is_nan() || d.is_nan() {
             return WHOLE;
         }
@@ -229,6 +267,115 @@ impl Ival {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The rules as they were before the fast paths (verbatim): the references.
+    fn add_ref(x: Ival, o: Ival) -> Ival {
+        let lo = if x.lo == f64::NEG_INFINITY || o.lo == f64::NEG_INFINITY {
+            f64::NEG_INFINITY
+        } else {
+            down(x.lo + o.lo)
+        };
+        let hi = if x.hi == f64::INFINITY || o.hi == f64::INFINITY {
+            f64::INFINITY
+        } else {
+            up(x.hi + o.hi)
+        };
+        Ival::fix(lo, hi)
+    }
+    fn mul_ref(x: Ival, o: Ival) -> Ival {
+        if x.lo == x.hi && o.lo == o.hi {
+            let p = x.lo * o.lo;
+            if p.is_nan() {
+                return WHOLE;
+            }
+            return Ival::fix(down(p), up(p));
+        }
+        let (a, b, c, d) = (x.lo * o.lo, x.lo * o.hi, x.hi * o.lo, x.hi * o.hi);
+        if a.is_nan() || b.is_nan() || c.is_nan() || d.is_nan() {
+            return WHOLE;
+        }
+        Ival::fix(down(min4(a, b, c, d)), up(max4(a, b, c, d)))
+    }
+    fn bits(x: Ival) -> (u64, u64) {
+        (x.lo.to_bits(), x.hi.to_bits())
+    }
+    fn same(op: &str, x: Ival, y: Ival) {
+        let (got, want) = match op {
+            "add" => (x.add(y), add_ref(x, y)),
+            _ => (x.mul(y), mul_ref(x, y)),
+        };
+        assert_eq!(bits(got), bits(want), "{op} {x:?} {y:?}: {got:?} vs {want:?}");
+    }
+
+    /// Every pair of intervals over the special values (both zeros, the denormal limits, ±1,
+    /// halves, the largest finite, the infinities, NaN, small and large magnitudes; each end any
+    /// of them, inverted ones included): the fast add and mul are the references bit for bit.
+    #[test]
+    fn add_and_mul_are_the_reference_bit_for_bit() {
+        let base = [
+            0.0,
+            f64::MIN_POSITIVE,
+            5e-324,
+            1e-300,
+            0.1,
+            0.5,
+            1.0,
+            1.5,
+            2.0,
+            3.0,
+            1e10,
+            1e300,
+            f64::MAX,
+            f64::INFINITY,
+        ];
+        let mut vals: Vec<f64> = Vec::new();
+        for &v in &base {
+            vals.push(v);
+            vals.push(-v);
+        }
+        vals.push(f64::NAN);
+        let ivs: Vec<Ival> = vals
+            .iter()
+            .flat_map(|&lo| vals.iter().map(move |&hi| Ival { lo, hi }))
+            .collect();
+        for &x in &ivs {
+            for &y in &ivs {
+                same("add", x, y);
+                same("mul", x, y);
+            }
+        }
+        // random intervals, ends from random bit patterns and from ordinary ranges, sorted and not
+        let mut s = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = || {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            s
+        };
+        let mut val = |k: u64, r: u64| match k % 4 {
+            0 => f64::from_bits(r),
+            1 => (r % 2001) as f64 / 16.0 - 62.5,
+            2 => ((r % 1_000_003) as f64 - 500_000.0) * 1e-7,
+            _ => vals[(r % vals.len() as u64) as usize],
+        };
+        for _ in 0..2_000_000 {
+            let (k, r1, r2, r3, r4) = (next(), next(), next(), next(), next());
+            let (a, b) = (val(k, r1), val(k >> 2, r2));
+            let (c, d) = (val(k >> 4, r3), val(k >> 6, r4));
+            let x = if k & (1 << 10) == 0 {
+                Ival::new(a, b)
+            } else {
+                Ival { lo: a, hi: b }
+            };
+            let y = if k & (1 << 11) == 0 {
+                Ival::new(c, d)
+            } else {
+                Ival { lo: c, hi: d }
+            };
+            same("add", x, y);
+            same("mul", x, y);
+        }
+    }
 
     #[test]
     fn encloses() {
