@@ -821,6 +821,38 @@ fn manufacture_opens_in_a_phone_wide_window() {
     shot(&mut h, "cam-480");
 }
 
+/// The tool library is left as every window is: Esc (BUTTON-AUDITOR: it stayed open), and its
+/// Close, a click away whatever it shows.
+#[test]
+fn the_tool_library_closes_with_esc_and_its_close() {
+    let Some((mut h, _)) = open("tools-esc") else { return };
+    tap(&mut h, "tool:Tool Library");
+    h.step();
+    assert!(h.gui.shell.cam.as_ref().unwrap().tools_open);
+    h.key_with(egui::Key::Escape, egui::Modifiers::NONE);
+    h.step();
+    h.step();
+    assert!(!h.gui.shell.cam.as_ref().unwrap().tools_open, "Esc closes the library");
+}
+
+/// A new op's dialog (Thread Mill, from the ribbon) is cancelled by Esc as an op's is
+/// (BUTTON-AUDITOR's crawl: "Esc leaves it open").
+#[test]
+fn a_new_ops_dialog_is_cancelled_by_esc() {
+    let Some((mut h, _)) = open("newop-esc") else { return };
+    let before = text(&h);
+    tap(&mut h, "tool:Thread Mill");
+    h.step();
+    assert!(h.gui.shell.cam.as_ref().unwrap().op_dlg.is_some(), "the op dialog");
+    h.key_with(egui::Key::Escape, egui::Modifiers::NONE);
+    for _ in 0..8 {
+        h.step();
+    }
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert!(w.op_dlg.is_none(), "Esc cancels it");
+    assert_eq!(text(&h), before, "nothing written");
+}
+
 /// A cycle time is the lower bound and the estimate together (never the estimate alone), and the
 /// estimate counts the tool change the bound counts (the flange changes T1 for T12).
 #[test]

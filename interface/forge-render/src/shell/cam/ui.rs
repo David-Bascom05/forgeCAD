@@ -2427,7 +2427,11 @@ fn finder(
     }
     ui.add_space(4.0);
     let mut pick: Option<String> = None;
-    egui::ScrollArea::vertical().id_salt("cam-tools-list").auto_shrink([false, false]).show(ui, |ui| {
+    egui::ScrollArea::vertical()
+        .id_salt("cam-tools-list")
+        .auto_shrink([false, false])
+        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
+        .show(ui, |ui| {
         let shown: Vec<&forge_tooling::Tool> =
             toollib::sorted(&w.lib.tools).into_iter().filter(|x| toollib::matches(&w.tools_find, x)).collect();
         let doc: Vec<&forge_tooling::Tool> = shown.iter().copied().filter(|x| in_doc.iter().any(|d| d.0 == x.id)).collect();
@@ -2576,7 +2580,13 @@ fn detail_pane(
     });
     let width = (body.width() - 8.0).min(640.0);
     ui.scope_builder(egui::UiBuilder::new().max_rect(body), |ui| {
-        egui::ScrollArea::vertical().id_salt("cam-tools-detail").auto_shrink([false, false]).show(ui, |ui| {
+        // its bar always shown: what is below the pane's edge (the tool's table runs under the
+        // footer on a laptop's screen) is seen to be there (BUTTON-AUDITOR: "Material" cut)
+        egui::ScrollArea::vertical()
+            .id_salt("cam-tools-detail")
+            .auto_shrink([false, false])
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
+            .show(ui, |ui| {
             ui.set_width(body.width() - 8.0);
             if w.tools_aux == 1 {
                 return import_pane(ui, t, w, width, places);
