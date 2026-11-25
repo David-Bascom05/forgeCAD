@@ -271,7 +271,9 @@ fn the_demo_part_is_built_with_the_ribbons_tools() {
     );
 }
 
-/// A tapped hole where hole1 already is: the preview's refusal is said in words and OK is held.
+/// A fillet far bigger than the part (500 mm on the 12 mm plate's edge): the preview's refusal is
+/// said in words and OK is held. A size that can never build, so the refusal is the intended one
+/// for good (the tapped hole this used before builds since the thread fix, curved-sites).
 #[test]
 fn a_refused_preview_holds_ok_and_says_why_in_words() {
     let dir = std::env::temp_dir().join(format!("fg-demo-refused-{}", std::process::id()));
@@ -292,9 +294,10 @@ fn a_refused_preview_holds_ok_and_says_why_in_words() {
     h.gui.open(file.to_str().unwrap());
     settle(&mut h);
     let before = h.gui.fg.as_ref().unwrap().src.clone();
-    button(&mut h, "Hole");
-    click(&mut h, "fg:tool:choice:Type:Tapped");
-    click(&mut h, "fg:choice:Points:sk2.p1");
+    button(&mut h, "Fillet");
+    // the plate's top front edge (the plate is 80 x 60 x 12 about the origin)
+    point_at(&mut h, [0.0, -30.0, 12.0]);
+    set(&mut h, "r", "500");
     assert!(
         h.until(|g| g
             .shell
@@ -317,8 +320,9 @@ fn a_refused_preview_holds_ok_and_says_why_in_words() {
         .note
         .clone()
         .unwrap();
+    // the kernel's words for why may change; that it refused, said in words, may not
     assert!(
-        note.contains("not supported yet") && !note.contains('{'),
+        note.contains("refused") && !note.contains('{'),
         "{note}"
     );
     click(&mut h, "fg:tool:ok");
