@@ -112,6 +112,9 @@ fn run(what: &str, dir: &std::path::Path, doc: &str) -> R {
     }
 }
 
+/// A statement `NAME = f(..)`: (line index, name, f).
+type Stmt = (usize, String, String);
+
 /// The statements `NAME = f(..)` of a document: (line index, name, f).
 fn stmts(src: &str) -> Vec<(usize, String, String)> {
     let mut v = vec![];
@@ -171,7 +174,7 @@ fn fmt(x: f64) -> String {
 
 fn op_edit(
     src: &str,
-    which: &dyn Fn(&[(usize, String, String)]) -> Option<usize>,
+    which: &dyn Fn(&[Stmt]) -> Option<usize>,
 ) -> Option<(String, String)> {
     let st: Vec<_> = stmts(src)
         .into_iter()
