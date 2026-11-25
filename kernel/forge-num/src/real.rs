@@ -505,13 +505,37 @@ impl Quad {
 struct Tower {
     /// cᵢ, a value over the roots below i (2^i coefficients).
     c: Vec<Vec<Q>>,
+    /// The most bits a coefficient may have.
     cap: u64,
+    /// Rational operations left: the tower's work is bounded, whatever its depth (a quotient
+    /// over several roots squares its coefficients at every level, and they are not reduced).
+    left: std::cell::Cell<u64>,
 }
 
 impl Tower {
     /// The most roots a value may have: 2^6 coefficients each.
     const MAX: usize = 6;
+    /// The most bits a coefficient may have: exact ties among round inputs stay far below it.
+    const CAP: u64 = 4096;
+    /// The most rational operations one sign may take.
+    const WORK: u64 = 50_000;
 
+    fn new() -> Tower {
+        Tower {
+            c: Vec::new(),
+            cap: Tower::CAP,
+            left: std::cell::Cell::new(Tower::WORK),
+        }
+    }
+    /// One rational operation's worth of the budget, and its result's size: None past either.
+    fn spend(&self, q: Q) -> Option<Q> {
+        let l = self.left.get();
+        if l == 0 || q.bits() > self.cap {
+            return None;
+        }
+        self.left.set(l - 1);
+        Some(q)
+    }
     fn pad(x: &[Q], m: usize) -> Vec<Q> {
         let mut v = x.to_vec();
         v.resize(1 << m, Q::zero());
@@ -520,93 +544,89 @@ impl Tower {
     fn is_zero(x: &[Q]) -> bool {
         x.iter().all(|q| q.is_zero())
     }
-    fn add(x: &[Q], y: &[Q]) -> Vec<Q> {
-        x.iter().zip(y).map(|(a, b)| a.add(b)).collect()
+    fn add(&self, x: &[Q], y: &[Q]) -> Option<Vec<Q>> {
+        x.iter().zip(y).map(|(a, b)| self.spend(a.add(b))).collect()
     }
     fn neg(x: &[Q]) -> Vec<Q> {
         x.iter().map(|a| a.neg()).collect()
     }
-    fn bits(x: &[Q]) -> u64 {
-        x.iter().map(|q| q.bits()).max().unwrap_or(0)
-    }
     /// x y over m roots: (a1 + b1 s)(a2 + b2 s) = a1 a2 + b1 b2 c + (a1 b2 + a2 b1) s.
-    fn mul(&self, x: &[Q], y: &[Q], m: usize) -> Vec<Q> {
+    fn mul(&self, x: &[Q], y: &[Q], m: usize) -> Option<Vec<Q>> {
         if m == 0 {
-            return vec![x[0].mul(&y[0])];
+            return Some(vec![self.spend(x[0].mul(&y[0]))?]);
         }
         let h = 1 << (m - 1);
         let (a1, b1, a2, b2) = (&x[..h], &x[h..], &y[..h], &y[h..]);
         let (zb1, zb2) = (Tower::is_zero(b1), Tower::is_zero(b2));
-        let mut lo = self.mul(a1, a2, m - 1);
+        let mut lo = self.mul(a1, a2, m - 1)?;
         if !zb1 && !zb2 {
-            let bb = self.mul(b1, b2, m - 1);
-            lo = Tower::add(&lo, &self.mul(&bb, &self.c[m - 1], m - 1));
+            let bb = self.mul(b1, b2, m - 1)?;
+            lo = self.add(&lo, &self.mul(&bb, &self.c[m - 1], m - 1)?)?;
         }
         let hi = match (zb1, zb2) {
             (true, true) => vec![Q::zero(); h],
-            (true, false) => self.mul(a1, b2, m - 1),
-            (false, true) => self.mul(a2, b1, m - 1),
-            (false, false) => Tower::add(&self.mul(a1, b2, m - 1), &self.mul(a2, b1, m - 1)),
+            (true, false) => self.mul(a1, b2, m - 1)?,
+            (false, true) => self.mul(a2, b1, m - 1)?,
+            (false, false) => self.add(&self.mul(a1, b2, m - 1)?, &self.mul(a2, b1, m - 1)?)?,
         };
         lo.extend(hi);
-        lo
+        Some(lo)
+    }
+    /// a² − b² c over m roots (the norm of a + b√c, a level down).
+    fn norm(&self, a: &[Q], b: &[Q], c: &[Q], m: usize) -> Option<Vec<Q>> {
+        let aa = self.mul(a, a, m)?;
+        let bbc = self.mul(&self.mul(b, b, m)?, c, m)?;
+        self.add(&aa, &Tower::neg(&bbc))
     }
     /// The exact sign of x's value over m roots (each root non-negative): of a + b√c, as
-    /// `Quad::sign`.
-    fn sign(&self, x: &[Q], m: usize) -> Ordering {
+    /// `Quad::sign`. None past the budget.
+    fn sign(&self, x: &[Q], m: usize) -> Option<Ordering> {
         if m == 0 {
-            return x[0].sign();
+            return Some(x[0].sign());
         }
         let h = 1 << (m - 1);
         let (a, b) = (&x[..h], &x[h..]);
         let sb = if Tower::is_zero(b) {
             Ordering::Equal
         } else {
-            self.sign(b, m - 1)
+            self.sign(b, m - 1)?
         };
-        let sa = self.sign(a, m - 1);
+        let sa = self.sign(a, m - 1)?;
         let c = &self.c[m - 1];
-        if sb == Ordering::Equal || self.sign(c, m - 1) == Ordering::Equal {
-            return sa;
+        if sb == Ordering::Equal || self.sign(c, m - 1)? == Ordering::Equal {
+            return Some(sa);
         }
         if sa == Ordering::Equal || sa == sb {
-            return sb;
+            return Some(sb);
         }
         // opposite signs: the term with the larger square wins
-        let t = Tower::add(
-            &self.mul(a, a, m - 1),
-            &Tower::neg(&self.mul(&self.mul(b, b, m - 1), c, m - 1)),
-        );
-        match self.sign(&t, m - 1) {
+        let t = self.norm(a, b, c, m - 1)?;
+        Some(match self.sign(&t, m - 1)? {
             Ordering::Greater => sa,
             Ordering::Less => sb,
             Ordering::Equal => Ordering::Equal,
-        }
+        })
     }
     /// 1 / x over m roots: (a − b s) / (a² − b² c), the norm inverted a level down. None where a
-    /// norm's value is 0.
+    /// norm's value is 0, or past the budget.
     fn inv(&self, x: &[Q], m: usize) -> Option<Vec<Q>> {
         if m == 0 {
-            return Some(vec![Q::one().div(&x[0])?]);
+            return Some(vec![self.spend(Q::one().div(&x[0])?)?]);
         }
         let h = 1 << (m - 1);
         let (a, b) = (&x[..h], &x[h..]);
         if Tower::is_zero(b) {
-            let ia = self.inv(a, m - 1)?;
-            let mut v = ia;
+            let mut v = self.inv(a, m - 1)?;
             v.resize(1 << m, Q::zero());
             return Some(v);
         }
-        let norm = Tower::add(
-            &self.mul(a, a, m - 1),
-            &Tower::neg(&self.mul(&self.mul(b, b, m - 1), &self.c[m - 1], m - 1)),
-        );
-        if self.sign(&norm, m - 1) == Ordering::Equal {
+        let norm = self.norm(a, b, &self.c[m - 1], m - 1)?;
+        if self.sign(&norm, m - 1)? == Ordering::Equal {
             return None;
         }
         let ni = self.inv(&norm, m - 1)?;
-        let mut v = self.mul(a, &ni, m - 1);
-        v.extend(Tower::neg(&self.mul(b, &ni, m - 1)));
+        let mut v = self.mul(a, &ni, m - 1)?;
+        v.extend(Tower::neg(&self.mul(b, &ni, m - 1)?));
         Some(v)
     }
 }
@@ -1406,7 +1426,7 @@ impl Ctx {
             if exact
                 && p == 128
                 && k >= 2
-                && let Some(o) = self.tower_sign(&order, (2 * need).max(4096) as u64)
+                && let Some(o) = self.tower_sign(&order)
             {
                 return o;
             }
@@ -1460,39 +1480,45 @@ impl Ctx {
 
     /// The exact sign of the last node of `order` with any number of distinct square roots (up to
     /// `Tower::MAX`), computed in their tower (`Tower`): a square root of a radicand equal to an
-    /// earlier one is that root. None (the caller refines as before) where a number grows past
-    /// `cap` bits, a divisor's value is 0, a radicand is negative, or there are too many roots:
-    /// never a wrong sign, only no answer. An exact tie among radicals, which refinement proves
+    /// earlier one is that root. None (the caller refines as before) where a coefficient grows
+    /// past `Tower::CAP` bits, the work passes `Tower::WORK` rational operations, a divisor's
+    /// value is 0, a radicand is negative, or there are too many roots: never a wrong sign, only
+    /// no answer, and never more than a bounded cost before it. An exact tie among radicals, which refinement proves
     /// only at the separation bound (some hundred thousand bits for three roots), is a zero here.
-    fn tower_sign(&self, order: &[u32], cap: u64) -> Option<Ordering> {
-        let mut t = Tower { c: Vec::new(), cap };
+    fn tower_sign(&self, order: &[u32]) -> Option<Ordering> {
+        let mut t = Tower::new();
         let mut m = 0usize;
         let mut val: Vec<Vec<Q>> = Vec::with_capacity(order.len());
         let at = |x: &u32| order.binary_search(x).expect("an operand is in the closure");
         for &i in order {
             let v = match &self.nodes[i as usize].op {
                 Op::Lit(d) => vec![Q::dy(d.clone())],
-                Op::Add(x, y) => Tower::add(&Tower::pad(&val[at(x)], m), &Tower::pad(&val[at(y)], m)),
-                Op::Sub(x, y) => Tower::add(
+                Op::Add(x, y) => t.add(&Tower::pad(&val[at(x)], m), &Tower::pad(&val[at(y)], m))?,
+                Op::Sub(x, y) => t.add(
                     &Tower::pad(&val[at(x)], m),
                     &Tower::neg(&Tower::pad(&val[at(y)], m)),
-                ),
+                )?,
                 Op::Neg(x) => Tower::neg(&val[at(x)]),
-                Op::Mul(x, y) => t.mul(&Tower::pad(&val[at(x)], m), &Tower::pad(&val[at(y)], m), m),
+                Op::Mul(x, y) => t.mul(&Tower::pad(&val[at(x)], m), &Tower::pad(&val[at(y)], m), m)?,
                 Op::Div(x, y) => {
                     let inv = t.inv(&Tower::pad(&val[at(y)], m), m)?;
-                    t.mul(&Tower::pad(&val[at(x)], m), &inv, m)
+                    t.mul(&Tower::pad(&val[at(x)], m), &inv, m)?
                 }
                 Op::Sqrt(x) => {
                     let r = Tower::pad(&val[at(x)], m);
-                    match t.sign(&r, m) {
+                    match t.sign(&r, m)? {
                         Ordering::Less => return None,
                         Ordering::Equal => vec![Q::zero()],
                         Ordering::Greater => {
                             // the same radicand: the same root
-                            let same = (0..m).find(|&j| {
-                                Tower::is_zero(&Tower::add(&Tower::pad(&t.c[j], m), &Tower::neg(&r)))
-                            });
+                            let mut same = None;
+                            for j in 0..m {
+                                let d = t.add(&Tower::pad(&t.c[j], m), &Tower::neg(&r))?;
+                                if Tower::is_zero(&d) {
+                                    same = Some(j);
+                                    break;
+                                }
+                            }
                             let j = match same {
                                 Some(j) => j,
                                 None => {
@@ -1511,14 +1537,11 @@ impl Ctx {
                     }
                 }
             };
-            if Tower::bits(&v) > t.cap {
-                return None;
-            }
             val.push(v);
         }
         let v = val.pop()?;
         let v = Tower::pad(&v, m);
-        Some(t.sign(&v, m))
+        t.sign(&v, m)
     }
 
     /// sign(a - b), without keeping the difference.
@@ -1899,7 +1922,7 @@ mod tests {
                 let want = c.sign_by_refinement(t);
                 let order = c.closure(t);
                 if c.radicals(&order) >= 2
-                    && let Some(got) = c.tower_sign(&order, 1 << 20)
+                    && let Some(got) = c.tower_sign(&order)
                 {
                     routed += 1;
                     assert_eq!(got, want, "case {case}");
@@ -1916,6 +1939,45 @@ mod tests {
             zeros > 200 && nonzeros > 400 && routed > 300,
             "{zeros} {nonzeros} {routed}"
         );
+    }
+
+    /// Quotients nested over five and six roots square their coefficients at every level of the
+    /// tower (never reduced): unbounded, one such sign took minutes (a CAM pocket's offset, before
+    /// the tower's work was bounded). The tower gives up within its budget and the sign is still
+    /// exact (refinement's).
+    #[test]
+    fn deep_quotients_over_many_roots_stay_bounded() {
+        let mut c = Ctx::new();
+        // radicands with full 53-bit mantissas, as coordinates have
+        let roots: Vec<R> = [
+            2.123456789123457,
+            3.987654321987654,
+            5.555555555111111,
+            7.314159265358979,
+            11.2718281828459,
+            13.61803398874989,
+        ]
+        .iter()
+        .map(|&v| {
+            let l = c.lit(v);
+            c.sqrt(l)
+        })
+        .collect();
+        let mut x = c.lit(1.0);
+        for k in 0..16 {
+            let (a, b) = (roots[k % 6], roots[(k + 1) % 6]);
+            let num = c.add(x, a);
+            let den = c.add(b, roots[(k + 3) % 6]);
+            x = c.div(num, den);
+        }
+        let order = c.closure(x);
+        assert!(c.radicals(&order) >= 5);
+        // past the tower's coefficient cap within a few levels: it gives up, and refinement signs
+        assert_eq!(c.tower_sign(&order), None);
+        let near = c.lit(0.5);
+        let d = c.sub(x, near);
+        let want = c.sign_by_refinement(d);
+        assert_eq!(c.sign(d), want);
     }
 
     #[test]
