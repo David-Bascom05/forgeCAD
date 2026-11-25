@@ -114,7 +114,14 @@ pub fn capsule(b: &Body) -> Option<Capsule> {
         rho: b.rmax,
         a: 0.0,
     };
-    axis_capsule(b, c).or_else(|| disc_capsule(b))
+    // (the `old-closed-form` feature: a ball's capsule only, as before)
+    axis_capsule(b, c).or_else(|| {
+        if cfg!(feature = "old-closed-form") {
+            None
+        } else {
+            disc_capsule(b)
+        }
+    })
 }
 
 /// A body within the axis capsule `c` (every piece checked), or None.
@@ -781,6 +788,7 @@ mod tests {
     /// The same for a bull-nose cutter (its disc capsule): the bound never exceeds the sampled
     /// true minimum, and never clears where the branch and bound finds a Hit.
     #[test]
+    #[cfg(not(feature = "old-closed-form"))]
     fn a_bull_noses_bound_is_never_above_the_true_minimum() {
         let b = assemble(&Cutter::Bull { d: 10.0, re: 1.0 }, 30.0, 10.0, 40.0, None)
             .unwrap()
@@ -792,6 +800,7 @@ mod tests {
     /// A bull-nose's body has a disc capsule: its corner's radius, its corner centre's distance
     /// from the axis as the core's radius, from the corner centre's height up.
     #[test]
+    #[cfg(not(feature = "old-closed-form"))]
     fn a_bull_nose_has_a_disc_capsule() {
         let b = assemble(&Cutter::Bull { d: 10.0, re: 1.0 }, 30.0, 10.0, 40.0, None)
             .unwrap()
