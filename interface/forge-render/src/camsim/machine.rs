@@ -408,12 +408,45 @@ impl MachineView {
     }
 
     /// The machine's bodies at time t, in the part's frame (shaded); `hit` names drawn red. A
-    /// body the user attached a model to (forge_machine_builder::models: a maker's model, read
-    /// from their own library, never shipped) is drawn as that model, moving with its link; a
+    /// body with a model (forge_machine_builder::models: the user's own, else forgecad's shipped
+    /// makers' models, `models_dir`) is drawn as that model, moving with its link; a
     /// whole-machine model on the base. An enclosure is drawn see-through into `glass`, so it never
     /// hides the cut. The checks keep the record's envelopes either way.
     pub fn draw(&self, t: f64, hit: &[String], out: &mut Vec<WorldVert>) {
         self.draw_with(t, hit, out, &mut Vec::new());
+    }
+
+    /// What the collision check takes at time t, see-through amber over the drawing, in the
+    /// part's frame: each checked machine body's primitives (forge_machine::collide::
+    /// machine_bodies) and the workholding's bodies as the run checked them (`run.work`, in
+    /// their links' frames as the machine's are).
+    pub fn draw_checked(&self, t: f64, glass: &mut Vec<WorldVert>) {
+        let def = &self.run.def;
+        let q = self.q_at(t);
+        let pose = kin::pose(def, &q);
+        let w = self.to_part(&q);
+        let c = crate::viewcube::rgb(0xE8B13A);
+        let mut put = |prims: &[forge_machine::def::Prim], link: Option<usize>| {
+            let l = link.map_or(Rigid::ID, |j| pose[j].clone());
+            let m = w.then(&l);
+            let tr = crate::machine_mesh::prims_tris(prims);
+            for tri in &tr.tri {
+                for &k in tri {
+                    let mut col = super::draw::shade_pub(c, f3(m.dir(tr.nrm[k as usize])));
+                    col[3] = 0.28;
+                    glass.push(WorldVert {
+                        at: f3(m.apply(tr.pos[k as usize])),
+                        colour: col,
+                    });
+                }
+            }
+        };
+        for b in forge_machine::collide::machine_bodies(def) {
+            put(&b.prims, b.link);
+        }
+        for b in &self.run.work {
+            put(&b.prims, b.link);
+        }
     }
 
     /// `draw`, the see-through bodies (an enclosure) into `glass`.
@@ -486,8 +519,95 @@ impl MachineView {
     }
 }
 
-/// The models the user attached to a machine (their own library: `forgecad machine model
-/// attach` / `split`), each placed in the base frame at home, with the body it is drawn as (None:
+/// The folder a machine's models are drawn from: the user's own (their library: `forgecad
+/// machine model attach`), else forgecad's shipped ones (`models::drawn_dir`: the makers'
+/// published models, Git LFS), where downloaded.
+pub fn models_dir(machine: &str) -> Option<std::path::PathBuf> {
+    forge_machine_builder::models::drawn_dir(forge_machine_builder::catalog::user_dir().as_deref(), machine)
+}
+
+/// The command that fetches forgecad's shipped models of a machine, where it ships some that
+/// are not downloaded (a clone's LFS pointers) and the user has none of their own: the machine
+/// is drawn from its record's parts meanwhile.
+pub fn models_missing(machine: &str) -> Option<String> {
+    if models_dir(machine).is_some() {
+        return None;
+    }
+    forge_machine_builder::models::not_downloaded(machine).map(|(_, cmd)| cmd)
+}
+
+/// Where a machine body's geometry comes from: a model drawn in its place (its file), its
+/// record's `.fg` part, its record's primitives (the collision envelope), or nothing.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Source {
+    Model(String),
+    Part(String),
+    Prims,
+    None,
+}
+
+/// A body of a machine: what the simulation draws it as, and what the collision check
+/// (forge_machine::collide::machine_bodies) takes for it. The two are to be one (David: what's
+/// drawn is what's checked); where they are not, the test of every built-in machine names it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BodySources {
+    pub body: String,
+    pub drawn: Source,
+    pub checked: Source,
+}
+
+/// Every body of `def`: its drawn source and its checked source.
+pub fn sources(def: &forge_machine::MachineDef) -> Vec<BodySources> {
+    let models = attached(&def.name);
+    let files: Vec<(Option<String>, String)> = models_dir(&def.name)
+        .and_then(|d| forge_machine_builder::models::load_in(&d).ok())
+        .unwrap_or_default()
+        .into_iter()
+        .map(|m| (m.body, m.file))
+        .collect();
+    let checked: Vec<String> = forge_machine::collide::machine_bodies(def)
+        .into_iter()
+        .map(|b| b.name)
+        .collect();
+    def.bodies
+        .iter()
+        .map(|b| {
+            let drawn = if models
+                .iter()
+                .any(|(body, _)| body.as_deref() == Some(b.name.as_str()))
+            {
+                let f = files
+                    .iter()
+                    .find(|(body, _)| body.as_deref() == Some(b.name.as_str()))
+                    .map_or(String::new(), |x| x.1.clone());
+                Source::Model(f)
+            } else {
+                match &b.part {
+                    Some(p)
+                        if forge_machine_builder::make::builtin_part(p)
+                            .is_some_and(|src| crate::machine_mesh::part_tris(src, None).is_ok()) =>
+                    {
+                        Source::Part(p.clone())
+                    }
+                    _ if b.prims.is_empty() => Source::None,
+                    _ => Source::Prims,
+                }
+            };
+            BodySources {
+                body: b.name.clone(),
+                drawn,
+                checked: if checked.contains(&b.name) {
+                    Source::Prims
+                } else {
+                    Source::None
+                },
+            }
+        })
+        .collect()
+}
+
+/// The models a machine is drawn with (`models_dir`: the user's own library, `forgecad machine
+/// model attach` / `split`, else forgecad's shipped ones), each placed in the base frame at home, with the body it is drawn as (None:
 /// the whole machine). Read once per change of the machine's models.toml; none where it has none
 /// or a file does not read (the record's bodies are drawn then).
 fn attached(machine: &str) -> std::sync::Arc<Vec<(Option<String>, std::sync::Arc<Tris>)>> {
@@ -502,7 +622,7 @@ fn attached(machine: &str) -> std::sync::Arc<Vec<(Option<String>, std::sync::Arc
         >,
     >;
     static KEPT: OnceLock<Kept> = OnceLock::new();
-    let Some(dir) = forge_machine_builder::models::dir(machine) else {
+    let Some(dir) = models_dir(machine) else {
         return Arc::new(vec![]);
     };
     let index = dir.join(forge_machine_builder::models::INDEX);

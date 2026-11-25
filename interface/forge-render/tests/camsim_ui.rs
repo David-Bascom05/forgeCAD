@@ -507,6 +507,10 @@ fn the_flange_on_a_haas_vf2() {
         v.mark_dirty();
     }
     shot(&mut h, "native-machine-04-vf2-vise-1400x860");
+    // the geometry the collision check takes, see-through over what is drawn
+    h.gui.camsim_command("checked=1;machine=1;fit=machine").unwrap();
+    shot(&mut h, "native-machine-05-vf2-checked-1400x860");
+    h.gui.camsim_command("checked=0").unwrap();
     // the operator's view: the eye stays put in the machine, so as the table carries the part
     // the target moves in the part's frame by just the table's travel
     let target = |h: &Headless| h.gui.view.as_ref().unwrap().nav.camera.target;

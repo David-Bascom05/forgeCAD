@@ -49,6 +49,7 @@ impl Gui {
                 ui.part = old.part;
                 ui.tool = old.tool;
                 ui.fixture = old.fixture;
+                ui.checked = old.checked;
                 ui.follow = old.follow;
                 ui.shop_eye = old.shop_eye;
                 ui.detail = old.detail;
@@ -450,6 +451,9 @@ pub fn geometry(
             .flat_map(|c| [c.a.clone(), c.b.clone()])
             .collect();
         mv.draw_with(st.t, &hit, &mut solid, world);
+        if st.checked {
+            mv.draw_checked(st.t, world);
+        }
     }
     // the toolpath
     let show = PathShow {
@@ -573,6 +577,8 @@ impl Gui {
                     st.jump(f * total);
                 }
                 "machine" => st.machine = on()?,
+                // what the collision check takes for each body, see-through
+                "checked" => st.checked = on()?,
                 // the simulation's own framing: the stock and the tool's tip now (STANDARD §2)
                 "fit" if v == "sim" => refit = true,
                 "fit" => {

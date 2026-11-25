@@ -73,6 +73,10 @@ pub struct CamSimUi {
     pub fixture: bool,
     /// The machine's bodies, when a machine run plays.
     pub machine: bool,
+    /// Over them, the geometry the collision check takes for each body (its record's
+    /// primitives) and the workholding as checked, see-through: where it is not what is drawn,
+    /// it shows.
+    pub checked: bool,
     /// The toolpath coloured by a measured value per move (the workspace's colour-by).
     pub values: Option<crate::camsim::draw::Values>,
     pub follow: bool,
@@ -150,6 +154,7 @@ impl CamSimUi {
             tool: true,
             fixture: true,
             machine: true,
+            checked: false,
             values: None,
             follow: false,
             shop_eye: true,
@@ -688,6 +693,12 @@ pub fn machine_notes(st: &CamSimUi) -> Vec<String> {
             } else {
                 "the stock"
             }
+        ));
+    }
+    if let Some(cmd) = crate::camsim::machine::models_missing(&mv.run.def.name) {
+        out.push(format!(
+            "Model not downloaded: {} is drawn from its record's parts (`{cmd}` fetches it)",
+            mv.run.def.name
         ));
     }
     if mv.run.holding.is_none() {
@@ -1491,6 +1502,8 @@ fn display(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
     ui.checkbox(&mut st.fixture, "Workholding");
     if st.sim.machine().is_some() {
         ui.checkbox(&mut st.machine, "Machine");
+        ui.checkbox(&mut st.checked, "Checked geometry")
+            .on_hover_text("Shows, see-through, what the collision check takes for each body of the machine and the workholding. Where it differs from what is drawn, the drawing is not what is checked.");
     }
 }
 

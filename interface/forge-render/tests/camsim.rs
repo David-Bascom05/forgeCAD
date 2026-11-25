@@ -1054,3 +1054,55 @@ fn the_vise_sits_on_the_vf2s_table() {
     let b = bare.machines[0].as_ref().unwrap();
     assert!(b.run.holding.is_none() && b.run.seat.is_none());
 }
+
+/// What's drawn is what's checked (David): for every body of every built-in machine, the
+/// source the simulation draws it from against the one the collision check takes
+/// (camsim::machine::sources). Today the check takes each body's record primitives while the
+/// drawing takes its `.fg` part or a maker's model: every such body is a gap, counted here and
+/// listed (CAM-MACHINE's collision meshes close them: the real model, drawn and checked, one
+/// source). The count may only fall; a body drawn that the check leaves out entirely is a gap
+/// too. The workholding is drawn from the boxes the run checks (the vise test).
+#[test]
+fn what_is_drawn_against_what_is_checked() {
+    use forge_render::camsim::machine::{Source, sources};
+    let mut gaps = vec![];
+    let mut bodies = 0;
+    for def in forge_machine::library::builtin() {
+        for b in sources(&def) {
+            bodies += 1;
+            let same = matches!(
+                (&b.drawn, &b.checked),
+                (Source::Prims, Source::Prims) | (Source::None, Source::None)
+            );
+            if !same {
+                gaps.push(format!(
+                    "{} {}: drawn {:?}, checked {:?}",
+                    def.name, b.body, b.drawn, b.checked
+                ));
+            }
+        }
+    }
+    eprintln!(
+        "{} of {bodies} bodies drawn from other than what is checked:",
+        gaps.len()
+    );
+    for g in &gaps {
+        eprintln!("  {g}");
+    }
+    // every body the check takes is drawn (nothing checked unseen)
+    for def in forge_machine::library::builtin() {
+        for b in sources(&def) {
+            assert!(
+                b.checked == Source::None || b.drawn != Source::None,
+                "{} {}: checked but not drawn",
+                def.name,
+                b.body
+            );
+        }
+    }
+    // the ratchet: lower it as gaps close, never raise it (1170: every body of every built-in
+    // machine, 2026-11-25: each drawn from its `.fg` part, or a maker's model, while the check
+    // takes its record's primitives)
+    const GAPS_AT_MOST: usize = 1170;
+    assert!(gaps.len() <= GAPS_AT_MOST, "{} gaps", gaps.len());
+}
