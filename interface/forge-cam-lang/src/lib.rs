@@ -6284,6 +6284,22 @@ impl Cam {
     /// column route like the surfacing ops. With `cusp:` the stepover and step-down are the
     /// largest the scallop module proves leave at most that cusp on a plane at the op's slopes.
     #[allow(clippy::too_many_arguments)]
+    /// The setup's built ops so far, each path with its tool's profile (a tool with none, a
+    /// drill's, is left out): what the stock holds after them, as `HeightMap::sweep_path` models it.
+    fn earlier_cuts(&self, su: usize) -> Vec<(forge_cam::engage::Profile, &OpPath)> {
+        self.ops
+            .iter()
+            .filter(|o| o.setup == su && o.status == "built")
+            .filter_map(|o| {
+                Some((
+                    forge_cam::engage::Profile::of(&self.tools[o.tool?].tool)?,
+                    &o.paths,
+                ))
+            })
+            .flat_map(|(p, ps)| ps.iter().map(move |q| (p, q)))
+            .collect()
+    }
+
     fn finish3d(
         &self,
         su: usize,
@@ -6322,6 +6338,12 @@ impl Cam {
                 (s.tol, ti, h, feed, arc_min_r(&s.machine, feed.0))
             )
         );
+        // rest reads the stock the setup's earlier ops left (`earlier_cuts`): their paths too
+        let key = if kind == "rest" {
+            format!("{key} {:?}", (&s.ip, self.earlier_cuts(su)))
+        } else {
+            key
+        };
         let (paths, plan, finish) = FINISHED.get_or(key, || {
             let (mut plan, mut finish) = (Vec::new(), None);
             let r = self.finish3d_made(su, kind, a, ti, h, feed, &mut plan, &mut finish);
@@ -6670,13 +6692,36 @@ impl Cam {
                     None => get_num(a, "stepover", Some(0.1 * d))?,
                 };
                 fin.stepover = so;
-                let m = forge_cam_3d::rest::region(
+                // and only where the stock as the setup's earlier ops left it stands above what
+                // this tool leaves: their paths swept over the stock box less its voids, on cells
+                // centred on the grid's nodes (a model for where to cut, not for safety)
+                let [lo, hi] = forge_cam_3d::drop::DropCutter::extent(&dc);
+                let hc = grid / (grid / 0.1).ceil();
+                let ip = &s.ip;
+                let mut sm = forge_cam::engage::HeightMap::new(
+                    [lo[0] - 0.5 * hc, lo[1] - 0.5 * hc, ip.min[2]],
+                    [hi[0] + 0.5 * hc, hi[1] + 0.5 * hc, ip.max[2]],
+                    hc,
+                );
+                for k in 0..sm.z.len() {
+                    let x = sm.x0 + (0.5 + (k % sm.nx) as f64) * hc;
+                    let y = sm.y0 + (0.5 + (k / sm.nx) as f64) * hc;
+                    if x < ip.min[0] || x > ip.max[0] || y < ip.min[1] || y > ip.max[1] {
+                        sm.z[k] = sm.bottom;
+                    }
+                }
+                sm.lower_voids(ip);
+                for (pr, p) in self.earlier_cuts(su) {
+                    sm.sweep_path(p.start, &p.moves, &pr);
+                }
+                let m = forge_cam_3d::rest::region_in(
                     &dc,
                     &sf.check,
                     &bdc,
                     &before.check,
                     grid,
                     get_num(a, "min", Some(0.05))?,
+                    Some(&|x, y| sm.top(x, y)),
                 );
                 if !m.on.iter().any(|x| *x) {
                     return Err(
@@ -6693,6 +6738,16 @@ impl Cam {
                     &within,
                 )
                 .map_err(|x| e(format!("{x:?}")))?;
+                // each pass from where it first meets the stock the model holds to where it last
+                // does (the model lowered as the passes cut it): no run at the cutting feed over
+                // what is already finished
+                let pr = forge_cam::engage::Profile::of(&t.tool).ok_or("rest: a tool with no profile")?;
+                let rp = forge_cam_3d::rest::trim(rp, &mut |p, q| sm.sweep(p, q, &pr) > 1e-4);
+                if rp.is_empty() {
+                    return Err(
+                        "rest: nothing left by the earlier ops that this tool reaches (above `min`)".into(),
+                    );
+                }
                 vec![rp]
             }
             _ => {

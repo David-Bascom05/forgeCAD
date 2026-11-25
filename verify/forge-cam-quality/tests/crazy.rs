@@ -47,20 +47,6 @@ const KNOWN: &[(&str, &str, &str, f64, &str)] = &[
         "slot: a third of the groove's length passes again over what it cut (CAM-2D-FINISH)",
     ),
     (
-        "mold_core_cam",
-        "left",
-        "air",
-        0.76,
-        "rest machining: most of its length in air (CAM-3D-FINISH)",
-    ),
-    (
-        "mold_core_cam",
-        "left",
-        "retracts",
-        35.0,
-        "rest machining: 35 retracts for 85 mm cut (CAM-3D-FINISH)",
-    ),
-    (
         "rptu1_clear_cam",
         "nut",
         "recut",
