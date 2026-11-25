@@ -3,6 +3,7 @@
 //! the flat and its DXF marks on the FORM layer, the shop checks, typed refusals (louvres and
 //! lances unbuilt), the folded clash check catching a form against a flange and another form, a
 //! fuzz, timing.
+use forge_math::ipow::Powi as _;
 use forge_math::rng::Rng;
 use forge_math::{Frame, Point2, dmath};
 use forge_ops::{ProfileLoop, Segment};
@@ -108,7 +109,7 @@ fn closed_form(shape: FormShape, t: f64) -> (f64, f64) {
             // (-1) or away (+1): its first moment about the axis
             let sector = |c: f64, ri: f64, ro: f64, toward: f64| {
                 0.5 * b * (ro * ro - ri * ri) * c
-                    + toward * (ro.powi(3) - ri.powi(3)) * (1.0 - dmath::cos(b)) / 3.0
+                    + toward * (ro.ipow(3) - ri.ipow(3)) * (1.0 - dmath::cos(b)) / 3.0
             };
             let rim = sector(r1, ri, ro, -1.0);
             let wall = (h - (ro + pi_) * (1.0 - dmath::cos(b))) / dmath::sin(b);
@@ -132,7 +133,7 @@ fn closed_form(shape: FormShape, t: f64) -> (f64, f64) {
             let ro = die_r + t;
             let r1 = rb + ro;
             // a quarter ring sector about r = r1, bowing towards the axis
-            let rim = 0.25 * PI * (ro * ro - die_r * die_r) * r1 - (ro.powi(3) - die_r.powi(3)) / 3.0;
+            let rim = 0.25 * PI * (ro * ro - die_r * die_r) * r1 - (ro.ipow(3) - die_r.ipow(3)) / 3.0;
             let collar = (height - ro) * t * (rb + 0.5 * t);
             (
                 tau * (rim + collar) - PI * r1 * r1 * t,

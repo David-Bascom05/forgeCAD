@@ -1187,7 +1187,11 @@ impl Session {
         let mut text = src.clone();
         let mut done = Vec::new();
         for (k, op) in ops.iter().enumerate() {
-            match edit::apply_checked_in(&text, op, p.parent().map(Path::to_path_buf)) {
+            let at = edit::At {
+                dir: p.parent().map(Path::to_path_buf),
+                root: self.root.clone(),
+            };
+            match edit::apply_checked_at(&text, op, &at) {
                 Ok((next, reach)) => {
                     let mut j = Json::obj(vec![("op", op.json())]);
                     if let Some(r) = reach {

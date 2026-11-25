@@ -14,6 +14,7 @@ use forge_cam_geom::check::{Face, Surf, TSeg, Trim};
 use forge_cam_geom::ival::Ival;
 use forge_cam_geom::region::{Loop, Region, Seg, p2};
 use forge_math::dmath;
+use forge_math::ipow::Powi as _;
 
 /// The stock faces made in this thread, by stock (`InProcess::faces`), the most recently used
 /// last; at most `FACES_MAX`.
@@ -77,7 +78,7 @@ fn rect(a: [f64; 3], b: [f64; 3]) -> Region {
 
 /// Arcs as pieces of at most a quarter turn (the checker's trims take less than a half).
 fn arc_pieces(a: [f64; 2], b: [f64; 2], c: [f64; 2], ccw: bool, full: bool) -> Vec<([f64; 2], [f64; 2])> {
-    let r = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2)).sqrt();
+    let r = ((a[0] - c[0]).ipow(2) + (a[1] - c[1]).ipow(2)).sqrt();
     let t0 = dmath::atan2(a[1] - c[1], a[0] - c[0]);
     let mut t1 = if full {
         t0 + if ccw {
@@ -395,7 +396,7 @@ pub fn flat(r: &Region, z: f64, mu: f64, id: u32) -> Face {
                     b: [b.x, b.y],
                 }),
                 Seg::Arc { a, b, c, ccw } => {
-                    let rad = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+                    let rad = ((a.x - c.x).ipow(2) + (a.y - c.y).ipow(2)).sqrt();
                     for (p, q) in arc_pieces([a.x, a.y], [b.x, b.y], [c.x, c.y], ccw, a == b) {
                         segs.push(TSeg::Arc {
                             a: p,
@@ -474,7 +475,7 @@ fn walls(s: &Seg, z0: f64, z1: f64, mu: f64, id: &mut u32, out: &mut Vec<Face>) 
             *id += 1;
         }
         Seg::Arc { a, b, c, ccw } => {
-            let rad = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+            let rad = ((a.x - c.x).ipow(2) + (a.y - c.y).ipow(2)).sqrt();
             for (p, q) in arc_pieces([a.x, a.y], [b.x, b.y], [c.x, c.y], ccw, a == b) {
                 let (t0, t1) = (
                     dmath::atan2(p[1] - c.y, p[0] - c.x),

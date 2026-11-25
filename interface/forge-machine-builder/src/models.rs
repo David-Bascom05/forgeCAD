@@ -1,4 +1,4 @@
-//! Models a user attaches to a machine: their own files (a maker's STEP or STL, say), shown in
+//! Models a user attaches to a machine: their own files (a maker's STEP, Parasolid or STL, say), shown in
 //! place of a body's drawn shape while the body's primitives stay its collision envelope.
 //!
 //! - Kept in the user's library, never in a project and never fetched:
@@ -21,12 +21,16 @@ use std::path::{Path, PathBuf};
 pub enum Format {
     Step,
     Iges,
+    /// A Parasolid transmit file (.x_t text, .x_b binary): its assembly placed as the file places it.
+    Parasolid,
     Stl,
 }
 
 impl Format {
     /// The extensions the picker offers.
-    pub const EXTS: [&'static str; 5] = ["step", "stp", "igs", "iges", "stl"];
+    pub const EXTS: [&'static str; 9] = [
+        "step", "stp", "igs", "iges", "x_t", "x_b", "xmt_txt", "xmt_bin", "stl",
+    ];
 
     /// A file's format by its extension; the formats forgecad cannot read say what to send instead.
     pub fn of(name: &str) -> Result<Format, String> {
@@ -35,16 +39,19 @@ impl Format {
             "step" | "stp" => Ok(Format::Step),
             "igs" | "iges" => Ok(Format::Iges),
             "stl" => Ok(Format::Stl),
-            "x_t" | "x_b" | "xmt_txt" | "xmt_bin" => Err(format!(
-                "{name}: Parasolid files are not read by forgecad; save the model as STEP (or STL) in the program that opens it"
+            "x_t" | "x_b" | "xmt_txt" | "xmt_bin" => Ok(Format::Parasolid),
+            "sldprt" | "sldasm" | "prt" => Err(format!(
+                "{name}: a CAD program's own format; export it as Parasolid (.x_t) or STEP (or STL)"
             )),
-            "sldprt" | "sldasm" | "f3d" | "ipt" | "iam" | "prt" | "catpart" => Err(format!(
+            "f3d" | "ipt" | "iam" | "catpart" => Err(format!(
                 "{name}: a CAD program's own format; export it as STEP (or STL)"
             )),
             "3mf" | "obj" | "glb" | "gltf" => Err(format!(
                 "{name}: not read as a machine model yet; export it as STEP or STL"
             )),
-            _ => Err(format!("{name}: a machine model is a STEP, IGES or STL file")),
+            _ => Err(format!(
+                "{name}: a machine model is a STEP, IGES, Parasolid or STL file"
+            )),
         }
     }
 }
@@ -496,12 +503,14 @@ mod tests {
         assert_eq!(Format::of("Head.STP"), Ok(Format::Step));
         assert_eq!(Format::of("a.iges"), Ok(Format::Iges));
         assert_eq!(Format::of("a.stl"), Ok(Format::Stl));
+        assert_eq!(Format::of("vf2.x_t"), Ok(Format::Parasolid));
+        assert_eq!(Format::of("vf2.X_B"), Ok(Format::Parasolid));
         assert!(
-            Format::of("vf2.x_t")
+            Format::of("a.sldprt")
                 .unwrap_err()
-                .contains("save the model as STEP")
+                .contains("export it as Parasolid")
         );
-        assert!(Format::of("a.sldprt").unwrap_err().contains("export it as STEP"));
+        assert!(Format::of("a.f3d").unwrap_err().contains("export it as STEP"));
     }
 
     #[test]

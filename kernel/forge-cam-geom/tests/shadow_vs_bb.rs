@@ -8,6 +8,7 @@ use forge_cam_geom::check::{Face, Move, Surf, Verdict, certify_bb};
 use forge_cam_geom::ival::Ival;
 use forge_cam_geom::shadow;
 use forge_cam_geom::tool::{Cutter, Shape, assemble};
+use forge_math::ipow::Powi as _;
 
 struct Rng(u64);
 impl Rng {
@@ -62,7 +63,7 @@ fn sampled(body: &forge_cam_geom::tool::Body, f: &Face, mv: &Move) -> f64 {
             for k in 0..=n {
                 let a = mv.at(Ival::pt(k as f64 / n as f64));
                 let a = [a[0].mid(), a[1].mid(), a[2].mid()];
-                let rho = ((y[0] - a[0]).powi(2) + (y[1] - a[1]).powi(2)).sqrt();
+                let rho = ((y[0] - a[0]).ipow(2) + (y[1] - a[1]).ipow(2)).sqrt();
                 m = m.min(body.sd_rz(Ival::pt(rho), Ival::pt(y[2] - a[2])).mid());
             }
         }

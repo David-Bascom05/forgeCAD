@@ -3045,13 +3045,19 @@ fn variant_text<'d>(
     };
     let text = match (text, variant) {
         (Some(mut t), Some(Variant::With(xs))) => {
+            // the placed file's own place, under the same fence
+            let here = crate::edit::At {
+                dir: std::path::Path::new(&path).parent().map(|p| p.to_path_buf()),
+                root: fence.clone(),
+            };
             for (n, l) in xs {
-                t = crate::edit::apply(
+                t = crate::edit::apply_at(
                     &t,
                     &Op::SetParam {
                         param: ParamKey::shared(n),
                         value: *l,
                     },
+                    &here,
                 )
                 .map_err(|_| n.clone())?;
             }
@@ -4930,6 +4936,10 @@ fn at_text(
         );
     }
     let mut text = ev.src.to_string();
+    let here = crate::edit::At {
+        dir: ev.dir.clone(),
+        root: ev.root.clone(),
+    };
     // the document's dimensions hold while each value set keeps its param's dimension; after a
     // param of no fixed dimension is set they are worked out again from the text
     let mut fresh = false;
@@ -4938,7 +4948,7 @@ fn at_text(
             let base = done.dims.as_ref().expect("made above");
             let known = |k: &ParamKey| -> Option<Dim> {
                 if fresh {
-                    return crate::edit::param_dim(&text, k);
+                    return crate::edit::param_dim(&text, k, &here);
                 }
                 base.get(k).copied().flatten()
             };

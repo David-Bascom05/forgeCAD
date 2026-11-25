@@ -24,6 +24,7 @@
 
 use super::glyph::{Glyph, arc_points};
 use forge_math::dmath;
+use forge_math::ipow::Powi as _;
 use std::collections::HashMap;
 
 /// Polylines.
@@ -532,7 +533,7 @@ impl Pen<'_> {
         let m = [self.at[0] + dx / 2.0, self.at[1] + dy / 2.0];
         let n = [-dy / chord, dx / chord];
         let c = [m[0] + n[0] * off, m[1] + n[1] * off];
-        let r = ((self.at[0] - c[0]).powi(2) + (self.at[1] - c[1]).powi(2)).sqrt();
+        let r = ((self.at[0] - c[0]).ipow(2) + (self.at[1] - c[1]).ipow(2)).sqrt();
         let a0 = dmath::atan2(self.at[1] - c[1], self.at[0] - c[0]);
         self.arc(c, r, a0, sweep);
         // Land exactly on the target.
@@ -725,7 +726,7 @@ mod tests {
         let d: Vec<f64> = strokes
             .iter()
             .flatten()
-            .map(|p| ((p[0] - c[0]).powi(2) + (p[1] - c[1]).powi(2)).sqrt())
+            .map(|p| ((p[0] - c[0]).ipow(2) + (p[1] - c[1]).ipow(2)).sqrt())
             .collect();
         (
             d.iter().cloned().fold(0.0, f64::max),

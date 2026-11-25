@@ -98,7 +98,7 @@ pub(super) fn sheet_groups(s: &Shell) -> Vec<Group> {
         g(
             "Punch",
             vec![
-                tool("PunchTool", SheetCmd::Punch, on(SheetCmd::Punch)),
+                tool("Punch Tool", SheetCmd::Punch, on(SheetCmd::Punch)),
                 tool("Insert Hardware", SheetCmd::Hardware, on(SheetCmd::Hardware)),
             ],
             vec![],
@@ -357,6 +357,7 @@ impl Shell {
         let mut ok = false;
         let mut cancel = false;
         let defaults = self.sheet.defaults.clone();
+        let units = self.units;
         let (close, _) = self.sheet_window(
             ctx,
             "sheet:dlg",
@@ -395,7 +396,7 @@ impl Shell {
                     Self::sheet_picks(ui, &t, &mut d, places, &edges, &sketches, &loops, &points, &walls, &flanges, &sheets, &paths);
                     match d.cmd {
                         SheetCmd::Punch => Self::sheet_library(ui, &t, &mut d, places),
-                        SheetCmd::Hardware => Self::sheet_catalogue(ui, &t, &mut d, places, &catalogue),
+                        SheetCmd::Hardware => Self::sheet_catalogue(ui, &t, &mut d, places, &catalogue, units),
                         _ => {}
                     }
                 }
@@ -493,9 +494,13 @@ impl Shell {
             ui.horizontal(|ui| {
                 // Inventor's selection button: an arrow, the slot's name, red till it has picks
                 let (r, resp) = ui.allocate_exact_size(vec2(118.0, 24.0), Sense::click());
-                let p = ui.painter();
                 let empty = d.slots[k].picks.is_empty();
                 let edge = if on { t.focus } else { t.line };
+                if on {
+                    // the dialog's focus is this pick: keys go to the view (STANDARD §9)
+                    places.push(("focus:pick".into(), r));
+                }
+                let p = ui.painter();
                 p.rect_filled(r, 3.0, if on { t.on } else { t.raised });
                 p.rect_stroke(r, 3.0, Stroke::new(1.0, edge), StrokeKind::Inside);
                 icons::draw(
@@ -553,9 +558,17 @@ impl Shell {
             let choices: Vec<String> = choices.into_iter().filter(|c| !own(c)).collect();
             let picked = d.slots[k].picks.clone();
             let mut take = None;
+            // every choice shown while they're few; past that a scroll with its bar always drawn
+            // (a hidden floating bar cut the last ones off with no sign of them: the UI audit)
+            let many = choices.len() > 24;
             egui::ScrollArea::vertical()
                 .id_salt(("sheet-choices", lab))
-                .max_height(96.0)
+                .max_height(if many { 140.0 } else { f32::INFINITY })
+                .scroll_bar_visibility(if many {
+                    egui::scroll_area::ScrollBarVisibility::AlwaysVisible
+                } else {
+                    egui::scroll_area::ScrollBarVisibility::AlwaysHidden
+                })
                 .show(ui, |ui| {
                     ui.horizontal_wrapped(|ui| {
                         ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
@@ -795,8 +808,13 @@ impl Shell {
         d: &mut SheetDlg,
         places: &mut Vec<(String, Rect)>,
         rows: &[super::sheet::HwRow],
+        units: &str,
     ) {
         section(ui, t, "Catalogue");
+        // each number says what it is, with its unit (ux::show), and where it is from on hover
+        use super::ux::{Qty, System, show};
+        let sys = System::of_doc(units);
+        let len = |v: f64| show(v, Qty::Length, sys);
         let kind = d.field("#0").map_or("nut", |f| f.word());
         let size = d.field("Size").map_or(String::new(), |f| f.num().to_string());
         let mut pick = None;
@@ -804,8 +822,11 @@ impl Shell {
             .striped(true)
             .spacing(vec2(10.0, 2.0))
             .show(ui, |ui| {
-                for h in ["Type", "Size", "Hole", "Edge", "Code"] {
-                    ui.label(egui::RichText::new(h).font(medium(11.0)).color(t.ink2));
+                // the Code column only where some row has a code (a placeholder table has none)
+                let codes = rows.iter().any(|r| !r.code.is_empty());
+                let heads = ["Type", "Size", "Mounting hole", "Edge, at least", "Code"];
+                for h in &heads[..if codes { 5 } else { 4 }] {
+                    ui.label(egui::RichText::new(*h).font(medium(11.0)).color(t.ink2));
                 }
                 ui.end_row();
                 for (k, row) in rows.iter().enumerate() {
@@ -823,21 +844,29 @@ impl Shell {
                         pick = Some(k);
                     }
                     ui.label(egui::RichText::new(&row.size).font(mono(11.0)).color(t.ink));
-                    ui.label(
-                        egui::RichText::new(super::fg::short(row.hole))
-                            .font(mono(11.0))
-                            .color(t.ink),
+                    let from = row.source.as_deref().map_or_else(
+                        || "A placeholder, not a maker's table".to_string(),
+                        |s| format!("From {s}"),
                     );
-                    ui.label(
-                        egui::RichText::new(super::fg::short(row.edge))
-                            .font(mono(11.0))
-                            .color(t.ink),
-                    );
-                    ui.label(
-                        egui::RichText::new(if row.code.is_empty() { "-" } else { &row.code })
-                            .font(mono(11.0))
-                            .color(t.ink2),
-                    );
+                    ui.label(egui::RichText::new(len(row.hole)).font(mono(11.0)).color(t.ink))
+                        .on_hover_text(format!(
+                            "The mounting hole for the {} {}: \u{00d8} {}. {from}.",
+                            row.size,
+                            word.to_lowercase(),
+                            len(row.hole)
+                        ));
+                    ui.label(egui::RichText::new(len(row.edge)).font(mono(11.0)).color(t.ink))
+                        .on_hover_text(format!(
+                            "Keep the hole's centre at least {} from an edge (a bend counts as one). {from}.",
+                            len(row.edge)
+                        ));
+                    if codes {
+                        ui.label(
+                            egui::RichText::new(if row.code.is_empty() { "-" } else { &row.code })
+                                .font(mono(11.0))
+                                .color(t.ink2),
+                        );
+                    }
                     ui.end_row();
                 }
             });

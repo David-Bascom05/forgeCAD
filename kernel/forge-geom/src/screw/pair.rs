@@ -1,4 +1,4 @@
-//! Where two screw faces with straight sections about one axis, rising the same way, meet in
+//! Where two screw faces with straight sections about one axis (either way along it) meet in
 //! closed form. In the half plane at angle u (of the first face's turn) each face shows its
 //! section, carried out and up linearly in u, once per turn of the other face; two such lines
 //! cross at a point that moves linearly with u, so each crossing is a (conical) helix. Sections
@@ -7,7 +7,7 @@
 use super::{Helix, Motion, Screw, Section};
 use crate::curve::{Line, ProcCurve};
 use crate::intersect::{Contact, SurfaceSurface};
-use forge_math::{Interval, Point2, Vec2, dmath, tol};
+use forge_math::{Frame, Interval, Point2, Vec2, dmath, tol};
 use std::sync::Arc;
 
 impl Screw {
@@ -17,8 +17,26 @@ impl Screw {
         else {
             return None;
         };
-        let (f, g) = (&self.m.frame, &o.m.frame);
+        let f = &self.m.frame;
         let z = f.z();
+        // a face about the axis the other way (a nut on a stud) is the same point set read with the
+        // angle reversed: frame (x, -y, -z), drift -a, rise b, sections h -> -h, angles -U
+        // (ScrewFlip.lean `flip_point`; negations only, so exact). Its own frame's x is kept.
+        let o_g = &o.m.frame;
+        let flip = (z.get() + o_g.z().get()).length() <= tol::ANGULAR;
+        let (g, (p2, q2), (oa, ob), oue) = if flip {
+            let g = Frame::from_axes(o_g.origin, o_g.x().get(), -o_g.y().get(), -o_g.z().get())?;
+            let m = |q: Point2| Point2::new(q.x, -q.y);
+            (
+                g,
+                (m(p2), m(q2)),
+                (-o.m.a, o.m.b),
+                Interval::new(-o.ue.hi, -o.ue.lo),
+            )
+        } else {
+            (*o_g, (p2, q2), (o.m.a, o.m.b), o.ue)
+        };
+        let g = &g;
         let off = g.origin - f.origin;
         if (z.get() - g.z().get()).length() > tol::ANGULAR || (off - z * z.dot(off)).length() > tol::LINEAR {
             return None;
@@ -27,7 +45,7 @@ impl Screw {
         let phi0 = dmath::atan2(g.x().dot(f.y().get()), g.x().dot(f.x().get()));
         let h0 = z.dot(off);
         let (d1, d2) = (q1 - p1, q2 - p2);
-        let (ab1, ab2) = (Vec2::new(self.m.a, self.m.b), Vec2::new(o.m.a, o.m.b));
+        let (ab1, ab2) = (Vec2::new(self.m.a, self.m.b), Vec2::new(oa, ob));
         let p2 = Point2::new(p2.x, p2.y + h0);
         let det = d1.cross(d2);
         let (lo, hi) = (self.ue.lo, self.ue.hi);
@@ -42,8 +60,8 @@ impl Screw {
             }
         };
         let (e1, e2) = (past(d1, ab1), past(d2, ab2));
-        let k0 = ((o.ue.lo - hi + phi0) / dmath::TAU).floor() as i64;
-        let k1 = ((o.ue.hi - lo + phi0) / dmath::TAU).ceil() as i64;
+        let k0 = ((oue.lo - hi + phi0) / dmath::TAU).floor() as i64;
+        let k1 = ((oue.hi - lo + phi0) / dmath::TAU).ceil() as i64;
         let mut curves = Vec::new();
         for k in k0..=k1 {
             // u2 = u + c2 with c2 the turn's shift; the gap between the sections' starts is
@@ -51,7 +69,7 @@ impl Screw {
             let c2 = -phi0 + dmath::TAU * k as f64;
             let w0 = (p2 - p1) + ab2 * c2;
             let wu = ab2 - ab1;
-            let (mut ulo, mut uhi) = (lo.max(o.ue.lo - c2), hi.min(o.ue.hi - c2));
+            let (mut ulo, mut uhi) = (lo.max(oue.lo - c2), hi.min(oue.hi - c2));
             if ulo >= uhi {
                 continue;
             }
@@ -227,5 +245,126 @@ mod tests {
             }
         }
         assert!(checked > 200, "{checked}");
+    }
+
+    /// A face read the other way along its axis (frame (x, -y, -z), drift -a, rise b, sections
+    /// h -> -h, angles -U) is the same face to the bit: `meet_screw`'s flip (ScrewFlip.lean
+    /// `flip_point`) needs no rounding.
+    #[test]
+    fn a_face_read_the_other_way_is_the_same_to_the_bit() {
+        let mut r = Rng::new(7379);
+        let mut checked = 0;
+        for _ in 0..40 {
+            let f = rand_frame(&mut r);
+            let g = Frame::from_axes(f.origin, f.x().get(), -f.y().get(), -f.z().get()).expect("a frame");
+            let (a, b) = (r.range(-0.1, 0.1), r.range(-0.6, 0.6));
+            let lo = r.range(-20.0, 5.0);
+            let u = Interval::new(lo, lo + r.range(1.0, 15.0));
+            let loop_ = rect(r.range(2.0, 4.0), r.range(-1.0, 1.0), 1.0, 0.8, 0.1);
+            let mirrored: Vec<Section> = loop_
+                .iter()
+                .map(|s| match *s {
+                    Section::Line { a, b } => Section::Line {
+                        a: Point2::new(a.x, -a.y),
+                        b: Point2::new(b.x, -b.y),
+                    },
+                    other => other,
+                })
+                .collect();
+            let (Some(one), Some(two)) = (
+                Screw::loop_faces(f, &loop_, a, b, u),
+                Screw::loop_faces(g, &mirrored, -a, b, Interval::new(-u.hi, -u.lo)),
+            ) else {
+                continue;
+            };
+            for (s, t) in one.iter().zip(&two) {
+                for i in 0..=16 {
+                    let uu = u.lo + u.width() * i as f64 / 16.0;
+                    for v in [0.0, 0.3, 0.5, 0.9, 1.0] {
+                        let p = s.point(Point2::new(uu, v)).p;
+                        let q = t.point(Point2::new(-uu, v)).p;
+                        assert_eq!(
+                            (p.x.to_bits(), p.y.to_bits(), p.z.to_bits()),
+                            (q.x.to_bits(), q.y.to_bits(), q.z.to_bits()),
+                            "u {uu} v {v}"
+                        );
+                        checked += 1;
+                    }
+                }
+            }
+        }
+        assert!(checked > 2000, "{checked}");
+    }
+
+    /// Faces about the axis the other way (a nut's on a stud's) meet in closed form, every point of
+    /// every crossing on both faces' sections; before the flip `meet_screw` declined them all.
+    #[test]
+    fn screws_the_other_way_meet_in_closed_form() {
+        let mut r = Rng::new(7380);
+        let (mut checked, mut met) = (0, 0);
+        for _ in 0..80 {
+            let f = rand_frame(&mut r);
+            let b = r.range(0.3, 0.6);
+            // the other face's frame turned about the axis, moved along it, and turned over
+            let g0 = f
+                .rotated_about_z(r.range(0.0, 6.0))
+                .with_origin(f.origin + f.z() * r.range(-1.0, 1.0));
+            let g = Frame::from_axes(g0.origin, g0.x().get(), -g0.y().get(), -g0.z().get()).expect("a frame");
+            let one = Screw::loop_faces(f, &rect(3.0, 0.0, 1.0, 0.8, 0.1), 0.0, b, Interval::new(0.0, 7.0));
+            // rising the same way along the axis as `one`: b along g's z, which is -f's
+            let two = Screw::loop_faces(
+                g,
+                &rect(
+                    r.range(2.5, 3.5),
+                    r.range(-0.4, 0.4),
+                    1.0,
+                    0.7,
+                    if r.bool() { 0.1 } else { 0.15 },
+                ),
+                r.range(-0.1, 0.1),
+                if r.bool() { b } else { -b },
+                Interval::new(0.0, r.range(2.0, 7.0)),
+            );
+            let (Some(one), Some(two)) = (one, two) else {
+                continue;
+            };
+            for s in &one {
+                for t in &two {
+                    let got = s.meet_screw(t);
+                    assert!(got.is_some(), "declined");
+                    let Some(SurfaceSurface::Curves(cs)) = got else {
+                        continue;
+                    };
+                    met += 1;
+                    for (c, _) in cs {
+                        let (lo, hi) = match &c {
+                            crate::Curve::Procedural(pc) => (pc.domain().lo, pc.domain().hi),
+                            _ => (0.0, 0.05),
+                        };
+                        for i in 0..=8 {
+                            let u = lo + (hi - lo) * i as f64 / 8.0;
+                            let p = c.eval(u);
+                            for (sc, at) in [(s, f), (t, g)] {
+                                let l = at.point_to_local(p);
+                                let ang = forge_math::dmath::atan2(l.y, l.x);
+                                let rho = (l.x * l.x + l.y * l.y).sqrt();
+                                let Section::Line { a, b: e } = sc.ring.pieces[0].s else {
+                                    unreachable!()
+                                };
+                                let dir = (e - a).normalize().expect("a section");
+                                let on = (-12..=12).any(|k| {
+                                    let uu = ang + dmath::TAU * k as f64;
+                                    let q = Point2::new(rho - sc.m.a * uu, l.z - sc.m.b * uu);
+                                    (q - a).cross(dir).abs() < 1e-8
+                                });
+                                assert!(on, "off a face's section");
+                            }
+                            checked += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(met > 20 && checked > 200, "{met} {checked}");
     }
 }

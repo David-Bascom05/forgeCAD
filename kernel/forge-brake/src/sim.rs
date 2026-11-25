@@ -19,6 +19,7 @@ use crate::geo::{Iso3, Region, Rigid2, Seg, Slot, V3, sd_prism};
 use crate::model::{BendM, Model};
 use crate::num::Sc;
 use crate::tooling::{Die, Punch, Tooling, cover_within};
+use forge_math::ipow::Powi as _;
 use forge_math::{Interval, Point2, Vec2, dmath};
 use forge_sheet::{JointId, Strip};
 
@@ -719,7 +720,7 @@ impl<'a> StepCtx<'a> {
 
     fn may_hold(pc: &Piece, c: &Cell) -> bool {
         let p = Point2::new(c.p[0].mid(), c.p[1].mid());
-        let hd = 0.5 * (c.p[0].width().powi(2) + c.p[1].width().powi(2)).sqrt();
+        let hd = 0.5 * (c.p[0].width().ipow(2) + c.p[1].width().ipow(2)).sqrt();
         pc.region().dist_lower(p) <= hd + 1e-12
     }
 
@@ -1787,7 +1788,7 @@ impl Problem for ToolPb<'_, '_> {
     /// The tool is a prism along y: the bound in (x, z) and the exact least distance in y.
     fn lower(&self, e: &[Interval; 3]) -> (f64, f64) {
         let (y0, y1) = self.el.y;
-        let hd2 = (0.25 * (e[0].width().powi(2) + e[2].width().powi(2))).sqrt() + bb::SLACK;
+        let hd2 = (0.25 * (e[0].width().ipow(2) + e[2].width().ipow(2))).sqrt() + bb::SLACK;
         let s2 = self.el.sec.sd(Point2::new(e[0].mid(), e[2].mid())) - hd2;
         // dy(y) = max(y0 - y, y - y1) is least at the range's middle
         let ym = 0.5 * (y0 + y1);
@@ -1796,13 +1797,13 @@ impl Problem for ToolPb<'_, '_> {
         let lb = if s2 <= 0.0 && dy <= 0.0 {
             s2.max(dy)
         } else {
-            (s2.max(0.0).powi(2) + dy.max(0.0).powi(2)).sqrt()
+            (s2.max(0.0).ipow(2) + dy.max(0.0).ipow(2)).sqrt()
         };
         // past the tool's ends the cell's length along y counts too
         let size = if e[1].lo >= y0 && e[1].hi <= y1 {
             hd2
         } else {
-            (hd2 * hd2 + 0.25 * e[1].width().powi(2)).sqrt()
+            (hd2 * hd2 + 0.25 * e[1].width().ipow(2)).sqrt()
         };
         (lb, size)
     }
@@ -1866,7 +1867,7 @@ fn piece_sd(ctx: &StepCtx, pc: &Piece, p: [f64; 3]) -> (f64, f64) {
         if s2 <= 0.0 && dw <= 0.0 {
             s2.max(dw)
         } else {
-            (s2.max(0.0).powi(2) + dw.max(0.0).powi(2)).sqrt()
+            (s2.max(0.0).ipow(2) + dw.max(0.0).ipow(2)).sqrt()
         }
     };
     let exact = |d: f64| (d, d);
@@ -1933,7 +1934,7 @@ fn zone_sd_slot(b: &BendM, phi: f64, t: f64, p: [f64; 3]) -> f64 {
                 .min(r * dmath::sin((phi - psi).min(dmath::FRAC_PI_2)));
             return dr.max(dy).max(-ang);
         }
-        return (dr.max(0.0).powi(2) + dy.max(0.0).powi(2)).sqrt();
+        return (dr.max(0.0).ipow(2) + dy.max(0.0).ipow(2)).sqrt();
     }
     // past the ends: the nearer end cap (a meridian rectangle)
     let cap = |a: f64| {

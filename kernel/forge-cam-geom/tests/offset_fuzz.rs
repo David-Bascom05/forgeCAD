@@ -4,6 +4,7 @@
 //! away from a thin band around ∂C where f64 sampling cannot judge.
 use forge_cam_geom::offset::{OLoop, offset};
 use forge_cam_geom::region::{Loop, P2, Region, Seg, p2};
+use forge_math::ipow::Powi as _;
 
 struct Rng(u64);
 impl Rng {
@@ -23,7 +24,7 @@ fn polyline(segs: &[Seg]) -> Vec<P2> {
         match *s {
             Seg::Line { a, .. } => out.push(a),
             Seg::Arc { a, b, c, ccw } => {
-                let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+                let r = ((a.x - c.x).ipow(2) + (a.y - c.y).ipow(2)).sqrt();
                 let t0 = (a.y - c.y).atan2(a.x - c.x);
                 let mut t1 = (b.y - c.y).atan2(b.x - c.x);
                 if ccw {
@@ -65,7 +66,7 @@ fn winding(poly: &[P2], q: P2) -> i32 {
 fn seg_dist(a: P2, b: P2, q: P2) -> f64 {
     let (dx, dy) = (b.x - a.x, b.y - a.y);
     let t = (((q.x - a.x) * dx + (q.y - a.y) * dy) / (dx * dx + dy * dy)).clamp(0.0, 1.0);
-    ((a.x + t * dx - q.x).powi(2) + (a.y + t * dy - q.y).powi(2)).sqrt()
+    ((a.x + t * dx - q.x).ipow(2) + (a.y + t * dy - q.y).ipow(2)).sqrt()
 }
 
 fn dist(polys: &[Vec<P2>], q: P2) -> f64 {

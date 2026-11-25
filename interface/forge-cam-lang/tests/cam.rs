@@ -1,5 +1,6 @@
 //! The machining document end to end: built, certified on the posted path, and the refusals
 //! typed with fixes.
+use forge_math::ipow::Powi as _;
 use std::path::Path;
 
 fn doc(body: &str) -> String {
@@ -903,13 +904,13 @@ fn cycle_time_counts_arcs() {
             for m in &p.moves {
                 match *m {
                     forge_cam::ops::PMove::Rapid { to } => {
-                        let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2) + (to[2] - at[2]).powi(2))
+                        let l = ((to[0] - at[0]).ipow(2) + (to[1] - at[1]).ipow(2) + (to[2] - at[2]).ipow(2))
                             .sqrt();
                         t += l / 10_000.0 * 60.0;
                         at = to;
                     }
                     forge_cam::ops::PMove::Line { to, f, .. } => {
-                        let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2) + (to[2] - at[2]).powi(2))
+                        let l = ((to[0] - at[0]).ipow(2) + (to[1] - at[1]).ipow(2) + (to[2] - at[2]).ipow(2))
                             .sqrt();
                         t += l / f * 60.0;
                         len += l;
@@ -928,7 +929,7 @@ fn cycle_time_counts_arcs() {
                         if a <= 1e-12 {
                             a += std::f64::consts::TAU;
                         }
-                        let l = ((r * a).powi(2) + (to[2] - at[2]).powi(2)).sqrt();
+                        let l = ((r * a).ipow(2) + (to[2] - at[2]).ipow(2)).sqrt();
                         t += l / f * 60.0;
                         len += l;
                         at = to;
