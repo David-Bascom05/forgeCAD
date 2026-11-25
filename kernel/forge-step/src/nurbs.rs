@@ -80,50 +80,46 @@ fn basis<const N: usize>(knots: &[f64], p: usize, span: usize, t: f64, want: usi
         return;
     }
     // N'[i, k] = k (N[i, k - 1] / (u[i + k] - u[i]) - N[i + 1, k - 1] / (u[i + k + 1] - u[i + 1]));
-    // the second derivative is the same over the degree below's first derivatives
-    let ratio = |a: f64, d: f64| if d != 0.0 { a / d } else { 0.0 };
-    let first = |k: usize, j: usize| -> f64 {
-        if k == 0 {
-            return 0.0;
+    // the second derivative is the same over the degree below's first derivatives. Function j's
+    // second quotient is function j + 1's first (the same numbers divided: with i = span - k + j,
+    // N[i + 1, k - 1] / (u[i + k + 1] - u[i + 1]) both), so each quotient is worked out once
+    // q[j] = vals[j] / (u[span + j + 1] - u[span - k + j + 1]) for j in 0..k: the quotient function
+    // j's derivative subtracts, and function j + 1's adds
+    #[inline(always)]
+    fn quotients<const N: usize>(
+        knots: &[f64],
+        span: usize,
+        k: usize,
+        vals: impl Fn(usize) -> f64,
+        q: &mut [f64; N],
+    ) {
+        for j in 0..k {
+            let d = knots[span + j + 1] - knots[span - k + j + 1];
+            q[j] = if d != 0.0 { vals(j) / d } else { 0.0 };
         }
-        let i = span - k + j;
-        let a = if j >= 1 {
-            ratio(ndu[j - 1][k - 1], knots[i + k] - knots[i])
-        } else {
-            0.0
-        };
-        let b = if j < k {
-            ratio(ndu[j][k - 1], knots[i + k + 1] - knots[i + 1])
-        } else {
-            0.0
-        };
-        k as f64 * (a - b)
-    };
-    for j in 0..=p {
-        out[1][j] = first(p, j);
     }
+    // k (q[j - 1] - q[j]), the missing ends 0
+    let derivs = |k: usize, q: &[f64; N], out: &mut [f64; N]| {
+        for j in 0..=k {
+            let a = if j >= 1 { q[j - 1] } else { 0.0 };
+            let b = if j < k { q[j] } else { 0.0 };
+            out[j] = k as f64 * (a - b);
+        }
+    };
+    let mut q = [0.0; N];
+    quotients(knots, span, p, |j| ndu[j][p - 1], &mut q);
+    derivs(p, &q, &mut out[1]);
     if want == 1 {
         return;
     }
-    // the degree below's first derivatives, each once (each is used twice)
+    // the degree below's first derivatives (none at degree 0: there they are 0)
     let mut below = [0.0; N];
-    for j in 0..p {
-        below[j] = first(p - 1, j);
+    if p >= 2 {
+        quotients(knots, span, p - 1, |j| ndu[j][p - 2], &mut q);
+        derivs(p - 1, &q, &mut below);
     }
-    for j in 0..=p {
-        let i = span - p + j;
-        let a = if j >= 1 && p >= 1 {
-            ratio(below[j - 1], knots[i + p] - knots[i])
-        } else {
-            0.0
-        };
-        let b = if j < p {
-            ratio(below[j], knots[i + p + 1] - knots[i + 1])
-        } else {
-            0.0
-        };
-        out[2][j] = p as f64 * (a - b);
-    }
+    quotients(knots, span, p, |j| below[j], &mut q);
+    derivs(p, &q, &mut out[2]);
 }
 
 /// The span holding `t`: `knots[s] <= t < knots[s + 1]`, the last span taking the domain's end.

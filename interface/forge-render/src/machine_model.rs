@@ -44,21 +44,169 @@ pub fn read(name: &str, bytes: &[u8]) -> Result<Tris, String> {
             done(t, name)
         }
         Format::Step | Format::Iges => {
-            let imp = forge_step::import(bytes, &forge_step::Limits::default())
-                .map_err(|_| format!("{name}: not a model this reads"))?;
-            let mut t = Tris::default();
-            let mut failed = 0;
-            for s in &imp.solids {
-                // (the read's own drawing at this chord where it kept one: the same triangles)
-                match s.display_mesh() {
-                    Ok(m) => push(&mut t, &m.positions, &m.triangles, &m.edges),
-                    Err(_) => failed += 1,
+            // a file read before by this build: its meshes from the cache, the same triangles
+            let key = cached::key(bytes);
+            let (meshes, failed) = match cached::load(key) {
+                Some(m) => m,
+                None => {
+                    let imp = forge_step::import(bytes, &forge_step::Limits::default())
+                        .map_err(|_| format!("{name}: not a model this reads"))?;
+                    let mut meshes = Vec::new();
+                    let mut failed = 0;
+                    for s in &imp.solids {
+                        // (the read's own drawing at this chord where it kept one: the same triangles)
+                        match s.display_mesh() {
+                            Ok(m) => meshes.push(m.into_owned()),
+                            Err(_) => failed += 1,
+                        }
+                    }
+                    cached::store(key, &meshes, failed);
+                    (meshes, failed)
                 }
+            };
+            let mut t = Tris::default();
+            for m in &meshes {
+                push(&mut t, &m.positions, &m.triangles, &m.edges);
             }
             if t.tri.is_empty() && failed > 0 {
                 return Err(format!("{name}: none of its {failed} solids could be meshed"));
             }
             done(t, name)
+        }
+    }
+}
+
+/// A STEP or IGES file's display meshes on disk, by the hash of its bytes and of the sources that
+/// read and mesh it (`FORGE_KERNEL_HASH`): a file opened again is not read again. Only the
+/// renderer reads this. A cache that cannot be read or written is no failure.
+mod cached {
+    use forge_math::Point3;
+    use forge_mesh::TriMesh;
+    use std::path::PathBuf;
+
+    const MAGIC: &[u8; 8] = b"FCMODEL1";
+
+    pub fn key(bytes: &[u8]) -> u128 {
+        let mut h = forge_math::hash::Hash128::new();
+        h.str("forge-render machine model display meshes 1");
+        h.str(env!("FORGE_KERNEL_HASH"));
+        h.bytes(bytes);
+        h.finish()
+    }
+
+    fn path(key: u128) -> Option<PathBuf> {
+        let base = std::env::var_os("FORGE_RENDER_CACHE")
+            .map(PathBuf::from)
+            .or_else(forge_dirs::cache)?;
+        Some(
+            base.join("forgecad")
+                .join("models")
+                .join(format!("{key:032x}.meshes")),
+        )
+    }
+
+    /// The meshes (positions, triangles, edges) and how many solids could not be meshed, as bytes.
+    pub fn to_bytes(key: u128, meshes: &[TriMesh], failed: usize) -> Vec<u8> {
+        let mut b = Vec::new();
+        b.extend_from_slice(MAGIC);
+        b.extend_from_slice(&key.to_le_bytes());
+        let n = |b: &mut Vec<u8>, x: usize| b.extend_from_slice(&(x as u64).to_le_bytes());
+        n(&mut b, failed);
+        n(&mut b, meshes.len());
+        for m in meshes {
+            n(&mut b, m.positions.len());
+            for p in &m.positions {
+                for x in [p.x, p.y, p.z] {
+                    b.extend_from_slice(&x.to_bits().to_le_bytes());
+                }
+            }
+            n(&mut b, m.triangles.len());
+            for t in &m.triangles {
+                for i in t {
+                    b.extend_from_slice(&i.to_le_bytes());
+                }
+            }
+            n(&mut b, m.edges.len());
+            for e in &m.edges {
+                n(&mut b, e.len());
+                for i in e {
+                    b.extend_from_slice(&i.to_le_bytes());
+                }
+            }
+        }
+        b
+    }
+
+    /// `to_bytes` read back, if they are whole and for this key.
+    pub fn from_bytes(key: u128, b: &[u8]) -> Option<(Vec<TriMesh>, usize)> {
+        struct R<'a>(&'a [u8]);
+        impl R<'_> {
+            fn take<const K: usize>(&mut self) -> Option<[u8; K]> {
+                let (a, rest) = self.0.split_first_chunk::<K>()?;
+                self.0 = rest;
+                Some(*a)
+            }
+            fn n(&mut self) -> Option<usize> {
+                let x = usize::try_from(u64::from_le_bytes(self.take()?)).ok()?;
+                // no count past what the bytes could hold
+                (x <= self.0.len()).then_some(x)
+            }
+            fn f(&mut self) -> Option<f64> {
+                Some(f64::from_bits(u64::from_le_bytes(self.take()?)))
+            }
+            fn u(&mut self) -> Option<u32> {
+                Some(u32::from_le_bytes(self.take()?))
+            }
+        }
+        let mut r = R(b);
+        if &r.take::<8>()? != MAGIC || u128::from_le_bytes(r.take()?) != key {
+            return None;
+        }
+        let failed = r.n()?;
+        let mut meshes = Vec::with_capacity(r.n()?);
+        for _ in 0..meshes.capacity() {
+            let mut m = TriMesh::default();
+            for _ in 0..r.n()? {
+                m.positions.push(Point3::new(r.f()?, r.f()?, r.f()?));
+            }
+            for _ in 0..r.n()? {
+                let t = [r.u()?, r.u()?, r.u()?];
+                if t.iter().any(|&i| i as usize >= m.positions.len()) {
+                    return None;
+                }
+                m.triangles.push(t);
+            }
+            for _ in 0..r.n()? {
+                let mut e = Vec::new();
+                for _ in 0..r.n()? {
+                    let i = r.u()?;
+                    if i as usize >= m.positions.len() {
+                        return None;
+                    }
+                    e.push(i);
+                }
+                m.edges.push(e);
+            }
+            meshes.push(m);
+        }
+        r.0.is_empty().then_some((meshes, failed))
+    }
+
+    pub fn load(key: u128) -> Option<(Vec<TriMesh>, usize)> {
+        from_bytes(key, &forge_dirs::fs::read(path(key)?).ok()?)
+    }
+
+    // written whole and then moved into place, so a reader never sees half a file
+    pub fn store(key: u128, meshes: &[TriMesh], failed: usize) {
+        let Some(path) = path(key) else { return };
+        if let Some(dir) = path.parent() {
+            let _ = forge_dirs::fs::create_dir_all(dir);
+        }
+        let tmp = path.with_extension(format!("{}.tmp", forge_dirs::process_id()));
+        if forge_dirs::fs::write(&tmp, to_bytes(key, meshes, failed)).is_ok()
+            && forge_dirs::fs::rename(&tmp, &path).is_err()
+        {
+            let _ = forge_dirs::fs::remove_file(&tmp);
         }
     }
 }
@@ -133,6 +281,29 @@ pub fn placed_points(t: &Tris, m: &Model) -> Vec<[f64; 3]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Meshes cached come back the same, and only for their key and whole.
+    #[test]
+    fn cached_meshes_come_back_whole_or_not_at_all() {
+        let m = forge_mesh::TriMesh {
+            positions: vec![
+                forge_math::Point3::new(0.0, -0.0, 1.5),
+                forge_math::Point3::new(1e-300, 2.0, 3.0),
+                forge_math::Point3::new(4.0, 5.0, 6.0),
+            ],
+            triangles: vec![[0, 1, 2]],
+            edges: vec![vec![0, 1], vec![]],
+            ..Default::default()
+        };
+        let b = cached::to_bytes(7, std::slice::from_ref(&m), 2);
+        let (back, failed) = cached::from_bytes(7, &b).unwrap();
+        assert_eq!(failed, 2);
+        assert_eq!(format!("{back:?}"), format!("{:?}", vec![m]));
+        assert!(cached::from_bytes(8, &b).is_none());
+        for cut in 0..b.len() {
+            assert!(cached::from_bytes(7, &b[..cut]).is_none());
+        }
+    }
 
     #[test]
     fn an_ascii_stl_reads_and_lands_where_its_model_says() {
