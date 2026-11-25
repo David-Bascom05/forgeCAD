@@ -102,6 +102,14 @@ def prune_stale(text):
     import shutil
     # (profile, file): "debug", "release" or "wasm32-.../debug", as the Running line names it
     ran = set(re.findall(r"((?:wasm32[^/\s]*/)?(?:debug|release))/deps/([^/()\s]+-[0-9a-f]{16}(?:\.wasm)?)\)", text))
+    # wasm-tests.py prints no Running lines, only "NNs NAME-HASH.wasm: test result ...": those
+    # count as run in the wasm32 profile that holds them
+    for f in set(re.findall(r"(?:^|\s)([^/\s]+-[0-9a-f]{16}\.wasm): ", text, re.M)):
+        for t in (os.path.join(repo, "target"), os.path.join(repo, "interface/forge-render/target")):
+            for x in (os.listdir(t) if os.path.isdir(t) else []):
+                for p in ("debug", "release") if x.startswith("wasm32") else ():
+                    if os.path.exists(os.path.join(t, x, p, "deps", f)):
+                        ran.add((f"{x}/{p}", f))
     ran_names = {(p, re.sub(r"-[0-9a-f]{16}(\.wasm)?$", "", f)) for p, f in ran}
     for t in (os.path.join(repo, "target"), os.path.join(repo, "interface/forge-render/target")):
         if not os.path.isdir(t):
