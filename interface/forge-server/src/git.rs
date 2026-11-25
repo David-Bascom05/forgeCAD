@@ -17,14 +17,6 @@ fn sig(author: &str) -> Sig {
     }
 }
 
-/// Writes `text` to the document's file, which must still be the document's one canonical
-/// file (checked again now: the folder may have changed since the document opened), whole.
-fn write_doc(root: &Path, doc: &str, text: &str) -> Result<std::path::PathBuf, String> {
-    let path = crate::fsx::canonical_doc(root, doc).map_err(str::to_string)?;
-    crate::fsx::put(&path, text.as_bytes()).map_err(|e| e.to_string())?;
-    Ok(path)
-}
-
 fn history(root: &Path) -> Result<History, String> {
     match History::open(&root.join(".")) {
         Some(h) if h.work().canonicalize().ok() == root.canonicalize().ok() => Ok(h),
@@ -44,18 +36,18 @@ fn save(h: &History, path: &Path, summary: &str, who: &Sig) -> Result<(), String
 
 /// The head as named version `name`: a save, then forge-history's version tag. Returns the
 /// commit's id.
+/// `path` already holds the head (the caller wrote it, and its mark).
 pub fn version(
     root: &Path,
     doc: &str,
-    text: &str,
+    path: &Path,
     name: &str,
     author: &str,
     seq: u64,
 ) -> Result<String, String> {
-    let path = write_doc(root, doc, text)?;
     let h = history(root)?;
     let who = sig(author);
-    save(&h, &path, &format!("{name} (seq {seq})"), &who)?;
+    save(&h, path, &format!("{name} (seq {seq})"), &who)?;
     let v = h
         .create_version_as(doc, name, &format!("ForgeCAD-Seq: {seq}"), None, &who)
         .map_err(|e| format!("{e:?}"))?;
@@ -63,12 +55,11 @@ pub fn version(
 }
 
 /// The head saved after an idle period (no version tag).
-pub fn checkpoint(root: &Path, doc: &str, text: &str, seq: u64) -> Result<(), String> {
-    let path = write_doc(root, doc, text)?;
+pub fn checkpoint(root: &Path, path: &Path, seq: u64) -> Result<(), String> {
     let h = history(root)?;
     save(
         &h,
-        &path,
+        path,
         &format!("checkpoint at seq {seq}"),
         &sig("forge-server"),
     )

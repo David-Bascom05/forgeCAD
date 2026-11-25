@@ -11,6 +11,8 @@ use crate::{Refusal, Store};
 
 /// The most entries a joining client is sent one by one; further behind, it gets a snapshot.
 pub const CATCH_UP: u64 = 1024;
+/// ... and at most this many bytes of them.
+pub const CATCH_UP_BYTES: usize = 1 << 20;
 
 /// A connection, by the host's number for it.
 pub type Conn = u64;
@@ -66,16 +68,16 @@ impl Room {
         });
         let you = author.to_string();
         let head = self.seq.seq();
-        // far behind: a snapshot, not a catch-up that could overflow the connection's queue
-        let Some(seq) = seq.filter(|&s| s <= head && head - s <= CATCH_UP) else {
-            return vec![(
-                conn,
-                Down::Welcome {
-                    seq: head,
-                    text: self.seq.head().to_string(),
-                    you,
-                },
-            )];
+        // a catch-up only when the log still has every entry missed and they are few and small;
+        // else a snapshot (it is bounded by the document's own size)
+        let catch_up = seq.filter(|&s| {
+            s <= head
+                && head - s <= CATCH_UP
+                && s >= self.seq.floor()
+                && self.seq.bytes_since(s) <= CATCH_UP_BYTES
+        });
+        let Some(seq) = catch_up else {
+            return vec![(conn, self.snapshot(you))];
         };
         let mut out = vec![(
             conn,
@@ -83,12 +85,22 @@ impl Room {
                 seq,
                 text: String::new(),
                 you,
+                snap: false,
             },
         )];
-        for e in self.seq.since(seq) {
+        for e in self.seq.since(seq).into_iter().flatten() {
             out.push((conn, down_for(e, client)));
         }
         out
+    }
+
+    fn snapshot(&self, you: String) -> Down {
+        Down::Welcome {
+            seq: self.seq.seq(),
+            text: self.seq.head().to_string(),
+            you,
+            snap: true,
+        }
     }
 
     pub fn leave(&mut self, conn: Conn) {
@@ -161,6 +173,7 @@ impl Room {
                 (vec![], vec![Action::Version { name, author, conn }])
             }
             Up::Ping { t } => (vec![(conn, Down::Pong { t })], vec![]),
+            Up::Resync => (vec![(conn, self.snapshot(author))], vec![]),
         }
     }
 

@@ -608,6 +608,7 @@ dependencies = [
  "forge-history",
  "forge-lang",
  "forge-remote",
+ "forge-server",
  "forge-sync",
  "forge-ws",
 ]

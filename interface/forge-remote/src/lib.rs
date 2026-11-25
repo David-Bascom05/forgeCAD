@@ -40,12 +40,36 @@ pub fn remote(project: &Path) -> Option<Result<Remote, String>> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
         Err(e) => return Some(Err(format!("{}: {e}", p.display()))),
     };
-    let user = forge_dirs::config().map(|d| d.join("forgecad").join("remotes.toml"));
-    let user_text = user
-        .as_ref()
+    let user_text = user_file()
         .and_then(|u| std::fs::read_to_string(u).ok())
         .unwrap_or_default();
-    Some(resolve(&text, &user_text).map_err(|e| format!("{}: {e}", p.display())))
+    let here = project.canonicalize().unwrap_or_else(|_| project.to_path_buf());
+    Some(resolve_for(&text, &user_text, Some(&here)).map_err(|e| format!("{}: {e}", p.display())))
+}
+
+static USER_FILE: std::sync::Mutex<Option<std::path::PathBuf>> = std::sync::Mutex::new(None);
+
+/// The user's remotes file: `<config>/forgecad/remotes.toml` (a relative `XDG_CONFIG_HOME` is
+/// ignored, as the XDG spec says: it would make the file depend on the working folder, which a
+/// project chooses), or the one [`set_user_file`] named.
+pub fn user_file() -> Option<std::path::PathBuf> {
+    let set = USER_FILE.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    set.or_else(|| {
+        let c = forge_dirs::config().filter(|c| c.is_absolute()).or_else(|| {
+            let h = forge_dirs::home().filter(|h| h.is_absolute())?;
+            Some(if cfg!(windows) || cfg!(target_os = "macos") {
+                forge_dirs::config()?
+            } else {
+                h.join(".config")
+            })
+        })?;
+        c.is_absolute().then(|| c.join("forgecad").join("remotes.toml"))
+    })
+}
+
+/// Uses `path` as the user's remotes file in this process (tests; an app setting).
+pub fn set_user_file(path: Option<std::path::PathBuf>) {
+    *USER_FILE.lock().unwrap_or_else(|e| e.into_inner()) = path;
 }
 
 /// `key = "value"` lines, grouped by `[section]` (the few TOML forms these files use).
@@ -83,6 +107,13 @@ fn sections(text: &str) -> Result<Sections, String> {
 
 /// The project's `remote.toml` resolved against the user's `remotes.toml`.
 pub fn resolve(project: &str, user: &str) -> Result<Remote, String> {
+    resolve_for(project, user, None)
+}
+
+/// [`resolve`], for the project folder `at`: an entry with `projects = "/a, /b"` serves only
+/// projects inside one of those folders (so a project elsewhere naming it is refused: the
+/// user's trust in a remote is for their own projects, not any folder that names it).
+pub fn resolve_for(project: &str, user: &str, at: Option<&Path>) -> Result<Remote, String> {
     let proj = sections(project)?;
     let top = &proj[0].1;
     if proj.len() > 1 || top.keys().any(|k| k != "remote") {
@@ -118,6 +149,19 @@ pub fn resolve(project: &str, user: &str) -> Result<Remote, String> {
             "[remote.{name}]: {host} is not this machine, and phase 1 has no TLS: the token would cross the network \
              in clear (insecure_lan = true to send it anyway)"
         ));
+    }
+    if let Some(list) = e.get("projects") {
+        let inside = at.is_some_and(|at| {
+            list.split(',')
+                .map(str::trim)
+                .filter(|p| !p.is_empty())
+                .any(|p| Path::new(p).is_absolute() && at.starts_with(p))
+        });
+        if !inside {
+            return Err(format!(
+                "[remote.{name}] serves only the projects under {list:?}: this one is elsewhere"
+            ));
+        }
     }
     let token = match (e.get("token"), e.get("token_env")) {
         (Some(t), _) => t.clone(),
@@ -163,6 +207,11 @@ struct Shared {
     /// When this client last sent anything (it pings when quiet: the server closes connections
     /// it has heard nothing from).
     last_sent: Instant,
+    /// When this client last heard anything (a link quiet for 3 pings is dead: dropped, and the
+    /// connection thread reconnects).
+    last_heard: Instant,
+    /// How often a quiet client pings.
+    ping: Duration,
     /// When each own op was sent (for the round trip to its ack).
     sent: std::collections::HashMap<u64, Instant>,
     /// Round trips from send to ack, in ms.
@@ -203,6 +252,16 @@ pub const PING: Duration = Duration::from_secs(20);
 impl Session {
     /// Starts the connection thread for `doc` (the document's path relative to the project).
     pub fn start(remote: &Remote, doc: &str, waker: Option<Waker>) -> Result<Session, String> {
+        Session::start_with(remote, doc, waker, PING)
+    }
+
+    /// [`start`](Self::start), pinging every `ping` when quiet (tests).
+    pub fn start_with(
+        remote: &Remote,
+        doc: &str,
+        waker: Option<Waker>,
+        ping: Duration,
+    ) -> Result<Session, String> {
         let (addr, path) = split_url(&remote.url)?;
         let shared = Arc::new(Mutex::new(Shared {
             client: Client::new(doc, &client_id(), &remote.token),
@@ -210,6 +269,8 @@ impl Session {
             writer: None,
             connected: false,
             last_sent: Instant::now(),
+            last_heard: Instant::now(),
+            ping,
             sent: Default::default(),
             acks_ms: vec![],
         }));
@@ -225,9 +286,17 @@ impl Session {
             .name(format!("forge-remote ping {doc}"))
             .spawn(move || {
                 while !stop3.load(Ordering::SeqCst) {
-                    std::thread::sleep(Duration::from_millis(500));
+                    let ping = s3.lock().unwrap_or_else(|e| e.into_inner()).ping;
+                    std::thread::sleep((ping / 4).min(Duration::from_millis(500)));
                     let mut s = s3.lock().unwrap_or_else(|e| e.into_inner());
-                    if s.connected && s.last_sent.elapsed() >= PING {
+                    if s.connected && s.last_heard.elapsed() >= ping * 3 {
+                        // a half-open link (no reply to three pings): drop it; it reconnects
+                        if let Some(w) = &s.writer {
+                            let _ = w.stream().shutdown(std::net::Shutdown::Both);
+                        }
+                        s.writer = None;
+                        s.connected = false;
+                    } else if s.connected && s.last_sent.elapsed() >= ping {
                         s.client.outbox.push(Up::Ping { t: 0.0 });
                         s.flush();
                     }
@@ -333,6 +402,7 @@ fn run(addr: &str, path: &str, shared: &Mutex<Shared>, stop: &AtomicBool, waker:
     let mut backoff = Duration::from_millis(50);
     while !stop.load(Ordering::SeqCst) {
         let Ok((mut r, w)) = forge_ws::connect(addr, path, &[], MAX_MESSAGE) else {
+            // (connect's own wait is the OS's; then backoff)
             std::thread::sleep(backoff);
             backoff = (backoff * 2).min(Duration::from_secs(5));
             continue;
@@ -341,8 +411,11 @@ fn run(addr: &str, path: &str, shared: &Mutex<Shared>, stop: &AtomicBool, waker:
         // no read timeout: a timeout in the middle of a frame would leave the framing out of
         // step (the security review's finding); quiet links are kept alive by the pinger thread,
         // and a dead one ends in a reset or in the server's idle close
+        // writes are made under the session's lock: never one that can block for long
+        let _ = w.stream().set_write_timeout(Some(Duration::from_secs(10)));
         {
             let mut s = lock();
+            s.last_heard = Instant::now();
             s.writer = Some(w);
             s.connected = true;
             // Hello (from the last seq applied) and every pending op again
@@ -357,6 +430,7 @@ fn run(addr: &str, path: &str, shared: &Mutex<Shared>, stop: &AtomicBool, waker:
                 Ok(forge_ws::Msg::Text(t)) => {
                     let Ok(d) = Down::parse(&t) else { break };
                     let mut s = lock();
+                    s.last_heard = Instant::now();
                     let acked = match &d {
                         Down::Ack { id, .. } => Some(*id),
                         _ => None,
@@ -426,11 +500,79 @@ mod tests {
             let e = resolve(proj, user).unwrap_err();
             assert!(e.contains(why), "{proj}: {e}");
         }
+        // a remote bound to the user's projects serves no project elsewhere
+        let bound = "[remote.lab]\nurl = \"ws://127.0.0.1:7878/sync\"\ntoken = \"abc\"\nprojects = \"/home/me/cad\"\n";
+        assert!(resolve_for("remote = \"lab\"\n", bound, Some(Path::new("/home/me/cad/x"))).is_ok());
+        let e = resolve_for("remote = \"lab\"\n", bound, Some(Path::new("/tmp/cloned"))).unwrap_err();
+        assert!(e.contains("elsewhere"), "{e}");
         let lan = user.replace("[remote.far]\n", "[remote.far]\ninsecure_lan = true\n");
         assert!(resolve("remote = \"far\"\n", &lan).is_ok());
         let d = std::env::temp_dir().join(format!("forge-remote-{}", std::process::id()));
         std::fs::create_dir_all(&d).unwrap();
         assert!(remote(&d).is_none(), "no file: LOCAL");
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// The review's 11: a frame cut in two by a pause (longer than the ping interval) is read
+    /// whole, never out of step; and a quiet client pings by the clock.
+    #[test]
+    fn a_split_frame_and_pings_by_the_clock() {
+        use std::io::Write;
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let at = l.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (s, _) = l.accept().unwrap();
+            let raw = s.try_clone().unwrap();
+            let (mut r, _w, _) = forge_ws::accept(s, 1 << 20, |_| Ok(())).unwrap();
+            let hello = match r.read().unwrap() {
+                forge_ws::Msg::Text(t) => Up::parse(&t).unwrap(),
+                x => panic!("{x:?}"),
+            };
+            assert!(matches!(hello, Up::Hello { .. }));
+            let welcome = Down::Welcome {
+                seq: 0,
+                text: "shared w = 4\n".repeat(20),
+                you: "dev".into(),
+                snap: true,
+            }
+            .text();
+            let mut f = vec![0x81u8, 126];
+            f.extend_from_slice(&(welcome.len() as u16).to_be_bytes());
+            f.extend_from_slice(welcome.as_bytes());
+            let mut raw = raw;
+            raw.write_all(&f[..f.len() / 2]).unwrap();
+            std::thread::sleep(Duration::from_millis(500));
+            raw.write_all(&f[f.len() / 2..]).unwrap();
+            // a ping comes by the clock while the server says nothing
+            let t0 = Instant::now();
+            loop {
+                match r.read().unwrap() {
+                    forge_ws::Msg::Text(t) if matches!(Up::parse(&t), Ok(Up::Ping { .. })) => {
+                        break t0.elapsed();
+                    }
+                    _ => {}
+                }
+            }
+        });
+        let remote = Remote {
+            name: "t".into(),
+            url: format!("ws://{at}/sync"),
+            token: "x".into(),
+        };
+        let s = Session::start_with(&remote, "p.fg", None, Duration::from_millis(300)).unwrap();
+        let t0 = Instant::now();
+        while !s.ready() {
+            assert!(
+                t0.elapsed() < Duration::from_secs(5),
+                "the split Welcome was never read"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(s.text(), "shared w = 4\n".repeat(20), "read whole, in step");
+        let waited = server.join().unwrap();
+        assert!(
+            waited < Duration::from_millis(1500),
+            "a ping within the interval: {waited:?}"
+        );
     }
 }
