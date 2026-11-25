@@ -1,0 +1,13 @@
+# haas-vf-2 base (envelope: floor to the published base-top height)
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared x0 = -456
+shared y0 = -237
+shared z0 = -888
+shared lx = 912
+shared ly = 1459
+shared lz = 540.56
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (lx, ly))
+}
+block = extrude(plan, lz)
