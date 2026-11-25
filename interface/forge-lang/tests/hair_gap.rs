@@ -46,13 +46,16 @@ fn part(d: f64) -> String {
 #[test]
 fn a_bore_a_hair_inside_a_tapped_m5_builds_right_or_is_refused() {
     // each diameter on a thread of its own: twelve builds one after another were 6 s
-    let map: Vec<String> = std::thread::scope(|s| {
-        let all: Vec<_> = DIAMETERS
-            .into_iter()
-            .map(|d| s.spawn(move || format!("{d:<8} {}", verdict(d))))
-            .collect();
-        all.into_iter().map(|t| t.join().unwrap()).collect()
-    });
+    // (wasm has no threads: one after another there)
+    let one = |d: f64| format!("{d:<8} {}", verdict(d));
+    let map: Vec<String> = if cfg!(target_family = "wasm") {
+        DIAMETERS.into_iter().map(one).collect()
+    } else {
+        std::thread::scope(|s| {
+            let all: Vec<_> = DIAMETERS.into_iter().map(|d| s.spawn(move || one(d))).collect();
+            all.into_iter().map(|t| t.join().unwrap()).collect()
+        })
+    };
     eprintln!("{}", map.join("\n"));
 }
 
