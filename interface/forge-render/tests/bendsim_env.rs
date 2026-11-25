@@ -1756,3 +1756,75 @@ fn a_480_px_window_enters_without_a_panic() {
         }
     }
 }
+
+/// The eye goes to every station the part moves to (David: "the camera only moves on the last
+/// tool"): played as a recording plays it (Follow bend), at each step's bend the eye's target
+/// stands at that step's station along the bed, every station change, not only those that put
+/// the part near the frame's edge.
+#[test]
+fn the_eye_goes_to_every_station() {
+    let Some(mut h) = headless() else { return };
+    let part = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/sheetmetal/load_tray.fg");
+    open(&mut h, part);
+    click(&mut h, "tab:Environments");
+    click(&mut h, "tool:Bend Simulation");
+    let c = Choice {
+        press: Some("trumpf-trubend-5130".into()),
+        stations_auto: true,
+        ..Choice::default()
+    };
+    h.gui.shell.sheet.bend_sim.as_mut().unwrap().redo(c, "std-eu");
+    for _ in 0..4 {
+        h.step();
+    }
+    let total = h.gui.shell.env_timeline().unwrap().duration(&h.gui.shell);
+    let n = 240;
+    h.gui.shell.env_timeline().unwrap().seek(&mut h.gui.shell, 0.0);
+    for _ in 0..20 {
+        h.step();
+    }
+    let mut seen = std::collections::BTreeMap::new();
+    for i in 0..n {
+        let tl = h.gui.shell.env_timeline().unwrap();
+        tl.seek(&mut h.gui.shell, total * i as f64 / (n - 1) as f64);
+        h.step();
+        let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
+        // the middle of the bend: the eye has had the handling's end, the gauge and the approach
+        if (b.t - 0.55).abs() > 0.03 {
+            continue;
+        }
+        let sim = b.sim.as_ref().unwrap();
+        let st = &sim.plan.steps[b.step];
+        let y = sim.tooling.stations[st.station.expect("staged")].y as f32;
+        let eye = h.gui.view.as_ref().unwrap().nav.camera.target[1];
+        seen.insert(b.step, (st.station.unwrap(), y, eye));
+    }
+    // why each bend has its tools (David): the first bend at a station chosen from what was
+    // tried, a later one at the same station kept
+    {
+        let sim = h.gui.shell.sheet.bend_sim.as_ref().unwrap().sim.as_ref().unwrap();
+        let (first, list) = forge_render::shell::bendsim::why_tools(sim, 0);
+        assert!(first.starts_with("chosen from ") && first.contains("setups tried"), "{first}");
+        assert!(!list.is_empty());
+        let (second, _) = forge_render::shell::bendsim::why_tools(sim, 1);
+        assert!(second.starts_with("kept: station 1"), "{second}");
+    }
+    // the shots: step 3's move to station 2 (its caption), and the overview's chips
+    {
+        let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+        b.playing = false;
+        b.step = 2;
+        b.t = 0.2;
+    }
+    shot(&mut h, "ux-station-change-caption");
+    click(&mut h, "tool:Press Overview");
+    for _ in 0..20 {
+        h.step();
+    }
+    shot(&mut h, "ux-overview-station-chips");
+    let stations: std::collections::BTreeSet<usize> = seen.values().map(|x| x.0).collect();
+    assert!(stations.len() >= 3, "{seen:?}");
+    for (k, (s, y, eye)) in &seen {
+        assert!((eye - y).abs() < 15.0, "step {} at S{}: the eye at y {eye:.0}, the station at {y:.0}", k + 1, s + 1);
+    }
+}

@@ -591,11 +591,14 @@ pub fn chips(ui: &Ui, view: Rect, camera: Option<(crate::camera::Camera, (u32, u
             "punch {} · die {}",
             sim.tooling.punches[st.punch].id, sim.tooling.dies[st.die].id
         );
+        // the stacks' lengths too: why the same tools stand at two stations (the coordinator)
         let text = format!(
-            "S{} · {} punch / {} die · {}",
+            "S{} · {} punch / {} die · stacks {:.0}/{:.0} mm · {}",
             k + 1,
             short(&sim.tooling.punches[st.punch].id),
             short(&sim.tooling.dies[st.die].id),
+            st.punch_length,
+            st.die_length,
             if bends.is_empty() {
                 "no bends".to_string()
             } else {

@@ -1452,6 +1452,58 @@ fn doc_buttons(ui: &mut egui::Ui, st: &mut BendSimUi) {
 }
 
 /// A row of the property sheet: its label, its value (with its unit), its key on hover.
+/// Why a step has its tools, in a line, and the setups tried with the rule each failed (its hover).
+pub fn why_tools(sim: &Sim, k: usize) -> (String, String) {
+    let Some(s) = sim.plan.steps.get(k) else {
+        return (String::new(), String::new());
+    };
+    let tried = s.rejected.len() + 1;
+    if s.rejected.is_empty() {
+        let line = match (s.station, k) {
+            (Some(j), _) if k > 0 && sim.plan.steps[..k].iter().any(|p| p.station == Some(j)) => {
+                format!("kept: station {}'s tools pass", j + 1)
+            }
+            (Some(j), _) => format!("station {}'s tools pass, the first tried", j + 1),
+            _ => "the first setup tried passes".to_string(),
+        };
+        return (line, String::new());
+    }
+    // the rules the others failed, the most common first
+    let mut by: Vec<(fb::Rule, usize)> = Vec::new();
+    for r in &s.rejected {
+        match by.iter_mut().find(|x| x.0 == r.3) {
+            Some(x) => x.1 += 1,
+            None => by.push((r.3, 1)),
+        }
+    }
+    by.sort_by_key(|x| std::cmp::Reverse(x.1));
+    let top: Vec<String> = by
+        .iter()
+        .take(3)
+        .map(|(r, n)| format!("{n} {}", cards::rule_failed(*r)))
+        .collect();
+    let more = if by.len() > 3 { " · …" } else { "" };
+    let line = format!("chosen from {tried} setups tried: {}{more}", top.join(" · "));
+    let mut list: Vec<String> = s
+        .rejected
+        .iter()
+        .take(40)
+        .map(|(p, d, rot, r)| {
+            format!(
+                "{} punch on {} die{}: {}",
+                super::bendsim_env::tool_words(p),
+                super::bendsim_env::tool_words(d),
+                if *rot { ", turned" } else { "" },
+                cards::rule_failed(*r)
+            )
+        })
+        .collect();
+    if s.rejected.len() > 40 {
+        list.push(format!("… and {} more", s.rejected.len() - 40));
+    }
+    (line, list.join("\n"))
+}
+
 fn prop(ui: &mut egui::Ui, t: &Theme, label: &str, value: String, key: Option<&str>) {
     let r = ui.label(egui::RichText::new(label).color(t.ink2));
     if let Some(k) = key {
@@ -1752,6 +1804,15 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                         None,
                     );
                 }
+                // why these tools (David): what the planner tried for this bend and why each
+                // went, or that it kept the tools on the bed
+                let (line, list) = why_tools(sim, st.step);
+                ui.label(egui::RichText::new("Why").color(t.ink2));
+                let r = ui.add(egui::Label::new(egui::RichText::new(line).color(t.ink)).wrap());
+                if !list.is_empty() {
+                    r.on_hover_text(list);
+                }
+                ui.end_row();
             });
         head(ui, t, "Press");
         egui::Grid::new("bendsim-sheet-press")
@@ -2368,6 +2429,25 @@ pub fn overlay(ui: &egui::Ui, rect: egui::Rect, st: &mut BendSimUi) {
             ),
             egui::Color32::from_gray(230),
         ));
+        // the part moved to another station (its tools, its stacks): said while it goes there and
+        // is set to the stop, brief (David: each new tool shown)
+        let moved = s.station.filter(|_| matches!(stage, Stage::Handle | Stage::Gauge | Stage::Approach)).filter(|&j| {
+            st.step == 0 || sim.plan.steps[st.step - 1].station != Some(j)
+        });
+        if let Some(j) = moved {
+            let ss = &sim.tooling.stations[j];
+            lines.push((
+                format!(
+                    "To station {} · {} punch / {} die · stacks {:.0} / {:.0} mm",
+                    j + 1,
+                    super::bendsim_env::tool_words(&sim.tooling.punches[ss.punch].id),
+                    super::bendsim_env::tool_words(&sim.tooling.dies[ss.die].id),
+                    ss.punch_length,
+                    ss.die_length
+                ),
+                egui::Color32::from_rgb(140, 190, 255),
+            ));
+        }
         if stage == Stage::Handle {
             let h = s.checks.iter().find(|c| c.rule == fb::Rule::Handling);
             lines.push(match h {

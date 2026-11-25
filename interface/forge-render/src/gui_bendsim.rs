@@ -38,6 +38,10 @@ pub struct BendView {
     /// The working station's place along the bed when framed: the part moved to another
     /// station, the eye follows it there.
     station: Option<u64>,
+    /// The station the eye was last brought to (framed there, or panned there by Follow bend): a
+    /// step at another one pans the eye along the bed to it (David: the eye goes to each station
+    /// the part moves to, and holds through the handling there).
+    followed: Option<u64>,
     /// The press's parts cut away for the eye (the Work framing's near walls), and the framed
     /// subject they are cut for (none in Press Overview).
     cut: Vec<String>,
@@ -834,6 +838,7 @@ impl Gui {
             }
             self.bend.framed = true;
             self.bend.goal = None;
+            self.bend.followed = at;
         }
         self.bend.station = at;
         self.bend.step = Some(step);
@@ -883,6 +888,16 @@ impl Gui {
         // the operator's handling (the pull out, the turns) starts no move: the eye stands still
         // through it and the part comes back to the tools where the eye is (David)
         let handling = forge_brake::scene::stage_at(b.t).0 == forge_brake::scene::Stage::Handle;
+        // the part at another station: the eye pans along the bed to it, its height and distance
+        // kept, once the handling is over (before the bend is made there)
+        if self.bend.goal.is_none() && !handling && self.bend.station != self.bend.followed {
+            if let Some(y) = self.bend.station.map(|y| f64::from_bits(y) as f32) {
+                let mut t = cam.target;
+                t[1] = y;
+                self.bend.goal = Some(((cam.target, cam.dist), (t, cam.dist), 0));
+            }
+            self.bend.followed = self.bend.station;
+        }
         if self.bend.goal.is_none() && !handling {
             let m = cam.view(v.size.0.max(1), v.size.1.max(1)).matrix;
             let ndc = |p: [f32; 3]| {
