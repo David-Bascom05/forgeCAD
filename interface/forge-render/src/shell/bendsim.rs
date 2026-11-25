@@ -1121,19 +1121,79 @@ pub fn layout_ui(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) {
     for (k, s) in tl.stations.iter().enumerate() {
         let Some(n) = names.get(k) else { continue };
         let (punch, die) = (&tl.punches[s.punch], &tl.dies[s.die]);
-        ui.label(egui::RichText::new(n).font(super::theme::semi(11.5)).color(t.ink));
-        ui.label(
-            egui::RichText::new(cards::tool_title(cat, &punch.id, true))
-                .small()
-                .color(t.ink2),
-        )
-        .on_hover_text(&punch.id);
-        ui.label(
-            egui::RichText::new(cards::tool_title(cat, &die.id, false))
-                .small()
-                .color(t.ink2),
-        )
-        .on_hover_text(&die.id);
+        let used = sim.plan.steps.iter().filter(|x| x.station == Some(k)).count();
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(n).font(super::theme::semi(11.5)).color(t.ink));
+            // a station no bend works at can go (David: add or remove a station); one in use
+            // says which bends are there
+            let can = used == 0 && tl.stations.len() > 1;
+            let r = ui.add_enabled(can, egui::Button::new(egui::RichText::new("Remove").small()));
+            let r = if can {
+                r.on_hover_text("take this station off the bed")
+            } else if used > 0 {
+                r.on_disabled_hover_text(format!(
+                    "{used} bend{} work{} here: move {} to another station first",
+                    if used == 1 { "" } else { "s" },
+                    if used == 1 { "s" } else { "" },
+                    if used == 1 { "it" } else { "them" }
+                ))
+            } else {
+                r.on_disabled_hover_text("the only station on the bed")
+            };
+            if r.clicked() {
+                op = Some(Op::DeleteFeature { id: n.clone() });
+            }
+        });
+        // its punch and die, chosen from the tools the simulation has (David: set up or change
+        // the tools by hand); the change is an edit of the bending document, simulated again at
+        // once: the panel says whether the program still passes
+        for (arg, is_punch, cur) in [("punch", true, &punch.id), ("die", false, &die.id)] {
+            // the library's tools (the simulation's own set holds only the stations' tools), those
+            // whose records are whole; the ones already on the bed first
+            let mut ids: Vec<String> = if is_punch {
+                tl.punches.iter().map(|x| x.id.clone()).collect()
+            } else {
+                tl.dies.iter().map(|x| x.id.clone()).collect()
+            };
+            if let Some(c) = cat {
+                let more: Vec<String> = if is_punch {
+                    c.punches.iter().filter(|r| r.punch.is_ok()).map(|r| r.id.clone()).collect()
+                } else {
+                    c.dies.iter().filter(|r| r.die.is_ok()).map(|r| r.id.clone()).collect()
+                };
+                for id in more {
+                    if !ids.contains(&id) {
+                        ids.push(id);
+                    }
+                }
+            }
+            let mut pick: Option<String> = None;
+            egui::ComboBox::from_id_salt(("bendsim-station-pick", k, arg))
+                .width(ui.available_width().min(260.0))
+                .selected_text(egui::RichText::new(cards::tool_title(cat, cur, is_punch)).small())
+                .height(320.0)
+                .show_ui(ui, |ui| {
+                    for id in &ids {
+                        if ui
+                            .selectable_label(id == cur, cards::tool_title(cat, id, is_punch))
+                            .on_hover_text(id.as_str())
+                            .clicked()
+                            && id != cur
+                        {
+                            pick = Some(id.clone());
+                        }
+                    }
+                })
+                .response
+                .on_hover_text(format!("{arg}: {cur}"));
+            if let Some(id) = pick {
+                op = Some(Op::SetArg {
+                    id: n.clone(),
+                    arg: arg.into(),
+                    text: format!("{id:?}"),
+                });
+            }
+        }
         // the stack's capacity: the least rated load per metre of its punch and die times its
         // length, against the most force a step at it takes (with the material's strength)
         let cap = punch
@@ -1187,6 +1247,37 @@ pub fn layout_ui(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) {
                     }
                 });
             });
+    }
+    // a station added: the last one's tools, in the bed's first free place past the others
+    if ui
+        .button(egui::RichText::new("Add station").small())
+        .on_hover_text("a station with the last one's tools, past the others on the bed")
+        .clicked()
+        && let Some(last) = tl.stations.last()
+    {
+        let reach = tl
+            .stations
+            .iter()
+            .map(|s| s.y + 0.5 * s.punch_length.max(s.die_length))
+            .fold(f64::MIN, f64::max);
+        let len = last.punch_length.max(last.die_length);
+        let y = ((reach + 20.0 + 0.5 * len) / 5.0).round() * 5.0;
+        let room = 0.5 * tl.press.bed_length - 0.5 * len;
+        if y <= room {
+            let mut i = names.len() + 1;
+            while names.iter().any(|x| *x == format!("s{i}")) {
+                i += 1;
+            }
+            op = Some(Op::AddFeature {
+                before: doc.bends.first().cloned(),
+                text: format!(
+                    "s{i} = station(punch: {:?}, die: {:?}, y: {y}, punch_length: {}, die_length: {})",
+                    tl.punches[last.punch].id, tl.dies[last.die].id, last.punch_length, last.die_length
+                ),
+            });
+        } else {
+            st.note = Some("no room on the bed past the last station: move or remove one first".into());
+        }
     }
     if let Some(op) = op
         && let Err(e) = st.doc_op(&op)

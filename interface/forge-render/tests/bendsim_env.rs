@@ -1828,3 +1828,70 @@ fn the_eye_goes_to_every_station() {
         assert!((eye - y).abs() < 15.0, "step {} at S{}: the eye at y {eye:.0}, the station at {y:.0}", k + 1, s + 1);
     }
 }
+
+/// Stations set up by hand (David: "a good way to set up or manually change the tools used"):
+/// a station's punch swapped, a station added and an unused one removed, each an edit of the
+/// bending document simulated again at once, Undo bringing it back.
+#[test]
+fn a_stations_tools_are_changed_by_hand() {
+    use forge_lang::error::Op;
+    let Some(mut h) = headless() else { return };
+    let d = scratch("pickers");
+    let f = d.join("load_tray.fg");
+    let src = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/sheetmetal/load_tray.fg");
+    std::fs::copy(src, &f).unwrap();
+    open(&mut h, f.to_str().unwrap());
+    click(&mut h, "tab:Environments");
+    click(&mut h, "tool:Bend Simulation");
+    let c = Choice {
+        press: Some("trumpf-trubend-5130".into()),
+        stations_auto: true,
+        ..Choice::default()
+    };
+    let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+    b.redo(c, "std-eu");
+    b.write_doc().expect("written");
+    b.reload();
+    let file = b.companion();
+    let stations = |b: &forge_render::shell::bendsim::BendSimUi| b.sim.as_ref().unwrap().tooling.stations.len();
+    let n0 = stations(b);
+    // swap station 1's punch for another the simulation has
+    let sim = b.sim.as_ref().unwrap();
+    let s1 = &sim.tooling.stations[0];
+    let cur = sim.tooling.punches[s1.punch].id.clone();
+    // a punch the library has that is on no station yet (the pickers offer the library's)
+    let cat = b.catalog.as_ref().and_then(|c| c.as_ref().ok()).expect("the library");
+    let on_bed: Vec<String> = sim.tooling.punches.iter().map(|p| p.id.clone()).collect();
+    let other = cat
+        .punches
+        .iter()
+        .filter(|r| r.punch.is_ok() && r.id.starts_with("trumpf/") && !on_bed.contains(&r.id))
+        .map(|r| r.id.clone())
+        .next()
+        .expect("another Trumpf punch");
+    let name = b.doc.as_ref().unwrap().stations[0].clone();
+    b.doc_op(&Op::SetArg { id: name.clone(), arg: "punch".into(), text: format!("{other:?}") })
+        .expect("the punch swapped");
+    let sim = b.sim.as_ref().expect("simulated again");
+    assert_eq!(sim.tooling.punches[sim.tooling.stations[0].punch].id, other);
+    // a station added (past the others), then removed (no bend works at it)
+    let before = std::fs::read_to_string(&file).unwrap();
+    let first_bend = b.doc.as_ref().unwrap().bends.first().cloned();
+    b.doc_op(&Op::AddFeature {
+        before: first_bend,
+        text: format!("s9 = station(punch: {other:?}, die: {:?}, y: 1200, punch_length: 100, die_length: 100)", sim.tooling.dies[0].id),
+    })
+    .expect("added");
+    assert_eq!(stations(b), n0 + 1);
+    b.doc_op(&Op::DeleteFeature { id: "s9".into() }).expect("removed");
+    assert_eq!(stations(b), n0);
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), before);
+    // undo the swap: station 1's punch as it was
+    b.doc_step(true).expect("undo");
+    b.doc_step(true).expect("undo");
+    b.doc_step(true).expect("undo");
+    let sim = b.sim.as_ref().unwrap();
+    assert_eq!(sim.tooling.punches[sim.tooling.stations[0].punch].id, cur);
+    b.pane = forge_render::shell::bendsim::Pane::Setup;
+    shot(&mut h, "ux-station-pickers");
+}
