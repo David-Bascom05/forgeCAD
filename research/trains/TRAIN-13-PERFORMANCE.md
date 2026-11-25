@@ -35,3 +35,14 @@ For coplanar seq, all 334,120 additional instructions were in `boolean::general`
 For heatsink edit, the per-plane flush change added 300,725 instructions and the open-shell check added 12,926. In the combined per-function profile, glibc's memory copy added 201,842 and `_int_malloc` added 59,761. The instruction count below the edge-sized vector-growth function rose 201,929 despite exactly 432 calls on both sides. These inclusive costs overlap with the glibc self costs. The heap layout changed how often a growing allocation needed to move. The n-ary pair loop also added 23,996 instructions. The differing allocator result on the Debian development VM did not reproduce the hosted heatsink result.
 
 Head `2e7d9a2d` kept both geometry checks. It reused loop storage, pruned disjoint faces before iterating pairs and initialized the per-tool plane-group cache on demand. Coplanar seq measured −0.0991%, housing seq −0.1544%, and the strict total −0.0187% against main. Heatsink edit (+0.1533%) and bracket app (+0.0631%) remained over the limit. Head `73513c86` additionally reserves the known source and bevel topology before constructing a chamfer. [Candidate CI](https://github.com/David-Bascom05/forgeCAD/actions/runs/45695144874) · [Candidate profiles](https://github.com/David-Bascom05/forgeCAD/actions/runs/45695711876)
+
+On `73513c86`, the strict total was −0.0202%. Both bracket app (−0.0378%) and heatsink edit (−0.0078%) recovered. Four lines remained over band. The following are the two largest positive self-cost changes in the exact profiles.
+
+| Line | Change vs main | Largest increases |
+|---|---:|---|
+| bracket cli | +0.4442% | heap consolidation +38,923, glibc copy +21,239 |
+| hub cli | +0.0705% | glibc copy +26,997, allocator +8,188 |
+| insert app | +0.0596% | glibc copy +26,242, allocator +4,189 |
+| insert cli | +0.0335% | see the exact profile for the copy and allocator breakdown |
+
+Insert app still grew its edge vectors 66 times, down from 76 on main, but those growths cost 24,698 extra instructions. Chamfer copied the known source topology and then its corner solver added vertices, edges and patch faces. [Exact profile](https://github.com/David-Bascom05/forgeCAD/actions/runs/45695711876)
