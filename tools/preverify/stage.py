@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """One stage of a train's verification on an exact commit: what a verifier session runs.
 
-    tools/preverify/stage.py STAGE SHA [--repo DIR] [--publish]
+    tools/preverify/stage.py STAGE SHA [--repo DIR] [--publish | --emit FILE]
 
 STAGE: native | render | wasm | clippy | guards | gate | all-local. The commit is checked out
 detached in DIR (default ~/verify), a worktree kept between trains: its target directories stay
@@ -78,7 +78,10 @@ tc = " / ".join(subprocess.run(c, cwd=repo, capture_output=True, text=True).stdo
 # this stage's items for this commit, published (branch preverify/maps), so a branch's pre-verify
 # on this commit as its main compares against them instead of running main again
 # (only with --publish: a push to preverify/maps, which a verifier does only when allowed to)
-if stage in ("native", "render", "wasm") and "--publish" in sys.argv:
+# (or --emit FILE: the same results written to FILE only, nothing pushed, for someone who may push
+# to publish: tools/preverify/publish.py FILE results-<sha>-<stage>.json)
+emit = sys.argv[sys.argv.index("--emit") + 1] if "--emit" in sys.argv else None
+if stage in ("native", "render", "wasm") and ("--publish" in sys.argv or emit):
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import json
     from pvitems import ALONE, items, publish
@@ -86,7 +89,11 @@ if stage in ("native", "render", "wasm") and "--publish" in sys.argv:
     doc = {"sha": sha, "stage": stage, "exit": code, "toolchain": tc,
            "items": sorted(" ".join(x) for x in its),
            "alone": {" ".join(k): v for k, v in ALONE.items()}}
-    if not publish(repo, f"results-{sha}-{stage}.json", json.dumps(doc, indent=0)):
+    if emit:
+        with open(emit, "w") as fh:
+            json.dump(doc, fh, separators=(",", ":"))
+        print(f"(results written to {emit}: results-{sha}-{stage}.json)")
+    elif not publish(repo, f"results-{sha}-{stage}.json", json.dumps(doc, indent=0)):
         print("(could not publish this stage's results)")
 print(f"VERIFY {stage} {sha} exit {code} {secs}s [{tc}]" +
       (f" failed: {' '.join(failed)}" if failed else "") + f"\nlog: {log}")
