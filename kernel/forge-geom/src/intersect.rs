@@ -821,7 +821,7 @@ fn subdivide_pieces(
     range: Interval,
     s: &Surface,
     near: Option<Box3>,
-    mut stack: Vec<(f64, f64, f64)>,
+    stack: Vec<(f64, f64, f64)>,
 ) -> CurveSurface {
     let g = |t: f64| s.implicit(c.eval(t));
     let off = |p: Point3| {
@@ -834,36 +834,49 @@ fn subdivide_pieces(
     // the Lipschitz bound until its pieces are that small: past a budget, a piece 1/4096 of the
     // range is kept only where the surface's sign changes across it
     let (mut budget, coarse) = (100_000usize, range.width() / 4096.0);
-    let mut leaves: Vec<(f64, f64)> = Vec::new();
-    while let Some((a, b, lip)) = stack.pop() {
+    // each piece with g at its ends where already known: a kept piece's middle is its halves'
+    // shared end, so the leaves' ends below are mostly values the search worked out on its way
+    // down (the same g, at the same t: the same value), not to be worked out again
+    let known = |t: f64, v: Option<f64>| v.unwrap_or_else(|| g(t));
+    let mut stack: Vec<(f64, f64, f64, Option<f64>, Option<f64>)> = stack
+        .into_iter()
+        .map(|(a, b, lip)| (a, b, lip, None, None))
+        .collect();
+    let mut leaves: Vec<(f64, f64, Option<f64>, Option<f64>)> = Vec::new();
+    while let Some((a, b, lip, ga, gb)) = stack.pop() {
         let m = 0.5 * (a + b);
         let p = c.eval(m);
         let reach = lip * 0.5 * (b - a) + tol::LINEAR;
-        if off(p) > reach || s.implicit(p).abs() > reach {
+        if off(p) > reach {
+            continue;
+        }
+        let gm = s.implicit(p);
+        if gm.abs() > reach {
             continue;
         }
         budget = budget.saturating_sub(1);
         if budget == 0 && b - a <= coarse && b - a > tol::LINEAR / lip {
-            if (g(a) < 0.0) != (g(b) < 0.0) {
-                leaves.push((a, b));
+            let (va, vb) = (known(a, ga), known(b, gb));
+            if (va < 0.0) != (vb < 0.0) {
+                leaves.push((a, b, Some(va), Some(vb)));
             }
             continue;
         }
         if b - a <= tol::LINEAR / lip {
-            leaves.push((a, b));
+            leaves.push((a, b, ga, gb));
             if leaves.len() > 20_000 {
                 return CurveSurface::Overlap;
             }
             continue;
         }
         // right half first so the left half pops first: leaves come out in order
-        stack.push((m, b, lip));
-        stack.push((a, m, lip));
+        stack.push((m, b, lip, Some(gm), gb));
+        stack.push((a, m, lip, ga, Some(gm)));
     }
     let mut hits = Vec::new();
     let mut i = 0;
     while i < leaves.len() {
-        let (lo, mut hi) = leaves[i];
+        let (lo, mut hi) = (leaves[i].0, leaves[i].1);
         let mut j = i + 1;
         while j < leaves.len() && leaves[j].0 <= hi {
             hi = leaves[j].1;
@@ -872,13 +885,14 @@ fn subdivide_pieces(
         // sign changes across the group's leaf boundaries
         let mut marks: Vec<f64> = vec![lo];
         marks.extend(leaves[i..j].iter().map(|l| l.1));
-        let vals: Vec<f64> = marks.iter().map(|&t| g(t)).collect();
+        let mut vals: Vec<f64> = vec![known(lo, leaves[i].2)];
+        vals.extend(leaves[i..j].iter().map(|l| known(l.1, l.3)));
         let changes: Vec<usize> = (1..vals.len())
             .filter(|&k| (vals[k - 1] < 0.0) != (vals[k] < 0.0))
             .collect();
         if changes.len() % 2 == 1 {
             let k = changes[0];
-            let t = bisect_sign(&g, marks[k - 1], marks[k]);
+            let t = bisect_sign_from(&g, marks[k - 1], marks[k], vals[k - 1], vals[k]);
             hits.push(CurveHit {
                 t,
                 point: c.eval(t),
@@ -935,10 +949,16 @@ fn chain_pieces(ic: &crate::intcurve::IntCurve, range: Interval, s: &Surface) ->
     out
 }
 
-fn bisect_sign(g: &impl Fn(f64) -> f64, mut a: f64, mut b: f64) -> f64 {
+/// Where `g` changes sign between `a` and `b`.
+#[cfg(test)]
+fn bisect_sign(g: &impl Fn(f64) -> f64, a: f64, b: f64) -> f64 {
+    bisect_sign_from(g, a, b, g(a), g(b))
+}
+
+/// Where `g` changes sign between `a` and `b`, given its values there.
+fn bisect_sign_from(g: &impl Fn(f64) -> f64, mut a: f64, mut b: f64, mut fa: f64, mut fb: f64) -> f64 {
     // Illinois: secant steps, the kept end's value halved when an end stays twice. Over a leaf a
     // surface's value along a curve is all but straight, so two or three steps reach rounding.
-    let (mut fa, mut fb) = (g(a), g(b));
     // an end on the surface is the crossing: a chain's sample that lies on it, say
     if fb.abs() <= 1e-13 {
         return b;
