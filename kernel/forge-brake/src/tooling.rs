@@ -116,9 +116,12 @@ impl Role {
         matches!(self, Role::Bend | Role::Hem)
     }
 
-    /// A tool that flattens a hem: a flattening one, or a combination hem die's pad.
+    /// A tool that flattens a hem: a flattening one. A combination die's spring part flattens on
+    /// the press, but how its height divides between the spring part and the holder under it is
+    /// not published (WILA DDU-00x/1, Mate 20.2xx-20.4xx: open, closed and gap only), so it is not
+    /// simulated: it pre-bends, and a flattening pair must follow.
     pub fn flattens(self) -> bool {
-        matches!(self, Role::Flatten | Role::Hem)
+        matches!(self, Role::Flatten)
     }
 }
 

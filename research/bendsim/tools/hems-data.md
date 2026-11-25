@@ -69,3 +69,29 @@ set beyond the tables' heights; Trumpf, Amada, LVD hemming sections; flattening 
 The minimum offset for a thickness is read from these tables inversely: a Z is refused below the
 smallest insert rated for that thickness (Mate's 90 deg series, for instance, 1.5 mm needs Z4.5).
 No maker states a formula; none is invented here.
+
+## Hemming tool sections (second pass, read 2026-11-25)
+
+From WILA's full catalogue PDF
+(https://catalog.wilatooling.com/WILA-Catalog-GB/files/assets/common/downloads/publication.pdf,
+drawings read at 300 dpi; BIU-051 and OZU-083 are drawn on p.84, not p.80) and Mate LIT01119 pp.46-47.
+
+| Tool | Figures |
+|---|---|
+| WILA BIU-041 (flattening top) | total 156, 120 below the clamp shoulder, width 50; NS adaption; "to be used in combination with bottom tools DDU-003 and OZU-384. Max. sheet thickness 2 mm." (p.87) |
+| WILA OZU-384 (flattening bottom) | working height 100, width 50 (p.87) |
+| WILA BIU-051 (28 deg top) | height 120, width 25 at the clamp, blade 10, R1, alpha 28 (p.84) |
+| WILA BIU-061 | 120 high, 25 wide, blade 6, R1, alpha 28 (p.85) |
+| WILA OZU-083 | heights 79 and 59, slot 10 ("V=10 mm"), R1, width 60; 50 t/m bending, 100 t/m flattening (p.84) |
+| WILA DDU-001/1, -002/1, -004/1 | drawn height 101 / 101 / 105, flange gap 13 / 13 / 15, width 63 / 63 / 65 (p.86) |
+| WILA DD-005 / DD-009 | closed 115 / 130, stroke 15 / 20, top 52 / 62, slot 13.5, base 70 / 80 (p.82) |
+| Mate 11.550/554/560 punches | alpha 24, R 0.6, H 128, blade Z 8/10/12, 80 t/m; body 28 wide, tang 13 x 30 |
+| Mate 20.550/554/560 dies | R 1.0, H 80, slot 8.2/10.2/12.2, width 60, slot depth 59, 50 t/m |
+| Mate spring dies 20.264 / .303 / .450 / .231 / .305 | open/closed 105/90, 110/95, 135/120, 135/120, 140/125 (gap 15 each); V 6/8/8/10/12; base 60; lengths 415 and 835 |
+
+How a spring-action die flattens is not stated in a sentence. WILA: "Flattening part operated by
+spring action, stroke 13 mm" (p.86); "a holder with a spring-action flattening part" (p.80, figure
+labels spring / top tool / flattening part / guide part). The drawings show the V on the sprung
+part over a 13-15 mm gap above the holder: read (not quoted) as the punch pushing the sprung part
+down onto the hem in the gap. How the height divides between the sprung part and the holder is
+not published: the combination dies are not simulated for the flattening.
