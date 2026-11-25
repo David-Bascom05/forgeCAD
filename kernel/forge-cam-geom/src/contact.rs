@@ -556,6 +556,11 @@ pub fn lower(c: &Capsule, f: &Face, a: V3, b: V3) -> Option<f64> {
     // disc exactly, above)
     let dist = if c.a > 0.0 && !matches!(f.surf, Surf::Plane { .. } | Surf::Cyl { .. }) {
         Ival::pt(dist).sub(Ival::pt(c.a)).lo
+    } else if c.a > 0.0 && dist <= 0.0 {
+        // FALLBACK's review: the plane and cylinder arms take the disc exactly, but where the
+        // face passes through P they give 0, and a face point inside P is as deep as its own
+        // depth there, up to a (P lies in a slab of thickness 2a), so a + rho inside the body
+        -c.a
     } else {
         dist
     };
@@ -808,6 +813,206 @@ mod tests {
             .clone();
         let c = capsule(&b).unwrap();
         assert_eq!((c.zc, c.rho, c.a), (b.z0 + 1.0, 1.0, 4.0));
+    }
+
+    /// FALLBACK's independent review of the disc capsule (cam/speed-bull): the bound never
+    /// exceeds the true minimum, on the cases the branch's own sweep leaves out (a vertical-axis
+    /// cylinder, a torus, a cone) and on near-touching poses, with the body sampled as it is.
+    #[test]
+    #[cfg(not(feature = "old-closed-form"))]
+    fn review_a_disc_capsules_bound_never_exceeds_the_truth() {
+        let b = assemble(&Cutter::Bull { d: 10.0, re: 1.0 }, 30.0, 10.0, 40.0, None)
+            .unwrap()
+            .bodies[0]
+            .clone();
+        let c = capsule(&b).unwrap();
+        let mut seed = 0x853c49e6748fea9bu64;
+        let mut rnd = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed >> 11) as f64 / (1u64 << 53) as f64
+        };
+        let mut worst = f64::INFINITY;
+        let mut cases = 0;
+        for k in 0..400 {
+            let f = match k % 5 {
+                // a bore wall: the cylinder's axis along z, the tool inside it
+                0 => Face::new(
+                    Surf::Cyl {
+                        o: [0.0, 0.0, 0.0],
+                        x: [1.0, 0.0, 0.0],
+                        y: [0.0, 1.0, 0.0],
+                        ax: [0.0, 0.0, 1.0],
+                        r: 5.0 + rnd() * 10.0,
+                    },
+                    Ival::new(-3.2, 3.2),
+                    Ival::new(-30.0, 30.0),
+                    None,
+                    0.0,
+                    1,
+                ),
+                // a cylinder lying along y, the tool riding over or beside it
+                1 => Face::new(
+                    Surf::Cyl {
+                        o: [rnd() * 6.0 - 3.0, 0.0, -4.0],
+                        x: [0.0, 0.0, 1.0],
+                        y: [1.0, 0.0, 0.0],
+                        ax: [0.0, 1.0, 0.0],
+                        r: 2.0 + rnd() * 8.0,
+                    },
+                    Ival::new(-3.2, 3.2),
+                    Ival::new(-25.0, 25.0),
+                    None,
+                    0.0,
+                    1,
+                ),
+                2 => Face::new(
+                    Surf::Torus {
+                        o: [rnd() * 4.0 - 2.0, rnd() * 4.0 - 2.0, -3.0],
+                        x: [1.0, 0.0, 0.0],
+                        y: [0.0, 1.0, 0.0],
+                        ax: [0.0, 0.0, 1.0],
+                        big: 8.0 + rnd() * 6.0,
+                        r: 1.0 + rnd() * 3.0,
+                        cm: 1.0,
+                        sm: 0.0,
+                    },
+                    Ival::new(-3.2, 3.2),
+                    Ival::new(-3.2, 3.2),
+                    None,
+                    0.0,
+                    3,
+                ),
+                3 => Face::new(
+                    Surf::Cone {
+                        o: [rnd() * 4.0 - 2.0, rnd() * 4.0 - 2.0, -12.0],
+                        x: [1.0, 0.0, 0.0],
+                        y: [0.0, 1.0, 0.0],
+                        ax: [0.0, 0.0, 1.0],
+                        r0: 3.0 + rnd() * 6.0,
+                        k: 0.3 + rnd() * 0.5,
+                    },
+                    Ival::new(-3.2, 3.2),
+                    Ival::new(0.0, 14.0),
+                    None,
+                    0.0,
+                    4,
+                ),
+                // a steep plane, where the disc reaches furthest along the normal
+                _ => Face::new(
+                    Surf::Plane {
+                        o: [0.0, 0.0, rnd() * 4.0 - 2.0],
+                        u: [rnd() * 0.4 + 0.8, 0.0, rnd() * 3.0 - 1.5],
+                        v: [0.0, 1.0, rnd() * 3.0 - 1.5],
+                    },
+                    Ival::new(-30.0, 30.0),
+                    Ival::new(-30.0, 30.0),
+                    None,
+                    0.0,
+                    2,
+                ),
+            };
+            // poses from far to just touching
+            let a = [rnd() * 16.0 - 8.0, rnd() * 16.0 - 8.0, rnd() * 18.0 - 2.0];
+            let bb = [
+                a[0] + rnd() * 8.0 - 4.0,
+                a[1] + rnd() * 8.0 - 4.0,
+                a[2] + rnd() * 5.0 - 2.5,
+            ];
+            let Some(lo) = lower(&c, &f, a, bb) else { continue };
+            cases += 1;
+            let mut tmin = f64::INFINITY;
+            let n = 40;
+            for i in 0..=n {
+                for j in 0..=n {
+                    let p = f.p.lo + (f.p.hi - f.p.lo) * i as f64 / n as f64;
+                    let q = f.q.lo + (f.q.hi - f.q.lo) * j as f64 / n as f64;
+                    let y = f.surf.eval(Ival::pt(p), Ival::pt(q));
+                    let y = [y[0].mid(), y[1].mid(), y[2].mid()];
+                    for m in 0..=20 {
+                        let s = m as f64 / 20.0;
+                        let g = [
+                            a[0] + (bb[0] - a[0]) * s,
+                            a[1] + (bb[1] - a[1]) * s,
+                            a[2] + (bb[2] - a[2]) * s,
+                        ];
+                        let sd = b
+                            .sd(
+                                Ival::pt(y[0] - g[0]),
+                                Ival::pt(y[1] - g[1]),
+                                Ival::pt(y[2] - g[2]),
+                            )
+                            .mid();
+                        if sd < tmin {
+                            tmin = sd;
+                        }
+                    }
+                }
+            }
+            assert!(
+                lo <= tmin + 1e-9,
+                "case {k} ({:?}): bound {lo} over the sampled truth {tmin}",
+                f.surf
+            );
+            worst = worst.min(tmin - lo);
+        }
+        assert!(cases > 100, "only {cases} cases had a closed form");
+        assert!(worst >= -1e-9, "worst slack {worst}");
+    }
+
+    /// FALLBACK's review: the straddle case (the arm's own value 0) floors the bound at -rho,
+    /// but a face point can lie up to `a` deep in the core, so `a + rho` deep in the body. With
+    /// a negative limit (limit = stock to leave - inner tolerance) `clear` then clears a gouge.
+    #[test]
+    #[cfg(not(feature = "old-closed-form"))]
+    fn review_a_straddling_disc_capsule_clears_a_gouge() {
+        let b = assemble(&Cutter::Bull { d: 10.0, re: 1.0 }, 30.0, 10.0, 40.0, None)
+            .unwrap()
+            .bodies[0]
+            .clone();
+        let c = capsule(&b).unwrap();
+        // a bore wall of radius 5.04, the tool axis 4.87 off its axis: the body (radius 5) is
+        // most of the way through the wall
+        let f = Face::new(
+            Surf::Cyl {
+                o: [0.0, 0.0, 0.0],
+                x: [1.0, 0.0, 0.0],
+                y: [0.0, 1.0, 0.0],
+                ax: [0.0, 0.0, 1.0],
+                r: 5.04,
+            },
+            Ival::new(-3.2, 3.2),
+            Ival::new(-30.0, 30.0),
+            None,
+            0.0,
+            1,
+        );
+        let a = [4.87, 0.0, 2.0];
+        let lo = lower(&c, &f, a, a).unwrap();
+        // the sampled truth over the face and the still move
+        let mut tmin = f64::INFINITY;
+        for i in 0..=200 {
+            for j in 0..=40 {
+                let p = f.p.lo + (f.p.hi - f.p.lo) * i as f64 / 200.0;
+                let q = f.q.lo + (f.q.hi - f.q.lo) * j as f64 / 40.0;
+                let y = f.surf.eval(Ival::pt(p), Ival::pt(q));
+                let sd = b
+                    .sd(
+                        Ival::pt(y[0].mid() - a[0]),
+                        Ival::pt(y[1].mid() - a[1]),
+                        Ival::pt(y[2].mid() - a[2]),
+                    )
+                    .mid();
+                tmin = tmin.min(sd);
+            }
+        }
+        println!("bound {lo}, sampled truth {tmin}, rho {} a {}", c.rho, c.a);
+        // the public decision: a roughing limit of one corner radius of gouge
+        let v = clear(&b, &f, &Move::Line { a, b: a }, -1.5);
+        println!("clear(limit -1.5) = {v:?}");
+        assert!(lo <= tmin + 1e-9, "bound {lo} over the truth {tmin}");
+        assert!(v.is_none(), "cleared a gouge of {tmin}: {v:?}");
     }
 
     fn never_above(b: &Body, seed0: u64) {
