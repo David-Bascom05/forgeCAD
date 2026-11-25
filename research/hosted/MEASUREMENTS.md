@@ -223,3 +223,23 @@ The worst are the rack's large documents (rack.fg, 85 KB: 23.7 ms).
 ## (e) Threaded wasm and forge-alloc
 
 Read, not measured. See DESIGN.md §(e).
+
+## How to rerun
+
+```
+cd research/hosted/proto
+CARGO_TARGET_DIR=../../../target cargo build --release            # det, merge, gitsave, valcost
+CARGO_TARGET_DIR=../../../target cargo build --profile wasm --target wasm32-wasip1 --bin det
+cd ../../.. && find $PWD/examples -name '*.fg' | sort > /tmp/ex.txt
+target/release/det /tmp/ex.txt 3                    # hashes + cold/warm timings (DET_WHY=1: per-edit errors)
+target/release/det /tmp/ex.txt 0 errs               # hashes + each document's errors
+node --no-turbo-fast-api-calls tools/wasi-run.mjs target/wasm32-wasip1/wasm/det.wasm /tmp/ex.txt 0
+(cd research/hosted/browser && npm install)         # @bjorn3/browser_wasi_shim 0.4.1
+node research/hosted/browser/run-wasi-chromium.cjs target/wasm32-wasip1/wasm/det.wasm $PWD/examples,/tmp/ex.txt /tmp/ex.txt 0
+python3 research/hosted/bench/compare_det.py A.txt B.txt ..
+target/release/merge /tmp/ex.txt 60                 # op pairs, both orders
+target/release/valcost /tmp/ex.txt
+target/release/gitsave DOC.fg 300 /var/tmp/gitsave
+python3 research/hosted/bench/oplog_bench.py OUTDIR  # needs Postgres on /var/tmp:5433, redis-server, psycopg2, redis, libsql-experimental
+cd research/forge-lang/lean && lake env lean ../../hosted/lean/Merge.lean
+```
