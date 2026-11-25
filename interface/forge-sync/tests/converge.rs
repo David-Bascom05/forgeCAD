@@ -66,7 +66,10 @@ fn candidates(text: &str, rng: &mut Rng, tag: &str) -> Vec<Op> {
             from: id.clone(),
             to: format!("{id}_{tag}"),
         });
-        ops.push(Op::DeleteFeature { id: id.clone() });
+        // deletes rarer than the rest, so the document stays worth editing
+        if rng.below(4) == 0 {
+            ops.push(Op::DeleteFeature { id: id.clone() });
+        }
         ops.push(Op::MoveFeature {
             id: id.clone(),
             before: None,
