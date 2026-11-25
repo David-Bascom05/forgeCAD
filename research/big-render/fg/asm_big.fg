@@ -1,0 +1,12 @@
+# a fixture plate beside an imported machine (big.fg): the big-model bench's assembly
+shared L = 400
+shared T = 20
+
+sketch plan(on: xy) {
+  o = rect(center: (0, 0), size: (L, L / 2))
+}
+plate = extrude(plan, T)
+m = part("big.fg")
+
+ground(plate)
+ground(m)
