@@ -4,37 +4,48 @@
 
 use super::bsdf::{Bsdf, Lut};
 use super::env::Env;
-use super::gpu::Tracer;
+use super::gpu::{DENOISE_PASSES, Tracer};
 use super::scene::{Built, Instance};
 use super::{Settings, View};
 use crate::mesh::PartMesh;
 
-/// How many samples a frame may take: grown while frames come quickly, shrunk when they don't.
+/// How much the view's trace may do a frame: rows of a sample (a sample is traced a band at a
+/// time, so a slow GPU keeps the window answering), fitted to what the GPU took for the last
+/// measured band.
 #[derive(Clone, Copy, Debug)]
 pub struct Pace {
-    pub per_frame: u32,
-    /// A frame's time the tracer may fill, ms.
+    /// Rows a frame (a multiple of 8; more than the picture's height: whole samples).
+    pub rows: u32,
+    /// The GPU time a frame's trace may take, ms.
     pub budget_ms: f64,
 }
 
 impl Default for Pace {
     fn default() -> Pace {
         Pace {
-            per_frame: 1,
-            budget_ms: 16.0,
+            rows: 64,
+            budget_ms: 8.0,
         }
     }
 }
 
+/// The most rows a frame: 64 samples of the tallest picture.
+const MOST_ROWS: u32 = 64 * 4096;
+
 impl Pace {
-    /// A frame took `ms` with `per_frame` samples in it: the next frame's count.
-    pub fn after(&mut self, ms: f64) {
-        if ms < self.budget_ms * 0.6 && self.per_frame < 64 {
-            self.per_frame += 1.max(self.per_frame / 4);
-        } else if ms > self.budget_ms * 1.5 && self.per_frame > 1 {
-            self.per_frame = (self.per_frame * 2 / 3).max(1);
-        }
+    /// The GPU took `ms` for `rows` rows: the rows that fill the budget.
+    pub fn fit(&mut self, ms: f64, rows: u32) {
+        let per_row = (ms / rows.max(1) as f64).max(1e-6);
+        let fit = (self.budget_ms / per_row) as u32;
+        // no more than doubling at once: a measure taken while the GPU was idle overstates it
+        self.rows = (fit.min(self.rows.saturating_mul(2)) / 8 * 8).clamp(8, MOST_ROWS);
     }
+}
+
+/// The sample counts the view's picture is denoised and shown at: from 8 (`READABLE`), each
+/// doubling, then every 64, and the last.
+fn shown_at(samples: u32, target: u32) -> bool {
+    samples == target || (samples >= 8 && (samples.is_power_of_two() || samples.is_multiple_of(64)))
 }
 
 /// The view's tracer and what its sum was made of.
@@ -47,6 +58,16 @@ pub struct Live {
     last: Option<(View, Settings)>,
     has_scene: bool,
     has_env: bool,
+    /// The next row of the sample under way.
+    row: u32,
+    /// The samples in the picture shown.
+    shown: u32,
+    /// The denoiser's next pass and row, while a denoise is spread over frames (the trace
+    /// waits for it).
+    stage: Option<(u32, u32)>,
+    /// A band measured: when it was sent, its rows; `done` says when the GPU had finished it.
+    measuring: Option<(f64, u32)>,
+    done: std::sync::Arc<std::sync::Mutex<Option<f64>>>,
 }
 
 impl Live {
@@ -59,6 +80,11 @@ impl Live {
             last: None,
             has_scene: false,
             has_env: false,
+            row: 0,
+            shown: 0,
+            stage: None,
+            measuring: None,
+            done: Default::default(),
         }
     }
 
@@ -95,14 +121,21 @@ impl Live {
         self.has_scene && self.has_env
     }
 
+    /// The samples in the picture shown (it's shown at `shown_at`'s counts).
     pub fn samples(&self) -> u32 {
+        self.shown
+    }
+
+    /// The samples traced so far (the picture shown may have fewer).
+    pub fn traced(&self) -> u32 {
         self.tracer.samples
     }
 
     /// One frame's worth: started again if the camera, the settings or the size changed, then
-    /// `pace.per_frame` more samples (none past `target`), shown denoised. True: the picture
-    /// changed.
-    pub fn frame(&mut self, view: View, settings: Settings, size: (u32, u32)) -> bool {
+    /// `pace.rows` more rows of work: samples (none past `target`) and, at `shown_at`'s counts,
+    /// the denoise (when asked) that shows them, a band of rows at a time like the samples. True:
+    /// work was done.
+    pub fn frame(&mut self, view: View, settings: Settings, size: (u32, u32), denoise: bool) -> bool {
         if !self.ready() || size.0 == 0 || size.1 == 0 {
             return false;
         }
@@ -111,21 +144,78 @@ impl Live {
             self.last = None;
         }
         if self.last != Some((view, settings)) {
-            self.tracer.reset();
+            self.restart();
             self.last = Some((view, settings));
         }
-        if self.tracer.samples >= self.target {
-            return false;
+        // what the GPU took for the band measured (callbacks come with a poll natively)
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = self.tracer.device.poll(wgpu::PollType::Poll);
+        if let Some((sent, rows)) = self.measuring
+            && let Some(at) = self.done.lock().ok().and_then(|mut d| d.take())
+        {
+            self.pace.fit(at - sent, rows);
+            self.measuring = None;
         }
-        let n = self.pace.per_frame.min(self.target - self.tracer.samples);
-        self.tracer.step(&view, &settings, n);
-        self.tracer.show(settings.exposure, true);
-        true
+        let h = size.1;
+        // this frame's rows: a denoise's passes under way first (the trace waits for it), then
+        // the samples, each a band at a time
+        let mut left = self.pace.rows;
+        let mut sent = 0;
+        while left > 0 {
+            if let Some((k, y)) = self.stage {
+                let rows = left.min(h - y);
+                self.tracer.denoise_rows(k, y, rows);
+                sent += rows;
+                left -= rows;
+                let next = if y + rows >= h { (k + 1, 0) } else { (k, y + rows) };
+                if next.0 == DENOISE_PASSES {
+                    self.tracer.show_denoised(settings.exposure);
+                    self.shown = self.tracer.samples;
+                    self.stage = None;
+                } else {
+                    self.stage = Some(next);
+                }
+                continue;
+            }
+            if self.tracer.samples >= self.target {
+                break;
+            }
+            let rows = left.min(h - self.row);
+            self.tracer.trace_rows(&view, &settings, self.row, rows);
+            sent += rows;
+            left -= rows;
+            self.row += rows;
+            if self.row < h {
+                continue;
+            }
+            self.row = 0;
+            self.tracer.sample_done();
+            let s = self.tracer.samples;
+            if !denoise {
+                self.tracer.show(settings.exposure, false);
+                self.shown = s;
+            } else if shown_at(s, self.target) {
+                self.stage = Some((0, 0));
+            }
+        }
+        if self.measuring.is_none() && sent > 0 {
+            let done = self.done.clone();
+            self.measuring = Some((crate::viewer::now_ms(), sent));
+            self.tracer.queue.on_submitted_work_done(move || {
+                if let Ok(mut d) = done.lock() {
+                    *d = Some(crate::viewer::now_ms());
+                }
+            });
+        }
+        sent > 0
     }
 
     /// Something not in the view or the settings changed (a light's map, appearances): again.
     pub fn restart(&mut self) {
         self.tracer.reset();
+        self.row = 0;
+        self.shown = 0;
+        self.stage = None;
     }
 }
 
@@ -324,17 +414,27 @@ mod tests {
     #[test]
     fn the_pace_fills_the_budget_and_backs_off() {
         let mut p = Pace::default();
-        for _ in 0..40 {
-            p.after(4.0);
+        // a fast GPU: 0.01 ms a row grows to the budget's 800 rows, doubling at most each time
+        p.fit(0.64, 64);
+        assert_eq!(p.rows, 128);
+        for _ in 0..10 {
+            let r = p.rows;
+            p.fit(0.01 * r as f64, r);
         }
-        assert!(p.per_frame > 10, "{}", p.per_frame);
-        let was = p.per_frame;
-        p.after(40.0);
-        assert!(p.per_frame < was);
-        for _ in 0..40 {
-            p.after(100.0);
-        }
-        assert_eq!(p.per_frame, 1);
+        assert_eq!(p.rows, 800);
+        // slower: it backs off at once, to the rows the budget holds, a multiple of 8
+        p.fit(800.0 * 0.1, 800);
+        assert_eq!(p.rows, 80);
+        // however slow, a band of 8 rows a frame still goes
+        p.fit(1e4, 80);
+        assert_eq!(p.rows, 8);
+    }
+
+    #[test]
+    fn the_picture_is_shown_at_doublings_then_every_64() {
+        let at: Vec<u32> = (1..=300).filter(|&s| shown_at(s, 1024)).collect();
+        assert_eq!(at, [8, 16, 32, 64, 128, 192, 256]);
+        assert!(shown_at(5, 5), "the last sample is shown");
     }
 
     #[test]

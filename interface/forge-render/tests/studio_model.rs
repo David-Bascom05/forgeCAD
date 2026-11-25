@@ -83,11 +83,12 @@ fn a_click_in_the_view_paints_the_part_with_the_brush() {
     assert!(h.gui.shell.view_over_tex.is_none(), "the noise is shown");
     assert!(h.gui.shell.studio.samples < forge_render::shell::studio_env::READABLE);
     shot(&h, "painted");
-    for _ in 0..80 {
+    // (the live trace goes a band of rows a frame, as the GPU allows: waited for by time)
+    let start = std::time::Instant::now();
+    while h.gui.shell.studio.samples < 2 * forge_render::shell::studio_env::READABLE
+        && start.elapsed().as_secs() < 120
+    {
         h.step();
-        if h.gui.shell.studio.samples >= 2 * forge_render::shell::studio_env::READABLE {
-            break;
-        }
     }
     h.step();
     assert!(
@@ -144,11 +145,9 @@ fn many_parts_take_one_look_and_the_filter_finds_them() {
     assert_eq!(rows(st), vec![Row::Part(1)]);
     st.filter.clear();
     // the picture is made again with them, however they were changed: the samples start over
-    for _ in 0..40 {
+    let start = std::time::Instant::now();
+    while h.gui.shell.studio.samples < 4 && start.elapsed().as_secs() < 120 {
         h.step();
-        if h.gui.shell.studio.samples >= 4 {
-            break;
-        }
     }
     let before = h.gui.shell.studio.samples;
     assert!(before >= 4, "{before}");
@@ -319,12 +318,77 @@ fn shots_for_review() {
         forge_render::shell::studio_model::apply(&mut g.gui.shell.studio, &hw, Some("Steel, black oxide"));
         g.gui.shell.studio.open.insert("frame".into());
         g.gui.shell.studio.selected = frame.clone();
-        for _ in 0..60 {
+        let start = std::time::Instant::now();
+        while g.gui.shell.studio.samples < 16 && start.elapsed().as_secs() < 120 {
             g.step();
-            if g.gui.shell.studio.samples >= 16 {
-                break;
-            }
         }
         snap(&mut g, "overrides");
     }
+}
+
+/// The live trace keeps the window answering: the trace and its denoise go a band of rows a
+/// frame, as many as the GPU does in the pace's budget (8 ms), so a Studio frame while it runs
+/// costs at most `LIVE_MS`, or a quarter of a frame on a GPU slow enough that frames take more
+/// than 120 ms, more than one with it stopped (p90 against the median), a software GPU too.
+/// Before the bands, every frame traced a whole sample and denoised it: about 230 ms a frame on
+/// lavapipe here, over 16 ms stopped. Release only: a debug build's own frames are no measure.
+#[test]
+fn the_live_trace_keeps_studio_frames_within_budget() {
+    const LIVE_MS: f64 = 30.0;
+    if cfg!(debug_assertions) {
+        return;
+    }
+    let Some(mut h) = studio("machined/flange.fg") else {
+        return;
+    };
+    let timed = |h: &mut Headless, n: usize| {
+        let mut ms: Vec<f64> = (0..n)
+            .map(|_| {
+                let t = std::time::Instant::now();
+                h.step();
+                t.elapsed().as_secs_f64() * 1e3
+            })
+            .collect();
+        ms.sort_by(f64::total_cmp);
+        ms
+    };
+    // the pace fitted to this GPU, and a picture shown (a denoise run): then frames as they go
+    let start = std::time::Instant::now();
+    while h.gui.shell.studio.samples < 2 * forge_render::shell::studio_env::READABLE {
+        h.step();
+        assert!(
+            start.elapsed().as_secs() < 180,
+            "the live view never showed a picture"
+        );
+    }
+    let traced = h.gui.studio_live().unwrap().traced();
+    let live = timed(&mut h, 60);
+    let more = h.gui.studio_live().unwrap().traced() - traced;
+    assert!(more > 0, "nothing traced while timed");
+    // stopped: the same frames, the trace done
+    let l = h.gui.studio_live().unwrap();
+    l.target = l.traced();
+    for _ in 0..30 {
+        h.step();
+    }
+    let idle = timed(&mut h, 30);
+    let at = |v: &[f64], q: f64| v[((v.len() - 1) as f64 * q) as usize];
+    let rows = h.gui.studio_live().unwrap().pace.rows;
+    eprintln!(
+        "studio frames: tracing median {:.1} ms, p90 {:.1}, max {:.1}; stopped median {:.1} ms; \
+         {more} samples in 60 frames, {rows} rows a frame",
+        at(&live, 0.5),
+        at(&live, 0.9),
+        at(&live, 1.0),
+        at(&idle, 0.5)
+    );
+    let limit = LIVE_MS.max(0.25 * at(&idle, 0.5));
+    assert!(
+        at(&live, 0.9) - at(&idle, 0.5) <= limit,
+        "a traced frame costs {:.1} ms more than a stopped one, over {limit:.0} ms (p90 {:.1} ms, \
+         stopped {:.1} ms)",
+        at(&live, 0.9) - at(&idle, 0.5),
+        at(&live, 0.9),
+        at(&idle, 0.5)
+    );
 }

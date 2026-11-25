@@ -26,8 +26,6 @@ pub struct StudioHost {
     env_key: Option<(usize, String)>,
     scene_key: Option<(u64, u64, u64)>,
     scene: Option<(Built, Vec<Bsdf>)>,
-    /// When the last frame's samples went in, ms.
-    last: f64,
     /// The render under way began (ms); the picture it last wrote, to show; its texture.
     render_started: Option<f64>,
     written: Option<((u32, u32), Vec<u8>)>,
@@ -120,6 +118,11 @@ pub(super) fn lit(
 }
 
 impl Gui {
+    /// The Studio's live view, while it's open (tests: its pace, its target).
+    pub fn studio_live(&mut self) -> Option<&mut Live> {
+        self.studio.as_mut().map(|h| &mut h.live)
+    }
+
     /// One frame of the Studio; true while it has more to do (the window should draw again).
     pub(super) fn studio_frame(&mut self) -> bool {
         let active = self.shell.env == Some(EnvId::RenderStudio);
@@ -170,7 +173,6 @@ impl Gui {
                 env_key: None,
                 scene_key: None,
                 scene: None,
-                last: now_ms(),
                 render_started: None,
                 written: None,
                 thumb: None,
@@ -428,17 +430,11 @@ impl Gui {
             backdrop: Backdrop::Environment,
             ..Settings::default()
         };
-        let now = now_ms();
-        host.live.pace.after(now - host.last);
-        host.last = now;
         // a final render asked or under way has the GPU: the live picture waits, as it is (on a
         // software GPU a live sample is seconds, and the click must answer at once)
         let rendering = host.queue.progress() != Progress::Idle
             || st.asks.iter().any(|a| matches!(a, Ask::Image | Ask::Turntable));
-        let more = !rendering && host.live.frame(view, settings, size);
-        if !st.denoise && more {
-            host.live.tracer.show(settings.exposure, false);
-        }
+        let more = !rendering && host.live.frame(view, settings, size, st.denoise);
         if host.live.tracer.size != host.tex_size {
             self.egui.update_egui_texture_from_wgpu_texture(
                 &self.device,
@@ -622,7 +618,8 @@ impl Gui {
             host.queue.log.clear();
             host.queue.log.extend(keep);
         }
-        let s = host.live.samples();
+        // the picture shown (from READABLE samples), and the samples traced since, for the fade
+        let (s, traced) = (host.live.samples(), host.live.traced());
         self.studio = Some(host);
         self.shell.studio = std::mem::take(st);
         // until the trace is readable the raster view (the same looks, its own cube) stands in;
@@ -631,10 +628,10 @@ impl Gui {
             self.shell.view_tex = Some(raster_tex);
             self.shell.view_over_tex = None;
             self.shell.view_over_alpha = 1.0;
-        } else if s < 2 * READABLE {
+        } else if traced < 2 * READABLE {
             self.shell.view_tex = Some(raster_tex);
             self.shell.view_over_tex = Some(tex);
-            self.shell.view_over_alpha = (s - READABLE) as f32 / READABLE as f32;
+            self.shell.view_over_alpha = (traced - READABLE) as f32 / READABLE as f32;
         } else {
             self.shell.view_tex = Some(tex);
             self.shell.view_over_tex = Some(cube_tex);
