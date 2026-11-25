@@ -32,6 +32,41 @@ feasible, and a manual choice is honoured.
    top), the hem's two layers kept apart (gap at least the hem's), and the flattening force from
    the maker's cited table, else "not checked".
 
+## P1 status (bendsim/hems)
+
+Done, with tests: the refold to the bit; `StepCtx::flattening` (base flat, face on the top, phi0);
+`Stroke` on `Step`, `StepCtx::of_step` / `of_stroke`; tools' `Role` and `max_thickness` (tooling
+files and the catalogue); the planner's pre-bend (`first_turn`, 30 degrees included less 1e-9 rad)
+then flattening (`Search::flattened`, `sim_flat`, `finish_all`); `Rule::NoFlattening`,
+`Rule::ToolRating`; flat sections for flattening tools; the scene from phi0; the reply's `stroke`.
+Air bends time the same before and after (deep box: 2.69-2.87 s both).
+
+Left: real flattening tools in the catalogue (section dimensions being collected); the combination
+spring-action die (`Role::Hem`: how it flattens, to confirm); the flattening force table (columns
+to confirm); teardrop hems; forge-render's `rule_label` needs a fallback arm before the new rules
+merge (asked of BENDSIM-ENV).
+
+## P2 design: offsets in one stroke
+
+An offset pair forms two adjacent bends, j (off wall a) and k (off j's wall b, the web), equal
+turns of opposite sign on parallel lines, in one stroke. The part's outer walls stay level and
+the web tilts: zone coordinates of j keep wall a flat (as a flattening's), both zones turn by the
+same phi. StepCtx gains `offset: Option<Off>`:
+
+- pieces: wall b (the web) stays `Side::B`; zone k becomes `Kind::ZoneK` (moving: k.fold at phi,
+  then its fixed iso into j's end coordinates); walls beyond k become `Side::C`, their iso into
+  k's end coordinates (`(F_k . shift(ba_k))^-1 . F_w` at the construction's turns).
+- `rel` for `Side::C`: k.end_apply(phi), then zone k's iso into j's end coordinates, then
+  j.end_apply(phi), then the level placement (no phi / 2 tilt).
+- `ztip`: the punch step's face on wall c's top skin (or the web's highest point), monotone in phi.
+- rules: the part's offset (the web's rise at the end) against the tool's `z`; the thickness
+  against the insert's rating (Mate's table read inversely: below the smallest Z rated for t,
+  refused, citing it); segments, bed, stroke, open height; tools through the stroke.
+- tools: `Role::Offset { z }` punch and die inserts, sections built from the published Z, angle
+  and insert size (23 x 36, 27 or 32 x 45), cited as estimates where the shape between is drawn.
+- planner: an offset pair is chosen where it is mounted and passes, and the two bends then count
+  as one step (`Stroke::Offset { k }`); otherwise the two bends are bent as two air bends, as now.
+
 ## Open questions
 
 - Teardrop hems: which tool forms the closing leg (a teardrop die, a spacer)? Refused with the
