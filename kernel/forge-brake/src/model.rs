@@ -197,7 +197,7 @@ impl Model {
         for j in &sheet.joints {
             match j.kind {
                 JointKind::Bend { .. } => {}
-                JointKind::Hem(_) => return Err(ModelError::Hem { joint: j.id }),
+                JointKind::Hem(_) => {}
                 _ => return Err(ModelError::NotBend { joint: j.id }),
             }
         }
