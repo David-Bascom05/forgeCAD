@@ -1,0 +1,88 @@
+examples/demo/part_tools.fg ok 786b4e6fef2befe9 92417726843555b2 faces=133 tris=5466 meshbytes=131040 errors=0 cold_ms=9.42 mesh_ms=2.43 warm_ms= cold2_ms=
+examples/harness/robot.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=1110.88 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/harness/robot_loom.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=15.89 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/machined/well_island_step.fg ok 027a514af5812af0 86bed07726a2c9f1 faces=13 tris=228 meshbytes=5520 errors=0 cold_ms=0.82 mesh_ms=0.09 warm_ms= cold2_ms=
+examples/rack18u/asm/carrier_kit.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=325.06 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/asm/post_kit.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=109.08 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/asm/probes/bool_bracket_post.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=272.64 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/asm/probes/unused_at_param.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=0.96 mesh_ms=0.00 warm_ms= cold2_ms=
+  ERR ExpectFailed expect interferences: 96 is not Eq 0
+  ERR ExpectFailed expect interferences: 96 is not Eq 0
+  ERR ExpectFailed expect interferences: 96 is not Eq 0
+  ERR ExpectFailed expect interferences: 96 is not Eq 0
+  ERR ExpectFailed expect interferences: 96 is not Eq 0
+  ERR ExpectFailed expect interferences: 96 is not Eq 0
+  ERR ExpectFailed expect interferences: 96 is not Eq 0
+  ERR ExpectFailed expect interferences: 96 is not Eq 0
+  ERR ExpectFailed expect interferences: 96 is not Eq 0
+  ERR ExpectFailed expect interferences: 96 is not Eq 0
+  ERR ExpectFailed expect interferences: 96 is not Eq 0
+examples/rack18u/asm/rack.fg err f498eb7b9d9d882a cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=11 cold_ms=8000.88 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/asm/rack_nopanels.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=456.14 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/casters/bearing_608.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=552.28 mesh_ms=0.00 warm_ms= cold2_ms=
+  ERR ExpectFailed expect interferences: 24 is not Eq 0
+  ERR ExpectFailed expect interferences: 24 is not Eq 0
+examples/rack18u/casters/caster_lock.fg err ae80fadb0b9a075f cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=2 cold_ms=200.29 mesh_ms=0.00 warm_ms= cold2_ms=
+  ERR ExpectFailed expect interferences: 24 is not Eq 0
+examples/rack18u/casters/caster_plain.fg err 6578bb1c2038bfb0 cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=1 cold_ms=54.92 mesh_ms=0.00 warm_ms= cold2_ms=
+  ERR BadRelation m2 relates values of the wrong kinds
+  ERR BadRelation m3 relates values of the wrong kinds
+  ERR ExpectFailed expect value: -0.3490658503988659 is not Eq 0.3490658503988659
+  ERR ExpectFailed expect value: 0 is not Eq 0.3490658503988659
+  ERR ExpectFailed expect value: 0 is not Eq 8
+examples/rack18u/casters/probes/rel.fg err fabd036a0b4d7694 cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=5 cold_ms=5.72 mesh_ms=0.00 warm_ms= cold2_ms=
+  ERR ExpectFailed expect value: 0.5235987755982987 is not Eq 0
+examples/rack18u/casters/probes/relation_offset.fg err 6578bb1c2038bfb0 cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=1 cold_ms=0.43 mesh_ms=0.00 warm_ms= cold2_ms=
+  ERR ExpectUnevaluable expect x cannot be measured: at swivel_turn: this document has no param swivel_turn (a subassembly's drives are its own file's params, set in that file)
+examples/rack18u/casters/probes/sub_drive.fg err 17ad25aec87638f9 cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=1 cold_ms=56.65 mesh_ms=0.00 warm_ms= cold2_ms=
+  ERR ExpectFailed expect interferences: 24 is not Eq 0
+examples/rack18u/casters/probes/sub_fits.fg err 6578bb1c2038bfb0 cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=1 cold_ms=55.87 mesh_ms=0.00 warm_ms= cold2_ms=
+  ERR Conflict no pose meets all of ring_in (lock), ring_out (lock), wheel (drive turn); wheel is left out
+examples/rack18u/casters/probes/sub_rigid.fg err 70ab9e74cb6c2c0a cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=1 cold_ms=41.20 mesh_ms=0.00 warm_ms= cold2_ms=
+  ERR ExpectFailed expect interferences: 96 is not Eq 0
+  ERR ExpectFailed expect interferences: 96 is not Eq 0
+  ERR ExpectFailed expect interferences: 96 is not Eq 0
+  ERR ExpectFailed expect interferences: 96 is not Eq 0
+  ERR ExpectFailed expect interferences: 96 is not Eq 0
+  ERR ExpectFailed expect interferences: 96 is not Eq 0
+  ERR ExpectFailed expect interferences: 96 is not Eq 0
+  ERR ExpectFailed expect interferences: 96 is not Eq 0
+  ERR ExpectFailed expect interferences: 96 is not Eq 0
+examples/rack18u/casters/test.fg err c50ca0df610545a8 cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=9 cold_ms=2264.03 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/fans/fan_assy.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=559.24 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/fans/probes/fit_interference.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=2.85 mesh_ms=0.00 warm_ms= cold2_ms=
+  ERR PartFile ../standin/grille_gauge.fg: no such file
+examples/rack18u/fans/probes/sub_clearance.fg err 3ad65c8a5c6c198d cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=1 cold_ms=0.17 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/fans/test.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=645.52 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/fans/test_air.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=233.54 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/frame/joints.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=129.46 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/frame/test.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=593.63 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/hw/tests/bracket_post.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=28.43 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/hw/tests/carrier_pan.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=27.52 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/hw/tests/caster.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=19.72 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/hw/tests/fan_screw.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=50.02 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/hw/tests/hanger.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=35.16 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/hw/tests/hinge_pin.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=26.55 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/hw/tests/latch_base_stud.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=18.75 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/hw/tests/latch_link.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=32.64 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/hw/tests/latch_pivot.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=87.93 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/hw/tests/panel_joint.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=31.01 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/hw/tests/panel_post.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=26.21 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/hw/tests/post_pan.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=16.94 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/hw/tests/rack_screw.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=22.13 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/hw/tests/rail_carrier.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=25.77 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/panels/door_asm.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=851.87 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/panels/latch_u.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=42.25 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/panels/probes/cyl_sem.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=11.62 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/panels/probes/frame_read.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=5.03 mesh_ms=0.00 warm_ms= cold2_ms=
+  ERR PartFile ../test_parts/_probe.fg: no such file
+examples/rack18u/panels/probes/post_probe.fg err 3ad65c8a5c6c198d cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=1 cold_ms=0.50 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/panels/probes/strike_frames.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=93.81 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/rack18u/panels/test.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=1159.11 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/robot/arm2.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=3.83 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/sheetmetal/probes/tray_clash.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=37.77 mesh_ms=0.00 warm_ms= cold2_ms=
+  ERR ExpectFailed expect axis_offset: 70 is not Le 0.01
+examples/sheetmetal/probes/tray_misread_asm.fg err 6578bb1c2038bfb0 cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=1 cold_ms=4.56 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/sheetmetal/tray_asm.fg err 821e65573beff6dd cbf29ce484222325 faces=0 tris=0 meshbytes=0 errors=0 cold_ms=42.94 mesh_ms=0.00 warm_ms= cold2_ms=
+examples/sheetmetal/vendor/vendor.fg ok 30da09df7959247a 755ca28bcdd038fb faces=13 tris=472 meshbytes=11232 errors=0 cold_ms=1.30 mesh_ms=0.18 warm_ms= cold2_ms=
+examples/unified/peg_board.fg ok 98def95516112295 da2bde5dd5fbe1f1 faces=8 tris=384 meshbytes=9168 errors=0 cold_ms=9.47 mesh_ms=0.24 warm_ms= cold2_ms=

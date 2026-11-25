@@ -20,6 +20,12 @@ fn main() {
         let (run, mut cache) = forge_lang::run(&src, opts(&path), Default::default());
         let cold = now_ms() - t0;
         let b = hash_run(&run, cold);
+        if std::env::args().nth(3).as_deref() == Some("errs") {
+            for e in &run.errors {
+                let t = e.text();
+                println!("  ERR {} {}", e.kind(), t.lines().next().unwrap_or(""));
+            }
+        }
         let mut warm = vec![];
         let mut cold2 = vec![];
         let mut text = src.clone();
