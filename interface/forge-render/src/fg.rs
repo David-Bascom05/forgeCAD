@@ -228,7 +228,9 @@ pub struct Built {
 }
 
 impl Built {
-    pub fn summary(&self) -> String {
+    /// The status line's words for the build: the short state first (valid, the volume in
+    /// `sys`'s units, the faces), the details after, so a narrow status bar's cut takes those.
+    pub fn summary(&self, sys: crate::shell::ux::System) -> String {
         if self.preview {
             return "opening: the last build on screen while it builds".into();
         }
@@ -237,10 +239,10 @@ impl Built {
         }
         let mut s = match &self.measure {
             Some(m) => format!(
-                "volume {} mm³ · {} faces · {} · ",
-                crate::shell::fg::short((m.volume * 10.0).round() / 10.0),
-                m.faces,
-                if m.problems == 0 { "valid" } else { "INVALID" }
+                "{} · {} · {} faces · ",
+                if m.problems == 0 { "valid" } else { "INVALID" },
+                crate::shell::ux::show(m.volume, crate::shell::ux::Qty::Volume, sys),
+                m.faces
             ),
             None if self.ok => "nothing built · ".into(),
             None => "not built · ".into(),
