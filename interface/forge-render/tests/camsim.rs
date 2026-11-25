@@ -1021,7 +1021,7 @@ fn the_vise_sits_on_the_vf2s_table() {
     for g in mv.tl.segs.iter().filter(|g| g.kind != Kind::Rapid) {
         let d = ends
             .iter()
-            .map(|e| (0..3).map(|k| (e[k] - g.b[k]).powi(2)).sum::<f64>().sqrt())
+            .map(|e| (0..3).map(|k| (e[k] - g.b[k]).ipow(2)).sum::<f64>().sqrt())
             .fold(f64::INFINITY, f64::min);
         assert!(d < 1e-6, "a machine motion ends {d} from the posted path");
     }
