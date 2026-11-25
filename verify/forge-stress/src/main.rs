@@ -221,13 +221,13 @@ fn bore(at: Point3, z: UnitVec3, r: f64, len: f64) -> Option<Body> {
     forge_ops::extrude(&p, len, 7000).ok()
 }
 
-/// What a boolean's answer is: its status word, its volume, and what is wrong with it.
 thread_local! {
     /// The error bounds `mass` gave the answers judged since the last oracle: what their volumes
     /// may be off by, honestly said (a file's tolerant edges widen it), which an oracle allows.
     static BOUND: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
 }
 
+/// What a boolean's answer is: its status word, its volume, and what is wrong with it.
 fn judge(r: Result<Body, String>) -> (String, f64, String) {
     match r {
         Err(e) => {
