@@ -1005,13 +1005,56 @@ fn document_text_is_a_bottom_panel() {
     shot(&mut h, "cam-text-panel");
     // typed: the whole text replaced
     let typed = text(&h).replace("stickout: 32", "stickout: 34");
-    assert!(h.click("cam:text:edit"));
+    // the field has the keyboard before anything is typed (a click taken late under load left
+    // the typing nowhere)
+    let field = egui::Id::unique("cam-text-edit");
+    for k in 0.. {
+        tap(&mut h, "cam:text:edit");
+        h.step();
+        if h.gui.ctx.memory(|m| m.has_focus(field)) {
+            break;
+        }
+        assert!(k < 4, "the text field never took the keyboard");
+    }
     h.key_with(egui::Key::A, egui::Modifiers::COMMAND);
     h.text(&typed);
+    let t0 = std::time::Instant::now();
+    while h.gui.shell.cam.as_ref().unwrap().text_edit != typed {
+        assert!(t0.elapsed().as_secs() < 30, "the typing never reached the field");
+        h.step();
+    }
+    // Apply takes the focus from the field: what was typed is what is applied
+    tap(&mut h, "cam:text:apply");
+    let t0 = std::time::Instant::now();
+    while !text(&h).contains("stickout: 34") {
+        assert!(t0.elapsed().as_secs() < 30, "never applied: {}", text(&h));
+        h.step();
+    }
+    assert_eq!(text(&h), typed, "exactly what was typed");
+}
+
+/// What is typed in Document Text and not yet applied stays while the field has no focus (a
+/// click on Apply takes the focus before Apply reads the field: the typing was put back first);
+/// the document's own change (an undo, an edit elsewhere) loads it again.
+#[test]
+fn document_text_keeps_what_was_typed_until_applied() {
+    let Some((mut h, _)) = open("text-keep") else { return };
+    tap(&mut h, "tool:Document Text");
     h.step();
-    assert!(h.click("cam:text:apply"));
-    h.step();
-    assert!(text(&h).contains("stickout: 34"), "{}", text(&h));
+    let typed = text(&h).replace("stickout: 32", "stickout: 34");
+    h.gui.shell.cam.as_mut().unwrap().text_edit = typed.clone();
+    for _ in 0..4 {
+        h.step();
+    }
+    assert_eq!(h.gui.shell.cam.as_ref().unwrap().text_edit, typed, "kept, not put back");
+    // the document changes (an edit from the op dialog's way): the field shows it
+    let w = h.gui.shell.cam.as_mut().unwrap();
+    let changed = w.text.replace("stickout: 32", "stickout: 30");
+    w.command(forge_render::shell::cam::Cmd::Text(changed.clone()));
+    for _ in 0..4 {
+        h.step();
+    }
+    assert_eq!(h.gui.shell.cam.as_ref().unwrap().text_edit, changed, "the document's new text shown");
 }
 
 /// An adaptive op selected: clear's time on the same setup, tool and heights is measured off the

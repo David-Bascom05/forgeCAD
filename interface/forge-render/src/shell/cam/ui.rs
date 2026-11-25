@@ -3727,8 +3727,11 @@ fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
                 places,
                 "cam:text",
             );
-            if w.text_edit != w.text && !ui.memory(|m| m.has_focus(egui::Id::unique("cam-text-edit"))) {
+            // the document's text changed from what the field was loaded with (an edit elsewhere,
+            // an undo, Apply itself): loaded again while the field is not being typed in
+            if w.text != w.text_base && !ui.memory(|m| m.has_focus(egui::Id::unique("cam-text-edit"))) {
                 w.text_edit = w.text.clone();
+                w.text_base = w.text.clone();
             }
             egui::ScrollArea::vertical()
                 .id_salt("cam-text-scroll")

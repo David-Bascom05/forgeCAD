@@ -295,6 +295,10 @@ pub struct CamWs {
     pub checks_open: bool,
     pub text_open: bool,
     pub text_edit: String,
+    /// The document's text `text_edit` was loaded from: loaded again only when the document's
+    /// text changes from it (an edit elsewhere, an undo), never because the field lost focus
+    /// (clicking Apply takes the focus first: the typed text was put back before Apply read it).
+    pub text_base: String,
     pub undo: Vec<String>,
     pub redo: Vec<String>,
     pub parts: Vec<PartInfo>,
@@ -390,6 +394,7 @@ impl CamWs {
             checks_open: false,
             text_open: false,
             text_edit: String::new(),
+            text_base: String::new(),
             undo: vec![],
             redo: vec![],
             parts: vec![],
@@ -741,6 +746,7 @@ impl CamWs {
                 self.close_windows();
                 self.text_open = open;
                 self.text_edit = self.text.clone();
+                self.text_base = self.text.clone();
             }
             Cmd::AutoGenerate => self.auto = !self.auto,
             Cmd::SectionView => self.turnview.open = !self.turnview.open,
