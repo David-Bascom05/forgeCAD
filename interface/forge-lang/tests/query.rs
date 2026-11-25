@@ -376,16 +376,17 @@ bore = cut(hs, thru)
 
 /// One pair's clash boolean refusing does not end the interference query: that pair is listed
 /// unconfirmed (no volume, the refusal as its reason, where the boxes meet) and the others are
-/// answered as before (rack18u's latch: two nut-on-screw clashes, the second refused here).
+/// answered as before (rack18u's frame_read probe: two clashes with one part, the second refused here).
 #[test]
 fn a_refused_clash_is_unconfirmed_and_the_rest_go_on() {
-    let latch = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/rack18u/panels/latch_u.fg");
-    let both = ask_file(&latch, None, "interference");
+    let doc =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/rack18u/panels/probes/frame_read.fg");
+    let both = ask_file(&doc, None, "interference");
     assert!(both.ok, "{}", both.text);
     let all = arr(&both.json, "interferences").to_vec();
     assert_eq!(all.len(), 2);
-    forge_lang::query::refuse_clash_for_test("nut1", "scr1");
-    let a = ask_file(&latch, None, "interference");
+    forge_lang::query::refuse_clash_for_test("b2", "prt");
+    let a = ask_file(&doc, None, "interference");
     assert!(a.ok, "{}", a.text);
     let list = arr(&a.json, "interferences");
     assert_eq!(list.len(), 2, "{}", a.text);
@@ -398,8 +399,8 @@ fn a_refused_clash_is_unconfirmed_and_the_rest_go_on() {
     // the other pair, exactly as when nothing refused
     let kept = list
         .iter()
-        .find(|j| pair(j) == ("nut0".into(), "scr0".into()))
-        .expect("nut0 x scr0");
+        .find(|j| pair(j) == ("b1".into(), "prt".into()))
+        .expect("b1 x prt");
     assert_eq!(
         kept.to_string(),
         all.iter()
@@ -410,8 +411,8 @@ fn a_refused_clash_is_unconfirmed_and_the_rest_go_on() {
     // the refused pair: unconfirmed, no volume, the reason given, placed
     let r = list
         .iter()
-        .find(|j| pair(j) == ("nut1".into(), "scr1".into()))
-        .expect("nut1 x scr1");
+        .find(|j| pair(j) == ("b2".into(), "prt".into()))
+        .expect("b2 x prt");
     assert_eq!(r.get("confirmed"), Some(&Json::Bool(false)));
     assert_eq!(r.get("volume"), Some(&Json::Null));
     assert!(
