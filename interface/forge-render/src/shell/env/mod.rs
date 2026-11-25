@@ -211,6 +211,11 @@ pub(in crate::shell) trait Environment: Sync {
         None
     }
     fn properties(&self, _s: &mut Shell, _ui: &mut Ui, _r: Rect) {}
+
+    /// The column's tab now shown, in words ("Simulation"): the view's way back to it names it.
+    fn properties_label(&self, _s: &Shell) -> Option<String> {
+        None
+    }
     /// Its windows and panels, once a frame.
     fn panels(&self, _s: &mut Shell, _ctx: &egui::Context) {}
     /// What it draws over the view; true: it takes the view's pointer too (hit-testing is its).
@@ -409,6 +414,11 @@ impl Shell {
         self.env
             .and_then(|id| id.imp().properties_width(self))
             .unwrap_or(0.0)
+    }
+
+    /// The environment's column's tab now shown, in words.
+    pub(super) fn env_properties_label(&self) -> Option<String> {
+        self.env.and_then(|id| id.imp().properties_label(self))
     }
 
     /// The environment's properties, docked at the right of the view at full height.
