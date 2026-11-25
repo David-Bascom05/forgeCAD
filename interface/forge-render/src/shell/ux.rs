@@ -58,6 +58,8 @@ pub enum Qty {
     Power,
     /// kN/m (a die's load per length)
     LoadPerLength,
+    /// mm³ (a part's volume), shown in cm³ or in³
+    Volume,
     /// a count: flutes, teeth, stations
     Count,
     /// a plain number with no unit
@@ -70,6 +72,9 @@ pub fn show(v: f64, q: Qty, sys: System) -> String {
     let n = match q {
         Qty::Count => format!("{}", x.round() as i64),
         Qty::Angle => trim_to(x, 2),
+        // inches to the thousandth (0.472 in); under a hundredth, two significant digits, so a
+        // clearance or tolerance never reads as 0 (0.00079 in, not 0 in)
+        Qty::Length if sys == System::Inch => inch(x),
         _ => forge_lang::units::trim(x),
     };
     if unit.is_empty() {
@@ -108,6 +113,8 @@ pub fn convert(v: f64, q: Qty, sys: System) -> (f64, &'static str) {
         (Qty::Power, Inch) => (v / 0.745_699_872, "hp"),
         (Qty::LoadPerLength, Metric) => (v, "kN/m"),
         (Qty::LoadPerLength, Inch) => (v / 8.896_443_230_521 * 0.3048, "US tonf/ft"),
+        (Qty::Volume, Metric) => (v / 1000.0, "cm³"),
+        (Qty::Volume, Inch) => (v / 16_387.064, "in³"),
         (Qty::Count | Qty::Plain, _) => (v, ""),
     }
 }
@@ -116,6 +123,16 @@ pub fn convert(v: f64, q: Qty, sys: System) -> (f64, &'static str) {
 pub fn unconvert(shown: f64, q: Qty, sys: System) -> f64 {
     let (one, _) = convert(1.0, q, sys);
     if one == 0.0 { shown } else { shown / one }
+}
+
+/// An inch length: 3 places at or above 0.01 in, 2 significant digits under it, 0 as "0".
+fn inch(x: f64) -> String {
+    let a = x.abs();
+    if a == 0.0 || a >= 0.01 {
+        return trim_to(x, 3);
+    }
+    let places = (1 - a.log10().floor() as i32).max(0) as usize;
+    trim_to(x, places)
 }
 
 fn trim_to(v: f64, places: usize) -> String {
@@ -697,6 +714,13 @@ mod tests {
         assert_eq!(show(850.0, Qty::Force, System::Metric), "850 kN");
         assert_eq!(show(10.0, Qty::Length, System::Metric), "10 mm");
         assert_eq!(show(25.4, Qty::Length, System::Inch), "1 in");
+        assert_eq!(show(12.0, Qty::Length, System::Inch), "0.472 in");
+        // small lengths keep two significant digits, never 0
+        assert_eq!(show(0.005, Qty::Length, System::Inch), "0.0002 in");
+        assert_eq!(show(0.2, Qty::Length, System::Inch), "0.0079 in");
+        assert_eq!(show(0.00079 * 25.4, Qty::Length, System::Inch), "0.00079 in");
+        assert_eq!(show(0.254, Qty::Length, System::Inch), "0.01 in");
+        assert_eq!(show(0.0, Qty::Length, System::Inch), "0 in");
         assert_eq!(show(30.0, Qty::Angle, System::Metric), "30°");
         assert_eq!(show(3.0, Qty::Count, System::Inch), "3");
         assert_eq!(show(25.0, Qty::Speed, System::Metric), "25 m/min");

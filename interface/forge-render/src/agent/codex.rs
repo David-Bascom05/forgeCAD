@@ -1,11 +1,11 @@
 //! Codex CLI JSONL, one process per turn, resumed by thread id. Authentication stays in Codex.
 // desktop only: a page starts no CLI (std's threads and sleeps never run there)
 #![cfg_attr(target_arch = "wasm32", allow(clippy::disallowed_methods))]
-use super::{Backend, Event, Out, Watch, claude::Config, clean_env};
+use super::{Backend, Event, Out, Watch, claude::Config, clean_env, spawn};
 use forge_agent::json::Json;
 use std::collections::HashSet;
 use std::io::{BufRead, BufReader, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -122,7 +122,7 @@ impl Codex {
         }
     }
 
-    pub fn args(&self, picture: Option<&Path>) -> Vec<String> {
+    pub fn args(&self, pictures: &[PathBuf]) -> Vec<String> {
         let mut args: Vec<String> = ["exec", "--json", "--skip-git-repo-check", "--color", "never"]
             .into_iter()
             .map(str::to_string)
@@ -144,30 +144,31 @@ impl Codex {
             args.extend(["resume".into(), session]);
         }
         // Resume has its own image option; keep it after the subcommand.
-        if let Some(path) = picture {
+        for path in pictures {
             args.extend(["--image".into(), path.display().to_string()]);
         }
         args.push("-".into());
         args
     }
 
-    fn start(&mut self, prompt: &str, picture: Option<Vec<u8>>) -> Result<(), String> {
+    fn start(&mut self, prompt: &str, pictures: Vec<super::Picture>) -> Result<(), String> {
         forge_dirs::fs::create_dir_all(&self.cfg.cwd).map_err(|e| e.to_string())?;
-        let image = if let Some(png) = picture {
+        // Codex reads pictures from files: each written beside it, gone when the turn ends
+        let mut image = Vec::new();
+        for pic in pictures {
             static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
             let p = self.cfg.cwd.join(format!(
-                "codex-{}-{}.png",
+                "codex-{}-{}.{}",
                 forge_dirs::process_id(),
-                NEXT.fetch_add(1, Ordering::Relaxed)
+                NEXT.fetch_add(1, Ordering::Relaxed),
+                pic.ext()
             ));
-            forge_dirs::fs::write(&p, png).map_err(|e| e.to_string())?;
-            Some(p)
-        } else {
-            None
-        };
+            forge_dirs::fs::write(&p, pic.bytes).map_err(|e| e.to_string())?;
+            image.push(p);
+        }
         let mut command = Command::new(&self.cfg.program);
         command
-            .args(self.args(image.as_deref()))
+            .args(self.args(&image))
             .current_dir(&self.cfg.cwd)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -176,11 +177,11 @@ impl Codex {
         // An app-launched Codex is its own session, not a child turn of this coding agent.
         command.env_remove("CODEX_THREAD_ID");
         let mut watch = Watch::new(&self.root);
-        let child = command.spawn();
+        let child = spawn(&mut command);
         let mut child = match child {
             Ok(c) => c,
             Err(e) => {
-                if let Some(p) = image {
+                for p in image {
                     let _ = forge_dirs::fs::remove_file(p);
                 }
                 return Err(format!(
@@ -194,7 +195,7 @@ impl Codex {
         if let Err(e) = stdin.write_all(prompt.as_bytes()) {
             let _ = child.kill();
             let _ = child.wait();
-            if let Some(p) = image {
+            for p in image {
                 let _ = forge_dirs::fs::remove_file(p);
             }
             return Err(format!("Couldn't send to Codex: {e}"));
@@ -260,7 +261,7 @@ impl Codex {
                 std::thread::sleep(std::time::Duration::from_millis(10));
             };
             let stderr = errors.join().unwrap_or_default();
-            if let Some(p) = image {
+            for p in image {
                 let _ = forge_dirs::fs::remove_file(p);
             }
             for change in watch.check() {
@@ -288,11 +289,11 @@ impl Codex {
 }
 
 impl Backend for Codex {
-    fn send(&mut self, prompt: String, picture: Option<Vec<u8>>) {
+    fn send(&mut self, prompt: String, pictures: Vec<super::Picture>) {
         if self.child.lock().expect("child").is_some() {
             return;
         }
-        if let Err(text) = self.start(&prompt, picture) {
+        if let Err(text) = self.start(&prompt, pictures) {
             self.out.send(Event::Problem {
                 text,
                 fix: Some("codex login".into()),

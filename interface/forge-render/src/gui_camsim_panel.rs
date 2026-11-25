@@ -76,6 +76,11 @@ pub struct CamSimUi {
     /// The toolpath coloured by a measured value per move (the workspace's colour-by).
     pub values: Option<crate::camsim::draw::Values>,
     pub follow: bool,
+    /// Cutting soft jaws: the part they will hold drawn faint where it will sit (off: it is not
+    /// there while they are cut).
+    pub jaw_part: bool,
+    /// The tool's label shown while paused without the pointer on the tool (review shots).
+    pub label_always: bool,
     pub path_width: f32,
     pub tab: Tab,
     /// The move list's selection (a piece), drawn wider.
@@ -138,6 +143,8 @@ impl CamSimUi {
             machine: true,
             values: None,
             follow: false,
+            jaw_part: false,
+            label_always: false,
             path_width: 2.0,
             tab: Tab::Program,
             picked: None,
@@ -373,6 +380,14 @@ fn srgb(c: [f32; 3]) -> Color32 {
 }
 
 pub(crate) const TIMELINE_H: f32 = 78.0;
+/// The narrowest the timeline is drawn (its transport, time and speed controls); narrower, it is
+/// folded away.
+const TIMELINE_MIN_W: f32 = 240.0;
+
+/// Whether the timeline is drawn in view `v` beside a panel `panel_w` wide.
+fn timeline_fits(v: Rect, panel_w: f32) -> bool {
+    v.width() - panel_w - 24.0 >= TIMELINE_MIN_W
+}
 pub(crate) const PANEL_W: f32 = 312.0;
 
 /// How much of the view's right the panel takes: none when docked in the environment's
@@ -429,10 +444,9 @@ impl Shell {
         // a machining document is in Manufacture, whose properties column hosts the panel
         // (outside `v`), from before the column has first drawn it
         let panel_w = if self.cam.is_some() { -8.0 } else { covered_w(st) };
-        Rect::from_min_max(
-            v.min,
-            pos2(v.right() - panel_w - 8.0, v.bottom() - TIMELINE_H - 16.0),
-        )
+        // a timeline folded away (a view too narrow for it) covers nothing
+        let timeline = if timeline_fits(v, covered_w(st)) && !self.view_hidden { TIMELINE_H + 16.0 } else { 0.0 };
+        Rect::from_min_max(v.min, pos2(v.right() - panel_w - 8.0, v.bottom() - timeline))
     }
 
     /// The simulation's timeline and panel, over the view; true if a machining document is open.
@@ -460,23 +474,29 @@ impl Shell {
             pos2(v.left() + 8.0, v.bottom() - TIMELINE_H - extra - 8.0),
             pos2(v.right() - panel_w - 16.0, v.bottom() - 8.0),
         );
-        let r = egui::Area::new(egui::Id::unique("camsim:timeline"))
-            .fixed_pos(bar.min)
-            .order(egui::Order::Middle)
-            .fade_in(false)
-            .show(ctx, |ui| {
-                ui.set_width(bar.width());
-                ui.set_height(bar.height());
-                egui::Frame::new()
-                    .fill(t.surface)
-                    .stroke(Stroke::new(1.0, t.line))
-                    .corner_radius(6.0)
-                    .inner_margin(6.0)
-                    .show(ui, |ui| timeline(ui, &mut st, &t, bar.width() - 12.0));
-            });
-        self.view_blocks.push(r.response.rect);
+        // a view too narrow for the timeline's controls (a phone-wide window: the bar's width
+        // went negative, and egui panicked): folded away, the panel's Program tab still plays
+        // (and none while the view is behind the properties column: a narrow window's turns)
+        if timeline_fits(v, panel_w) && !self.view_hidden {
+            let r = egui::Area::new(egui::Id::unique("camsim:timeline"))
+                .fixed_pos(bar.min)
+                .order(egui::Order::Middle)
+                .fade_in(false)
+                .show(ctx, |ui| {
+                    ui.set_width(bar.width());
+                    ui.set_height(bar.height());
+                    egui::Frame::new()
+                        .fill(t.surface)
+                        .stroke(Stroke::new(1.0, t.line))
+                        .corner_radius(6.0)
+                        .inner_margin(6.0)
+                        .show(ui, |ui| timeline(ui, &mut st, &t, bar.width() - 12.0));
+                });
+            self.view_blocks.push(r.response.rect);
+        }
         // the panel: down the view's right, unless the environment docks it
-        if !st.docked {
+        // (a narrow window taking turns: the panel is the column's only, never over the view)
+        if !st.docked && !self.props_alternate {
             // the panel: down the view's right
             let pr = Rect::from_min_max(
                 pos2(v.right() - panel_w - 8.0, v.top() + 44.0),
@@ -550,12 +570,30 @@ impl Shell {
             }
             // the tool and its holder in words, a leader label beside the tool's top (where the
             // holder meets it), out to the side with more room; the records it was drawn from
-            // (keys, sources, what is left out) are its hover
+            // (keys, sources, what is left out) are its hover. Only while the pointer is on the
+            // tool and the playback is still: never a label travelling with the tool (David);
+            // the status line names the tool at all times
+            let on_tool = |p: [f64; 3], reach: f64, top: f64| {
+                let hover = ctx.pointer_hover_pos()?;
+                let a = to_px([p[0] - reach, p[1], p[2]])?;
+                let b = to_px([p[0] + reach, p[1], p[2] + top])?;
+                let c = to_px([p[0], p[1], p[2] + top])?;
+                let d = to_px([p[0], p[1], p[2]])?;
+                let r = Rect::from_points(&[a, b, c, d]).expand(6.0);
+                Some(r.contains(hover))
+            };
+            // nor while a dialog or a floating window of the workspace is open over the view
+            // (STANDARD §0 rule 1: nothing floats over the view behind a dialog)
+            let dialog = self.cam.as_ref().is_some_and(|w| w.escape_level());
             if st.tool
+                && !self.view_hidden
+                && !st.playing
+                && !dialog
                 && let Some((tool, p, _)) = st.tool_now()
                 && let Some(lk) = st.sim.looks.get(tool)
                 && let Some((at, note)) = lk.note.as_ref()
                 && let Some(tu) = st.sim.cam.sim_tools().get(tool)
+                && (st.label_always || on_tool(p, lk.reach, at[1] + 40.0) == Some(true))
             {
                 let (z, r) = (p[2] + at[1], at[0].max(0.5 * tu.tool.dc));
                 // the leader runs out past the widest of the drawing (the nut, the flange)
@@ -629,6 +667,7 @@ impl Shell {
                                     r.on_hover_text(note.as_str());
                                 });
                             self.view_blocks.push(hit);
+                            self.places.push(("camsim:toolnote".into(), hit));
                         }
                     }
                 }
@@ -699,7 +738,7 @@ fn timeline(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme, w: f
             None => "The cycle time on the machine is in the Program tab, per op.".to_string(),
         };
         let tip = format!(
-            "{} of {} at feed time: feeds at their programmed rates, rapids at the machine's rapid rates. Feed time leaves out tool changes, dwells and acceleration, so it is shorter than the cycle time. {cycle}",
+            "{} of {} at feed time: feeds at their programmed rates, rapids at the machine's rapid rates, each tool change at the machine's change time (up, swap, across and down). It leaves out dwells and acceleration, so it is shorter than the cycle time. {cycle}",
             clock(st.t),
             clock(total)
         );
@@ -732,17 +771,34 @@ fn timeline(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme, w: f
             let op = &st.sim.tl.ops[g.op as usize];
             let tu = st.sim.cam.sim_tools().get(tool);
             ui.separator();
-            let s = format!(
-                "{} · T{} {} · {} · F {:.0} mm/min · X {:.3}  Y {:.3}  Z {:.3} mm",
-                op.name,
-                tu.map_or(0, |u| u.t),
-                tu.map_or("", |u| u.tool.id.as_str()),
-                g.kind.name(),
-                g.f,
-                p[0],
-                p[1],
-                p[2]
-            );
+            // the tool in people's words (the label never travels with the tool: it is here)
+            let named = tu.map_or(String::new(), |u| {
+                format!("T{} · {}", u.t, crate::camsim::tools::tool_words(u))
+            });
+            let s = match st.sim.tl.changes.iter().find(|c| st.t >= c.t0 && st.t < c.t1) {
+                Some(c) => {
+                    let to = st.sim.cam.sim_tools().get(c.to as usize).map_or(String::new(), |u| {
+                        format!("T{} · {}", u.t, crate::camsim::tools::tool_words(u))
+                    });
+                    format!(
+                        "Tool change to {to} · {}",
+                        if c.cited {
+                            format!("{:.1} s, the machine's", c.t1 - c.t0)
+                        } else {
+                            "the machine record gives no change time: a pause shown".into()
+                        }
+                    )
+                }
+                None => format!(
+                    "{} · {named} · {} · F {:.0} mm/min · X {:.3}  Y {:.3}  Z {:.3} mm",
+                    op.name,
+                    g.kind.name(),
+                    g.f,
+                    p[0],
+                    p[1],
+                    p[2]
+                ),
+            };
             ui.add(egui::Label::new(egui::RichText::new(&s).color(t.ink2)).truncate())
                 .on_hover_text(&s);
         }
@@ -815,6 +871,29 @@ fn timeline(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme, w: f
                 t.ink2,
             );
             last = op.setup;
+        }
+    }
+    // tool changes: a tick each, the new tool's number beside it where there is room (not over
+    // the one before: the status line names the tool during each change)
+    let mut room = f32::NEG_INFINITY;
+    for c in &st.sim.tl.changes {
+        let x = x_of(c.t0);
+        painter.line_segment(
+            [pos2(x, band.top()), pos2(x, band.bottom())],
+            Stroke::new(1.5, Color32::WHITE),
+        );
+        if x < room {
+            continue;
+        }
+        room = x + 26.0;
+        if let Some(u) = st.sim.cam.sim_tools().get(c.to as usize) {
+            painter.text(
+                pos2(x + 2.0, band.bottom() - 1.0),
+                Align2::LEFT_BOTTOM,
+                format!("T{}", u.t),
+                FontId::proportional(11.0),
+                Color32::WHITE,
+            );
         }
     }
     // markers
@@ -935,7 +1014,16 @@ fn verdict(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
     if s.is_empty() {
         // certified: the workspace's words (a rule left unchecked named, its meaning on hover)
         let (words, hover, amber) = crate::shell::cam::certified_words(cam.certification());
-        let r = ui.colored_label(if amber { t.warn } else if hover.is_some() { t.ink2 } else { c }, words);
+        let r = ui.colored_label(
+            if amber {
+                t.warn
+            } else if hover.is_some() {
+                t.ink2
+            } else {
+                c
+            },
+            words,
+        );
         if let Some(h) = hover {
             r.on_hover_text(h);
         }
@@ -1271,6 +1359,10 @@ fn program(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
 fn display(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
     heading(ui, t, "Playback");
     ui.checkbox(&mut st.follow, "Follow the tool");
+    if st.sim.setups.iter().any(|s| s.jaws_for.is_some()) {
+        ui.checkbox(&mut st.jaw_part, "Finished part in jaws")
+            .on_hover_text("Shows the part faint where it will sit, and seated once the jaws are cut");
+    }
     ui.checkbox(&mut st.stop_at_markers, "Stop at issues");
     // the toolpath coloured by a measured value: its legend
     if let Some(v) = &st.values {
@@ -1311,7 +1403,7 @@ fn display(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
                 (Kind::Cut, _) => look::CUT,
                 (Kind::Plunge, _) => look::PLUNGE,
                 (Kind::Link, _) => look::LINK,
-                (Kind::Rapid, _) => look::RAPID,
+                (Kind::Rapid | Kind::Change, _) => look::RAPID,
             };
             let (r, _) = ui.allocate_exact_size(vec2(14.0, 4.0), Sense::hover());
             ui.painter().rect_filled(r, 1.0, srgb(c));

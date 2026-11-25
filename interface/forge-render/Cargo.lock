@@ -1118,6 +1118,9 @@ dependencies = [
 [[package]]
 name = "forge-cam-geom"
 version = "0.1.0"
+dependencies = [
+ "forge-num",
+]
 
 [[package]]
 name = "forge-cam-import"
@@ -1298,6 +1301,8 @@ dependencies = [
  "forge-library",
  "forge-machine",
  "forge-math",
+ "forge-mesh",
+ "forge-step",
  "forge-tooling",
 ]
 
@@ -1391,6 +1396,7 @@ name = "forge-render"
 version = "0.1.0"
 dependencies = [
  "apple-native-keyring-store",
+ "arboard",
  "egui",
  "egui-wgpu",
  "egui-winit",

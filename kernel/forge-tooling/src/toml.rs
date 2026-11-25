@@ -286,6 +286,18 @@ pub fn tables<'a>(t: &'a Table, k: &str) -> &'a [Table] {
         _ => &[],
     }
 }
+/// `tables`, taken out of the table (the records moved, not copied).
+pub fn take_tables(t: &mut Table, k: &str) -> Vec<Table> {
+    match t.remove(k) {
+        Some(Val::Tables(v)) => v,
+        Some(other) => {
+            // not an array of tables: left where it was (`tables` reads none there either)
+            t.insert(k.to_string(), other);
+            Vec::new()
+        }
+        None => Vec::new(),
+    }
+}
 pub fn nums(t: &Table, k: &str) -> Option<Vec<f64>> {
     match t.get(k) {
         Some(Val::Arr(v)) => v

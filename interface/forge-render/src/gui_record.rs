@@ -278,22 +278,26 @@ impl Gui {
     /// Where captures go, and the name they start with: the folder set, else the open file's;
     /// `<document>-<environment>` (the View tab's captures say `view`).
     fn capture_place(&self) -> (std::path::PathBuf, String) {
+        self.capture_place_for(self.shell.env.map_or("view", |e| e.key()))
+    }
+
+    /// `capture_place`, its name saying `what` (the Render Studio's renders: `render`).
+    pub(super) fn capture_place_for(&self, what: &str) -> (std::path::PathBuf, String) {
         let file = self.shell.fg.as_ref().map(|f| f.path.clone()).unwrap_or_default();
         let p = std::path::Path::new(&file);
         let stem = p
             .file_stem()
             .map_or_else(|| "forgecad".to_string(), |s| s.to_string_lossy().into_owned());
-        let env = self.shell.env.map_or("view", |e| e.key());
         let dir = if !self.shell.capture.folder.trim().is_empty() {
             std::path::PathBuf::from(self.shell.capture.folder.trim())
         } else {
             p.parent().map(std::path::Path::to_path_buf).unwrap_or_default()
         };
-        (dir, format!("{stem}-{env}"))
+        (dir, format!("{stem}-{what}"))
     }
 
     /// `name-yyyymmdd-hhmmss.ext` (UTC), with `-2`, `-3` after it if that's taken.
-    fn fresh_name(dir: &std::path::Path, name: &str, ext: &str) -> String {
+    pub(super) fn fresh_name(dir: &std::path::Path, name: &str, ext: &str) -> String {
         let secs = forge_math::clock::system_now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_secs());
@@ -416,7 +420,7 @@ impl Gui {
             #[cfg(not(target_arch = "wasm32"))]
             Some(Sink::Video(video)) if cancelled => {
                 video.cancel();
-                "Recording stopped".to_string()
+                "Recording cancelled".to_string()
             }
             #[cfg(not(target_arch = "wasm32"))]
             Some(Sink::Video(video)) => {
@@ -433,7 +437,7 @@ impl Gui {
             #[cfg(target_arch = "wasm32")]
             Some(Sink::Web(video)) if cancelled => {
                 video.cancel();
-                "Recording stopped".to_string()
+                "Recording cancelled".to_string()
             }
             #[cfg(target_arch = "wasm32")]
             Some(Sink::Web(video)) => {
@@ -664,7 +668,7 @@ fn deliver(path: &str, bytes: &[u8]) {
 }
 
 /// The file's folder in the system's file manager.
-fn reveal(file: &str) {
+pub(super) fn reveal(file: &str) {
     #[cfg(not(target_arch = "wasm32"))]
     {
         let dir = std::path::Path::new(file)

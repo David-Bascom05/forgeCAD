@@ -248,7 +248,7 @@ fn a_sheet_metal_part_made_with_the_tools_then_flat_and_its_dxf() {
     );
 
     // PunchTool: an obround from the library at a point typed on the face, turned 90
-    click(&mut h, "tool:PunchTool");
+    click(&mut h, "tool:Punch Tool");
     click(&mut h, "sheet:choice:Face:face1");
     click(&mut h, "sheet:typed");
     click(&mut h, "sheet:tool:OB20X6");
@@ -264,7 +264,7 @@ fn a_sheet_metal_part_made_with_the_tools_then_flat_and_its_dxf() {
         src(&h)
     );
     // and a dimple from the forming tools
-    click(&mut h, "tool:PunchTool");
+    click(&mut h, "tool:Punch Tool");
     click(&mut h, "sheet:choice:Face:face1");
     click(&mut h, "sheet:typed");
     click(&mut h, "sheet:lib:Forming tools");

@@ -40,6 +40,9 @@ const fn c(x: u32) -> Color32 {
     Color32::from_rgb((x >> 16) as u8, (x >> 8) as u8, x as u8)
 }
 
+/// Text on a `focus` (amber) fill, in either theme: near-black, over 8:1 (white is under 3:1).
+pub const ON_FOCUS: Color32 = Color32::from_rgb(0x1B, 0x1D, 0x21);
+
 pub const DARK: Theme = Theme {
     dark: true,
     bar: c(0x16304F),
@@ -115,6 +118,10 @@ pub const CONTROL_H: f32 = 26.0;
 pub const TITLE_ROW_H: f32 = 28.0;
 
 /// Group labels, hints, secondary meta.
+/// The smallest text the app draws (STANDARD §10: nothing under 11 px): every size asked of
+/// `sans`, `medium`, `semi` and `mono` is held at it or above, so a 9.5 px line can't come back.
+pub const MIN_TEXT: f32 = 11.0;
+
 pub fn caption() -> FontId {
     sans(11.0)
 }
@@ -168,19 +175,19 @@ pub fn edge(t: &Theme) -> Color32 {
 }
 
 pub fn sans(size: f32) -> FontId {
-    FontId::new(size, FontFamily::Proportional)
+    FontId::new(size.max(MIN_TEXT), FontFamily::Proportional)
 }
 
 pub fn medium(size: f32) -> FontId {
-    FontId::new(size, FontFamily::Name("medium".into()))
+    FontId::new(size.max(MIN_TEXT), FontFamily::Name("medium".into()))
 }
 
 pub fn semi(size: f32) -> FontId {
-    FontId::new(size, FontFamily::Name("semi".into()))
+    FontId::new(size.max(MIN_TEXT), FontFamily::Name("semi".into()))
 }
 
 pub fn mono(size: f32) -> FontId {
-    FontId::new(size, FontFamily::Monospace)
+    FontId::new(size.max(MIN_TEXT), FontFamily::Monospace)
 }
 
 /// Public Sans and IBM Plex Mono, bundled.
@@ -208,6 +215,15 @@ pub fn fonts() -> FontDefinitions {
         vec!["semi".into(), "sans".into()],
     );
     f
+}
+
+/// A solid scroll bar (one that takes its own room) whose handle shows: egui's `solid()`, its
+/// handle in the ink (egui's own fills it with the track's colour: the UI audit, CAM-UI).
+pub fn solid_scroll() -> egui::style::ScrollStyle {
+    egui::style::ScrollStyle {
+        foreground_color: true,
+        ..egui::style::ScrollStyle::solid()
+    }
 }
 
 /// egui's own widgets (fields, menus, scrollbars) in these colours: flat, 4 px radius, no shadow.
@@ -258,8 +274,19 @@ pub fn apply(ctx: &egui::Context, t: &Theme) {
         w.active.bg_fill = t.on;
         w.active.weak_bg_fill = t.on;
         w.active.bg_stroke = Stroke::new(1.0, t.focus);
+        // a scroll bar's handle in the ink, over its track in the fields' colour: egui's solid
+        // bars fill both with the fields' colour otherwise, and the handle can't be seen
+        s.spacing.scroll.foreground_color = true;
+        // and a floating bar's handle shows at rest where the list overflows (egui fades it out
+        // till hovered: lists cut off with no sign they scroll); 0.6 of the ink is over 3:1 in both
+        s.spacing.scroll.dormant_handle_opacity = 0.6;
+        s.spacing.scroll.active_handle_opacity = s.spacing.scroll.active_handle_opacity.max(0.6);
         s.spacing.item_spacing = egui::vec2(0.0, 0.0);
         s.spacing.button_padding = egui::vec2(8.0, 5.0);
         s.interaction.tooltip_delay = 0.5;
     });
 }
+
+/// Below this window width a dialog takes its narrow layout (UX-LEAD: one breakpoint for all):
+/// a master-detail browser drills down, a form stacks, a table scrolls inside itself.
+pub const NARROW: f32 = 720.0;

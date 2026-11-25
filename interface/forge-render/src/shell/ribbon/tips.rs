@@ -54,7 +54,8 @@ fn table() -> &'static Vec<(String, String, String, String)> {
 pub(super) fn scope(s: &Shell) -> &'static str {
     if s.drawing.is_some() {
         "drawing"
-    } else if s.is_asm() && s.tab == 0 {
+    } else if (s.is_asm() && s.tab == 0) || s.tab == super::super::ASM_TAB {
+        // the Assemble tab's own words (its Copy copies components, not the 3D Model's bodies)
         "asm"
     } else {
         match s.tab {
@@ -91,6 +92,13 @@ pub(in crate::shell) fn key_of(s: &Shell, id: &str) -> Option<String> {
 }
 
 /// Why a tool is off, in words.
+/// A reason as a sentence: its first letter a capital.
+fn sentence(s: &str) -> String {
+    let mut c = s.chars();
+    c.next()
+        .map_or(String::new(), |f| f.to_uppercase().chain(c).collect())
+}
+
 fn why(s: &Shell, scope: &str, name: &str) -> String {
     if let Some(w) = why_off(name) {
         return w.to_string();
@@ -100,8 +108,27 @@ fn why(s: &Shell, scope: &str, name: &str) -> String {
     {
         return w;
     }
+    // the Machine Builder's own tools: off for its own reasons, never for want of a part
+    if s.env == Some(super::super::env::EnvId::MachineBuilder)
+        && let Some(m) = &s.machine
+        && let Some(w) = super::super::machine::why_off(m, name)
+    {
+        return w;
+    }
     if s.no_document() && scope != "thermo" {
         return "open or create a part first (File > New, or Open)".into();
+    }
+    if s.tab == super::super::ASM_TAB {
+        match name {
+            "Pattern" | "Mirror" | "Copy" => {
+                return "choose a top-level part in the browser first".into();
+            }
+            "Keep Position" | "Return to Design" => {
+                return "drag a part first (Free Move or Free Rotate): these keep or drop where it went"
+                    .into();
+            }
+            _ => {}
+        }
     }
     match scope {
         "sketch" if s.sketch.is_none() => {
@@ -176,7 +203,10 @@ impl Shell {
         let (line, key) = tip(scope, tool.name).unwrap_or(("", ""));
         // a Manufacture tool that is off: why, first
         if tool.action.is_none()
-            && let Some(why) = self.cam.as_ref().and_then(|w| super::super::cam::disabled_why(w, tool.name))
+            && let Some(why) = self
+                .cam
+                .as_ref()
+                .and_then(|w| super::super::cam::disabled_why(w, tool.name))
         {
             ui.label(RichText::new(why).font(sans(12.0)).color(t.warn));
         }
@@ -193,9 +223,11 @@ impl Shell {
         }
         if tool.action.is_none() {
             ui.label(
-                RichText::new(format!("Off: {}", why(self, scope, tool.name)))
+                // the reason alone, as a sentence (UX-LEAD: no "Off:" before it)
+                RichText::new(sentence(&why(self, scope, tool.name)))
                     .font(sans(12.0))
-                    .color(t.error),
+                    // guidance, not an error (UX-LEAD): amber, as a warning is
+                    .color(t.warn),
             );
         }
         if !long {

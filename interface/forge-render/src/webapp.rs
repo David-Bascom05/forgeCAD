@@ -53,6 +53,8 @@ extern "C" {
 
 /// What the page asked of the app between frames.
 enum Ask {
+    /// What the page did with an export (`window.forge_export`): its words for the status.
+    Exported(String),
     Open(String),
     SaveAs(String),
     Save,
@@ -69,6 +71,12 @@ enum Ask {
     StoreFailed(String, String),
     /// The page's word for the status line (a link's file it would not open, say).
     Say(String),
+    /// A link's file waits for the project's files (`?open=`): said, the empty view spinning.
+    Waiting(String),
+    /// The project is in: the link's file opened (project path, as the link named it, `?env=`),
+    /// unless the person opened or made something meanwhile, which is kept and the link said not
+    /// opened.
+    OpenLinked(String, String, Option<String>),
     /// Words for the toolpath simulation (`app_camsim`).
     CamSim(String),
     /// A click on what the shell noted by this name (`app_click`): the tests' hand. The button
@@ -82,6 +90,9 @@ enum Ask {
     Machine(String),
     /// `Gui::capture_command`'s words: a photo or a recording, as Capture's settings say.
     Capture(String),
+    /// A picture pasted or dropped on the page, for the agent (`app_agent_picture`).
+    AgentPicture(Vec<u8>),
+    Studio(String),
 }
 
 thread_local! {
@@ -95,6 +106,46 @@ thread_local! {
     static FIRST_FRAME: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
     /// The page's own changes are not echoed back to it.
     static LOADING: RefCell<bool> = const { RefCell::new(false) };
+    /// The UI audit's (web/tests/ui_audit.cjs) extra state: off but when it asks.
+    static AUDIT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The UI audit's state in `app_state` from now on (`audit`: the ribbon's tools, the shell's
+/// placed names, egui's visible layers), or not.
+#[wasm_bindgen]
+pub fn app_audit(on: bool) {
+    AUDIT.with(|a| a.set(on));
+}
+
+/// What the UI audit reads of a frame: what there is to click and what is open.
+fn audit_json(g: &Gui) -> Json {
+    let rect = |r: egui::Rect| Json::Arr(vec![num(r.left() as f64), num(r.top() as f64), num(r.width() as f64), num(r.height() as f64)]);
+    let tools = g
+        .shell
+        .ribbon_live()
+        .into_iter()
+        .map(|(gr, name, live)| Json::Arr(vec![gr.into(), name.into(), live.into()]))
+        .collect();
+    let places = g
+        .shell
+        .places
+        .iter()
+        .map(|(k, r)| Json::Arr(vec![k.clone().into(), rect(*r)]))
+        .collect();
+    let layers = g.ctx.memory(|m| {
+        m.areas()
+            .visible_layer_ids()
+            .into_iter()
+            .filter_map(|l| m.area_rect(l.id).map(|r| Json::Arr(vec![format!("{:?}", l.order).into(), format!("{:x}", l.id.value()).into(), rect(r)])))
+            .collect()
+    });
+    let focus = g.ctx.memory(|m| m.focused()).is_some();
+    Json::obj(vec![
+        ("tools", Json::Arr(tools)),
+        ("places", Json::Arr(places)),
+        ("layers", Json::Arr(layers)),
+        ("focus", focus.into()),
+    ])
 }
 
 fn wake() {
@@ -420,7 +471,14 @@ impl Host {
             if let egui::OutputCommand::CopyText(t) = c
                 && let Some(w) = web_sys::window()
             {
-                let _ = w.navigator().clipboard().write_text(t);
+                // the browser may refuse (no permission, the page not focused): said, not a
+                // rejected promise no one awaited (a page error, and nothing told)
+                let written = w.navigator().clipboard().write_text(t);
+                wasm_bindgen_futures::spawn_local(async move {
+                    if wasm_bindgen_futures::JsFuture::from(written).await.is_err() {
+                        ask(Ask::Say("Couldn't copy: the browser didn't allow it.".into()));
+                    }
+                });
             }
         }
         self.next = None;
@@ -457,14 +515,9 @@ impl Host {
         if let Some(w) = &mut self.gui.shell.cam
             && let Some(x) = w.export.take()
         {
+            // what was done is said when the page has done it (`app_exported`): the picker's
+            // save, a download, a cancel; until then the click's "choose where…" stands
             page_export(&crate::shell::cam::nc::page_json(&x));
-            let n = x.files.len();
-            w.said = Some(if n == 1 {
-                format!("Exported {}", crate::shell::cam::nc::base(&x.files[0].path))
-            } else {
-                format!("Exported {n} files in {}", x.zip)
-            });
-            w.exported += 1;
         }
         STATE.with(|s| *s.borrow_mut() = state_json(&self.gui, self.canvas_json()));
     }
@@ -496,6 +549,22 @@ impl Host {
         for a in INBOX.with(|b| std::mem::take(&mut *b.borrow_mut())) {
             match a {
                 Ask::Open(p) => self.gui.open(&p),
+                Ask::Waiting(f) => {
+                    self.gui.shell.status = crate::shell::empty::waiting_words(&f);
+                    self.gui.shell.waiting = Some(f);
+                }
+                Ask::OpenLinked(p, shown, env) => {
+                    self.gui.shell.waiting = None;
+                    if self.gui.shell.name.is_empty() {
+                        self.gui.open(&p);
+                        if env.is_some() {
+                            self.gui.env_asked = env;
+                        }
+                    } else {
+                        self.gui.shell.status =
+                            format!("{shown} not opened: you opened {}", self.gui.shell.name);
+                    }
+                }
                 Ask::SaveAs(p) => self.gui.save_as(&p),
                 Ask::Save => self.gui.fg_save(),
                 Ask::Env(e) => self.gui.env_asked = Some(e),
@@ -514,6 +583,11 @@ impl Host {
                         self.gui.shell.status = e;
                     }
                 }
+                Ask::Studio(c) => {
+                    if let Some(l) = self.gui.studio_live() {
+                        l.target = if c == "stop" { l.traced() } else { 1024 };
+                    }
+                }
                 Ask::Rebuild => self.gui.rebuild_open(),
                 Ask::Apply(op) => {
                     if let Err(e) = self.gui.fg_apply(op) {
@@ -523,6 +597,22 @@ impl Host {
                 Ask::Pixels(f) => self.pixels(f),
                 Ask::StoreFailed(path, why) => self.gui.store_failed(&path, &why),
                 Ask::Say(text) => self.gui.shell.status = text,
+                Ask::AgentPicture(bytes) => {
+                    if !self.gui.agent_picture(bytes)
+                        && self.gui.shell.agent.tab != crate::shell::agent::SideTab::Agent
+                    {
+                        self.gui.shell.status =
+                            "A picture goes to the agent: open the Agent tab, then paste it".into();
+                    }
+                }
+                Ask::Exported(text) => {
+                    if let Some(w) = &mut self.gui.shell.cam {
+                        if !text.contains("cancelled") {
+                            w.exported += 1;
+                        }
+                        w.said = Some(text);
+                    }
+                }
                 Ask::CamSim(c) => {
                     if let Err(e) = self.gui.camsim_command(&c) {
                         self.gui.shell.status = e;
@@ -791,6 +881,60 @@ fn robot_json(g: &Gui) -> Json {
     ])
 }
 
+/// The Agent tab's transcript, each entry as `{kind, text}` (a tool's its summary, a diff's its
+/// file and whether undone, a question's its id and state), whether it's running, and its problem.
+fn agent_json(a: &crate::shell::agent::AgentTab) -> Json {
+    use crate::shell::agent::Entry;
+    let entries = a
+        .entries
+        .iter()
+        .map(|e| match e {
+            Entry::User { text, .. } => Json::obj(vec![("kind", "user".into()), ("text", text.clone().into())]),
+            Entry::Agent { text } => Json::obj(vec![("kind", "agent".into()), ("text", text.clone().into())]),
+            Entry::Tool { summary, state, .. } => Json::obj(vec![
+                ("kind", "tool".into()),
+                ("text", summary.clone().into()),
+                ("state", format!("{state:?}").into()),
+            ]),
+            Entry::Diff { file, undone, turn, index, .. } => Json::obj(vec![
+                ("kind", "diff".into()),
+                ("text", file.clone().into()),
+                ("undone", (*undone).into()),
+                ("turn", num(*turn as f64)),
+                ("index", num(*index as f64)),
+            ]),
+            Entry::Note { text, error } => Json::obj(vec![
+                ("kind", "note".into()),
+                ("text", text.clone().into()),
+                ("error", (*error).into()),
+            ]),
+            Entry::Permission {
+                id,
+                summary,
+                input,
+                state,
+                ..
+            } => Json::obj(vec![
+                ("kind", "permission".into()),
+                ("id", id.clone().into()),
+                ("text", summary.clone().into()),
+                ("input", input.clone().into()),
+                ("state", format!("{state:?}").into()),
+            ]),
+        })
+        .collect();
+    Json::obj(vec![
+        ("running", a.running.into()),
+        ("entries", Json::Arr(entries)),
+        ("mode", a.mode.flag().into()),
+        ("mode_other", a.mode_other.clone().map_or(Json::Null, Json::from)),
+        (
+            "problem",
+            a.problem.as_ref().map_or(Json::Null, |p| p.text.clone().into()),
+        ),
+    ])
+}
+
 fn state_json(g: &Gui, canvas: Json) -> String {
     let doc = g.fg.as_ref();
     let built = g.last_built.as_ref().map(|b| {
@@ -808,7 +952,11 @@ fn state_json(g: &Gui, canvas: Json) -> String {
         }
         Json::obj(f)
     });
-    Json::obj(vec![
+    let mut audit = vec![];
+    if AUDIT.with(|a| a.get()) {
+        audit.push(("audit", audit_json(g)));
+    }
+    Json::obj(audit.into_iter().chain(vec![
         ("ready", true.into()),
         ("first_frame_ms", num(FIRST_FRAME.with(|f| f.get()))),
         // frames drawn so far: a test waits on this, not on pictures, for a change to be drawn
@@ -821,6 +969,8 @@ fn state_json(g: &Gui, canvas: Json) -> String {
         ("seq", doc.map_or(Json::Null, |s| num(s.seq as f64))),
         ("done", doc.map_or(Json::Null, |s| num(s.done as f64))),
         ("dirty", doc.is_some_and(|s| s.dirty()).into()),
+        // the Agent tab, as a test reads it: each entry's kind and words, a question waiting
+        ("agent", agent_json(&g.shell.agent)),
         // the Versions panel's word: history kept or not, and why not
         (
             "versions",
@@ -864,6 +1014,17 @@ fn state_json(g: &Gui, canvas: Json) -> String {
                 ("last", g.shell.capture.last.clone().into()),
             ]),
         ),
+        // the Render Studio's live view: samples shown, traced, rows a frame
+        (
+            "studio",
+            g.studio_progress().map_or(Json::Null, |(shown, traced, rows)| {
+                Json::obj(vec![
+                    ("shown", num(shown as f64)),
+                    ("traced", num(traced as f64)),
+                    ("rows", num(rows as f64)),
+                ])
+            }),
+        ),
         ("cam", cam_json(g)),
         ("robot", robot_json(g)),
         // a pick of the view in flight (the host draws on until it is answered)
@@ -904,6 +1065,8 @@ fn state_json(g: &Gui, canvas: Json) -> String {
                             || n.starts_with("tool:")
                             || n.starts_with("robot:")
                             || n.starts_with("measure:")
+                            || n.starts_with("side:")
+                            || n.starts_with("agent:")
                             || n.starts_with("status:")
                     })
                     .map(|(n, r)| {
@@ -923,7 +1086,7 @@ fn state_json(g: &Gui, canvas: Json) -> String {
                     .collect(),
             ),
         ),
-    ])
+    ]).collect())
     .to_string()
 }
 
@@ -1210,6 +1373,19 @@ pub fn app_open(path: String) {
     ask(Ask::Open(path));
 }
 
+/// A link's file waits for the project's files: the status and the empty view say so.
+#[wasm_bindgen]
+pub fn app_waiting(file: String) {
+    ask(Ask::Waiting(file));
+}
+
+/// The project is in: opens the link's file (`path`; `shown` as the link named it; `env` from
+/// `?env=`), unless something was opened or made while it waited.
+#[wasm_bindgen]
+pub fn app_open_linked(path: String, shown: String, env: Option<String>) {
+    ask(Ask::OpenLinked(path, shown, env));
+}
+
 /// Saves the document under this path (File > Save As's answer).
 #[wasm_bindgen]
 pub fn app_save_as(path: String) {
@@ -1276,6 +1452,12 @@ pub fn app_type(text: String, enter: bool) {
     ask(Ask::Type(text, enter));
 }
 
+/// A picture pasted or dropped on the page (its bytes): the Agent tab's, for its next message.
+#[wasm_bindgen]
+pub fn app_agent_picture(bytes: Vec<u8>) {
+    ask(Ask::AgentPicture(bytes));
+}
+
 /// The page's storage could not keep a file the app wrote (`forgecad web` refused it, the
 /// browser's store failed): said in the status, and in Versions for the history's files.
 #[wasm_bindgen]
@@ -1293,6 +1475,13 @@ pub fn app_sketches_kept() -> usize {
 
 /// Says `text` in the app's status line: what the page refused (a link's file outside the
 /// project, a name to save as that isn't a project path).
+/// What the page did with the files the app asked it to export: "Exported prog.nc" (the
+/// browser's save picker), "Downloaded prog.nc", "Export cancelled".
+#[wasm_bindgen]
+pub fn app_exported(text: String) {
+    ask(Ask::Exported(text));
+}
+
 #[wasm_bindgen]
 pub fn app_say(text: String) {
     ask(Ask::Say(text));
@@ -1316,6 +1505,12 @@ pub fn app_machine(cmd: String) {
 #[wasm_bindgen]
 pub fn app_capture(words: String) {
     ask(Ask::Capture(words));
+}
+
+/// The Render Studio's live view (tests): `stop` it where it is, or let it `go` on.
+#[wasm_bindgen]
+pub fn app_studio(cmd: String) {
+    ask(Ask::Studio(cmd));
 }
 
 /// The app's state as JSON: see `state_json`.

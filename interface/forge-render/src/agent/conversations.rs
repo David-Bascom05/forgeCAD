@@ -1,11 +1,15 @@
-//! Local project conversations. Agent credentials and project files are never stored here.
+//! Local project conversations. Agent credentials are never stored here. A turn's changed files
+//! are, before and after (each up to `TURN_FILE_BYTES`), so its Undo still works when the
+//! conversation is resumed; the folder and files are the user's own (`private_dir`).
 use super::Event;
-use crate::shell::agent::{Entry, ToolState};
+use crate::shell::agent::{Asked, Entry, ToolState};
 use crate::shell::agent_settings::AgentSettings;
 use forge_agent::json::Json;
 use std::path::{Path, PathBuf};
 
 const MAX_BYTES: u64 = 32 << 20;
+/// A turn's file larger than this is kept as a note: its Undo isn't kept.
+pub const TURN_FILE_BYTES: usize = 1 << 20;
 
 #[derive(Clone, Debug)]
 pub struct Summary {
@@ -28,6 +32,8 @@ pub struct Conversation {
     pub entries: Vec<Entry>,
     pub history: Vec<Json>,
     pub interrupted: bool,
+    /// The agent's turns, each file's before and after: what the Diff cards undo.
+    pub turns: Vec<crate::agent::TurnRec>,
 }
 
 pub fn default_dir() -> Option<PathBuf> {
@@ -36,8 +42,8 @@ pub fn default_dir() -> Option<PathBuf> {
 }
 
 fn canonical(project: &Path) -> Result<String, String> {
-    project
-        .canonicalize()
+    // the page's filesystem too (std's has no canonicalize in wasm)
+    forge_dirs::fs::canonicalize(project)
         .map(|p| p.display().to_string())
         .map_err(|e| e.to_string())
 }
@@ -114,6 +120,7 @@ impl Conversation {
             entries: vec![],
             history: vec![],
             interrupted: false,
+            turns: vec![],
         })
     }
     pub fn summary(&self) -> Summary {
@@ -161,6 +168,7 @@ impl Conversation {
                 Json::Arr(self.entries.iter().map(entry_json).collect()),
             ),
             ("history", Json::Arr(self.history.clone())),
+            ("turns", Json::Arr(self.turns.iter().map(turn_json).collect())),
         ]);
         let text = json.to_string();
         if text.len() as u64 > MAX_BYTES {
@@ -222,7 +230,7 @@ pub fn load(base: &Path, project: &Path, id: &str) -> Result<Conversation, Strin
     if number(&j, "format") != 1 || string(&j, "id") != id || string(&j, "project") != canonical(project)? {
         return Err("Conversation belongs to another project or has an unsupported format".into());
     }
-    Ok(Conversation {
+    Ok(with_diffs(Conversation {
         id: id.into(),
         project: canonical(project)?,
         title: string(&j, "title"),
@@ -233,12 +241,111 @@ pub fn load(base: &Path, project: &Path, id: &str) -> Result<Conversation, Strin
         entries: array(&j, "entries").iter().filter_map(entry_from_json).collect(),
         history: complete_history(array(&j, "history")),
         interrupted: j.get("interrupted") == Some(&Json::Bool(true)),
-    })
+        turns: array(&j, "turns").iter().map(turn_from_json).collect(),
+    }))
+}
+
+fn turn_json(t: &crate::agent::TurnRec) -> Json {
+    Json::obj(vec![
+        ("label", t.label.clone().into()),
+        (
+            "files",
+            Json::Arr(
+                t.files
+                    .iter()
+                    .map(|f| {
+                        // too large to keep: no Undo after a resume (the card says so)
+                        let keep = f.after.len() <= TURN_FILE_BYTES
+                            && f.before.as_ref().is_none_or(|b| b.len() <= TURN_FILE_BYTES);
+                        Json::obj(vec![
+                            ("path", f.path.clone().into()),
+                            (
+                                "before",
+                                match (&f.before, keep) {
+                                    (Some(b), true) => b.clone().into(),
+                                    _ => Json::Null,
+                                },
+                            ),
+                            ("after", if keep { f.after.clone().into() } else { Json::Null }),
+                            ("created", f.before.is_none().into()),
+                            ("kept", keep.into()),
+                            ("undone", f.undone.into()),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
+    ])
+}
+
+fn turn_from_json(j: &Json) -> crate::agent::TurnRec {
+    crate::agent::TurnRec {
+        label: string(j, "label"),
+        files: array(j, "files")
+            .iter()
+            .map(|f| crate::agent::FileRec {
+                path: string(f, "path"),
+                before: f.get("before").and_then(Json::str).map(str::to_string),
+                after: string(f, "after"),
+                key: 0,
+                undone: f.get("undone") == Some(&Json::Bool(true)),
+                trash: None,
+                opened_from: None,
+                // kept: its Undo works; else it's only said (no before or after to put back)
+                restored: f.get("kept") != Some(&Json::Bool(false)),
+            })
+            .collect(),
+    }
+}
+
+/// The Diff cards again, their lines from the turns kept: a card whose texts weren't kept (too
+/// large) is a note, as before.
+fn with_diffs(mut c: Conversation) -> Conversation {
+    for e in &mut c.entries {
+        let Entry::Diff {
+            turn,
+            index,
+            created,
+            file,
+            lines,
+            added,
+            removed,
+            ..
+        } = e
+        else {
+            continue;
+        };
+        match c
+            .turns
+            .get(*turn)
+            .and_then(|t| t.files.get(*index))
+            .filter(|f| f.restored)
+        {
+            Some(f) => {
+                *lines = crate::shell::agent::diff(f.before.as_deref().unwrap_or(""), &f.after, 2);
+            }
+            None => {
+                *e = Entry::Note {
+                    text: format!(
+                        "{} {file} (+{added} −{removed}) · too large to undo after a resume",
+                        if *created { "Created" } else { "Changed" }
+                    ),
+                    error: false,
+                };
+            }
+        }
+    }
+    c
 }
 
 fn entry_json(entry: &Entry) -> Json {
     match entry {
-        Entry::User { text, refs, markup } => Json::obj(vec![
+        Entry::User {
+            text,
+            refs,
+            markup,
+            pictures,
+        } => Json::obj(vec![
             ("type", "user".into()),
             ("text", text.clone().into()),
             ("refs", Json::Arr(refs.iter().cloned().map(Json::from).collect())),
@@ -246,6 +353,7 @@ fn entry_json(entry: &Entry) -> Json {
                 "markup",
                 markup.as_ref().map_or(Json::Null, |m| m.said.clone().into()),
             ),
+            ("pictures", (*pictures as f64).into()),
         ]),
         Entry::Agent { text } => Json::obj(vec![("type", "agent".into()), ("text", text.clone().into())]),
         Entry::Note { text, error } => Json::obj(vec![
@@ -277,7 +385,24 @@ fn entry_json(entry: &Entry) -> Json {
                 .into(),
             ),
         ]),
+        Entry::Permission { summary, state, .. } => Json::obj(vec![
+            ("type", "note".into()),
+            (
+                "text",
+                match state {
+                    Asked::Waiting | Asked::Dropped => format!("Asked to {summary}: not answered"),
+                    Asked::Allowed => format!("Allowed: {summary}"),
+                    Asked::Always => format!("Allowed from then on: {summary}"),
+                    Asked::Denied => format!("Declined: {summary}"),
+                }
+                .into(),
+            ),
+            ("error", false.into()),
+        ]),
+        // its lines come back from the turn's before and after (`with_diffs`)
         Entry::Diff {
+            turn,
+            index,
             file,
             created,
             added,
@@ -285,17 +410,14 @@ fn entry_json(entry: &Entry) -> Json {
             undone,
             ..
         } => Json::obj(vec![
-            ("type", "note".into()),
-            (
-                "text",
-                format!(
-                    "{} {file} (+{added}/−{removed}){}",
-                    if *created { "Created" } else { "Changed" },
-                    if *undone { " · undone" } else { "" }
-                )
-                .into(),
-            ),
-            ("error", false.into()),
+            ("type", "diff".into()),
+            ("turn", (*turn as f64).into()),
+            ("index", (*index as f64).into()),
+            ("file", file.clone().into()),
+            ("created", (*created).into()),
+            ("added", (*added as f64).into()),
+            ("removed", (*removed as f64).into()),
+            ("undone", (*undone).into()),
         ]),
     }
 }
@@ -314,8 +436,19 @@ fn entry_from_json(j: &Json) -> Option<Entry> {
                     .map(str::to_string)
                     .collect(),
                 markup: None,
+                pictures: j.get("pictures").and_then(Json::num).map_or(0, |n| n as usize),
             }
         }
+        "diff" => Entry::Diff {
+            turn: number(j, "turn") as usize,
+            index: number(j, "index") as usize,
+            created: j.get("created") == Some(&Json::Bool(true)),
+            file: string(j, "file"),
+            lines: vec![],
+            added: number(j, "added") as usize,
+            removed: number(j, "removed") as usize,
+            undone: j.get("undone") == Some(&Json::Bool(true)),
+        },
         "agent" => Entry::Agent {
             text: string(j, "text"),
         },
@@ -467,6 +600,7 @@ pub fn import_codex_from(
                             text,
                             refs: vec![],
                             markup: None,
+                            pictures: 0,
                         });
                     } else if role == "assistant" {
                         entries.push(Entry::Agent { text });

@@ -105,7 +105,7 @@ impl Gui {
                         got
                     };
                     if let Some(d) = &mut self.shell.sheet.dlg {
-                        d.error = got.err().map(|e| format!("{}: {}", e.kind(), e.text()));
+                        d.error = got.err().map(|e| e.text());
                     }
                     self.fg_text();
                 }
@@ -122,7 +122,7 @@ impl Gui {
                     let Some(s) = &mut self.fg else { continue };
                     self.shell.status = match s.apply_all(ops) {
                         Ok(()) => "Sheet metal defaults set".into(),
-                        Err(e) => format!("refused: {}: {}", e.kind(), e.text()),
+                        Err(e) => format!("refused: {}", e.text()),
                     };
                     self.fg_text();
                 }
@@ -187,7 +187,7 @@ impl Gui {
         };
         let Some(s) = &mut self.fg else { return };
         if let Err(e) = s.apply_all(ops) {
-            d.error = Some(format!("{}: {}", e.kind(), e.text()));
+            d.error = Some(e.text());
             self.shell.sheet.dlg = Some(d);
             return;
         }

@@ -119,7 +119,10 @@ printf '{"type":"item.completed","item":{"id":"m","type":"agent_message","text":
 printf '{"type":"turn.completed","usage":{}}\n'
 "#,
     );
-    b.send("Make a change".into(), Some(vec![1, 2, 3]));
+    b.send(
+        "Make a change".into(),
+        vec![forge_render::agent::Picture::png(vec![1, 2, 3])],
+    );
     let events = until_done(&rx);
     assert!(matches!(
         events.last(),
@@ -135,7 +138,7 @@ printf '{"type":"turn.completed","usage":{}}\n'
             .ends_with("User request:\nMake a change")
     );
     assert_eq!(*b.session.lock().unwrap(), Some("saved-thread".into()));
-    let args = b.args(None);
+    let args = b.args(&[]);
     assert!(args.windows(2).any(|a| a == ["resume", "saved-thread"]));
     assert!(
         args.iter()
@@ -160,7 +163,7 @@ printf '{"type":"turn.completed","usage":{}}\n'
             .extension()
             .is_none_or(|x| x != "png"))
     );
-    b.send("Follow up".into(), None);
+    b.send("Follow up".into(), vec![]);
     assert!(matches!(
         until_done(&rx).last(),
         Some(Event::Done {
@@ -176,7 +179,7 @@ printf '{"type":"turn.completed","usage":{}}\n'
 fn codex_stop_and_exit_failures_finish_the_turn() {
     let dir = scratch();
     let (mut b, rx) = backend(&dir, "#!/bin/sh\ncat >/dev/null\nexec sleep 30\n");
-    b.send("Wait".into(), None);
+    b.send("Wait".into(), vec![]);
     b.stop();
     assert!(matches!(
         until_done(&rx).last(),
@@ -190,7 +193,7 @@ fn codex_stop_and_exit_failures_finish_the_turn() {
         &dir,
         "#!/bin/sh\ncat >/dev/null\necho 'Not signed in' >&2\nexit 1\n",
     );
-    b.send("Hi".into(), None);
+    b.send("Hi".into(), vec![]);
     assert!(
         matches!(until_done(&rx).last(), Some(Event::Done { error: Some(e), stopped: false }) if e.contains("Not signed in"))
     );
@@ -254,7 +257,7 @@ fn codex_live_uses_the_apps_mcp_tools_and_resumes_with_an_image() {
     };
     b.send(
         "Call forgecad's tree tool and tell me the part's name.".into(),
-        None,
+        vec![],
     );
     let events = collect();
     assert!(
@@ -275,7 +278,7 @@ fn codex_live_uses_the_apps_mcp_tools_and_resumes_with_an_image() {
     );
     let session = b.session.lock().unwrap().clone().expect("thread id");
     let png = forge_render::agent::apptools::png(16, 16, &[255, 0, 0].repeat(256)).unwrap();
-    b.send("What colour is the attached image, and what part name did the tree return last turn? Do not call tools.".into(), Some(png));
+    b.send("What colour is the attached image, and what part name did the tree return last turn? Do not call tools.".into(), vec![forge_render::agent::Picture::png(png)]);
     let events = collect();
     assert!(
         matches!(
@@ -300,5 +303,35 @@ fn codex_live_uses_the_apps_mcp_tools_and_resumes_with_an_image() {
     );
     assert_eq!(b.session.lock().unwrap().as_ref(), Some(&session));
     drop(b);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+/// train 7's GPU job: an agent started while its program is still open for writing somewhere (a
+/// fake agent just written, as another test's thread forks) failed with "Text file busy", and the
+/// turn ended as a Problem, not stopped. The start waits that moment out.
+#[test]
+fn an_agent_still_open_for_writing_starts_once_it_is_closed() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = scratch();
+    let program = dir.join("fake-agent");
+    let mut held = std::fs::File::create(&program).unwrap();
+    std::io::Write::write_all(&mut held, b"#!/bin/sh\nexit 0\n").unwrap();
+    std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+    // open for writing: exec refuses it, as it did in the race
+    let refused = std::process::Command::new(&program).spawn();
+    assert_eq!(
+        refused.map(|_| ()).unwrap_err().kind(),
+        std::io::ErrorKind::ExecutableFileBusy
+    );
+    let closer = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(80));
+        drop(held);
+    });
+    let status = forge_render::agent::spawn(&mut std::process::Command::new(&program))
+        .expect("started once it was closed")
+        .wait()
+        .unwrap();
+    assert!(status.success());
+    closer.join().unwrap();
     std::fs::remove_dir_all(dir).unwrap();
 }

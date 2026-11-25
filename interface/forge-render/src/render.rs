@@ -531,6 +531,21 @@ pub struct Renderer {
     pub gpu_ms: Option<f32>,
     /// Coarsest level whose chord stays under this many pixels.
     pub lod_px: f32,
+    /// The meshes' segments (bound with the placements), their bytes so far and the most
+    /// segments a level has: what an assembly's restage grows (`restage`).
+    segments: wgpu::Buffer,
+    bytes: (u64, u64, u64),
+    line_most: u32,
+    /// Whose meshes these are, and how many: an assembly's (`fg::AsmMeshes`), which only grow.
+    lineage: Option<(u64, usize)>,
+    /// What the vertex, index, segment and vertex-face buffers hold, room to grow included
+    /// (an assembly's are made with room: `set_lineage`).
+    room: [u64; 4],
+}
+
+/// Room for more meshes of an assembly's: half as much again, at least 4 MB.
+fn room_for(bytes: u64) -> u64 {
+    (bytes + bytes / 2).max(1 << 22).next_multiple_of(4)
 }
 
 /// What every part's chords and sphere are, for `Scene::new`.
@@ -674,10 +689,32 @@ struct Geometry {
     vertex_faces: wgpu::Buffer,
     line_indices: wgpu::Buffer,
     segments: wgpu::Buffer,
+    /// Vertex, index and segment bytes.
+    bytes: (u64, u64, u64),
+    /// The most segments a level has: what `line_indices` covers.
+    most: u32,
 }
 
-fn geometry(device: &wgpu::Device, queue: &wgpu::Queue, parts: &[PartMesh]) -> Geometry {
-    let (mut vbytes, mut ibytes, mut sbytes) = (0u64, 0u64, 0u64);
+/// Parts' meshes laid out for the GPU after `base` bytes of others (vertices, indices,
+/// segments): their draws, boxes, edges and pick index, and the bytes to write.
+struct Packed<'a> {
+    lods: Vec<Vec<LodDraw>>,
+    edge_lengths: Vec<Vec<Vec<(f32, u32)>>>,
+    boxes: Vec<([f32; 3], [f32; 3])>,
+    index: Vec<Vec<PickIndex>>,
+    v: Vec<&'a [u8]>,
+    i: Vec<&'a [u8]>,
+    s: Vec<&'a [u8]>,
+    /// Which face each of these parts' vertices is on.
+    face_bytes: Vec<u8>,
+    /// The most segments any of these levels has.
+    most: u32,
+    /// The bytes so far, these parts' with `base`'s.
+    bytes: (u64, u64, u64),
+}
+
+fn pack(parts: &[PartMesh], base: (u64, u64, u64)) -> Packed<'_> {
+    let (mut vbytes, mut ibytes, mut sbytes) = base;
     let mut lods = Vec::with_capacity(parts.len());
     for p in parts {
         let mut row = Vec::with_capacity(p.lods.len());
@@ -756,41 +793,19 @@ fn geometry(device: &wgpu::Device, queue: &wgpu::Queue, parts: &[PartMesh]) -> G
     let i: Vec<&[u8]> = all_lods().map(|l| &l.indices[..]).collect();
     let s: Vec<&[u8]> = all_lods().map(|l| &l.segments[..]).collect();
     // which face each vertex is on, for picks: whole buffers line up with the vertices
-    let mut face_bytes = vec![0u8; (vbytes / VERTEX as u64) as usize * 4];
-    let mut base = 0usize;
+    let mut face_bytes = vec![0u8; ((vbytes - base.0) / VERTEX as u64) as usize * 4];
+    let mut at = 0usize;
     for l in all_lods() {
         for f in &l.faces {
-            let from = (base + f.first_vertex as usize) * 4;
+            let from = (at + f.first_vertex as usize) * 4;
             let to = from + f.vertices as usize * 4;
             for out in face_bytes[from..to].as_chunks_mut::<4>().0 {
                 *out = f.face.to_le_bytes();
             }
         }
-        base += l.vertices.len() / VERTEX;
+        at += l.vertices.len() / VERTEX;
     }
-    let vertex_faces = filled(
-        (device, queue),
-        "vertex faces",
-        face_bytes.len() as u64,
-        wgpu::BufferUsages::VERTEX,
-        vec![&face_bytes],
-    );
-    // one pattern of two triangles per segment, as long as the longest level needs; a level
-    // starts at its first segment's vertices
     let most = all_lods().map(|l| l.segments.len() / SEGMENT).max().unwrap_or(0) as u32;
-    let mut pattern = Vec::with_capacity(most as usize * 24);
-    for k in 0..most {
-        for v in [0, 1, 2, 2, 1, 3] {
-            pattern.extend_from_slice(&(k * 4 + v).to_le_bytes());
-        }
-    }
-    let line_indices = filled(
-        (device, queue),
-        "line indices",
-        pattern.len() as u64,
-        wgpu::BufferUsages::INDEX,
-        vec![&pattern],
-    );
     let index: Vec<Vec<PickIndex>> = parts
         .iter()
         .zip(&lods)
@@ -808,13 +823,140 @@ fn geometry(device: &wgpu::Device, queue: &wgpu::Queue, parts: &[PartMesh]) -> G
                 .collect()
         })
         .collect();
-    let vertices = filled((device, queue), "vertices", vbytes, wgpu::BufferUsages::VERTEX, v);
-    let indices = filled((device, queue), "indices", ibytes, wgpu::BufferUsages::INDEX, i);
+    Packed {
+        lods,
+        edge_lengths,
+        boxes,
+        index,
+        v,
+        i,
+        s,
+        face_bytes,
+        most,
+        bytes: (vbytes, ibytes, sbytes),
+    }
+}
+
+/// One pattern of two triangles per segment, as long as the longest level needs; a level
+/// starts at its first segment's vertices.
+fn line_indices(device: &wgpu::Device, queue: &wgpu::Queue, most: u32) -> wgpu::Buffer {
+    let mut pattern = Vec::with_capacity(most as usize * 24);
+    for k in 0..most {
+        for v in [0, 1, 2, 2, 1, 3] {
+            pattern.extend_from_slice(&(k * 4 + v).to_le_bytes());
+        }
+    }
+    filled(
+        (device, queue),
+        "line indices",
+        pattern.len() as u64,
+        wgpu::BufferUsages::INDEX,
+        vec![&pattern],
+    )
+}
+
+/// A buffer of `old`'s first `keep` bytes, then `data`: the bytes kept are copied on the GPU.
+fn grown(
+    (device, queue): (&wgpu::Device, &wgpu::Queue),
+    encoder: &mut wgpu::CommandEncoder,
+    label: &str,
+    (old, keep): (&wgpu::Buffer, u64),
+    usage: wgpu::BufferUsages,
+    data: Vec<&[u8]>,
+    room: u64,
+) -> wgpu::Buffer {
+    let size = (keep + data.iter().map(|d| d.len() as u64).sum::<u64>()).max(room);
+    let usage = usage | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST;
+    #[cfg(target_arch = "wasm32")]
+    let buffer = {
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(label),
+            size: size.max(16).next_multiple_of(4),
+            usage,
+            mapped_at_creation: false,
+        });
+        let mut at = keep;
+        for d in data {
+            if d.len() % 4 == 0 {
+                queue.write_buffer(&buffer, at, d);
+            } else {
+                let mut w = d.to_vec();
+                w.resize(d.len().next_multiple_of(4), 0);
+                queue.write_buffer(&buffer, at, &w);
+            }
+            at += d.len() as u64;
+        }
+        buffer
+    };
+    #[cfg(not(target_arch = "wasm32"))]
+    let buffer = {
+        let _ = queue;
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(label),
+            size: size.max(16),
+            usage,
+            mapped_at_creation: true,
+        });
+        let mut map = buffer.slice(..).get_mapped_range_mut().expect("just mapped");
+        let mut at = keep as usize;
+        for d in data {
+            map.slice(at..at + d.len()).copy_from_slice(d);
+            at += d.len();
+        }
+        drop(map);
+        buffer.unmap();
+        buffer
+    };
+    if keep > 0 {
+        encoder.copy_buffer_to_buffer(old, 0, &buffer, 0, keep);
+    }
+    buffer
+}
+
+// every buffer of meshes can be grown into a new one (`Renderer::restage`)
+const GROWS: wgpu::BufferUsages = wgpu::BufferUsages::COPY_SRC;
+
+fn geometry(device: &wgpu::Device, queue: &wgpu::Queue, parts: &[PartMesh]) -> Geometry {
+    let Packed {
+        lods,
+        edge_lengths,
+        boxes,
+        index,
+        v,
+        i,
+        s,
+        face_bytes,
+        most,
+        bytes,
+    } = pack(parts, (0, 0, 0));
+    let vertex_faces = filled(
+        (device, queue),
+        "vertex faces",
+        face_bytes.len() as u64,
+        wgpu::BufferUsages::VERTEX | GROWS,
+        vec![&face_bytes],
+    );
+    let line_indices = line_indices(device, queue, most);
+    let (vbytes, ibytes, sbytes) = bytes;
+    let vertices = filled(
+        (device, queue),
+        "vertices",
+        vbytes,
+        wgpu::BufferUsages::VERTEX | GROWS,
+        v,
+    );
+    let indices = filled(
+        (device, queue),
+        "indices",
+        ibytes,
+        wgpu::BufferUsages::INDEX | GROWS,
+        i,
+    );
     let segments = filled(
         (device, queue),
         "segments",
         sbytes,
-        wgpu::BufferUsages::STORAGE,
+        wgpu::BufferUsages::STORAGE | GROWS,
         s,
     );
     Geometry {
@@ -827,6 +969,8 @@ fn geometry(device: &wgpu::Device, queue: &wgpu::Queue, parts: &[PartMesh]) -> G
         vertex_faces,
         line_indices,
         segments,
+        bytes,
+        most,
     }
 }
 
@@ -1239,6 +1383,8 @@ impl Renderer {
             vertex_faces,
             line_indices,
             segments,
+            bytes,
+            most,
         } = geometry(&device, &queue, parts);
 
         let placements = filled(
@@ -1595,6 +1741,11 @@ impl Renderer {
             period_ns,
             gpu_ms: None,
             lod_px: LOD_PX,
+            segments,
+            bytes,
+            line_most: most,
+            lineage: None,
+            room: [bytes.0, bytes.1, bytes.2, bytes.0 / VERTEX as u64 * 4],
         }
     }
 
@@ -1631,6 +1782,239 @@ impl Renderer {
         self.indices = g.indices;
         self.vertex_faces = g.vertex_faces;
         self.line_indices = g.line_indices;
+        self.segments = g.segments;
+        self.bytes = g.bytes;
+        self.line_most = g.most;
+        self.lineage = None;
+        self.room = [g.bytes.0, g.bytes.1, g.bytes.2, g.bytes.0 / VERTEX as u64 * 4];
+    }
+
+    /// These meshes of an assembly's, as their lineage says they are (the same `AsmMeshes`, of
+    /// which this renderer has the first so many): only the new ones packed and written, the
+    /// rest copied on the GPU. False, and nothing done, unless that holds.
+    fn grow_parts(&mut self, parts: &[PartMesh], lineage: Option<(u64, usize)>) -> bool {
+        let (Some((had_id, had)), Some((id, n))) = (self.lineage, lineage) else {
+            return false;
+        };
+        if had_id != id || had > n || n != parts.len() || self.lods.len() != had {
+            return false;
+        }
+        let tail = &parts[had..];
+        let p = pack(tail, self.bytes);
+        let (vb, ib, sb) = self.bytes;
+        let fb = vb / VERTEX as u64 * 4;
+        let have = [vb, ib, sb, fb];
+        let len = |d: &[&[u8]]| d.iter().map(|x| x.len() as u64).sum::<u64>();
+        let need = [len(&p.v), len(&p.i), len(&p.s), p.face_bytes.len() as u64];
+        let fits = (0..4).all(|k| have[k] + need[k] <= self.room[k]);
+        let mut enc = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("meshes grown"),
+            });
+        if fits {
+            // into the room left: only the new bytes written
+            let put = |q: &wgpu::Queue, b: &wgpu::Buffer, mut at: u64, data: &[&[u8]]| {
+                for d in data {
+                    q.write_buffer(b, at, d);
+                    at += d.len() as u64;
+                }
+            };
+            put(&self.queue, &self.vertices, vb, &p.v);
+            put(&self.queue, &self.indices, ib, &p.i);
+            put(&self.queue, &self.segments, sb, &p.s);
+            put(&self.queue, &self.vertex_faces, fb, &[&p.face_bytes]);
+        } else {
+            let dq = (&self.device, &self.queue);
+            let room: Vec<u64> = (0..4).map(|k| room_for(have[k] + need[k])).collect();
+            self.vertices = grown(
+                dq,
+                &mut enc,
+                "vertices",
+                (&self.vertices, vb),
+                wgpu::BufferUsages::VERTEX,
+                p.v,
+                room[0],
+            );
+            self.indices = grown(
+                dq,
+                &mut enc,
+                "indices",
+                (&self.indices, ib),
+                wgpu::BufferUsages::INDEX,
+                p.i,
+                room[1],
+            );
+            self.segments = grown(
+                dq,
+                &mut enc,
+                "segments",
+                (&self.segments, sb),
+                wgpu::BufferUsages::STORAGE,
+                p.s,
+                room[2],
+            );
+            self.vertex_faces = grown(
+                dq,
+                &mut enc,
+                "vertex faces",
+                (&self.vertex_faces, fb),
+                wgpu::BufferUsages::VERTEX,
+                vec![&p.face_bytes],
+                room[3],
+            );
+            self.room = [room[0], room[1], room[2], room[3]];
+        }
+        self.queue.submit([enc.finish()]);
+        if p.most > self.line_most {
+            self.line_indices = line_indices(&self.device, &self.queue, p.most);
+            self.line_most = p.most;
+        }
+        self.bytes = p.bytes;
+        self.lods.extend(p.lods);
+        self.edge_lengths.extend(p.edge_lengths);
+        self.boxes.extend(p.boxes);
+        self.index.extend(p.index);
+        std::sync::Arc::make_mut(&mut self.cpu_parts).extend(finest(tail).iter().cloned());
+        self.geometry += 1;
+        self.poses_gen += 1;
+        let layout = &self.bind_layout;
+        let all = |globals| [globals, &self.placements, &self.segments, &self.tints];
+        self.binds = bind_all(&self.device, layout, all(&self.globals));
+        self.pick.binds = bind_all(&self.device, layout, all(&self.pick.globals));
+        self.shadow.binds = bind_all(&self.device, layout, all(&self.shadow.globals));
+        self.sun.binds = bind_all(&self.device, layout, all(&self.sun.globals));
+        self.lineage = Some((id, n));
+        true
+    }
+
+    /// Marks these meshes as the first `n` of an assembly's (`fg::AsmMeshes` `id`).
+    /// Its buffers are made again with room for more, so later meshes are only written.
+    pub fn set_lineage(&mut self, lineage: Option<(u64, usize)>) {
+        self.lineage = lineage.filter(|&(_, n)| n == self.lods.len());
+        if self.lineage.is_none() {
+            return;
+        }
+        let (vb, ib, sb) = self.bytes;
+        let have = [vb, ib, sb, vb / VERTEX as u64 * 4];
+        if (0..4).all(|k| self.room[k] >= room_for(have[k])) {
+            return;
+        }
+        let room: Vec<u64> = have.iter().map(|&h| room_for(h)).collect();
+        let dq = (&self.device, &self.queue);
+        let mut enc = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("meshes given room"),
+            });
+        self.vertices = grown(
+            dq,
+            &mut enc,
+            "vertices",
+            (&self.vertices, vb),
+            wgpu::BufferUsages::VERTEX,
+            vec![],
+            room[0],
+        );
+        self.indices = grown(
+            dq,
+            &mut enc,
+            "indices",
+            (&self.indices, ib),
+            wgpu::BufferUsages::INDEX,
+            vec![],
+            room[1],
+        );
+        self.segments = grown(
+            dq,
+            &mut enc,
+            "segments",
+            (&self.segments, sb),
+            wgpu::BufferUsages::STORAGE,
+            vec![],
+            room[2],
+        );
+        self.vertex_faces = grown(
+            dq,
+            &mut enc,
+            "vertex faces",
+            (&self.vertex_faces, have[3]),
+            wgpu::BufferUsages::VERTEX,
+            vec![],
+            room[3],
+        );
+        self.queue.submit([enc.finish()]);
+        self.room = [room[0], room[1], room[2], room[3]];
+        let layout = &self.bind_layout;
+        let all = |globals| [globals, &self.placements, &self.segments, &self.tints];
+        self.binds = bind_all(&self.device, layout, all(&self.globals));
+        self.pick.binds = bind_all(&self.device, layout, all(&self.pick.globals));
+        self.shadow.binds = bind_all(&self.device, layout, all(&self.shadow.globals));
+        self.sun.binds = bind_all(&self.device, layout, all(&self.sun.globals));
+    }
+
+    /// Other parts in other places: this renderer as `new` would make it of them, keeping its
+    /// pipelines and targets (an assembly's restage: making those again took a frame of 150 ms
+    /// with a big import in it, research/big-render). What the person chose for the view stays:
+    /// occlusion on or off (`O`), the background's picture; the rest `new` starts from is put
+    /// back, and the host sets its look again.
+    pub fn restage(&mut self, parts: &[PartMesh], scene: &Scene, lineage: Option<(u64, usize)>) {
+        let dq = (&self.device, &self.queue);
+        self.placements = filled(
+            dq,
+            "placements",
+            scene.rows_bytes.len() as u64,
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            vec![&scene.rows_bytes],
+        );
+        let mut tint_bytes = Vec::with_capacity(scene.placements.len() * 16);
+        for v in scene.placements.iter().flat_map(|p| &p.tint) {
+            tint_bytes.extend_from_slice(&v.to_le_bytes());
+        }
+        self.tints = filled(
+            dq,
+            "tints",
+            tint_bytes.len() as u64,
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            vec![&tint_bytes],
+        );
+        self.above = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("above"),
+            size: scene.placements.len().max(1) as u64 * 4,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        self.instances = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("visible"),
+            size: scene.placements.len().max(1) as u64 * 8,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        self.above_list.clear();
+        self.above_draws.clear();
+        self.shadow_key = None;
+        self.sun_key = None;
+        self.map_count = 0;
+        self.map_key = 0;
+        self.live = None;
+        self.ids_out = None;
+        self.section = None;
+        self.section2 = None;
+        self.section_end = false;
+        self.style = VisualStyle::default();
+        self.floor_z = None;
+        self.lod_px = LOD_PX;
+        // the meshes (only the new ones, when they are more of the same assembly's), and every
+        // binding of the buffers above
+        if !self.grow_parts(parts, lineage) {
+            self.set_parts(parts);
+            self.set_lineage(lineage);
+        }
+    }
+
+    /// The background picture's size: (0, 0) with none.
+    pub fn background_image_size(&self) -> (u32, u32) {
+        self.back_image.size
     }
 
     /// The background's picture: RGBA (sRGB), width and height; none, the scheme's colours.
@@ -2648,8 +3032,26 @@ impl Renderer {
     /// The view cube alone, over transparent black, into `target` (this renderer's format and
     /// size): what the Render Studio lays over its traced picture. The globals are the last
     /// frame's, so call it after `frame` for the same camera.
-    pub fn cube_only(&mut self, target: &wgpu::TextureView, camera: &Camera, overlay: &Overlay) {
+    /// The view cube alone over transparent, for an environment drawing the view itself (the
+    /// Render Studio's trace); with `lit`, those faces too, drawn see-through over the picture in
+    /// their colours (what's chosen there: the ghost pass, nothing opaque to hide them).
+    pub fn cube_only(
+        &mut self,
+        target: &wgpu::TextureView,
+        camera: &Camera,
+        overlay: &Overlay,
+        scene: &Scene,
+        lit: &[FaceColour],
+    ) {
         let cube_verts = self.write_cube(camera, overlay);
+        if !lit.is_empty() {
+            let mut fc = Vec::with_capacity(lit.len().min(FACE_COLOURS) * 8);
+            for c in lit.iter().take(FACE_COLOURS) {
+                fc.extend_from_slice(&c.placement.to_le_bytes());
+                fc.extend_from_slice(&c.rgba);
+            }
+            self.queue.write_buffer(&self.face_ghosts, 0, &fc);
+        }
         let mut encoder = self.device.create_command_encoder(&Default::default());
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -2675,10 +3077,11 @@ impl Renderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
+            pass.set_bind_group(0, &self.binds, &[]);
+            pass.set_bind_group(1, &self.sun.read, &[]);
+            pass.set_bind_group(2, &self.back_image.binds, &[]);
+            self.draw_face_list(&mut pass, scene, lit, true);
             if cube_verts > 0 {
-                pass.set_bind_group(0, &self.binds, &[]);
-                pass.set_bind_group(1, &self.sun.read, &[]);
-                pass.set_bind_group(2, &self.back_image.binds, &[]);
                 pass.set_pipeline(&self.cube);
                 pass.set_vertex_buffer(0, self.cube_verts.slice(..));
                 pass.draw(0..cube_verts, 0..1);
