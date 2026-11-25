@@ -11,6 +11,7 @@
 //!   about +z), what the builder's 3D view draws.
 //! - `cli::run`: `forgecad workholding list|new|check|show|schema`.
 pub mod cli;
+pub mod compile;
 
 use forge_library::schema::{Field, Ty, Unit};
 use forge_workholding::{Box3, Kind as WKind, Library, Prim, Record, WhError, lathe, mill};

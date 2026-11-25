@@ -1,0 +1,54 @@
+# Makers' models of workholding devices, compiled for the checker (forge-workholding src/model.rs).
+# Each [[model]] is a STEP under data/models/ (Git LFS) and how its solids make the device's
+# bodies ([[group]], by the reader's solid order: `cargo run -p forge-workholding-builder
+# --example wh_solids -- FILE` lists them); data/check/NAME.txt is its compiled faces
+# (`cargo run --release -p forge-workholding-builder --example wh_compile`, which reads this file).
+#
+# The device's frame: x along the clamp axis from the fixed jaw's face (x = 0) to the moving
+# jaw's, y across centred on the jaws, z up from the bed (the jaw plates' underside, z = 0).
+# `rot` says each device axis as a model axis with its sign; `origin` is that point in the model
+# (mm), measured from the model's own faces.
+
+[[model]]
+name = "haas-05-0404"
+step = "haas-tooling/05-0404/05-0404.STEP"
+sha256 = "21af355a572df8ef225eb419c4a873836edc0f4704f39c1f0398997be2300cbc"
+how = "Haas Tooling 05-0404 (its metric twin 05-0213 is the same file): 6 in Single-Station CrossOver Fixed-Jaw Vise, 9 in Opening, Flange Style, Haas Workholding by Kurt (https://www.haastooling.com/p/05-0404, read 2026-11-25); the model from David's haas-tooling-step upload (34adf0c7), a SolidWorks 2020 part of 17 solids named by Kurt part numbers. Origin: the fixed jaw plate's (D60-315) face at x = -72.05979872039758 and its underside at y = 70.45959 (the model's y is up); the moving plate's (D60-7) face at x = 156.54018127960242 (the model fully open)."
+rot = "x,-z,y"
+origin = [-72.05979872039758, 70.45959, 0.0]
+opening = 228.59998000000002
+chord = 0.02
+
+[[group]]
+model = "haas-05-0404"
+name = "base"
+role = "base"
+moves = "fixed"
+solids = [13, 1]
+mesh = "haas-tooling/05-0404/base.stl"
+
+[[group]]
+model = "haas-05-0404"
+name = "fixed jaw"
+role = "fixed_jaw"
+moves = "fixed"
+solids = [14, 7, 2, 12, 0, 5, 8, 10]
+mesh = "haas-tooling/05-0404/fixed-jaw.stl"
+
+[[group]]
+model = "haas-05-0404"
+name = "moving jaw"
+role = "moving_jaw"
+moves = "with_jaw"
+solids = [6, 3, 4, 11]
+mesh = "haas-tooling/05-0404/moving-jaw.stl"
+
+# the screw (DX6-5), DX6-3 and DX6-224: neither the model nor a maker's text we have says whether
+# they travel with the moving jaw, so they are placed both ways and both are checked
+[[group]]
+model = "haas-05-0404"
+name = "drive"
+role = "other"
+moves = "unknown"
+solids = [9, 16, 15]
+mesh = "haas-tooling/05-0404/drive.stl"

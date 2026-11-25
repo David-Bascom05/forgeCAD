@@ -30,6 +30,10 @@ pub struct Fixture {
     /// workholding library device's mount. None for the boxes `vise` makes (they stop at the
     /// bed's depth and say nothing of the table).
     pub table_z: Option<f64>,
+    /// Bodies whose maker's model should have given the faces but could not be read: their
+    /// envelope stands in (always empty on a sound build; a caller that must check against the
+    /// real body refuses when it is not).
+    pub enveloped: Vec<String>,
     /// The workholding library's placement it was made from (its bodies' roles, real parts and
     /// their poses, for drawing), when it was.
     pub placed: Option<forge_workholding::Placed>,
@@ -190,6 +194,7 @@ pub fn vise(
         clearance,
         table_z: None,
         placed: None,
+        enveloped: vec![],
     })
 }
 
@@ -460,6 +465,7 @@ pub fn soft_jaws(
         clearance,
         table_z: None,
         placed: None,
+        enveloped: vec![],
     };
     let contact = area(band.first().expect("a band"));
     Ok(SoftJaws {
@@ -472,6 +478,7 @@ pub fn soft_jaws(
             clearance,
             table_z: None,
             placed: None,
+            enveloped: vec![],
         },
         hold,
         part,
@@ -493,7 +500,22 @@ impl Fixture {
         use forge_workholding::{Mount, Prim, geom::IDENT};
         let mut pieces = Vec::new();
         let mut shaped = Vec::new();
+        let mut enveloped = Vec::new();
         for b in &p.bodies {
+            // a maker's model: its compiled faces, posed, are what the checker keeps the tool
+            // from (the body's prims only envelope them); the keep-out grows them as a box does
+            if let Some(e) = &b.exact {
+                match model_faces(e, b.keepout) {
+                    Ok(fs) => {
+                        shaped.push((b.name.clone(), fs));
+                        continue;
+                    }
+                    // the compiled faces are built into the binary, so this means a mismatched
+                    // build: the body's envelope stands in and the fixture says which, for a
+                    // caller that must have the real faces (`enveloped`)
+                    Err(why) => enveloped.push(format!("{}: {why} ({})", b.name, e.model)),
+                }
+            }
             for prim in &b.prims {
                 let g = prim.grown(b.keepout);
                 match g {
@@ -529,8 +551,47 @@ impl Fixture {
                 _ => None,
             },
             placed: Some(p.clone()),
+            enveloped,
         }
     }
+}
+
+/// A model group's compiled faces (forge_workholding::model), posed into the part frame and
+/// grown by `keepout`: the pose must be a turn by quarters and a shift (exact in f64), as
+/// `model_bodies` makes, so the faces keep their kind.
+fn model_faces(e: &forge_workholding::Exact, keepout: f64) -> Result<Vec<Face>, String> {
+    let m = forge_workholding::model::get(&e.model).ok_or("no such model")?;
+    let rot = rot_of(&e.pose.m).ok_or("the pose is not a turn by quarters")?;
+    let groups = crate::fixture_model::read(m.check).map_err(|_| "the compiled faces do not read")?;
+    let fs = groups
+        .iter()
+        .find(|g| g.0 == e.group)
+        .ok_or("not in the compiled faces")?;
+    Ok(fs
+        .1
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            let mut g = crate::fixture_model::moved(f, &rot, e.pose.t, i as u32);
+            if keepout > 0.0 {
+                g.mu += keepout;
+            }
+            g
+        })
+        .collect())
+}
+
+/// A rotation matrix as a signed permutation, when it is one.
+fn rot_of(m: &[[f64; 3]; 3]) -> Option<crate::fixture_model::Rot> {
+    let mut out = [(0usize, 1.0f64); 3];
+    for (i, row) in m.iter().enumerate() {
+        let k = row.iter().position(|x| x.abs() == 1.0)?;
+        if row.iter().enumerate().any(|(j, x)| j != k && *x != 0.0) {
+            return None;
+        }
+        out[i] = (k, row[k]);
+    }
+    crate::fixture_model::is_rot(&out).then_some(out)
 }
 
 impl Fixture {

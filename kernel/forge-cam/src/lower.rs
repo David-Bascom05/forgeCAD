@@ -36,7 +36,7 @@ fn sub(a: V3, b: V3) -> V3 {
 }
 
 /// The bound on a lowered face's distance from the true one, for a part of size `scale`.
-pub(crate) fn mu(scale: f64) -> f64 {
+pub fn mu(scale: f64) -> f64 {
     tol::LINEAR + 64.0 * f64::EPSILON * (1.0 + scale)
 }
 
