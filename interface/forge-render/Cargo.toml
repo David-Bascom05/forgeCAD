@@ -122,10 +122,6 @@ unsafe_code = "forbid"
 [profile.dev.package."*"]
 opt-level = 2
 
-# as the root workspace's (its own workspace, so its own profile): one codegen unit for what ships
-[profile.release]
-codegen-units = 1
-
 # the agent's API keys in each platform's own keyring
 [target.'cfg(not(any(target_os = "macos", windows, target_arch = "wasm32")))'.dependencies]
 zbus-secret-service-keyring-store = { version = "=1.0.1", features = ["crypto-rust"] }

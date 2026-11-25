@@ -19,10 +19,6 @@ path = "src/main.rs"
 [profile.dev.package."*"]
 opt-level = 2
 
-# as the root workspace's (its own workspace, so its own profile): one codegen unit for what ships
-[profile.release]
-codegen-units = 1
-
 # the microphone where ALSA isn't: CoreAudio on macOS, WASAPI on Windows
 [target.'cfg(any(target_os = "macos", windows))'.dependencies]
 cpal = "=0.18.2"

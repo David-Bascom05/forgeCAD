@@ -19,15 +19,6 @@ unsafe_code = "forbid"
 float_cmp = "allow"
 many_single_char_names = "allow"
 
-# What ships, and what the speed gate measures: one codegen unit. 3-5% quicker on the CAM documents
-# and most bench parts than 16 (mold_core_cam 12.5 s -> 11.9 s), and a function's code no longer
-# moves when an unrelated item is added elsewhere in its crate (the gate's counts then move only
-# with code that changed). About 20% longer to build; fat LTO measured too: fewer instructions, no
-# quicker, 66% longer to build (research in FALLBACK's report, 2026-11-24). CI's test builds set
-# CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 for speed; the fuzz profile keeps 16 too.
-[profile.release]
-codegen-units = 1
-
 [profile.test]
 opt-level = 1
 
@@ -56,7 +47,6 @@ opt-level = 2
 # verify/forge-read-fuzz: release speed, with the checks a test build has (an overflow is a finding)
 [profile.fuzz]
 inherits = "release"
-codegen-units = 16
 overflow-checks = true
 debug-assertions = true
 
