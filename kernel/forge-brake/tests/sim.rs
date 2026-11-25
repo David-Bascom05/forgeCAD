@@ -791,16 +791,22 @@ fn stepped_is_the_plan(s: &Sheet, opts: &Options) {
         }
         (pl.plan().expect("done"), ticks)
     };
-    let (whole, runs) = std::thread::scope(|sc| {
-        let runs: Vec<_> = [1, 7].map(|n| (n, sc.spawn(move || stepped(n)))).into();
-        let whole = plan(&m, &tl, opts);
-        (
-            whole,
-            runs.into_iter()
-                .map(|(n, h)| (n, h.join().unwrap()))
-                .collect::<Vec<_>>(),
-        )
-    });
+    let (whole, runs) = if cfg!(target_os = "wasi") {
+        // WASI (wasip1) starts no threads: the same runs, one after another
+        let runs: Vec<_> = [1, 7].map(|n| (n, stepped(n))).into();
+        (plan(&m, &tl, opts), runs)
+    } else {
+        std::thread::scope(|sc| {
+            let runs: Vec<_> = [1, 7].map(|n| (n, sc.spawn(move || stepped(n)))).into();
+            let whole = plan(&m, &tl, opts);
+            (
+                whole,
+                runs.into_iter()
+                    .map(|(n, h)| (n, h.join().unwrap()))
+                    .collect::<Vec<_>>(),
+            )
+        })
+    };
     for (n, (p, ticks)) in runs {
         assert_eq!(p, whole, "{n} at a time");
         if opts.sequence.is_none() && n == 1 && m.bends.len() > 1 {

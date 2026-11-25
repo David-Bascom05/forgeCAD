@@ -723,12 +723,20 @@ fn an_unchanged_part_is_answered_from_the_kept_plan() {
     };
     // a changed part (the lips 1 mm taller) is planned for itself: alongside, on its own thread
     let changed = src.replace("shared lip = 12", "shared lip = 13");
-    let (a, first, c) = std::thread::scope(|sc| {
-        let c = sc.spawn(|| ask_src(&changed, None, None, &ask));
+    let (a, first, c) = if cfg!(target_os = "wasi") {
+        // WASI (wasip1) starts no threads: the changed part first, then the part, timed alone
+        let c = ask_src(&changed, None, None, &ask);
         let t0 = std::time::Instant::now();
         let a = ask_src(&src, None, None, &ask);
-        (a, t0.elapsed(), c.join().unwrap())
-    });
+        (a, t0.elapsed(), c)
+    } else {
+        std::thread::scope(|sc| {
+            let c = sc.spawn(|| ask_src(&changed, None, None, &ask));
+            let t0 = std::time::Instant::now();
+            let a = ask_src(&src, None, None, &ask);
+            (a, t0.elapsed(), c.join().unwrap())
+        })
+    };
     let t1 = std::time::Instant::now();
     let b = ask_src(&src, None, None, &ask);
     let second = t1.elapsed();
@@ -753,22 +761,34 @@ fn planned_a_little_at_a_time(part: &str, ask: &Ask, sliced: bool) {
     let mut p = forge_lang::bendsim::begin(part, None, None, ask).expect("begun");
     assert!(!p.model().bends.is_empty() && !p.tooling().punches.is_empty());
     assert!(!p.progress().done);
-    let (sim, ticks, sliced_for, whole, whole_for) = std::thread::scope(|sc| {
-        let w = sc.spawn(|| {
-            let t = std::time::Instant::now();
-            let a = ask_src(part, None, None, ask);
-            (a, t.elapsed())
-        });
+    let whole_alone = || {
+        let t = std::time::Instant::now();
+        let a = ask_src(part, None, None, ask);
+        (a, t.elapsed())
+    };
+    let slices = |p: &mut forge_lang::bendsim::Planning| {
         let t = std::time::Instant::now();
         let mut ticks = 0;
         while !p.step(3).done {
             ticks += 1;
             assert!(ticks < 100_000);
         }
-        let sliced_for = t.elapsed();
-        let (whole, whole_for) = w.join().unwrap();
+        (ticks, t.elapsed())
+    };
+    let (sim, ticks, sliced_for, whole, whole_for) = if cfg!(target_os = "wasi") {
+        // WASI (wasip1) starts no threads: the whole reply first (it finds no kept plan: the
+        // slices keep theirs only as they finish), then the slices
+        let (whole, whole_for) = whole_alone();
+        let (ticks, sliced_for) = slices(&mut p);
         (p.finish(), ticks, sliced_for, whole, whole_for)
-    });
+    } else {
+        std::thread::scope(|sc| {
+            let w = sc.spawn(whole_alone);
+            let (ticks, sliced_for) = slices(&mut p);
+            let (whole, whole_for) = w.join().unwrap();
+            (p.finish(), ticks, sliced_for, whole, whole_for)
+        })
+    };
     let whole = if whole_for * 5 < sliced_for {
         forge_lang::bendsim::forget_plans();
         ask_src(part, None, None, ask)
