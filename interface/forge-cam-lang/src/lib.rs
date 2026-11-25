@@ -2664,6 +2664,7 @@ impl Cam {
             programs: vec![],
             lib: self.lib.clone(),
             jaws: vec![],
+            wh: self.wh.clone(),
             frames: self.frames.clone(),
             prefetch: Some(Vec::new()),
         };
