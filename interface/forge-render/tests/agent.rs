@@ -229,7 +229,7 @@ fn an_openai_compatible_endpoint_edits_the_file_through_its_tools() {
         },
         out,
     );
-    b.send("make the base plate 10 mm thicker".into(), None);
+    b.send("make the base plate 10 mm thicker".into(), vec![]);
     let mut evs = Vec::new();
     while let Ok(e) = rx.recv_timeout(std::time::Duration::from_secs(60)) {
         let done = matches!(e, Event::Done { .. });

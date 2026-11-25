@@ -25,7 +25,9 @@ fn the_studio_traces_the_view_and_renders_a_file() {
     assert!(h.until(settled), "never built: {}", h.gui.shell.status);
     let shaded = h.gui.shell.view_tex;
     h.gui.shell.enter_env(EnvId::RenderStudio).unwrap();
-    for _ in 0..30 {
+    // the live trace goes a band of rows a frame, as the GPU allows: waited for by time
+    let start = std::time::Instant::now();
+    while h.gui.shell.studio.samples < 10 && start.elapsed().as_secs() < 120 {
         h.step();
     }
     let st = &h.gui.shell.studio;

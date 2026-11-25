@@ -61,6 +61,19 @@ impl Gui {
             // nothing else to say (a view loaded after the run cleared it): the run's state
             self.shell.status = crate::shell::cam::status_line(w);
         }
+        // a narrow window's turns: a sheet opened (an op's, a setup's) shows the column again
+        let sheet = w.op_dlg.is_some() || w.setup_dlg.is_some();
+        if sheet && !w.sheet_was {
+            self.shell.column_shown = true;
+        }
+        w.sheet_was = sheet;
+        // an export the host has not answered in 10 s: said so, with Try again
+        w.export_wait(crate::viewer::now_ms());
+        if let Some(a) = w.export_asked.as_ref().filter(|a| !a.waiting) {
+            // a frame when the wait is up (nothing else may draw one meanwhile)
+            let left = (a.at_ms + crate::shell::cam::nc::EXPORT_WAIT_MS - crate::viewer::now_ms()).max(0.0);
+            self.ctx.request_repaint_after(std::time::Duration::from_millis(left as u64 + 20));
+        }
         // what the workspace just said (an export asked, a refusal) is the shell's status too, as
         // drawn: the status bar draws the workspace's line, and what reads the shell's status
         // (the page's state, the UI audit) sees the same words

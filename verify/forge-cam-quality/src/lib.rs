@@ -183,6 +183,10 @@ pub struct MoveQ {
     pub hex: f64,
     /// hex / the cutting data's fz (1 = the target chip).
     pub load: f64,
+    /// The move's length in plan (mm, along an arc) and whether it keeps one height (a level
+    /// move: not a plunge, ramp or helix turn that descends).
+    pub len_xy: f64,
+    pub level: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -261,6 +265,10 @@ pub struct OpQ {
     pub p_avail: f64,
     /// Rapid pieces that met material (a certified path has none).
     pub rapid_cuts: usize,
+    /// Feed pieces at FAST_FEED or more that met material (a link or hop at the link feed
+    /// meeting stock the planner's map did not show), and the first such piece's end.
+    pub fast_cuts: usize,
+    pub fast_cut_at: Option<[f64; 3]>,
     /// Per move with feed (rapids and cycles left out), in path order.
     pub moves_q: Vec<MoveQ>,
     /// Hole cycles: the feed per spindle revolution (mm/rev), the least over the op's tools
@@ -391,6 +399,9 @@ fn power_at(curve: &[[f64; 2]], rpm: f64) -> f64 {
 
 /// The material threshold: a piece that removes less is in air (mm³).
 const AIR_VOL: f64 = 1e-4;
+
+/// A feed at or above this (mm/min) is a link's, not a cut's: no piece at it may meet material.
+pub const FAST_FEED: f64 = 5000.0;
 /// A point of the edge is in material if the stock there is this far above the tip (mm).
 const EPS_Z: f64 = 1e-3;
 
@@ -825,6 +836,7 @@ pub fn measure_op_unless(
             let mut mq = MoveQ {
                 path: pi,
                 mv: mi,
+                level: dz == 0.0,
                 ..MoveQ::default()
             };
             let mut mq_target: f64 = 0.0;
@@ -833,6 +845,7 @@ pub fn measure_op_unless(
                 let len = dist(a, b);
                 let dt = if f > 0.0 { 60.0 * len / f } else { 0.0 };
                 let pxy = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+                mq.len_xy += pxy;
                 let eng = if q.side && pxy > 1e-9 {
                     let u = [(b[0] - a[0]) / pxy, (b[1] - a[1]) / pxy];
                     Some((map::engage(m, b, u, r, EPS_Z), u))
@@ -842,6 +855,17 @@ pub fn measure_op_unless(
                 let removed = m.sweep_in(a, b, &prof, Some(&mut tiles));
                 q.removed += removed;
                 if removed > AIR_VOL {
+                    if f >= FAST_FEED {
+                        q.fast_cuts += 1;
+                        q.fast_cut_at.get_or_insert(b);
+                        if std::env::var_os("FORGE_QUALITY_FAST").is_some() {
+                            eprintln!(
+                                "fast {} f={f:.1} removed={removed:.6} a={a:?} b={b:?} mv={mv:?} side={:?}",
+                                q.name,
+                                eng.map(|e| (e.0.phi, e.0.ap))
+                            );
+                        }
+                    }
                     moved_in = true;
                     q.len_cut += len;
                     q.t_cut += dt;
@@ -1338,7 +1362,7 @@ pub fn json(jobs: &[JobQ]) -> String {
 \"retracts\":{},\"plunges\":{},\"ramps\":{},\"cycles\":{},\"corners30\":{},\"corners90\":{},\"turn_max\":{},\
 \"side\":{},\"phi_max\":{},\"phi_mean\":{},\"phi_hist\":[{}],\"climb\":{},\"conventional\":{},\"slotting\":{},\
 \"fz_target\":{},\"fz_class\":{},\"fz_class_rough\":{},\"hex_min\":{},\"hex_mean\":{},\"hex_max\":{},\"hex_p99\":{},\"thin\":{},\"thick\":{},\"removed\":{},\"mrr\":{},\
-\"fc_max\":{},\"p_max\":{},\"p_avail\":{},\"rapid_cuts\":{},\"f_rev\":{}}}",
+\"fc_max\":{},\"p_max\":{},\"p_avail\":{},\"rapid_cuts\":{},\"fast_cuts\":{},\"f_rev\":{}}}",
                 js(&q.name),
                 q.setup,
                 js(&q.kind),
@@ -1386,6 +1410,7 @@ pub fn json(jobs: &[JobQ]) -> String {
                 jn(q.p_max),
                 jn(q.p_avail),
                 q.rapid_cuts,
+                q.fast_cuts,
                 jn(q.f_rev)
             );
         }
