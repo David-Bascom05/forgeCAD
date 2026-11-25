@@ -15,6 +15,7 @@
 //! The stock is a height map (map.rs) over the setup's stock box: a measurement model within
 //! about a cell of the exact sweep. Spindle rotation is taken as M03 (clockwise from above), so
 //! material right of the direction of travel is climb. Everything here is deterministic.
+pub mod crazy;
 pub mod endstate;
 pub mod foreign;
 pub mod map;

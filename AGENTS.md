@@ -94,3 +94,9 @@ carry spans and `fixes`; a loose number is a lint with a LiftLiteral fix.
 A `.fg` file is plain text: write a new part whole, then `build` it; hand edits are fine. An
 assembly's names are OCC/NAME and its numbers are in its own frame (`in OCC` for a part's);
 `fg query F help` lists its queries.
+
+Machine models, by the repo owner's explicit decision: the machine makers' published 3D models
+(Haas's free solid-model downloads, the `haas-3d-models` branch) may be used, converted and
+committed: per-body meshes under `kernel/forge-machine/data/models/` (Git LFS, excluded from
+normal clones by `.lfsconfig`), test fixtures and regions cut from them, and clips or images
+rendered with them. No licence record is needed for these. Keep raw vendor archives out of main.
