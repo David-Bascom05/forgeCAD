@@ -83,7 +83,8 @@ record!(crate::shell::fg::Issue {
     col,
     fixes,
     feature,
-    asm
+    asm,
+    stale
 });
 choice!(crate::shell::fg::Severity {
     0 => Error,
@@ -284,7 +285,8 @@ record!(crate::fg::Occ {
     path,
     file,
     placement,
-    tooling
+    tooling,
+    material
 });
 choice!(crate::fg::HarnessPiece {
     0 => Wire(a0),
