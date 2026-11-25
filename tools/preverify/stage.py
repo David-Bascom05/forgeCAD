@@ -91,6 +91,52 @@ def make_room(need=25, cap=30):
         shutil.rmtree(d, ignore_errors=True)
 
 
+def prune_stale(text):
+    """After a run: in each profile's deps/, a test executable this run ran (cargo's "Running ...
+    (target/.../deps/NAME-HASH)" lines in TEXT) keeps only the copies that ran; other hashed copies
+    of the same NAME are from earlier commits. Each commit leaves one more copy of every forge-render
+    test binary (~130 MB each, 28 GB after three commits), none of which the next commit runs. An
+    older copy goes with its .d file and its .fingerprint/ directory, so if a later commit maps to
+    that hash again, cargo finds no fingerprint and rebuilds it: nothing stale is ever reused.
+    Names this run did not run, and libraries, are left alone."""
+    import shutil
+    # (profile, file): "debug", "release" or "wasm32-.../debug", as the Running line names it
+    ran = set(re.findall(r"((?:wasm32[^/\s]*/)?(?:debug|release))/deps/([^/()\s]+-[0-9a-f]{16}(?:\.wasm)?)\)", text))
+    ran_names = {(p, re.sub(r"-[0-9a-f]{16}(\.wasm)?$", "", f)) for p, f in ran}
+    for t in (os.path.join(repo, "target"), os.path.join(repo, "interface/forge-render/target")):
+        if not os.path.isdir(t):
+            continue
+        profs = [os.path.join(t, "debug"), os.path.join(t, "release")] + [
+            os.path.join(t, x, p) for x in os.listdir(t) if x.startswith("wasm32") for p in ("debug", "release")]
+        for prof in profs:
+            key = os.path.relpath(prof, t)
+            deps = os.path.join(prof, "deps")
+            if not os.path.isdir(deps):
+                continue
+            newest, freed = {}, 0
+            for f in os.listdir(deps):
+                m = re.fullmatch(r"(.+)-([0-9a-f]{16})(\.wasm)?", f)
+                path = os.path.join(deps, f)
+                if not m or not os.path.isfile(path) or not os.access(path, os.X_OK) and not m.group(3):
+                    continue
+                newest.setdefault(m.group(1), []).append((os.path.getmtime(path), m.group(2), f))
+            for name, copies in newest.items():
+                if (key, name) not in ran_names:
+                    continue
+                for _, h, f in copies:
+                    if (key, f) in ran:
+                        continue
+                    freed += os.path.getsize(os.path.join(deps, f))
+                    for x in (f, f"{name}-{h}.d"):
+                        try:
+                            os.remove(os.path.join(deps, x))
+                        except OSError:
+                            pass
+                    shutil.rmtree(os.path.join(prof, ".fingerprint", f"{name}-{h}"), ignore_errors=True)
+            if freed > 2**30:
+                print(f"(pruned {freed / 2**30:.1f} GB of older test binaries from {prof})", flush=True)
+
+
 make_room()
 log = os.path.join(logs, f"{stage}-{sha[:12]}.log")
 t, code = time.time(), 0
@@ -111,6 +157,7 @@ with open(log, "w") as fh:
             code = code or r.returncode
 secs = round(time.time() - t)
 text = open(log, errors="replace").read()
+prune_stale(text)
 failed = sorted(set(re.findall(r"^test (\S+) \.\.\. FAILED", text, re.M)) |
                 set(re.findall(r"^---- (\S+) stdout ----", text, re.M)) |
                 set(re.findall(r"^(\S+): NO RESULT", text, re.M)))
