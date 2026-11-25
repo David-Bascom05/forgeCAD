@@ -82,6 +82,50 @@ to every check done, then solids shown / solids in the final read / roots refuse
 Shown at 0.34–3.3 s (median 1.4 s), every check at 1.9–11 s. The heavy ones are heavy in their
 display meshes (ds-40y: 4.8 M triangles) and in mass (HAB3232: 22 s on four faces, after display).
 
+## The frozen corpus, every check done
+
+The twenty files of CORPUS.md (frozen before this round; the split is tune / held-out there), on 4
+cores of the cloud VM with nothing else running, import/speed-ks. "all s" is the whole read in one
+pass, file on disk to every check done and every solid drawn (`forge_step::import_drawn`, what the
+app waits for); "app s" is the app's and the CLI's own path (`forge_machine_builder::model_files::read`,
+at its 16x budget, each solid's display mesh on all cores). Then the CPU seconds of each check,
+summed over the file's solids and threads (`forge-step --features times`, `examples/steptimes`).
+
+| half | file | all s | app s | heal | speck | devs | mass | mesh check |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| tune | VF-2 | 2.28 | 2.19 | 0.8 | 1.8 | 1.3 | 1.5 | 1.2 |
+| tune | GM2-5AX lightweight | 3.16 | 3.12 | 0.9 | 1.5 | 1.0 | 3.1 | 1.4 |
+| tune | VF-6/50 TR | 4.59 | 4.66 | 2.4 | 3.3 | 2.5 | 3.7 | 1.6 |
+| tune | ST-10/ST-15 | 6.90 | 6.94 | 2.5 | 4.5 | 5.9 | 7.7 | 2.2 |
+| tune | DS-30Y | 4.75 | 3.78 | 1.8 | 3.3 | 3.3 | 3.3 | 2.9 |
+| tune | RPL UMC-750 cell | 13.22 | 13.21 | 5.2 | 11.4 | 9.2 | 15.1 | 3.3 |
+| tune | UMC-500 + 20 PP | 4.49 | 4.66 | 1.8 | 2.9 | 2.2 | 3.6 | 2.5 |
+| tune | TRT160 | 1.24 | 1.27 | 0.6 | 0.8 | 0.4 | 0.7 | 0.6 |
+| tune | HAB3232 | 13.03 | 12.28 | 1.6 | 3.7 | 3.0 | 18.0 | 0.4 |
+| tune | ds-40y | 3.24 | 2.96 | 0.8 | 1.7 | 1.1 | 1.7 | 2.2 |
+| held-out | VM-6 | 5.69 | 5.73 | 3.2 | 3.7 | 3.1 | 6.4 | 1.9 |
+| held-out | VF-5/40 SS TR | 6.52 | 9.83 | 1.9 | 3.6 | 3.0 | 3.5 | 1.8 |
+| held-out | ST-28/28Y | 5.74 | 5.92 | 2.2 | 3.2 | 5.0 | 4.0 | 2.6 |
+| held-out | ST-20LY/25LY | 5.32 | 3.17 | 1.4 | 4.3 | 2.5 | 3.2 | 6.9 |
+| held-out | UMC-1250 | 3.55 | 3.53 | 1.3 | 3.8 | 3.0 | 3.2 | 1.3 |
+| held-out | GM-1-5AX | 2.83 | 3.24 | 1.4 | 2.1 | 1.6 | 2.4 | 1.9 |
+| held-out | HRT160SS | 0.67 | 0.69 | 0.2 | 0.8 | 0.3 | 0.5 | 0.4 |
+| held-out | TRT210 | 0.61 | 0.60 | 0.2 | 0.6 | 0.3 | 0.4 | 0.2 |
+| held-out | Haas 5kg cobot | 9.17 | 9.41 | 2.5 | 4.7 | 3.3 | 14.4 | 7.4 |
+| held-out | HFL-3015 | 1.49 | 1.48 | 0.5 | 0.5 | 0.3 | 0.7 | 1.8 |
+
+Median and worst: **tune 4.54 s / 13.22 s, held-out 4.44 s / 9.17 s** (the app's path 4.22 / 13.21
+and 3.39 / 9.83). Every file opens; none hangs or runs out of memory; two of the twenty are under
+1 s. Bits: the whole Haas corpus and the repository's fixtures, 350 files and 12,241 digest lines,
+identical to main's read through `import` and through `import_drawn` (and the app's path identical
+piece for piece over all 348 STEP/IGES files).
+
+Where the rest of the time is: mass 31% of all the CPU time, speck 20%, edge tolerances 17%, mesh
+check 14%, heal 11%, topology 4%, display mesh 2%, parse 1%. Two of the three slowest files are one
+check each (HAB3232: 18.0 s of mass; the RPL UMC-750 cell: 15.1 s of mass and 11.4 s of speck).
+research/import-speed/CHECKS.md takes the checks one by one: what each guards, and either a cheaper
+exact filter or why there is none.
+
 ## What changed (each a commit on import/speed)
 
 1. `forge_step::nurbs`: the basis's work arrays sized to the degree (they were zeroed at degree 15,
