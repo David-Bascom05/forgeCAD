@@ -10,7 +10,8 @@
 struct Pass {
     // width, height, the step in pixels, samples summed
     size: vec4u,
-    // the light's tolerance in standard errors, the normal's power, the depth's tolerance, 0
+    // the light's tolerance in standard errors, the normal's power, the depth's tolerance, and
+    // (its bits) the first row: a pass may run a band of rows at a time
     sigma: vec4f,
 }
 
@@ -43,7 +44,8 @@ fn lum(c: vec3f) -> f32 {
 }
 
 @compute @workgroup_size(8, 8)
-fn prepare(@builtin(global_invocation_id) id: vec3u) {
+fn prepare(@builtin(global_invocation_id) g: vec3u) {
+    let id = vec3u(g.x, g.y + bitcast<u32>(D.sigma.w), g.z);
     if id.x >= D.size.x || id.y >= D.size.y {
         return;
     }
@@ -76,7 +78,8 @@ fn prepare(@builtin(global_invocation_id) id: vec3u) {
 }
 
 @compute @workgroup_size(8, 8)
-fn atrous(@builtin(global_invocation_id) id: vec3u) {
+fn atrous(@builtin(global_invocation_id) g: vec3u) {
+    let id = vec3u(g.x, g.y + bitcast<u32>(D.sigma.w), g.z);
     let w = i32(D.size.x);
     let h = i32(D.size.y);
     if i32(id.x) >= w || i32(id.y) >= h {
@@ -127,7 +130,8 @@ fn atrous(@builtin(global_invocation_id) id: vec3u) {
 }
 
 @compute @workgroup_size(8, 8)
-fn finish(@builtin(global_invocation_id) id: vec3u) {
+fn finish(@builtin(global_invocation_id) g: vec3u) {
+    let id = vec3u(g.x, g.y + bitcast<u32>(D.sigma.w), g.z);
     if id.x >= D.size.x || id.y >= D.size.y {
         return;
     }

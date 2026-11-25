@@ -443,7 +443,7 @@ fn codex_live_organizes_project_files_and_creates_a_version_through_mcp() {
         },
         None,
     );
-    codex.send("Use the ForgeCAD project tools to create docs/agent-check.md with the exact text `Project tools ready`. Then create a named version of parts/a.fg called Agent smoke. Do not edit the part or issue a release. Use MCP tools, no shell commands.".into(),None);
+    codex.send("Use the ForgeCAD project tools to create docs/agent-check.md with the exact text `Project tools ready`. Then create a named version of parts/a.fg called Agent smoke. Do not edit the part or issue a release. Use MCP tools, no shell commands.".into(),vec![]);
     let mut events = vec![];
     loop {
         let event = rx
