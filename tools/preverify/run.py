@@ -91,6 +91,28 @@ def step(name, cmds, cwd=root, env=None):
           flush=True)
 
 
+BASE_WT = os.path.join(cache, "base-src")          # main's checkout for comparisons: one fixed path
+BASE_TARGET = os.path.join(cache, "base-target")   # and its own build folder, never the branch's
+
+
+def base_checkout():
+    """BASE checked out at BASE_WT (a fixed path, so its builds stay incremental from one run to
+    the next). Never the branch's target directory: cargo names a workspace crate's build by its
+    path in the workspace, not the checkout's, so main built into the branch's folder replaced the
+    branch's builds, with main's paths (env!/CARGO_MANIFEST_DIR) compiled in: false NotFounds."""
+    subprocess.run(["git", "worktree", "remove", "--force", BASE_WT], capture_output=True)
+    shutil.rmtree(BASE_WT, ignore_errors=True)
+    subprocess.run(["git", "worktree", "prune"], capture_output=True)
+    subprocess.run(["git", "worktree", "add", "-q", "--detach", BASE_WT, base], check=True)
+    return BASE_WT
+
+
+def base_env():
+    env = dict(os.environ, **test_env)
+    env["CARGO_TARGET_DIR"] = BASE_TARGET
+    return env
+
+
 def free_gb():
     return shutil.disk_usage(root).free / 2**30
 
@@ -184,12 +206,10 @@ def relative(name, cmd_for, pkgs_of):
         judge(name, e, mine, theirs, log,
               {tuple(k.split(" ", 2)): v for k, v in doc.get("alone", {}).items()})
         return
-    wt = tempfile.mkdtemp(prefix="pv-base.")
-    subprocess.run(["git", "worktree", "add", "-q", "--detach", wt, base], check=True)
+    wt = base_checkout()
     log = e["log"] + ".base"
     try:
-        env = dict(os.environ, **test_env)
-        env.setdefault("CARGO_TARGET_DIR", os.path.join(root, "target"))
+        env = base_env()
         with open(log, "w") as fh:
             for c, d in cmd_for(sorted(pk_fail)):
                 subprocess.run(c, cwd=os.path.join(wt, d), env=env, stdout=fh, stderr=subprocess.STDOUT)
@@ -273,9 +293,7 @@ def lints(cmd, cwd):
     else:
         c = ["sh", "-c", c[2].replace("cargo clippy", "cargo clippy --message-format=short")
              .replace(" -- -D warnings", "")]
-    # (the base's run shares the branch's target directory: its dependencies are already built)
-    env = dict(os.environ, **test_env)
-    env.setdefault("CARGO_TARGET_DIR", os.path.join(root, "target"))
+    env = base_env() if cwd.startswith(BASE_WT) else dict(os.environ, **test_env)
     r = subprocess.run(c, cwd=cwd, env=env, capture_output=True, text=True)
     out = set()
     for l in (r.stdout + r.stderr).splitlines():
@@ -291,8 +309,7 @@ if clippy:
         # judged on what the branch adds: clippy on BASE with the same packages, in a scratch
         # worktree; RED only for a diagnostic BASE does not have. (A lint main has, fixed in a train
         # not yet landed, is not this branch's. The train runs clippy whole, -D warnings, as ever.)
-        wt = tempfile.mkdtemp(prefix="pv-base.")
-        subprocess.run(["git", "worktree", "add", "-q", "--detach", wt, base], check=True)
+        wt = base_checkout()
         try:
             mine, theirs = set(), set()
             for cmd in clippy:
