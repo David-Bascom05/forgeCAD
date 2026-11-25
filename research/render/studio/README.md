@@ -31,9 +31,11 @@ alone (render.png) goes beside the document.
 - 11: the live view between its denoise steps. It traces a band of rows a frame and shows the
   picture at 8, 16, 32, 64 samples then every 64, so on a slow GPU the picture sits still a while.
   The badge says it's still refining ("Tracing · N samples", the count traced, with a spinner;
-  hover: "Refines until N samples; edits restart it") and goes back to "N samples · denoised" when
-  done.
-- 12: Output open, the File field empty with its hint "a new file in the Capture folder": a render
+  hover: "The live view refines until N samples; edits restart it. A render uses Output's
+  samples.") and goes back to "N samples · denoised" when done; "Preparing" and "Starting again…"
+  have the spinner too. Entering the Studio frames the subject (Fit All).
+- 12: Output open, its labels in one column, the File field empty with its hint "Capture folder"
+  (hover: a new file, `<document>-render-<time>.png`, there; a name alone goes there too): a render
   goes there as `<document>-render-<time>.png` (the document's folder if Capture has none), and the
   status says "Wrote PATH".
 - 13: a recording under way: its pill with Cancel and "Esc" beside it (Cancel discards a video;
