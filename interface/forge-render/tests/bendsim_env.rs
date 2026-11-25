@@ -6,6 +6,7 @@
 //!
 //! `BENDSIM_SHOTS=DIR` writes the frames (PPM) for research/bendsim/env/.
 
+use forge_math::ipow::Powi as _;
 use forge_render::gui::{Gui, Headless};
 use forge_render::shell::bendsim::{Choice, Framing, Pane};
 use forge_render::shell::env::EnvId;
@@ -369,7 +370,7 @@ fn follow_through_the_program(w: f32, ht: f32) {
         // a move's speed changes a little from frame to frame (eased); a cut changes it all at once
         let step = [0, 1, 2].map(|k| cam.target[k] - was.target[k]);
         let dv = (0..3)
-            .map(|k| (step[k] - step_was[k]).powi(2))
+            .map(|k| (step[k] - step_was[k]).ipow(2))
             .sum::<f32>()
             .sqrt();
         jolt = jolt.max(dv);
