@@ -358,3 +358,16 @@ Everyone who stops with work unfinished writes research/handoff/<NAME>.md on the
 Merge infrastructure (TRAIN-CONDUCTOR, FAST-VERIFY, VERIFY-*) runs until everything is merged. UX-LEAD only gives OKs for merging branches.
 - (David, later) Workholding: no overfitting to one Haas vise. Any vise or fixture geometry, catalogue or custom-imported (STEP/IGES/XT/.fg), goes through the same exact-face path (WORKHOLDING, CAM-SIM, CAM-MACHINE).
 - (David, later) Failing imports and meshes: "recover these or fix whatever bug causes them to break". Root-cause fixes, not caps or refusals; refuse only a provably invalid file (IMPORT-SPEED: HRT160 and undrawn faces; KERNEL-STRESS: the 14 Haas Tooling files).
+
+## 10g. STATE AT COORDINATOR CONTEXT END (2026-11-25 ~14:30Z)
+Landed on main: trains 8 (#61), 9 (#62), gate-memfns (#63), 10 (#64) → main 247a2694.
+Still in flight (TRAIN-CONDUCTOR session_01WJtawwrcJMe9MW7GeYQtHw owns the queue; ledger research/trains/MERGE-LEDGER.md on coord/trains):
+- T11 (merge-train/11): FLAT series reverted out; 16 over-band lines being attributed per branch (ellipse-foot bits accepted; volute codegen-noise waiver). No unexplained line may land. Contains speed branches, any2+real-collision+sim-vise-haas, bendsim/showcase, ci/determinism, kernel-stress, varblend (SAFE), intcurve memo (SAFE).
+- FLAT train: 7 FLAT items each need a gate line; cone-apex (209→212 faces on ports.rs manifold) HELD pending evidence.
+- T12: hosted/* (client-web waits for 2 --sync fixes: wss for non-loopback, strict origin parse), adaptive-ties.
+- KERNEL-STRESS (session_01WJtawvwbAt3fAh6MUBS9TT): op-budget being fixed to a total-spend verdict (machine-independent); ks/far-line-torus HELD for review fixes (End::Rim no rim point → refuse; cap via total) then re-review; gate/nurbs-ops lands before it.
+- IMPORT-SPEED (session_01WJtawvaYPKP5fkwg2qrwYb): speed-ks pre-verify; import/faces (A slit, D far-face + display) and mesh-floor (B+C) need the rigor package + an independent review.
+- HOSTED-BUILD/HOSTED-DESIGN: keep going to full bore (multi-hour soak, disk-full fault, residual 4 KB/op, M5). Auth plan done (research/hosted/USERS-ORGS-AUTH.md, plan only).
+- CAM-CORE: finishing pre-verify queue, then WOUND DOWN. Real vise default (default2) HELD on the μ-band fix (handoffs).
+- Held/handoff: hosted/web-worker (main merge conflict), CGU=1 (crank +3%), browser threaded-cache crash (root cause unknown; David asked whether to reopen — no answer yet).
+- I am the UI OK now (UX-LEAD archived). Every rewrite needs an independent review before landing.
