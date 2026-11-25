@@ -761,7 +761,7 @@ fn cross_check(
     mass: Option<forge_topo::mass::MassProps>,
 ) -> Result<(forge_topo::Body, Option<forge_topo::mass::MassProps>), String> {
     let Some(m) = &mass else { return Ok((body, mass)) };
-    if !(m.volume > 0.0) {
+    if m.volume.is_nan() || m.volume <= 0.0 {
         return Err(format!("it measures inside out (volume {:.6e})", m.volume));
     }
     if body.unverified.is_none() {
