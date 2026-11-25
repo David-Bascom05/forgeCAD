@@ -213,11 +213,15 @@ pub fn read_noting(name: &str, bytes: &[u8]) -> Result<(Vec<Piece>, Vec<String>)
             // a solid refused for one face its file puts far from its edges is still drawn here,
             // less that face (never a checked solid: a viewer's model only)
             for s in forge_step::draw_far_refused(bytes, &lim, &imp) {
-                let part = if s.name.trim().is_empty() {
-                    format!("solid #{}", s.entity)
-                } else {
-                    s.name.clone()
-                };
+                // the part as the file's assembly names it (a solid's own name is often its CAD
+                // feature's, "Imported2"), else its entity
+                let part = imp
+                    .occurrences
+                    .iter()
+                    .filter(|u| u.solid == s.entity && !u.path.is_empty())
+                    .map(|u| u.path.join(" / "))
+                    .min()
+                    .unwrap_or_else(|| format!("solid #{}", s.entity));
                 notes.push(format!(
                     "{part} is drawn without {}",
                     s.why.replacen(" can't be read", ", which can't be read", 1)
