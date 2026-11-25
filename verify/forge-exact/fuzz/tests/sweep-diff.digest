@@ -1443,6 +1443,7 @@ research/big-render/fg/asm_big.fg#1 agree
 research/fillets/conic/repro/counterbore_wall.fg#11 agree
 research/fillets/conic/repro/counterbore_wall.fg#14 agree
 research/fillets/conic/repro/spring_touches_hole.fg#1 agree
+research/forge-lang/shots/cube.fg#1 agree
 research/kernel-audit/curved-repros/ball_on_box_top.fg#1 agree
 research/kernel-audit/curved-repros/cone_apex_on_box_top.fg#1 agree
 research/thread-math/stress/cross-hole-after.fg#1 agree
