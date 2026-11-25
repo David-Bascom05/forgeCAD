@@ -287,7 +287,7 @@ def lints(cmd, cwd):
 
 if clippy:
     step("clippy", clippy, env=test_env)
-    if not record["steps"]["clippy"]["ok"] and (not only or "clippy" in only):
+    if record["steps"].get("clippy", {}).get("ok") is False:
         # judged on what the branch adds: clippy on BASE with the same packages, in a scratch
         # worktree; RED only for a diagnostic BASE does not have. (A lint main has, fixed in a train
         # not yet landed, is not this branch's. The train runs clippy whole, -D warnings, as ever.)
