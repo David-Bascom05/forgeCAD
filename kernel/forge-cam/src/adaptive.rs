@@ -194,6 +194,8 @@ struct Field {
     map: HeightMap,
     /// The stock as it stood before the op (rapids are certified against it).
     map0: HeightMap,
+    /// map0's highest cell (−∞: none): no disk of map0 stands higher.
+    top0_max: f64,
     prof: Profile,
     r: f64,
     eps: f64,
@@ -489,7 +491,11 @@ impl Field {
         way.extend_from_slice(via);
         way.push([target[0], target[1]]);
         let mut top = cur[2].max(target[2]);
-        for w in way.windows(2) {
+        // no disk of the stock before the op stands above its highest cell, and no height above
+        // the retract height is used: once the height reaches either, the rest of the way cannot
+        // change the answer (the scan was most of a retract's cost)
+        let most = (self.top0_max + CLEAR).min(retract);
+        'scan: for w in way.windows(2) {
             let l = ((w[1][0] - w[0][0]).powi(2) + (w[1][1] - w[0][1]).powi(2)).sqrt();
             let n = (l / self.map0.h).ceil().max(1.0) as usize;
             for k in 0..=n {
@@ -498,6 +504,9 @@ impl Field {
                     w[0][0] + t * (w[1][0] - w[0][0]),
                     w[0][1] + t * (w[1][1] - w[0][1]),
                 );
+                if top >= most {
+                    break 'scan;
+                }
                 top = top.max(self.top0(x, y, rr) + CLEAR);
             }
         }
@@ -625,6 +634,7 @@ pub fn adaptive(
         work,
         map: HeightMap::of_stock(ip, cell),
         map0: HeightMap::of_stock(ip, cell),
+        top0_max: f64::NEG_INFINITY,
         prof,
         r: 0.5 * tool.tool.dc,
         eps: 1e-3,
@@ -633,6 +643,7 @@ pub fn adaptive(
         ip: ip.clone(),
         swept: Vec::new(),
     };
+    f.top0_max = f.map0.z.iter().copied().fold(f64::NEG_INFINITY, f64::max);
     let cap = prm.phi_max.clamp(5.0, 180.0).to_radians();
     let mut sweep_dir: [f64; 2];
     let peel_cos = dmath::cos(PEEL.to_radians());
@@ -1259,8 +1270,10 @@ pub fn adaptive(
                         // by more than the cap allows would otherwise turn into it and stall at
                         // the stock's corner, and whether it does would depend on where the
                         // grids fall). The first heading, from most toward the material to
-                        // away from it, whose engagement ahead is within the cap; none: the one
-                        // meeting the least
+                        // straight on, whose engagement ahead is within the cap; none: the one
+                        // meeting the least. Never turned away from it: a pass sent off that way
+                        // ends where no link at depth reaches the next start (deep_open_slot:
+                        // 61 retracts for 64 passes, against 12 straight on)
                         let gentle = 10f64.to_radians();
                         let s = if side > 1e-9 {
                             1.0
@@ -1293,7 +1306,7 @@ pub fn adaptive(
                             };
                             let mut least: Option<(f64, f64)> = None;
                             let mut pick = None;
-                            for k in [1.0, 0.5, 0.0, -0.5, -1.0, -2.0] {
+                            for k in [1.0, 0.5, 0.0] {
                                 let d = (s * k * gentle).clamp(lo_d, hi_d);
                                 let m = ahead_max(rot(u, d));
                                 if m <= cap {

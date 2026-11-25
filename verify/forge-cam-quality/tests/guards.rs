@@ -44,25 +44,27 @@ const CAP_WHY: &str =
     "rings at half a diameter and stalled passes (CAM-CORE pass start; TOOLPATH-QUALITY rings)";
 
 /// (part, op, mm of level cutting over the cap when listed, why). Each comes off with its fix.
+/// Re-listed with the pass start (cam/adaptive-pass-start): a level swept again while material
+/// more than 4 cells' area stands far from the walls, and a start's heading held to the cap ahead.
 /// Lengths along each move as the measure walks it (a ring posted as one whole-circle arc counts
 /// its whole circumference; deep_islands and rptu4 were first listed from the shorter way round).
 const CAP_KNOWN: &[(&str, &str, f64, &str)] = &[
-    ("boss_adaptive_cam", "rough", 662.0, CAP_WHY),
-    ("deep_boss_n_adaptive_cam", "rough", 893.0, CAP_WHY),
-    ("deep_boss_n_zigzag_cam", "rough", 799.0, CAP_WHY),
-    ("deep_boss_p_adaptive_cam", "rough", 893.0, CAP_WHY),
-    ("deep_boss_p_zigzag_cam", "rough", 799.0, CAP_WHY),
-    ("deep_islands_p_adaptive_cam", "rough", 538.0, CAP_WHY),
-    ("deep_islands_p_zigzag_cam", "rough", 478.0, CAP_WHY),
-    ("deep_open_slot_p_adaptive_cam", "rough", 408.0, CAP_WHY),
-    ("deep_open_slot_p_zigzag_cam", "rough", 328.0, CAP_WHY),
-    ("rptu3_adaptive_cam", "step", 440.0, CAP_WHY),
+    ("boss_adaptive_cam", "rough", 606.0, CAP_WHY),
+    ("deep_boss_n_adaptive_cam", "rough", 77.0, CAP_WHY),
+    ("deep_boss_n_zigzag_cam", "rough", 315.0, CAP_WHY),
+    ("deep_boss_p_adaptive_cam", "rough", 77.0, CAP_WHY),
+    ("deep_boss_p_zigzag_cam", "rough", 315.0, CAP_WHY),
+    ("deep_islands_p_adaptive_cam", "rough", 531.0, CAP_WHY),
+    ("deep_islands_p_zigzag_cam", "rough", 421.0, CAP_WHY),
+    ("deep_open_slot_p_adaptive_cam", "rough", 404.0, CAP_WHY),
+    ("deep_open_slot_p_zigzag_cam", "rough", 323.0, CAP_WHY),
+    ("rptu3_adaptive_cam", "step", 439.0, CAP_WHY),
     ("rptu3_zigzag_cam", "step", 441.0, CAP_WHY),
-    ("rptu4_adaptive_cam", "step", 772.0, CAP_WHY),
-    ("rptu4_zigzag_cam", "step", 744.0, CAP_WHY),
-    ("rptu5_adaptive_cam", "step", 617.0, CAP_WHY),
-    ("rptu5_zigzag_cam", "step", 636.0, CAP_WHY),
-    ("rptu6_adaptive_cam", "step", 440.0, CAP_WHY),
+    ("rptu4_adaptive_cam", "step", 596.0, CAP_WHY),
+    ("rptu4_zigzag_cam", "step", 574.0, CAP_WHY),
+    ("rptu5_adaptive_cam", "step", 449.0, CAP_WHY),
+    ("rptu5_zigzag_cam", "step", 482.0, CAP_WHY),
+    ("rptu6_adaptive_cam", "step", 439.0, CAP_WHY),
     ("rptu6_zigzag_cam", "step", 441.0, CAP_WHY),
 ];
 
