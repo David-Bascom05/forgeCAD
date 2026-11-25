@@ -92,6 +92,13 @@ pub(in crate::shell) fn key_of(s: &Shell, id: &str) -> Option<String> {
 }
 
 /// Why a tool is off, in words.
+/// A reason as a sentence: its first letter a capital.
+fn sentence(s: &str) -> String {
+    let mut c = s.chars();
+    c.next()
+        .map_or(String::new(), |f| f.to_uppercase().chain(c).collect())
+}
+
 fn why(s: &Shell, scope: &str, name: &str) -> String {
     if let Some(w) = why_off(name) {
         return w.to_string();
@@ -206,7 +213,8 @@ impl Shell {
         }
         if tool.action.is_none() {
             ui.label(
-                RichText::new(format!("Off: {}", why(self, scope, tool.name)))
+                // the reason alone, as a sentence (UX-LEAD: no "Off:" before it)
+                RichText::new(sentence(&why(self, scope, tool.name)))
                     .font(sans(12.0))
                     // guidance, not an error (UX-LEAD): amber, as a warning is
                     .color(t.warn),

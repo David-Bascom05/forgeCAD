@@ -26,6 +26,9 @@ pub struct Snap {
     pub texts: Vec<Text>,
     /// Filled rectangles in paint order: a popup's background hides what was painted before it.
     pub fills: Vec<(usize, Rect)>,
+    /// Scroll bars drawn: (the track's rect, the handle's contrast against what's under it).
+    /// egui draws a bar as its track then its handle in it, one after the other.
+    pub bars: Vec<(Rect, f32)>,
     pub status: String,
     /// The status bar's line as it's drawn (the words a person reads there).
     pub status_drawn: String,
@@ -64,17 +67,39 @@ impl Snap {
         let mut texts = Vec::new();
         let mut fills = Vec::new();
         let mut n = 0;
+        let mut rects: Vec<(Rect, Color32)> = Vec::new();
         if let Some(shapes) = &h.gui.audit_shapes {
             for c in shapes {
                 collect(&c.shape, c.clip_rect, &mut texts, &mut fills, &mut n);
+                rect_shapes(&c.shape, &mut rects);
             }
         }
+        let panel = h.gui.shell.theme.surface;
+        let bars = rects
+            .windows(2)
+            .filter_map(|w| {
+                let ((tr, tc), (hr, hc)) = (w[0], w[1]);
+                let bar = tr.width() <= 14.0
+                    && tr.height() >= 24.0
+                    && (hr.left() - tr.left()).abs() < 0.5
+                    && (hr.right() - tr.right()).abs() < 0.5
+                    && hr.height() < tr.height() - 1.0
+                    && tr.expand(0.5).contains_rect(hr);
+                if !bar {
+                    return None;
+                }
+                let under = if tc.a() == 255 { tc } else { panel.blend(tc) };
+                let seen = under.blend(hc);
+                Some((tr, crate::judge::ratio(rgb3(seen), rgb3(under))))
+            })
+            .collect();
         let (w, hh, rgb) = ppm(&h.ppm());
         let mut snap = Snap {
             places,
             layers,
             texts,
             fills,
+            bars,
             status: h.gui.shell.status.clone(),
             status_drawn: String::new(),
             names: {
@@ -234,6 +259,18 @@ impl Snap {
 
 fn approx(a: Rect, b: Rect) -> bool {
     (a.min - b.min).length() < 2.0 && (a.max - b.max).length() < 2.0
+}
+
+fn rgb3(c: Color32) -> [u8; 3] {
+    [c.r(), c.g(), c.b()]
+}
+
+fn rect_shapes(s: &Shape, out: &mut Vec<(Rect, Color32)>) {
+    match s {
+        Shape::Vec(v) => v.iter().for_each(|x| rect_shapes(x, out)),
+        Shape::Rect(r) => out.push((r.rect, r.fill)),
+        _ => {}
+    }
 }
 
 fn collect(s: &Shape, clip: Rect, out: &mut Vec<Text>, fills: &mut Vec<(usize, Rect)>, n: &mut usize) {

@@ -978,7 +978,7 @@ impl Shell {
                     want = true;
                 }
                 // a solid bar: a long tab reads as one that scrolls
-                ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
+                ui.spacing_mut().scroll = super::theme::solid_scroll();
                 egui::ScrollArea::vertical()
                     .id_salt(("iprops-body", p.tab))
                     .auto_shrink([false, false])

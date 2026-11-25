@@ -975,6 +975,19 @@ impl Crawl {
         let picked = forge_render::plat::PICKERS_ASKED.load(std::sync::atomic::Ordering::Relaxed) > pickers;
         let screen = Rect::from_min_size(pos2(0.0, 0.0), vec2(self.size.0, self.size.1));
         classify(f, &mut rec, &before, &after, &host, picked, screen, self.noisy);
+        // a scroll bar the click brought up whose handle can't be seen against its track (or,
+        // floating, the panel): STANDARD's contrast, 3:1 (the UI audit: egui's solid bars)
+        for (r, c) in &after.bars {
+            let new = !before.bars.iter().any(|(b, _)| (b.min - r.min).length() < 1.0);
+            if new && *c < 3.0 {
+                rec.findings.push(judge::finding(
+                    "scrollbar",
+                    true,
+                    format!("a scroll bar's handle at {c:.1}:1 against its track (at least 3:1)"),
+                ));
+                break;
+            }
+        }
         let tip = TIP.with(|t| std::mem::take(&mut *t.borrow_mut()));
         let tip_shot = TIP_SHOT.with(|t| t.borrow_mut().take());
         // an item that said why it's off, and whose click changed nothing that matters (no

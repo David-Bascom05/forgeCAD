@@ -291,7 +291,7 @@ impl Shell {
         let none = self.no_document();
         ui.horizontal(|ui| {
             // a version is of a part: none open, nothing to keep
-            let why = "Off: no part open, so nothing to keep a version of";
+            let why = "No part open, so there is nothing to keep a version of";
             let b = ui
                 .add_enabled(!none, primary(&t, "Create Version"))
                 .on_disabled_hover_text(why);
@@ -318,7 +318,7 @@ impl Shell {
                         egui::Checkbox::new(&mut on, egui::RichText::new("Show saves").font(sans(12.0))),
                     )
                     .on_hover_text("List the saves between versions too")
-                    .on_disabled_hover_text("Off: no part open, so no saves to list");
+                    .on_disabled_hover_text("No part open, so there are no saves to list");
                 self.places.push(("versions:show-saves".into(), b.rect));
                 self.versions.show_saves = on;
             });
@@ -338,7 +338,7 @@ impl Shell {
                         !off,
                         egui::Button::selectable(on, egui::RichText::new(word).font(sans(12.0))),
                     )
-                    .on_disabled_hover_text("Off: no part open; Project lists the folder's versions");
+                    .on_disabled_hover_text("No part open. Project lists the folder's versions");
                 self.places.push((format!("versions:filter:{word}"), b.rect));
                 if b.clicked() && !on {
                     self.versions.filter = f;

@@ -217,6 +217,15 @@ pub fn fonts() -> FontDefinitions {
     f
 }
 
+/// A solid scroll bar (one that takes its own room) whose handle shows: egui's `solid()`, its
+/// handle in the ink (egui's own fills it with the track's colour: the UI audit, CAM-UI).
+pub fn solid_scroll() -> egui::style::ScrollStyle {
+    egui::style::ScrollStyle {
+        foreground_color: true,
+        ..egui::style::ScrollStyle::solid()
+    }
+}
+
 /// egui's own widgets (fields, menus, scrollbars) in these colours: flat, 4 px radius, no shadow.
 pub fn apply(ctx: &egui::Context, t: &Theme) {
     let t = *t;
@@ -265,6 +274,13 @@ pub fn apply(ctx: &egui::Context, t: &Theme) {
         w.active.bg_fill = t.on;
         w.active.weak_bg_fill = t.on;
         w.active.bg_stroke = Stroke::new(1.0, t.focus);
+        // a scroll bar's handle in the ink, over its track in the fields' colour: egui's solid
+        // bars fill both with the fields' colour otherwise, and the handle can't be seen
+        s.spacing.scroll.foreground_color = true;
+        // and a floating bar's handle shows at rest where the list overflows (egui fades it out
+        // till hovered: lists cut off with no sign they scroll); 0.6 of the ink is over 3:1 in both
+        s.spacing.scroll.dormant_handle_opacity = 0.6;
+        s.spacing.scroll.active_handle_opacity = s.spacing.scroll.active_handle_opacity.max(0.6);
         s.spacing.item_spacing = egui::vec2(0.0, 0.0);
         s.spacing.button_padding = egui::vec2(8.0, 5.0);
         s.interaction.tooltip_delay = 0.5;

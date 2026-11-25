@@ -1158,7 +1158,7 @@ impl Shell {
         let mut edited = false;
         let tab = b.tab;
         ui.scope_builder(egui::UiBuilder::new().max_rect(body), |ui| {
-            ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
+            ui.spacing_mut().scroll = super::theme::solid_scroll();
             egui::ScrollArea::vertical()
                 .id_salt(("material-detail", tab))
                 .auto_shrink([false, false])

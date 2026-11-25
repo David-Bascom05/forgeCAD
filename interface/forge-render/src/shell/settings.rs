@@ -743,7 +743,7 @@ impl Shell {
                         t.ink,
                     );
                     ui.add_space(28.0);
-                    ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
+                    ui.spacing_mut().scroll = super::theme::solid_scroll();
                     egui::ScrollArea::vertical()
                         .id_salt(("settings-body", tab))
                         .auto_shrink([false, false])
