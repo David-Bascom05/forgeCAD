@@ -1142,8 +1142,8 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
         on,
         edges,
     };
-    let preps: Vec<Box<Prep>> = preps.into_iter().map(|p| p.expect("every face drawn")).collect();
     if mend && preps.len() >= PAR_FACES {
+        let preps: Vec<Box<Prep>> = preps.into_iter().map(|p| p.expect("every face drawn")).collect();
         // a file's faces on all cores, each into its own part of the mesh (new vertices numbered
         // after the mesh's), as face after face under the drawing's budget would draw them
         // (`budget::map_until`: to the first face that fails), put together in face order with
@@ -1188,6 +1188,7 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
     } else {
         for (i, prep) in preps.into_iter().enumerate() {
             let f = FaceId(i as u32);
+            let prep = prep.expect("every face drawn");
             mesh_face(body, f, prep, &segments, q, mend, &mut mesh)
                 .map_err(|error| TessError::Face { face: f, error })?;
         }
