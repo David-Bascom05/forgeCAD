@@ -153,3 +153,18 @@ with the measures skipped (a scratch patch of `finish`, env `FORGE_NOCHECK`) and
 to find its first failing face; log the interior grid sizes and per-stage spends in `tessellate.rs`
 to see where the budget goes. Whatever is fixed needs the full differential with the repository's
 fixtures and the app's 16x path, as above.
+
+### Gap rule tier 2 (not written yet)
+
+Agreed with KERNEL-STRESS and the coordinator: one gap rule, held on `import/faces`. Tier 1 is
+done (a face whose edges lie farther than both 1 mm and 1% of the part from its surface refuses
+the solid; wording UX-LEAD-approved, test asserts it). Tier 2 keeps the solid but warns, for a gap
+over k x the file's stated uncertainty (and over LINEAR): ds-40y #249171's edge #57090 lies 0.96 mm
+off face #5840 where the file claims 1e-5 (evidence: tools/kernel-stress/edge_fit.py on
+import-sheets). Plan: Proto `edge_ids` like `face_ids`; measure_gaps reports the worst
+(edge, face, gap); choose k from the corpus's distribution of worst gap / uncertainty, so that
+accepted solids don't fill with warnings; join it with measures_agree's own `unverified`
+words (the gap first). Wording, UX-LEAD verbatim (distances through `far()`): "edge #E lies 0.96 mm
+off face #F, though the file claims 0.00001 mm accuracy: that face may look wrong and isn't checked
+there (exporting the file again may help)" -- drop "and isn't checked there" if the solid's checks
+still run on that face.
