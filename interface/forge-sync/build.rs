@@ -33,7 +33,14 @@ fn main() {
         if dirty { "+dirty" } else { "" }
     );
     println!("cargo:rustc-env=FORGE_KERNEL_ID={id}");
-    for p in ["../../rust-toolchain.toml", "../../.git/HEAD", "../../.git/index"] {
+    // the id follows the code: any change under kernel/ or forge-lang (a directory is watched
+    // whole), the toolchain, and the checkout's HEAD
+    for p in [
+        "../../rust-toolchain.toml",
+        "../../kernel",
+        "../forge-lang",
+        "../../.git/HEAD",
+    ] {
         println!("cargo:rerun-if-changed={p}");
     }
 }

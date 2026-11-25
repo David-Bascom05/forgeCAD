@@ -42,8 +42,13 @@ pub enum Event {
     },
     /// A round trip measured (ms).
     Rtt(f64),
-    /// The server closed the session with this.
+    /// The server closed the connection with this; the host reconnects.
     Closed(String),
+    /// The server will not serve this client as it is (a bad token, another kernel, a
+    /// quarantined document): the host stops reconnecting and stops syncing, and says why.
+    Stopped(String),
+    /// Something the server said about the last message (the connection stays).
+    Said(String),
 }
 
 #[derive(Clone, Debug)]
@@ -73,6 +78,9 @@ pub struct Client {
     pub outbox: Vec<Up>,
     /// True until the first Welcome.
     pub joining: bool,
+    /// True once this connection's Welcome came: ops wait for it, then all pending ops are sent
+    /// (an op sent before the server had placed this connection could be lost with it).
+    welcomed: bool,
 }
 
 impl Client {
@@ -92,22 +100,77 @@ impl Client {
             undo: vec![],
             outbox: vec![],
             joining: true,
+            welcomed: false,
         };
         c.hello();
         c
     }
 
+    /// What must outlive the app: this client's id, its next op id and its pending ops, as one
+    /// JSON text (DESIGN.md §14: `.forgecad/sync/<doc>.pending`). Restored, the same ids are
+    /// sent again, so the server answers one it already committed by (client, op id) and never
+    /// applies it twice.
+    pub fn saved(&self) -> String {
+        use crate::wire::write;
+        use forge_agent::json::Json;
+        let ops = self
+            .pending
+            .iter()
+            .map(|p| {
+                Json::Str(
+                    Up::Op {
+                        base: p.base,
+                        id: p.id,
+                        op: p.op.clone(),
+                    }
+                    .text(),
+                )
+            })
+            .collect();
+        write(&Json::obj(vec![
+            ("client", self.id.as_str().into()),
+            ("next", (self.next_id as f64).into()),
+            ("ops", Json::Arr(ops)),
+        ]))
+    }
+
+    /// A client for `doc` that takes up a [`saved`](Self::saved) one: its id, its op ids and its
+    /// pending ops (sent on its first Welcome). None: not a saved client's text.
+    pub fn restore(doc: &str, token: &str, saved: &str) -> Option<Client> {
+        use crate::wire::read;
+        use forge_agent::json::Json;
+        let j = read(saved).ok()?;
+        let id = j.get("client")?.str()?;
+        let next = j.get("next")?.num()? as u64;
+        let mut c = Client::new(doc, id, token);
+        if let Some(Json::Arr(ops)) = j.get("ops") {
+            for o in ops {
+                match Up::parse(o.str()?) {
+                    Ok(Up::Op { base, id, op }) if id < next => c.pending.push(Pending { base, id, op }),
+                    _ => return None,
+                }
+            }
+        }
+        c.next_id = next.max(1);
+        Some(c)
+    }
+
     /// After a reconnect: say hello again from the last seq applied; the server replays what
-    /// was missed (Acks for this client's own committed ops) and the pending ops are re-sent
-    /// (the server drops those it already committed, by id).
+    /// was missed (Acks for this client's own committed ops), and the pending ops are re-sent on
+    /// Welcome (the server answers those it already committed by id, never twice).
     pub fn reconnect(&mut self) {
         self.outbox.clear();
+        self.welcomed = false;
         self.hello();
-        for p in &self.pending {
+    }
+
+    /// Sends an op now if this connection was welcomed (else Welcome sends every pending op).
+    fn send_op(&mut self, base: u64, id: u64, op: &Op) {
+        if self.welcomed {
             self.outbox.push(Up::Op {
-                base: p.base,
-                id: p.id,
-                op: p.op.clone(),
+                base,
+                id,
+                op: op.clone(),
             });
         }
     }
@@ -143,11 +206,7 @@ impl Client {
     pub fn local(&mut self, op: Op, after: String) -> u64 {
         let id = self.next_id;
         self.next_id += 1;
-        self.outbox.push(Up::Op {
-            base: self.seq,
-            id,
-            op: op.clone(),
-        });
+        self.send_op(self.seq, id, &op);
         self.pending.push(Pending {
             id,
             base: self.seq,
@@ -182,11 +241,7 @@ impl Client {
         Some(checked.map(|(after, _)| {
             let id = self.next_id;
             self.next_id += 1;
-            self.outbox.push(Up::Op {
-                base: seq.max(self.seq),
-                id,
-                op: op.clone(),
-            });
+            self.send_op(seq.max(self.seq), id, &op);
             self.pending.push(Pending {
                 id,
                 base: seq.max(self.seq),
@@ -216,8 +271,27 @@ impl Client {
                     self.confirmed = text;
                     self.seq = seq;
                     self.recent.clear();
+                    // the pending ops now stand on this text (they replay on it here): sent from
+                    // it, they cannot fall behind the server's latest snapshot
+                    for p in &mut self.pending {
+                        p.base = seq;
+                    }
                     self.replay();
                     ev.push(Event::Changed);
+                }
+                // every Welcome (a join, a reconnect, a Resync's snapshot) sends every pending op
+                // again, in order: the server answers one it committed with its Ack again or
+                // AlreadyCommitted (by client and op id), so none is lost and none is held
+                // forever (DESIGN.md §4.2)
+                {
+                    self.welcomed = true;
+                    for p in &self.pending {
+                        self.outbox.push(Up::Op {
+                            base: p.base,
+                            id: p.id,
+                            op: p.op.clone(),
+                        });
+                    }
                 }
             }
             Down::Ack { id, seq, op, inv, th } => {
@@ -306,7 +380,9 @@ impl Client {
             }),
             Down::Versioned { name, seq, commit } => ev.push(Event::Versioned { name, seq, commit }),
             Down::Pong { t } => ev.push(Event::Rtt(t)),
-            Down::Error { text } => ev.push(Event::Closed(text)),
+            Down::Error { text } => ev.push(Event::Said(text)),
+            Down::Closing { text, retry: true } => ev.push(Event::Closed(text)),
+            Down::Closing { text, retry: false } => ev.push(Event::Stopped(text)),
         }
         ev
     }

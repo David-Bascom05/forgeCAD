@@ -339,6 +339,9 @@ pub struct FgPanel {
     pub rename_fresh: bool,
     /// The last op the host refused, and why.
     pub refused: Option<String>,
+    /// A served part not syncing, and why (a hand edit, a refused Hello): a banner over the
+    /// view while it holds.
+    pub sync_paused: Option<String>,
     pub collapsed: HashSet<String>,
     pub sheets: Vec<SheetRow>,
     /// The part's thermoforms, and whether their wall thickness is mapped on the view.

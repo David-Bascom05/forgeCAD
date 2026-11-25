@@ -31,6 +31,9 @@ pub trait Link {
     fn version(&self, name: &str);
     /// What happened since the last poll.
     fn poll(&self) -> Vec<Event>;
+    /// The client as it must outlive the app (its id, op ids, pending ops); empty where the
+    /// host keeps none.
+    fn saved(&self) -> String;
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -51,7 +54,8 @@ impl Link for forge_remote::Session {
         forge_remote::Session::local(self, op, after);
     }
     fn undo(&self) -> Option<Result<(), String>> {
-        forge_remote::Session::undo(self).map(|r| r.map(|_| ()).map_err(|e| format!("{}: {}", e.kind(), e.text())))
+        forge_remote::Session::undo(self)
+            .map(|r| r.map(|_| ()).map_err(|e| format!("{}: {}", e.kind(), e.text())))
     }
     fn built(&self, seq: u64, hash: u64) {
         forge_remote::Session::built(self, seq, hash)
@@ -61,6 +65,9 @@ impl Link for forge_remote::Session {
     }
     fn poll(&self) -> Vec<Event> {
         forge_remote::Session::poll(self)
+    }
+    fn saved(&self) -> String {
+        forge_remote::Session::saved(self)
     }
 }
 
@@ -73,7 +80,10 @@ pub fn served_root(file: &std::path::Path) -> Option<(std::path::PathBuf, String
     loop {
         if dir.join(".forgecad").join("remote.toml").is_file() {
             let rel = file.strip_prefix(dir).ok()?;
-            let parts: Vec<String> = rel.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect();
+            let parts: Vec<String> = rel
+                .components()
+                .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                .collect();
             return Some((dir.to_path_buf(), parts.join("/")));
         }
         dir = dir.parent()?;
@@ -81,15 +91,47 @@ pub fn served_root(file: &std::path::Path) -> Option<(std::path::PathBuf, String
 }
 
 /// The part at `path`'s link, if its project is SERVED: None for LOCAL, Err for a remote.toml
-/// that is there but wrong (said, never silently LOCAL).
+/// that is there but wrong (said, never silently LOCAL). The client the app kept when it last
+/// closed (`.forgecad/sync/<doc>.pending`) is taken up: its unacked ops are sent again.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn open(path: &str, waker: Arc<dyn Fn() + Send + Sync>) -> Option<Result<Box<dyn Link>, String>> {
     let (root, doc) = served_root(std::path::Path::new(path))?;
+    // the folder a forge-server serves is its own: the app editing it too would write the
+    // server's files behind it (and the server's behind the app). Open a clone of the project.
+    if root.join(".forgecad").join("server").is_dir() {
+        return Some(Err(format!(
+            "{} is the folder a forge-server serves: open a clone of the project instead (docs/hosted.md)",
+            root.display()
+        )));
+    }
     let remote = match forge_remote::remote(&root)? {
         Ok(r) => r,
         Err(e) => return Some(Err(e)),
     };
-    Some(forge_remote::Session::start(&remote, &doc, Some(waker)).map(|s| Box::new(s) as Box<dyn Link>))
+    let kept =
+        std::fs::read_to_string(sync_dir(&root).join(format!("{}.pending", forge_history::names::enc(&doc))))
+            .ok();
+    Some(
+        forge_remote::Session::resume(&remote, &doc, kept.as_deref(), Some(waker))
+            .map(|s| Box::new(s) as Box<dyn Link>),
+    )
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn sync_dir(root: &std::path::Path) -> std::path::PathBuf {
+    root.join(".forgecad").join("sync")
+}
+
+/// `bytes` written whole or not at all (a file beside it, renamed over it).
+#[cfg(not(target_arch = "wasm32"))]
+fn put(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    if let Some(d) = path.parent() {
+        std::fs::create_dir_all(d)?;
+    }
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".forgecad-sync");
+    std::fs::write(&tmp, bytes)?;
+    std::fs::rename(&tmp, path)
 }
 
 /// The browser build's link: the page's WebSocket, if the page said this tab is served.
@@ -106,8 +148,16 @@ pub fn open(path: &str, waker: Arc<dyn Fn() + Send + Sync>) -> Option<Result<Box
 pub struct SyncFile {
     path: std::path::PathBuf,
     mark: std::path::PathBuf,
+    /// The client kept for the next open, and what was last written there.
+    pending: std::path::PathBuf,
+    kept: String,
     last: u64,
     checked: std::time::Instant,
+    /// The file is known to hold the server's text (a mark it matches, or [`verify`]). Until
+    /// then nothing is written to it, and the app does not attach (DESIGN.md §15.2).
+    ///
+    /// [`verify`]: SyncFile::verify
+    verified: bool,
     /// Set when opening found a hand edit.
     pub paused: Option<String>,
 }
@@ -117,10 +167,9 @@ impl SyncFile {
     /// The file of a part being opened with its text `src` (None: not under a served folder).
     pub fn open(file: &std::path::Path, src: &str) -> Option<SyncFile> {
         let (root, doc) = served_root(file)?;
-        let mark = root
-            .join(".forgecad")
-            .join("sync")
-            .join(format!("{}.hash", forge_history::names::enc(&doc)));
+        let name = forge_history::names::enc(&doc);
+        let mark = sync_dir(&root).join(format!("{name}.hash"));
+        let pending = sync_dir(&root).join(format!("{name}.pending"));
         let now = forge_sync::text_hash(src);
         let kept = std::fs::read_to_string(&mark)
             .ok()
@@ -128,23 +177,66 @@ impl SyncFile {
         let mut f = SyncFile {
             path: file.to_path_buf(),
             mark,
+            pending,
+            kept: String::new(),
             last: now,
             checked: std::time::Instant::now(),
+            verified: kept == Some(now),
             paused: None,
         };
-        match kept {
-            Some(h) if h != now => {
-                f.paused = Some(format!(
-                    "{doc} was edited outside the app since it last synced: not synced, your edit kept \
-                     (bring it in by hand; merging such edits comes later)"
-                ));
-            }
-            Some(_) => {}
-            None => {
-                let _ = f.write_mark(now);
-            }
+        if kept.is_some_and(|h| h != now) {
+            f.paused = Some(format!(
+                "{doc} was edited outside the app since it last synced: not synced, your edit kept \
+                 (bring it in by hand; merging such edits comes later)"
+            ));
         }
+        // no mark (the first open since the project was served): attached only once the
+        // server's text is seen to be the file's (`verify`)
         Some(f)
+    }
+
+    /// The file holds what the server last had (a mark it matches): the link attaches now.
+    pub fn verified(&self) -> bool {
+        self.verified
+    }
+
+    /// The first open of a served part: the server's text (with this client's pending ops),
+    /// the file's and the editor's must be the same, or nothing is attached and the file is
+    /// left as it is (an edit made before the project was served is never written over).
+    pub fn verify(&mut self, server: &str, editor: &str) -> Result<(), String> {
+        let on_disk =
+            std::fs::read_to_string(&self.path).map_err(|e| format!("{}: {e}", self.path.display()))?;
+        let h = forge_sync::text_hash(server);
+        if forge_sync::text_hash(&on_disk) != h || forge_sync::text_hash(editor) != h {
+            return Err(format!(
+                "{} differs from the server's copy: not synced, your file kept (bring it in by hand, \
+                 or make it the server's text, then open it again)",
+                self.path.display()
+            ));
+        }
+        self.write_mark(h).map_err(|e| e.to_string())?;
+        self.last = h;
+        self.verified = true;
+        Ok(())
+    }
+
+    /// The app saved `text` to the file itself (Save, the agent's save before a turn): it is
+    /// the app's own write, not a hand edit.
+    pub fn wrote(&mut self, text: &str) {
+        let h = forge_sync::text_hash(text);
+        if self.verified && self.write_mark(h).is_ok() {
+            self.last = h;
+        }
+    }
+
+    /// The client as it must outlive the app (`Link::saved`), written when it changed.
+    pub fn keep_pending(&mut self, saved: String) {
+        if saved.is_empty() || saved == self.kept {
+            return;
+        }
+        if put(&self.pending, saved.as_bytes()).is_ok() {
+            self.kept = saved;
+        }
     }
 
     fn write_mark(&self, h: u64) -> std::io::Result<()> {
@@ -157,11 +249,12 @@ impl SyncFile {
     /// Once a second: a hand edit is Err (pause); else, when `settled`, the server's text is
     /// written if it changed.
     pub fn tick(&mut self, settled: bool, text: impl FnOnce() -> String) -> Result<(), String> {
-        if self.checked.elapsed() < std::time::Duration::from_secs(1) {
+        if !self.verified || self.checked.elapsed() < std::time::Duration::from_secs(1) {
             return Ok(());
         }
         self.checked = std::time::Instant::now();
-        let on_disk = std::fs::read_to_string(&self.path).map_err(|e| format!("{}: {e}", self.path.display()))?;
+        let on_disk =
+            std::fs::read_to_string(&self.path).map_err(|e| format!("{}: {e}", self.path.display()))?;
         if forge_sync::text_hash(&on_disk) != self.last {
             return Err(format!(
                 "{} was edited outside the app: syncing paused, your edit kept",
@@ -172,11 +265,17 @@ impl SyncFile {
             let t = text();
             let h = forge_sync::text_hash(&t);
             if h != self.last {
-                // whole or not at all: a file beside it, renamed over it
-                let tmp = self.path.with_extension("fg.forgecad-sync");
-                std::fs::write(&tmp, &t)
-                    .and_then(|_| std::fs::rename(&tmp, &self.path))
+                // a save landing since the check above is not written over (read again, just
+                // before the rename: the window left is the rename's own)
+                let now = std::fs::read_to_string(&self.path)
                     .map_err(|e| format!("{}: {e}", self.path.display()))?;
+                if forge_sync::text_hash(&now) != self.last {
+                    return Err(format!(
+                        "{} was edited outside the app: syncing paused, your edit kept",
+                        self.path.display()
+                    ));
+                }
+                put(&self.path, t.as_bytes()).map_err(|e| format!("{}: {e}", self.path.display()))?;
                 self.last = h;
                 self.write_mark(h).map_err(|e| e.to_string())?;
             }

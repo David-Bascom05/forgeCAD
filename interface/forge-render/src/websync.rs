@@ -58,6 +58,9 @@ struct Inner {
     events: Vec<Event>,
     url: String,
     connected: bool,
+    /// The server refused for good (a bad token, another kernel, a quarantined document): no
+    /// reconnect (it would be refused the same way, for ever).
+    stopped: bool,
     waker: Arc<dyn Fn() + Send + Sync>,
     /// The socket's callbacks, kept alive while it is.
     #[allow(clippy::type_complexity)]
@@ -92,6 +95,7 @@ pub fn open(path: &str, waker: Arc<dyn Fn() + Send + Sync>) -> Option<Result<Box
         events: vec![],
         url,
         connected: false,
+        stopped: false,
         waker,
         held: vec![],
     }));
@@ -129,6 +133,9 @@ fn connect(inner: &Rc<RefCell<Inner>>) {
             let waker = {
                 let mut s = i.borrow_mut();
                 let ev = s.client.receive(d);
+                if ev.iter().any(|e| matches!(e, Event::Stopped(_))) {
+                    s.stopped = true;
+                }
                 s.events.extend(ev);
                 s.flush();
                 s.waker.clone()
@@ -143,6 +150,9 @@ fn connect(inner: &Rc<RefCell<Inner>>) {
                 let mut s = i.borrow_mut();
                 s.connected = false;
                 s.ws = None;
+                if s.stopped {
+                    return;
+                }
             }
             retry(&i);
         })
@@ -200,6 +210,10 @@ impl Link for WebLink {
     }
     fn poll(&self) -> Vec<Event> {
         std::mem::take(&mut self.0.borrow_mut().events)
+    }
+    fn saved(&self) -> String {
+        // (the browser keeps no pending ops across a closed tab yet)
+        String::new()
     }
 }
 

@@ -863,6 +863,7 @@ impl Shell {
         self.sheet_ui(&ctx);
         self.machine_ui(&ctx);
         self.build_banner(ui);
+        self.sync_banner(ui);
         self.view_toolbar(&ctx);
         self.sketch_ui(&ctx);
         self.mode_bar(&ctx);
