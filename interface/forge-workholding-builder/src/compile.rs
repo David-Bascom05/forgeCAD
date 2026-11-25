@@ -13,6 +13,10 @@
 use forge_cam::fixture_model::{self, Rot};
 use forge_cam_geom::check::Face;
 
+/// The compiler's version: a cache of compiled faces is named by it with its input's content,
+/// so raise it whenever the same input would compile to other faces.
+pub const VERSION: u32 = 1;
+
 /// Which of the file's solids (in the order the reader gives them) make each of the device's
 /// bodies.
 #[derive(Clone, Debug)]

@@ -104,6 +104,29 @@ fn a_fixture_of_the_users_own_is_checked_against_its_faces() {
         again.setup_view(0).unwrap().fixture.unwrap().faces().len(),
         counts[0]
     );
+    // what is drawn is what is checked: the body's mesh is the same compile's, kept beside the
+    // faces, and its faces are the ones the checker has
+    let f = again.setup_view(0).unwrap().fixture.unwrap();
+    let b = &f.placed.as_ref().unwrap().bodies[0];
+    let (mesh, faces) = forge_cam::fixture::body_source(b).expect("a model body");
+    let mesh = mesh.expect("its mesh kept beside its faces");
+    assert!(mesh.is_file() && mesh.starts_with(&d), "{}", mesh.display());
+    assert_eq!(b.part.as_deref().map(Path::new), Some(mesh.as_path()));
+    assert_eq!(faces.unwrap().len(), f.faces().len());
+    // a device that grips nothing excuses no leftover as held by it
+    assert!(again.leftover_done);
+    assert!(!again.leftover.is_empty(), "the facing leaves stock");
+    assert!(
+        again.leftover.iter().all(|l| l.why != "held by fixture"),
+        "{:?}",
+        again.leftover.iter().map(|l| l.why).collect::<Vec<_>>()
+    );
+    assert!(
+        f.jaw_top <= f.table_z.unwrap() + 1e-9,
+        "{} {:?}",
+        f.jaw_top,
+        f.table_z
+    );
     // a plate that reaches up into the cut is a collision found against its real faces
     let hit = forge_cam_lang::run(&setup("workholding(\"my-plate\", at: (0, 0, 5))"), &d);
     assert!(!hit.ok, "a plate across the cut certified: {:?}", hit.warnings);

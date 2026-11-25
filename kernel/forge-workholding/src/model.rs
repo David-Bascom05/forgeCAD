@@ -49,7 +49,9 @@ pub struct Group {
     /// it): its envelope for drawing, and the device's height and where it sits on the table.
     pub tight_min: V3,
     pub tight_max: V3,
-    /// Its drawn mesh (an STL in the device's frame), relative to data/models/ (Git LFS).
+    /// Its drawn mesh (an STL in the device's frame): relative to data/models/ (Git LFS) for a
+    /// built-in model, an absolute path for one compiled while running (`mesh_path` resolves
+    /// either). Empty when there is none.
     pub mesh: String,
     /// The STEP's solids it is made of (in the reader's order).
     pub solids: Vec<usize>,
@@ -232,6 +234,21 @@ pub const SPECS: &str = include_str!("../data/models.toml");
 /// The models' specs alone, before they are compiled: what to compile (no faces, no boxes).
 pub fn specs(src: &str) -> Result<Vec<Model>, WhError> {
     parse(src, false)
+}
+
+/// Where a group's drawn mesh is, if it has one.
+pub fn mesh_path(g: &Group) -> Option<std::path::PathBuf> {
+    if g.mesh.is_empty() {
+        return None;
+    }
+    let p = std::path::Path::new(&g.mesh);
+    Some(if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("data/models")
+            .join(p)
+    })
 }
 
 /// Models compiled while running (a user's own imported fixture), each kept once, by name.

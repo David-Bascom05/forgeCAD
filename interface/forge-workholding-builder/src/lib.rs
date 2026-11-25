@@ -208,7 +208,7 @@ fn place(r: &Record) -> Result<Vec<(String, Vec<Prim>)>, WhError> {
             w(vec![mill::dovetail("preview", r, &s, 0, t)?])
         }
         WKind::SoftJaws => {
-            let v = lib.get("standin-vise-150")?;
+            let v = preview_vise(&lib)?;
             let s = Box3 {
                 min: [0.0; 3],
                 max: [40.0, 40.0, r.get("height")?.max(30.0)],
@@ -224,7 +224,7 @@ fn place(r: &Record) -> Result<Vec<(String, Vec<Prim>)>, WhError> {
             )?])
         }
         WKind::Parallels => {
-            let v = lib.get("standin-vise-150")?;
+            let v = preview_vise(&lib)?;
             let jh = v.get("jaw_height")?;
             // the tallest parallel under the jaws' height: the shallowest grip
             let h = r
@@ -339,6 +339,20 @@ pub fn check(r: &Record) -> Vec<Finding> {
 /// chuck face), or why there are none yet.
 pub fn preview(r: &Record) -> Result<Vec<(String, Vec<Prim>)>, Finding> {
     place(r).map_err(finding)
+}
+
+/// The vise a preview stands a soft jaw or a parallel in: the stand-in vise a generic name means
+/// (the record that `replaces` one), chosen by the data, not by name.
+fn preview_vise(
+    lib: &forge_workholding::Library,
+) -> Result<&forge_workholding::Record, forge_workholding::WhError> {
+    lib.of_kind(forge_workholding::Kind::Vise)
+        .find(|r| r.standin && r.words.contains_key("replaces"))
+        .ok_or_else(|| forge_workholding::WhError::Missing {
+            record: "the library".into(),
+            field: "a stand-in vise that replaces a generic name".into(),
+            fix: "a stand-in vise record with `replaces`".into(),
+        })
 }
 
 #[cfg(test)]

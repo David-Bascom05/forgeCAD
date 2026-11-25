@@ -3436,7 +3436,9 @@ impl Cam {
 
     /// The user's own model of a device (`model_file`, beside the document), compiled to the
     /// checker's faces: once per content (its sha256 names it), kept for the run, and written
-    /// beside the document (`cam/workholding/.compiled/SHA.txt`) so the next run reads it. Its
+    /// beside the document (`cam/workholding/.compiled/SHA-cV.txt`, V the compiler's version, with
+    /// the drawn mesh as `.stl`) so the next run reads it. A `.fg` is named by its own text: a
+    /// file it reads changed under it is not seen until its text changes. Its
     /// solids are one rigid body (a custom fixture does not move; a device that does is a maker's
     /// model with its bodies said, data/models.toml).
     fn import_model(
@@ -3492,14 +3494,18 @@ impl Cam {
             origin: [0.0; 3],
             chord: 0.02,
         };
-        let cache = dir
-            .join("cam")
-            .join("workholding")
-            .join(".compiled")
-            .join(format!("{sha}.txt"));
-        let text = match forge_dirs::fs::read_to_string(&cache) {
-            Ok(t) if t.starts_with(forge_cam::fixture_model::HEADER) => t,
-            _ => {
+        // named by the content and the compiler's version, so a cached file is only ever the
+        // compile of these very bytes by this very compiler; one that does not read is compiled
+        // again, never used
+        let stem = format!("{sha}-c{}", forge_workholding_builder::compile::VERSION);
+        let cdir = dir.join("cam").join("workholding").join(".compiled");
+        let (cache, stl) = (cdir.join(format!("{stem}.txt")), cdir.join(format!("{stem}.stl")));
+        let cached = forge_dirs::fs::read_to_string(&cache)
+            .ok()
+            .filter(|t| forge_cam::fixture_model::read(t).is_ok());
+        let text = match cached {
+            Some(t) => t,
+            None => {
                 let cs = forge_workholding_builder::compile::Spec {
                     rot,
                     origin: [0.0; 3],
@@ -3525,14 +3531,31 @@ impl Cam {
                     forge_workholding_builder::compile::compile(&bytes, &cs)
                 }
                 .map_err(|e| format!("{file}: {e}"))?;
-                // kept for the next run; a project that cannot be written to compiles again
-                if let Some(d) = cache.parent() {
-                    let _ = forge_dirs::fs::create_dir_all(d)
-                        .and_then(|_| forge_dirs::fs::write(&cache, &c.text));
+                // kept for the next run with its drawn mesh beside it; a project that cannot be
+                // written to (read-only, a page without files) compiles again next time, and
+                // says so: the run's result does not depend on it
+                let kept = forge_dirs::fs::create_dir_all(&cdir)
+                    .and_then(|_| forge_dirs::fs::write(&cache, &c.text))
+                    .and_then(|_| match c.stl.first() {
+                        Some((_, b)) => forge_dirs::fs::write(&stl, b),
+                        None => Ok(()),
+                    });
+                if let Err(e) = kept {
+                    let w = format!(
+                        "{file}: its compiled faces could not be kept ({e}): it is compiled again on the next run"
+                    );
+                    if !self.warnings.contains(&w) {
+                        self.warnings.push(w);
+                    }
                 }
                 c.text
             }
         };
+        // the drawn mesh is the same compile's (drawn = checked), where it was kept
+        let mut spec = spec;
+        if forge_dirs::fs::is_file(&stl) {
+            spec.groups[0].mesh = stl.to_string_lossy().into_owned();
+        }
         forge_cam::fixture_model::read(&text).map_err(|e| format!("{file}: {e}"))?;
         forge_workholding::model::register(spec, text).map_err(|e| format!("{file}: {e:?}"))
     }
