@@ -139,6 +139,28 @@ fn the_structure_reads_back_where_the_solve_put_it() {
     } else {
         // a reader that leaves assemblies alone says so, and still gives each part
         assert_eq!(got.solids.len(), 2);
+        // and where each use of it stands, by the product names down to it: every use where the
+        // solve put it
+        let want = corners(
+            sol.occurrences
+                .iter()
+                .filter(|o| !o.reference)
+                .map(|o| forge_asm::check::rigid_copy(&bodies[&(o.part.doc.clone(), o.part.body)], &o.pose)),
+        );
+        assert_eq!(got.occurrences.len(), 6);
+        let placed = got.occurrences.iter().map(|u| {
+            let s = got
+                .solids
+                .iter()
+                .find(|s| s.entity == u.solid)
+                .expect("a read solid");
+            forge_asm::check::rigid_copy(&s.body, &u.frame)
+        });
+        assert_eq!(corners(placed), want);
+        let mut paths: Vec<String> = got.occurrences.iter().map(|u| u.path.join("/")).collect();
+        paths.sort();
+        assert_eq!(paths.first().map(|p| p.split('/').next()), Some(Some("top")));
+        assert_eq!(paths.iter().filter(|p| p.contains("post")).count(), 4);
     }
 }
 

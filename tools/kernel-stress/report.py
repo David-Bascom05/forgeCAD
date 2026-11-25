@@ -66,7 +66,7 @@ def load(out):
                 z["parasolid"].append(e)
             elif ev == "file":
                 cur = {"file": e["file"], "bytes": e["bytes"], "import": None, "solids": {}, "ops": {},
-                       "hangs": [], "crashes": [], "done": None, "wall": None}
+                       "hangs": [], "crashes": [], "sites": [], "done": None, "wall": None}
                 z["files"].append(cur)
             elif cur is None:
                 continue
@@ -80,6 +80,8 @@ def load(out):
                 # an op past the time or memory limit: the run ends there and is rerun without it
                 e["what"] = "memory" if ev == "memory" else "hang"
                 cur["hangs"].append(e)
+            elif ev == "site":
+                cur["sites"].append(e)
             elif ev == "crash":
                 cur["crashes"].append(e)
             elif ev == "done":
@@ -276,6 +278,22 @@ def main():
     for ms, w in slow[:20]:
         p(f"| {ms:.0f} | {w} |")
     p()
+
+    # the decision log's named sites (KS_DECISIONS=1): every hit, for the site's owner
+    hits = [(z["name"], f, x) for z in zips.values() for f in z["files"] for x in f.get("sites", [])]
+    if hits:
+        p("## Decisions sites hit")
+        p()
+        p("| site | file | solid | op | the op's answer |")
+        p("|---|---|---:|---|---|")
+        for zn, f, x in hits:
+            site = x["d"].removeprefix("decisions site ").split(" x")[0]
+            s, _, op = x.get("key", "").partition(":")
+            sol = f["solids"].get(int(s[1:])) if s[1:].isdigit() else None
+            e = f["ops"].get((int(s[1:]), op)) if sol else None
+            p(f"| {site} | {zn} / {f['file']} | {sol['ent'] if sol else '?'} | {op or '?'} | "
+              f"{e['st'] if e else '?'} {(e or {}).get('d', '')[:80]} |")
+        p()
 
     p("## Memory: peak resident, largest 10 files")
     p()

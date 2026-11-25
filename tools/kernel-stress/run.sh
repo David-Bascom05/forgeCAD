@@ -5,6 +5,8 @@
 #
 #   tools/kernel-stress/run.sh [-o OUT] [-j JOBS] [-t OP_TIMEOUT_S] [-f FILE_TIMEOUT_S]
 #                              [-n MAX_SOLIDS] [-z ZIPDIR] [ZIP_NAME ...]
+#   KS_DECISIONS=1 tools/kernel-stress/run.sh ...   (the decision log's named sites, as `site` events)
+#   KS_NARY=1 tools/kernel-stress/run.sh ...        (booleans through n-ary on all threads, as the app)
 #
 # The zips come from the branch haas-3d-models (fetched, never checked out: each one is read with
 # `git show` into a scratch dir, unpacked, run, and deleted), or from -z DIR. No names: all of them.
@@ -35,8 +37,18 @@ done
 shift $((OPTIND - 1))
 
 bin="$root/target/release/forge-stress"
+# KS_NARY=1: every boolean through forge_bool::nary on all threads (the app's path), not boolean
+nary=""
+[ -n "${KS_NARY:-}" ] && nary="--nary"
+# KS_DECISIONS=1: forge-bool's decision log on (feature `decisions`), and each hit of a named site
+# (FORGE_DECISIONS_SITES) kept as {"ev":"site","key":OP,"d":LINE} under the op in flight
+feat=()
+if [ -n "${KS_DECISIONS:-}" ]; then
+  feat=(--features decisions)
+  export FORGE_DECISIONS_SITES=1
+fi
 if [ -z "${KS_NO_BUILD:-}" ]; then
-  (cd "$root" && cargo build --release -q -p forge-stress) || exit 1
+  (cd "$root" && cargo build --release -q -p forge-stress "${feat[@]}") || exit 1
 fi
 mkdir -p "$out"
 scratch="${TMPDIR:-/tmp}/kernel-stress.$$"
@@ -94,8 +106,10 @@ one() {
       printf '{"ev":"file","zip":"%s","file":"%s","bytes":%s}\n' "$zip" "${rel//\"/}" "$bytes" >>"$res"
       t0=$(date +%s.%N)
       while :; do
-        timeout -k 10 "$file_t" "$bin" "$f" --timeout "$op_t" --max-solids "$max_solids" --skip "$skip" >"$dir/run.jsonl" 2>"$dir/err.txt"
+        timeout -k 10 "$file_t" "$bin" "$f" --timeout "$op_t" --max-solids "$max_solids" --skip "$skip" $nary >"$dir/run.jsonl" 2>"$dir/err.txt"
         rc=$?
+        # the decisions sites hit, each under the last op begun before it
+        awk '/^BEGIN /{k=$2} /^decisions site /{gsub(/["\\\t\r]/,"\x27"); printf "{\"ev\":\"site\",\"key\":\"%s\",\"d\":\"%s\"}\n", k, substr($0,1,400)}' "$dir/err.txt" >>"$res"
         if [ -n "$skip" ]; then
           # a rerun: what came before the skipped ops is in already
           grep -v '"ev":"\(import\|solid\)"' "$dir/run.jsonl" >>"$res"
@@ -123,7 +137,7 @@ one() {
   echo "done $zip" >&2
 }
 export -f one
-export scratch out bin op_t file_t max_solids zipdir root
+export scratch out bin op_t file_t max_solids zipdir root nary
 
 if [ $# -gt 0 ]; then printf '%s\n' "$@"; else list; fi |
   xargs -P "$jobs" -I{} bash -c 'one "$@"' _ {}

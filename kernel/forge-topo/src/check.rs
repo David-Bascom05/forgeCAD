@@ -841,16 +841,10 @@ pub fn stray_edges_from(body: &Body, first: usize) -> Vec<Problem> {
             }
             let s = &body.face(f).surface;
             let worst = pts.iter().map(|&p| s.distance(p)).fold(0.0, f64::max);
+            let band = edge.tol.max(tol::LINEAR);
             #[cfg(feature = "decisions")]
-            face_log::record(
-                body,
-                e,
-                f,
-                worst,
-                edge.tol.max(tol::LINEAR),
-                "check: a stray edge, 256 points",
-            );
-            if worst > edge.tol.max(tol::LINEAR) {
+            face_log::record(body, e, f, worst, band, "check: a stray edge, 256 points");
+            if worst > band && worst > band + rounding(&pts) {
                 out.push(Problem::EdgeOffFace {
                     edge: e,
                     face: f,
@@ -1127,11 +1121,26 @@ fn check_geometry(body: &Body, known: &Known, out: &mut Vec<Problem>) {
     }
 }
 
-/// Edge `e` of face `f`, if it strays from the face by more than its tolerance.
+/// A few units in the last place of the largest coordinate of `points`: as fine as a distance
+/// measured there can be told apart. An edge's tolerance read from a file is its distance as
+/// measured where the part was; moved rigidly (a copy placed beside it, a part placed far out in
+/// an assembly) the same distance reads a few 1e-15 to 1e-13 over it, rounding and nothing else
+/// (KERNEL-STRESS's Haas sweep: EdgeOffFace on copies and on every boolean with them, 7 of
+/// GM2-5AX "lightweight v1"'s first 60 solids).
+fn rounding(points: &[forge_math::Point3]) -> f64 {
+    let far = points
+        .iter()
+        .map(|p| p.x.abs().max(p.y.abs()).max(p.z.abs()))
+        .fold(0.0, f64::max);
+    8.0 * f64::EPSILON * far
+}
+
+/// Edge `e` of face `f`, if it strays from the face by more than its tolerance (and the rounding
+/// of a distance measured at its coordinates: `rounding`).
 pub fn edge_off_face(body: &Body, e: EdgeId, f: FaceId) -> Option<Problem> {
-    let band = body.edge(e).tol.max(tol::LINEAR);
     let s = &body.face(f).surface;
     let points = body.edge_points(e, 16);
+    let band = body.edge(e).tol.max(tol::LINEAR);
     let mut worst = 0.0f64;
     // each point from the one before, where it stays on the face that far; else the search
     let mut near = None;
@@ -1145,7 +1154,8 @@ pub fn edge_off_face(body: &Body, e: EdgeId, f: FaceId) -> Option<Problem> {
     }
     #[cfg(feature = "decisions")]
     face_log::record(body, e, f, worst, band, "check: edge_off_face, 16 points");
-    (worst > band).then_some(Problem::EdgeOffFace {
+    // (past the band, by more than its coordinates' rounding: asked only then)
+    (worst > band && worst > band + rounding(&points)).then_some(Problem::EdgeOffFace {
         edge: e,
         face: f,
         distance: worst,
