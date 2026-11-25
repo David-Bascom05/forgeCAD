@@ -66,6 +66,26 @@ pub fn left() -> u64 {
     LEFT.get()
 }
 
+/// `f` under a budget of its own: at most `limit` evaluations, charged to nothing else, with
+/// this thread's own budget put back after (unwinding too). Gives what `f` spent, and its answer.
+/// For a caller that must know one piece's cost on its own, or hold one piece to a share of the
+/// whole: a piece that runs its own out sees `over()`, while the caller's budget is untouched
+/// until the caller charges the spend itself (`spend_many`).
+pub fn isolated<T>(limit: u64, f: impl FnOnce() -> T) -> (u64, T) {
+    struct Put(u64, bool);
+    impl Drop for Put {
+        fn drop(&mut self) {
+            LEFT.set(self.0);
+            LIMITED.set(self.1);
+        }
+    }
+    let _put = Put(LEFT.get(), LIMITED.get());
+    LEFT.set(limit);
+    LIMITED.set(true);
+    let t = f();
+    (limit - LEFT.get(), t)
+}
+
 /// `f` of each of `0..n`, as one after another on this thread under its budget would give them,
 /// worked out on all cores (`forge_math::par::map`) as far as that is the same.
 ///
@@ -286,6 +306,35 @@ mod tests {
         assert!(r.is_err());
         assert_eq!(super::left(), u64::MAX);
         assert!(!super::limited());
+    }
+
+    /// An isolated piece spends its own budget, not the caller's, and the caller is told what it
+    /// spent; one that runs its own out sees it, and the caller's is still whole.
+    #[test]
+    fn isolated_spends_its_own_budget() {
+        let b = super::scoped(100);
+        let (spent, x) = super::isolated(10, || {
+            super::spend_many(4);
+            super::over()
+        });
+        assert_eq!((spent, x), (4, false));
+        assert_eq!(super::left(), 100);
+        let (spent, out) = super::isolated(10, || {
+            super::spend_many(25);
+            super::over()
+        });
+        assert_eq!((spent, out), (10, true));
+        assert_eq!((super::left(), super::limited()), (100, true));
+        super::spend_many(spent);
+        assert_eq!(super::left(), 90);
+        drop(b);
+        // with no budget of the caller's own, an isolated piece still has one, and leaves none
+        let (spent, out) = super::isolated(3, || {
+            super::spend_many(5);
+            super::over()
+        });
+        assert_eq!((spent, out), (3, true));
+        assert!(!super::limited() && super::left() == u64::MAX);
     }
 
     /// Items that spend less than is left together: their answers, the budget charged their sum,
