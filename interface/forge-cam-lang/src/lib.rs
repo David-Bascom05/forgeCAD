@@ -329,6 +329,7 @@ pub struct Finish {
     pub links: [usize; 3],
 }
 
+#[derive(Default)]
 pub struct OpOut {
     pub name: String,
     pub kind: &'static str,
@@ -1440,7 +1441,37 @@ pub struct Cam {
     /// of (`frames_wanted`): such a part is loaded with its anchors and those sketches asked,
     /// so the ops' sketch frames come from that run. Empty for most documents.
     frames: BTreeMap<String, Vec<String>>,
+    /// Set on the prefetch pass only (`prefetch`): the 3D ops' generator calls recorded, not
+    /// made; every op stops before its generation.
+    prefetch: Option<Vec<Prefetch>>,
 }
+
+/// A 3D op's generator call, as the prefetch pass found it: the arguments `surfacing` or
+/// `finish3d` takes (their memo keys are made of these and the setup's part, tool and stock
+/// box, none of which an earlier op changes).
+struct Prefetch {
+    su: usize,
+    kind: String,
+    a: BTreeMap<String, V>,
+    ti: usize,
+    h: Heights,
+    feed: (f64, f64),
+}
+
+/// The 3D generator kinds (`Cam::op`'s `surfacing` and `finish3d` arms).
+const GEN3D: &[&str] = &[
+    "parallel",
+    "waterline",
+    "zlevel",
+    "steep_shallow",
+    "spiral",
+    "radial",
+    "ramping",
+    "flat",
+    "scallop",
+    "pencil",
+    "rest",
+];
 
 impl PartIn {
     /// The part's answer to `frame SKETCH`: from its load's run where that was kept (and the
@@ -2395,6 +2426,7 @@ fn run_shared(src: &str, dir: &Path, lib: std::sync::Arc<Library>) -> Cam {
         lib,
         jaws: vec![],
         frames: BTreeMap::new(),
+        prefetch: None,
     };
     let prog = match syntax::parse(src) {
         Ok(p) => p,
@@ -2431,90 +2463,8 @@ fn run_shared(src: &str, dir: &Path, lib: std::sync::Arc<Library>) -> Cam {
             }
         }
     }
-    let mut env: BTreeMap<String, V> = BTreeMap::new();
-    let mut params: BTreeMap<String, BTreeMap<String, Expr>> = BTreeMap::new();
-    for st in prog.iter().skip(1) {
-        let r: Result<(), String> = (|| {
-            match &st.kind {
-                StmtKind::Shared { name, value } => {
-                    let v = cam.eval(value, &env)?;
-                    env.insert(name.clone(), v);
-                }
-                StmtKind::Param { owner, name, value } => {
-                    // the owner's id as text (`a.b`, `a[0]`): a statement's id is its name
-                    let o = forge_lang::error::path_text(owner);
-                    params.entry(o).or_default().insert(name.clone(), value.clone());
-                }
-                StmtKind::Assign { name, value } => {
-                    let ExprKind::Call(f, args) = &value.kind else {
-                        let v = cam.eval(value, &env)?;
-                        env.insert(name.clone(), v);
-                        return Ok(());
-                    };
-                    let ExprKind::Name(fname) = &f.kind else {
-                        return Err("a call of a non-built-in".into());
-                    };
-                    // the statement's own params, by their short names
-                    let mut local = env.clone();
-                    // (its id exactly: `param xop1.d` is not `op1`'s)
-                    if let Some(ps) = params.get(name.as_str()) {
-                        for (k, e) in ps {
-                            let v = cam.eval(e, &env)?;
-                            local.insert(k.clone(), v);
-                        }
-                    }
-                    let a = cam.named_of(fname, args, &local)?;
-                    // the kernel's clock: std's Instant panics in a browser
-                    let t0 = std::env::var("FORGE_CAM_TIME")
-                        .is_ok()
-                        .then(forge_math::clock::Instant::now);
-                    let v = {
-                        let _sp = prof::span(|| format!("stmt\t{fname}\t{name}"));
-                        cam.call(name, fname, &a, dir)?
-                    };
-                    if let Some(t0) = t0 {
-                        eprintln!("{name}: {:?}", t0.elapsed());
-                    }
-                    env.insert(name.clone(), v);
-                }
-                // a bare statement after the header did nothing and said nothing: every
-                // statement of a machining document names what it makes
-                StmtKind::Expr(e) => {
-                    return Err(match &e.kind {
-                        ExprKind::Call(f, _) => match &f.kind {
-                            ExprKind::Name(n) => format!("an operation needs a name: `{n}1 = {n}(..)`"),
-                            _ => "a statement needs a name: `NAME = ..`".into(),
-                        },
-                        _ => "a statement needs a name: `NAME = ..`".into(),
-                    });
-                }
-                _ => return Err("a statement a machining document does not take".into()),
-            }
-            Ok(())
-        })();
-        if let Err(e) = r {
-            cam.ok = false;
-            // the statement by its name and its built-in: `bolts` (drill)
-            let who = match &st.kind {
-                StmtKind::Assign { name, value } => match &value.kind {
-                    ExprKind::Call(f, _) => match &f.kind {
-                        ExprKind::Name(fname) => format!(", `{name}` ({fname})"),
-                        _ => format!(", `{name}`"),
-                    },
-                    _ => format!(", `{name}`"),
-                },
-                _ => String::new(),
-            };
-            let (code, words) = split_code(&e);
-            if let Some(c) = code {
-                cam.error_codes.push((cam.errors.len(), c));
-            }
-            cam.errors.push(format!(
-                "line {}{who}: {words}",
-                line_of(src, st.span.lo as usize)
-            ));
-        }
-    }
+    cam.prefetch(&prog, src, dir);
+    cam.exec(&prog, src, dir);
     // each op was certified on the stock every earlier op of its setup, and every op of the
     // setup it continues, left: so those are posted before it (an earlier program, or earlier
     // in its own), or the program is refused
@@ -2588,6 +2538,161 @@ fn run_shared(src: &str, dir: &Path, lib: std::sync::Arc<Library>) -> Cam {
         cam.ok = false;
     }
     cam
+}
+
+impl Cam {
+    /// The 3D ops' generations made ahead, side by side, into their memos (`SURFACED`,
+    /// `FINISHED`): a pass over the statements in which every op stops before its generation
+    /// (and nothing is posted) records each 3D op's generator call, then those run on the
+    /// pool. Each is a function of its memo key alone, which no earlier op's result enters,
+    /// so the run that follows takes every one from its memo: the same values, in the same
+    /// order, as making them there. Only with two or more such ops and more than one thread.
+    fn prefetch(&self, prog: &[forge_lang::syntax::Stmt], src: &str, dir: &Path) {
+        let gen3d = prog
+            .iter()
+            .filter(|st| {
+                matches!(&st.kind, StmtKind::Assign { value, .. }
+                    if matches!(&value.kind, ExprKind::Call(f, _)
+                        if matches!(&f.kind, ExprKind::Name(n) if GEN3D.contains(&n.as_str()))))
+            })
+            .count();
+        if gen3d < 2 || forge_math::par::threads() <= 1 {
+            return;
+        }
+        let _sp = prof::span(|| "prefetch\t-\t-".to_string());
+        let mut pre = Cam {
+            leftover: vec![],
+            leftover_done: false,
+            hop_maps: vec![],
+            ok: true,
+            errors: vec![],
+            error_codes: vec![],
+            warnings: vec![],
+            parts: vec![],
+            tools: vec![],
+            tool_asks: vec![],
+            setups: vec![],
+            ops: vec![],
+            programs: vec![],
+            lib: self.lib.clone(),
+            jaws: vec![],
+            frames: self.frames.clone(),
+            prefetch: Some(Vec::new()),
+        };
+        prof::muted(|| pre.exec(prog, src, dir));
+        let jobs = pre.prefetch.take().unwrap_or_default();
+        if jobs.len() < 2 {
+            return;
+        }
+        let ctx = memo::context();
+        forge_math::par::map(jobs.len(), |i| {
+            ctx.enter(|| {
+                let j = &jobs[i];
+                match j.kind.as_str() {
+                    "parallel" | "waterline" | "zlevel" => {
+                        let _ = pre.surfacing(j.su, &j.kind, &j.a, j.ti, j.h, j.feed, &mut Vec::new());
+                    }
+                    _ => {
+                        let mut out = OpOut::default();
+                        let _ = pre.finish3d(j.su, &j.kind, &j.a, j.ti, j.h, j.feed, &mut out);
+                    }
+                }
+            })
+        });
+    }
+
+    /// The document's statements after its header, in order (`run`): each named value made,
+    /// each failure recorded against its line.
+    fn exec(&mut self, prog: &[forge_lang::syntax::Stmt], src: &str, dir: &Path) {
+        let mut env: BTreeMap<String, V> = BTreeMap::new();
+        let mut params: BTreeMap<String, BTreeMap<String, Expr>> = BTreeMap::new();
+        for st in prog.iter().skip(1) {
+            let r: Result<(), String> = (|| {
+                match &st.kind {
+                    StmtKind::Shared { name, value } => {
+                        let v = self.eval(value, &env)?;
+                        env.insert(name.clone(), v);
+                    }
+                    StmtKind::Param { owner, name, value } => {
+                        // the owner's id as text (`a.b`, `a[0]`): a statement's id is its name
+                        let o = forge_lang::error::path_text(owner);
+                        params.entry(o).or_default().insert(name.clone(), value.clone());
+                    }
+                    StmtKind::Assign { name, value } => {
+                        let ExprKind::Call(f, args) = &value.kind else {
+                            let v = self.eval(value, &env)?;
+                            env.insert(name.clone(), v);
+                            return Ok(());
+                        };
+                        let ExprKind::Name(fname) = &f.kind else {
+                            return Err("a call of a non-built-in".into());
+                        };
+                        // the statement's own params, by their short names
+                        let mut local = env.clone();
+                        // (its id exactly: `param xop1.d` is not `op1`'s)
+                        if let Some(ps) = params.get(name.as_str()) {
+                            for (k, e) in ps {
+                                let v = self.eval(e, &env)?;
+                                local.insert(k.clone(), v);
+                            }
+                        }
+                        let a = self.named_of(fname, args, &local)?;
+                        // the kernel's clock: std's Instant panics in a browser
+                        let t0 = std::env::var("FORGE_CAM_TIME")
+                            .is_ok()
+                            .then(forge_math::clock::Instant::now);
+                        // the prefetch pass posts nothing
+                        if self.prefetch.is_some() && fname == "program" {
+                            return Ok(());
+                        }
+                        let v = {
+                            let _sp = prof::span(|| format!("stmt\t{fname}\t{name}"));
+                            self.call(name, fname, &a, dir)?
+                        };
+                        if let Some(t0) = t0 {
+                            eprintln!("{name}: {:?}", t0.elapsed());
+                        }
+                        env.insert(name.clone(), v);
+                    }
+                    // a bare statement after the header did nothing and said nothing: every
+                    // statement of a machining document names what it makes
+                    StmtKind::Expr(e) => {
+                        return Err(match &e.kind {
+                            ExprKind::Call(f, _) => match &f.kind {
+                                ExprKind::Name(n) => format!("an operation needs a name: `{n}1 = {n}(..)`"),
+                                _ => "a statement needs a name: `NAME = ..`".into(),
+                            },
+                            _ => "a statement needs a name: `NAME = ..`".into(),
+                        });
+                    }
+                    _ => return Err("a statement a machining document does not take".into()),
+                }
+                Ok(())
+            })();
+            if let Err(e) = r {
+                self.ok = false;
+                // the statement by its name and its built-in: `bolts` (drill)
+                let who = match &st.kind {
+                    StmtKind::Assign { name, value } => match &value.kind {
+                        ExprKind::Call(f, _) => match &f.kind {
+                            ExprKind::Name(fname) => format!(", `{name}` ({fname})"),
+                            _ => format!(", `{name}`"),
+                        },
+                        _ => format!(", `{name}`"),
+                    },
+                    _ => String::new(),
+                };
+                let (code, words) = split_code(&e);
+                if let Some(c) = code {
+                    self.error_codes.push((self.errors.len(), c));
+                }
+                self.errors.push(format!(
+                    "line {}{who}: {words}",
+                    line_of(src, st.span.lo as usize)
+                ));
+            }
+        }
+    }
 }
 
 /// z-level's default floor over a bare support: one posting step above it (0.0001 in, the
@@ -5664,8 +5769,24 @@ impl Cam {
                     self.ops.push(out);
                     return Ok(V::Op(self.ops.len() - 1));
                 }
-                let t = &self.tools[ti];
                 let h = s.heights;
+                if let Some(jobs) = self.prefetch.as_mut() {
+                    // the prefetch pass: a 3D generator's call recorded; nothing generated
+                    if GEN3D.contains(&kind) {
+                        jobs.push(Prefetch {
+                            su,
+                            kind: kind.to_string(),
+                            a: a.clone(),
+                            ti,
+                            h,
+                            feed: (vf, vp),
+                        });
+                    }
+                    out.status = "refused";
+                    self.ops.push(out);
+                    return Ok(V::Op(self.ops.len() - 1));
+                }
+                let t = &self.tools[ti];
                 match kind {
                     "engrave" => self.engrave(su, a, t, ti, h, (vf, vp), step, false, &mut voids),
                     "slot" => self.engrave(su, a, t, ti, h, (vf, vp), step, true, &mut voids),
@@ -11469,6 +11590,40 @@ mod frame_tests {
         let src = forge_dirs::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
         let cam = run(&src, &dir);
         assert!(cam.frames.is_empty() && cam.parts.iter().all(|p| p.prepared.is_none()));
+    }
+}
+
+#[cfg(test)]
+mod prefetch_tests {
+    /// A document with several 3D ops has their generations made ahead, side by side
+    /// (`Cam::prefetch`), and the run then takes each from its memo: every generation is made
+    /// exactly once, and the reply and programs are the run made with every memo bypassed
+    /// (where nothing is made ahead or taken from a memo).
+    #[test]
+    fn the_3d_ops_made_ahead_are_the_run_made_fresh() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+        // the mould with smaller areas: five 3D ops (zlevel, parallel, waterline, pencil, rest)
+        let src = forge_dirs::fs::read_to_string(dir.join("mold_core_cam.fg"))
+            .unwrap()
+            .replace("area: (-30, -24, 30, 24)", "area: (-12, -9, 12, 9)")
+            .replace("area: (-45, -35, 45, 35)", "area: (-20, -15, 20, 15)");
+        let reply = |cam: &super::Cam| {
+            let mut t = cam.json().to_string();
+            for p in &cam.programs {
+                t.push_str(&format!("\n{:?}", p.text));
+            }
+            t
+        };
+        let (s0, f0) = (super::SURFACED.computed(), super::FINISHED.computed());
+        let cam = super::run(&src, &dir);
+        assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+        // zlevel, parallel, waterline (surfacing); pencil, rest (finish3d): each made once
+        assert_eq!(super::SURFACED.computed() - s0, 3, "a surfacing op made twice or not at all");
+        assert_eq!(super::FINISHED.computed() - f0, 2, "a finishing op made twice or not at all");
+        super::memo::bypass(true);
+        let fresh = super::run(&src, &dir);
+        super::memo::bypass(false);
+        assert_eq!(reply(&cam), reply(&fresh), "made ahead: not the fresh run");
     }
 }
 

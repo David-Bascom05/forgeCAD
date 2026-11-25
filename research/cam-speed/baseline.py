@@ -14,6 +14,8 @@ tool's stickout, the part's first number), each in that process as the app runs 
 Phases (seconds of wall, summed per kind of span; spans in forge-cam-lang/src/prof.rs):
   part     the part built and lowered (`part(..)`)
   setup    machine, tools and setups (`machine`, `tool`, `setup`, ..)
+  pre      the 3D ops' generations made ahead side by side (Cam::prefetch); their statements
+           then take them from the memo
   gen      each op's generation: its statement less its hops, feeds and stock update
   hops     links over the stock (hop_links)
   feeds    feeds from engagement (feeds_from_engagement)
@@ -52,7 +54,7 @@ def split(ds):
     return tune, held
 
 def phases(run):
-    ph = {k: 0.0 for k in ["part", "setup", "gen", "hops", "feeds", "stock", "cert", "post", "rt", "g4"]}
+    ph = {k: 0.0 for k in ["part", "setup", "pre", "gen", "hops", "feeds", "stock", "cert", "post", "rt", "g4"]}
     ops = {}
     stmt = {}
     sub = {}
@@ -63,7 +65,7 @@ def phases(run):
         else:
             sub[(kind, b)] = sub.get((kind, b), 0.0) + s
             ph_k = {"hops": "hops", "feeds": "feeds", "stock": "stock", "certify": "cert", "axis": "cert",
-                    "roundtrip": "rt", "leftover": "g4"}[kind]
+                    "roundtrip": "rt", "leftover": "g4", "prefetch": "pre"}[kind]
             ph[ph_k] += s
             if kind in ("hops", "feeds", "stock", "certify", "axis"):
                 o = ops.setdefault(b, {"kind": a})
@@ -193,7 +195,7 @@ def main():
     L.append("`post` is the programs' wall; `cert` and `rt` are inside it, `cert` summed over the threads "
              "that ran it. `other` is the wall outside every span: parsing, evaluation, and in a fresh process "
              "the built-in library's first load. The turning documents have no spans (forge-turn-lang).\n")
-    cols = ["part", "setup", "gen", "hops", "feeds", "stock", "post", "cert", "rt", "g4", "json", "other"]
+    cols = ["part", "setup", "pre", "gen", "hops", "feeds", "stock", "post", "cert", "rt", "g4", "json", "other"]
     L.append("| doc | cold | " + " | ".join(cols) + " |")
     L.append("|---|---|" + "---|" * len(cols))
     for r in res:

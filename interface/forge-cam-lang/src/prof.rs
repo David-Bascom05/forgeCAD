@@ -24,9 +24,21 @@ pub fn on() -> bool {
 /// A span: its time is added to its name's sum when it is dropped.
 pub struct Span(Option<(String, forge_math::clock::Instant)>);
 
+std::thread_local! {
+    static MUTED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 /// A span named by `name()` (called only when timing is on).
 pub fn span(name: impl FnOnce() -> String) -> Span {
-    Span(on().then(|| (name(), forge_math::clock::Instant::now())))
+    Span((on() && !MUTED.with(|m| m.get())).then(|| (name(), forge_math::clock::Instant::now())))
+}
+
+/// `f` with this thread's spans not timed (a pass whose statements are timed elsewhere).
+pub fn muted<T>(f: impl FnOnce() -> T) -> T {
+    let was = MUTED.with(|m| m.replace(true));
+    let r = f();
+    MUTED.with(|m| m.set(was));
+    r
 }
 
 impl Drop for Span {
