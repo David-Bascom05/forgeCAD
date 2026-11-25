@@ -4564,6 +4564,7 @@ impl Cam {
         kind: &str,
         out: &OpOut,
         paths: Vec<OpPath>,
+        cap: Option<f64>,
     ) -> Vec<OpPath> {
         use forge_cam::engage::{HeightMap, Profile, Sched, sample_feeds, schedule_samples};
         if !matches!(
@@ -4628,6 +4629,62 @@ impl Cam {
                 .map(|p| schedule_samples(p, &mut map, &prof, &sc))
                 .collect()
         });
+        // an engagement cap asked (adaptive's): the level cutting measured over it, by more than
+        // 5° (the model's own rounding), reported. Entries (moves that change height: a helix,
+        // a ramp) cut a full slot by design and are not counted
+        if let Some(cap) = cap {
+            let (mut over, mut most) = (0.0f64, 0.0f64);
+            for (p, samples) in paths.iter().zip(all.iter()) {
+                let mut from = Vec::with_capacity(p.moves.len());
+                let mut at = p.start;
+                for m in &p.moves {
+                    from.push(at);
+                    if let PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } = *m {
+                        at = to;
+                    }
+                }
+                for (k, smp) in samples.iter().enumerate() {
+                    let (level, chord) = match p.moves.get(smp.mv) {
+                        Some(PMove::Line { to, .. } | PMove::Arc { to, .. }) => {
+                            let a = from[smp.mv];
+                            (
+                                to[2] == a[2],
+                                ((to[0] - a[0]).powi(2) + (to[1] - a[1]).powi(2)).sqrt(),
+                            )
+                        }
+                        _ => (false, 0.0),
+                    };
+                    if let Some(e) = smp.engage
+                        && level
+                    {
+                        let deg = e.phi.to_degrees();
+                        if deg > cap + 5.0 {
+                            // a move's samples are equal pieces: the gap to a neighbour of the
+                            // same move, else (one sample) the move's chord
+                            let same = |j: usize| samples.get(j).filter(|o| o.mv == smp.mv);
+                            let len = if let Some(q) = k.checked_sub(1).and_then(same) {
+                                smp.s - q.s
+                            } else if let Some(q) = same(k + 1) {
+                                q.s - smp.s
+                            } else {
+                                chord
+                            };
+                            over += len;
+                            most = most.max(deg);
+                        }
+                    }
+                }
+            }
+            if over > 0.0 {
+                self.warnings.push(format!(
+                    "{}: {:.0} mm of the cut engages the tool more than its {}° engagement cap (up to {:.0}°): it cuts heavier than asked",
+                    out.name,
+                    over,
+                    mm(cap),
+                    most
+                ));
+            }
+        }
         // the cutting force at the actual speed: the stock's rows, else the group's
         let part = &self.parts[s.part];
         let kg = self.lib.group(&part.group).map(|g| match part.stock.as_ref() {
@@ -6088,7 +6145,13 @@ impl Cam {
             }
         };
         let paths = self.hop_links(su, kind, &out, paths);
-        let paths = self.feeds_from_engagement(su, kind, &out, paths);
+        // adaptive's contract is its engagement cap: the cut held to it is reported where not
+        let cap = if kind == "adaptive" {
+            Some(get_num(a, "engagement", Some(60.0))?)
+        } else {
+            None
+        };
+        let paths = self.feeds_from_engagement(su, kind, &out, paths, cap);
         out.paths = paths;
         out.voids = voids.clone();
         for (v, floor) in voids {
