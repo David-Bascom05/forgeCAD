@@ -208,7 +208,10 @@ test_env0 = {"CARGO_PROFILE_TEST_DEBUG": "0", "CARGO_PROFILE_DEV_DEBUG": "0", "C
 # every hidden input reviewed (forge-model's test scans every kernel crate): whole, every branch
 step("hidden", [["cargo", "test", "--locked", "-p", "forge-model", "--test", "hidden_inputs", "--",
                  "every_hidden_input_is_reviewed"]], env=test_env0)
-test_env = {"CARGO_PROFILE_TEST_DEBUG": "0", "CARGO_PROFILE_DEV_DEBUG": "0",
+# a private temp folder for this run's tests and builds: two runs on one machine (owners' runs, a
+# gate) never share a file under /tmp (a font one writes while the other reads, say)
+private_tmp = tempfile.mkdtemp(prefix="pv-tmp.")
+test_env = {"TMPDIR": private_tmp, "CARGO_PROFILE_TEST_DEBUG": "0", "CARGO_PROFILE_DEV_DEBUG": "0",
             "CARGO_INCREMENTAL": "0", "JOBS": os.environ.get("JOBS", "3")}
 clippy = []
 if pk:
