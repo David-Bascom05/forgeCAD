@@ -83,6 +83,21 @@ clearance (closed form over boxes and cylinders), and the body that sets it.
   boxes, shaped from the other faces), so certify_fixtured is unchanged]. Re-clamping between
   setups: a placement's pose plus the stock transfer (the in-process stock of setup k, turned by
   the new setup's frame) [CAM-CORE, existing `from: SETUP`].
+- Done (branch cam/workholding-vise, written by WORKHOLDING for CAM-CORE): `Fixture::from_workholding(&Placed,
+  axis, clearance)`: each body's axis-aligned blocks, with keep-outs applied, become `pieces`
+  named for the body; every other primitive becomes `shaped` faces; `jaw_top` is the top of the
+  held bodies; there are two new fields, `table_z` (Mount::Table) and `placed` (the bodies, with
+  roles, parts and poses, for the machine view). faces/boxes/piece_of are unchanged, so
+  certify_fixtured is too. forge-cam-lang's `vise(NAME)` resolves in this library: the built-in
+  set, with the project's `cam/workholding/*.toml` on top. `vise(.., parallel: W)` becomes a
+  stand-in parallels record, W wide, as tall as the jaws below the grip. `generic-vise-150`
+  resolves to `standin-vise-150`, with a warning. A name only forge-tooling has keeps the old
+  boxes, with a warning that it has no body or table plane. `soft_jaw`'s bed depth is the
+  record's height less the jaw height. What the checker sees, against the old boxes: the jaws
+  stop at the bed, where before they went 20 below it. A base runs from the bed down to the
+  table, the body's length and width, where before there was a 20 mm slab between the jaws.
+  The soft-jaw setups' bed slab is 50 deep, where it was 20. bracket_cam.fg and manifold_cam.fg
+  certify with byte-identical NC.
 - Every body an obstacle in the certified checker (G2, today's path) and in the machine
   simulation [CAM-MACHINE: SetupSpec.fixture gets cylinders and a body name per prim; posing
   with the table is theirs].

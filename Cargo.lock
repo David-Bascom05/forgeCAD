@@ -114,6 +114,7 @@ dependencies = [
  "forge-post",
  "forge-tooling",
  "forge-topo",
+ "forge-workholding",
 ]
 
 [[package]]
@@ -162,6 +163,7 @@ dependencies = [
  "forge-post",
  "forge-sketch",
  "forge-tooling",
+ "forge-workholding",
 ]
 
 [[package]]

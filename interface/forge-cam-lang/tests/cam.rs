@@ -2155,3 +2155,52 @@ fn zlevel_stops_a_step_above_a_bare_support() {
         .fold(f64::INFINITY, f64::min);
     assert!(low > 0.002 && low < 0.003, "the lowest cut at {low}");
 }
+
+#[test]
+fn a_vise_from_the_workholding_library_or_the_old_record() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let doc = |vise: &str| {
+        format!(
+            "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2)), origin: \"top-center\", tol: 0.01, fixture: vise(\"{vise}\", across: \"x\", clamp: 15, clearance: 1))\nskim = facing(op1, tool: t1, to: 19.95, step: 1)\nprog = program(op1, post: \"fanuc\")\n"
+        )
+    };
+    // a library vise: its body down to the table, the table plane known
+    let cam = forge_cam_lang::run(&doc("standin-vise-150"), &dir);
+    assert!(cam.ok, "{:?}", cam.errors);
+    let f = cam.setup_view(0).unwrap().fixture.unwrap();
+    assert!(f.table_z.is_some() && f.placed.is_some());
+    assert!(f.boxes().iter().any(|b| b.0 == "base"));
+    // the base stands on the table plane, and the jaws' top is the vise's height above it
+    let t = f.table_z.unwrap();
+    let base = f
+        .placed
+        .as_ref()
+        .unwrap()
+        .bodies
+        .iter()
+        .find(|b| b.name == "base")
+        .unwrap();
+    assert!((base.bounds().0[2] - t).abs() < 1e-9, "{:?} {t}", base.bounds());
+    assert!((f.jaw_top - t - 100.0).abs() < 1e-9, "{} {t}", f.jaw_top);
+    // the old name is the library's stand-in, said so
+    let cam = forge_cam_lang::run(&doc("generic-vise-150"), &dir);
+    assert!(cam.ok, "{:?}", cam.errors);
+    assert!(cam.warnings.iter().any(|w| w.contains("standin-vise-150")));
+    assert!(cam.setup_view(0).unwrap().fixture.unwrap().table_z.is_some());
+    // a name only the old forge-tooling library has keeps its boxes, warned: no table plane
+    let cam = forge_cam_lang::run(&doc("generic-vise-100"), &dir);
+    assert!(cam.ok, "{:?}", cam.errors);
+    assert!(
+        cam.warnings
+            .iter()
+            .any(|w| w.contains("old forge-tooling record"))
+    );
+    assert!(cam.setup_view(0).unwrap().fixture.unwrap().table_z.is_none());
+    // a name neither knows is refused
+    let cam = forge_cam_lang::run(&doc("no-such-vise"), &dir);
+    assert!(
+        cam.errors.iter().any(|e| e.contains("no such vise")),
+        "{:?}",
+        cam.errors
+    );
+}
