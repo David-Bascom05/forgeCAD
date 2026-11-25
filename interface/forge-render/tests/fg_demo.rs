@@ -319,7 +319,10 @@ fn a_refused_preview_holds_ok_and_says_why_in_words() {
         .note
         .clone()
         .unwrap();
-    assert!(note.contains("no next face") && !note.contains('{'), "{note}");
+    assert!(
+        note.contains("the kernel refused it: nothing lies ahead of it to end at") && !note.contains('{'),
+        "{note}"
+    );
     click(&mut h, "fg:tool:ok");
     settle(&mut h);
     assert!(
