@@ -117,8 +117,11 @@ def main():
     ap.add_argument("--only", default=None)
     ap.add_argument("--no-build", action="store_true")
     ap.add_argument("--title", default="CAM speed baseline")
+    ap.add_argument("--from-json", default=None, help="render the table from saved results (JSON lines)")
+    ap.add_argument("--commit", default=None, help="the commit the saved results were made on")
+    ap.add_argument("--note", default=None, help="a paragraph added under the header")
     a = ap.parse_args()
-    if not a.no_build:
+    if not a.no_build and not a.from_json:
         subprocess.run(["cargo", "build", "--release", "-q", "-p", "forge-cam-lang", "--example", "cam_bench"],
                        cwd=ROOT, check=True)
     if a.outputs:
@@ -129,6 +132,9 @@ def main():
         ds = [d for d in ds if a.only in d]
     tune, held = split(docs())
     res = []
+    if a.from_json:
+        ds = []
+        res = [json.loads(l) for l in open(a.from_json)]
     for d in ds:
         r = None
         for k in range(a.reps):
@@ -141,7 +147,9 @@ def main():
         with open(a.json, "w") as h:
             for r in res:
                 h.write(json.dumps(r) + "\n")
-    rev = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+    for r in res:
+        r["doc"] = os.path.relpath(r["doc"], ROOT) if r["doc"].startswith("/") else r["doc"]
+    rev = a.commit or subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     nproc = os.cpu_count()
     L = []
     L.append(f"# {a.title}\n")
@@ -154,6 +162,8 @@ def main():
              "leave/to/depth changed, `first op` = its first op's (every later op of the setup sees new stock), "
              "`tool` = the last tool's stickout +1, `part` = the part's first number x1.02. "
              "**cpu/wall** = CPU seconds over wall (1.0 = one core busy). **thr** = most threads alive.\n")
+    if a.note:
+        L.append(a.note + "\n")
     L.append("Split (fixed, by a hash of the path): **T** = tune on, **H** = held out (never tuned on).\n")
     L.append("## Per document\n")
     L.append("| doc | set | cold | cpu/wall | thr | rerun | edit last op | edit first op | edit tool | edit part | ok |")

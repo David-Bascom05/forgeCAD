@@ -259,10 +259,29 @@ fn main() {
     let src_dir = docp.parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
     let doc = docp.file_name().unwrap().to_string_lossy().into_owned();
     let stem = docp.file_stem().unwrap().to_string_lossy().into_owned();
-    let work = std::env::temp_dir().join(format!("cam_bench_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&work);
-    // the part may sit in a parent directory (`../x.fg`): copy the document's own directory
+    let scratch = std::env::temp_dir().join(format!("cam_bench_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&scratch);
+    // the document's directory copied (the edits are made there) at its place under the
+    // checkout, every other entry along its path linked: a part's relative imports
+    // (`../../cam-parts/x.step`) reach what they reach in the checkout
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("checkout");
+    let abs = src_dir.canonicalize().expect("doc dir");
+    let rel = abs.strip_prefix(&root).expect("the document is in the checkout").to_path_buf();
+    let work = scratch.join(&rel);
     copy_dir(&src_dir, &work);
+    let mut at = rel.as_path();
+    while let Some(parent) = at.parent() {
+        let keep = at.file_name().unwrap();
+        for e in std::fs::read_dir(root.join(parent)).expect("dir").flatten() {
+            if e.file_name() != keep && e.file_name() != "target" && e.file_name() != ".git" {
+                let _ = std::os::unix::fs::symlink(e.path(), scratch.join(parent).join(e.file_name()));
+            }
+        }
+        at = parent;
+    }
     let sampler = std::thread::spawn(|| {
         while !STOP.load(Ordering::Relaxed) {
             MAXT.fetch_max(threads(), Ordering::Relaxed);
@@ -311,7 +330,7 @@ fn main() {
     }
     STOP.store(true, Ordering::Relaxed);
     let _ = sampler.join();
-    let _ = std::fs::remove_dir_all(&work);
+    let _ = std::fs::remove_dir_all(&scratch);
     let mut o = format!("{{\"doc\":\"{}\",\"runs\":[", esc(&docp.display().to_string()));
     for (i, r) in rs.iter().enumerate() {
         if i > 0 {
