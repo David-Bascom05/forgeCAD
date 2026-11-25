@@ -1929,10 +1929,16 @@ impl Session {
         let paused = file.as_ref().and_then(|f| f.paused.clone());
         #[cfg(target_arch = "wasm32")]
         let paused: Option<String> = None;
+        // the client kept when the app last closed (its unacked ops), when the file is the one
+        // it was kept with
+        #[cfg(not(target_arch = "wasm32"))]
+        let kept = file.as_ref().and_then(|f| f.kept_client());
+        #[cfg(target_arch = "wasm32")]
+        let kept: Option<String> = None;
         // LOCAL or SERVED: looked at once, here (a broken remote.toml is said, never ignored)
         let link = match paused {
             Some(_) => None,
-            None => crate::sync_link::open(path, waker.clone()).transpose()?,
+            None => crate::sync_link::open(path, waker.clone(), kept).transpose()?,
         };
         let mut s = Session::new(Some(path.to_string()), src, gpu, waker);
         if let Some(why) = paused {
