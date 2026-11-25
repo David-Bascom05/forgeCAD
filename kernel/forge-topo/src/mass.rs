@@ -1418,9 +1418,47 @@ enum Inner {
     Fourier { k: usize, along: Along },
     /// A Chebyshev interpolant of F over the face's parameter box, its last coefficients
     /// bounding its error.
-    Cheb(Vec<Cheb>, ((f64, f64), (f64, f64))),
+    Cheb(Tiles, ((f64, f64), (f64, f64))),
     /// Adaptive Gauss-Kronrod.
     Adapt,
+}
+
+/// A face's tiles, and for each slab of b between the tiles' b ends, the tiles whose b band holds
+/// every b of it (`Cheb::sum`'s test), in the tiles' order: `sum` then looks at those alone, and
+/// adds the same terms in the same order as over all of them.
+struct Tiles {
+    tiles: Vec<Cheb>,
+    /// The tiles' b ends, increasing, each once.
+    ends: Vec<f64>,
+    /// Slab k: b below ends[0] (k = 0), from ends[k - 1] to below ends[k], or from the last on.
+    slabs: Vec<Vec<u32>>,
+}
+
+impl Tiles {
+    /// `all_b`: the box the tiles cover, along b (`Cheb::sum`'s `all.1`).
+    fn new(tiles: Vec<Cheb>, all_b: (f64, f64)) -> Tiles {
+        let mut ends: Vec<f64> = tiles
+            .iter()
+            .flat_map(|t| [t.b.0, t.b.1])
+            .filter(|x| !x.is_nan())
+            .collect();
+        ends.sort_by(f64::total_cmp);
+        ends.dedup_by(|x, y| x == y);
+        let slabs = (0..=ends.len())
+            .map(|k| {
+                (0..tiles.len() as u32)
+                    .filter(|&i| {
+                        let t = &tiles[i as usize];
+                        // over the slab, b >= t.b.0 and b < t.b.1 are each the same throughout
+                        let from = k >= 1 && t.b.0 <= ends[k - 1];
+                        let below = k < ends.len() && t.b.1 >= ends[k];
+                        (from || t.b.0 == all_b.0) && (below || t.b.1 == all_b.1)
+                    })
+                    .collect()
+            })
+            .collect();
+        Tiles { tiles, ends, slabs }
+    }
 }
 
 struct Cheb {
@@ -1431,6 +1469,8 @@ struct Cheb {
     nb: usize,
     c: Vec<F>,
     tail: F,
+    /// The argument `g` gives `chebyshev_integrals` at the tile's a end, and their values.
+    full: (f64, Vec<f64>),
 }
 
 /// T_0..=T_n at x.
@@ -1714,6 +1754,10 @@ impl Cheb {
             last = (ta, tb);
             if oka && okb {
                 let tail = std::array::from_fn(|m| ta[m] + tb[m]);
+                // (the integrals across the whole tile, as `g` works them out there: most of a
+                // sum's tiles are whole ones)
+                let ha = 0.5 * (a.1 - a.0);
+                let x_full = (a.1 - a.0) / ha - 1.0;
                 return Ok(Cheb {
                     a,
                     b,
@@ -1721,6 +1765,7 @@ impl Cheb {
                     nb,
                     c,
                     tail,
+                    full: (x_full, chebyshev_integrals(x_full, na)),
                 });
             }
             if !oka {
@@ -1736,16 +1781,25 @@ impl Cheb {
     }
 
     /// G at (a, b) and its error bound, over tiles covering the box `all`.
-    fn sum(tiles: &[Cheb], all: ((f64, f64), (f64, f64)), a: f64, b: f64) -> (F, F) {
+    fn sum(tiles: &Tiles, all: ((f64, f64), (f64, f64)), a: f64, b: f64) -> (F, F) {
         let (mut g, mut e) = ([0.0; NF], [0.0; NF]);
-        for t in tiles {
+        // the tiles of b's slab (all of them for a b that is not a number), in order
+        let k = tiles.ends.partition_point(|&x| x <= b);
+        let slab: Box<dyn Iterator<Item = &Cheb>> = if b.is_nan() {
+            Box::new(tiles.tiles.iter())
+        } else {
+            Box::new(tiles.slabs[k].iter().map(|&i| &tiles.tiles[i as usize]))
+        };
+        // T_j at each tile's b argument, made once for the tiles that share it (most of a slab's)
+        let mut tbs: Vec<(u64, usize, Vec<f64>)> = Vec::new();
+        for t in slab {
             // a tile on the box's side also takes what lies beyond it
             let inb = (t.b.0 <= b || t.b.0 == all.1.0) && (b < t.b.1 || t.b.1 == all.1.1);
             if !inb || (a <= t.a.0 && t.a.0 != all.0.0) {
                 continue;
             }
             let x = if t.a.1 == all.0.1 { a } else { a.min(t.a.1) };
-            let (gt, et) = t.g(x, b);
+            let (gt, et) = t.g_at(x, b, &mut tbs);
             for m in 0..NF {
                 g[m] += gt[m];
                 e[m] += et[m];
@@ -1754,15 +1808,35 @@ impl Cheb {
         (g, e)
     }
 
-    /// G within this tile, from its a side to `a`, at b, and its error bound.
-    fn g(&self, a: f64, b: f64) -> (F, F) {
+    /// G within this tile, from its a side to `a`, at b, and its error bound. The Chebyshev
+    /// values are worked out once for each argument (bit for bit) and degree: `tbs` keeps those
+    /// along b over one sum's tiles, `full` those along a across the whole tile.
+    fn g_at(&self, a: f64, b: f64, tbs: &mut Vec<(u64, usize, Vec<f64>)>) -> (F, F) {
         let (ha, hb) = (0.5 * (self.a.1 - self.a.0), 0.5 * (self.b.1 - self.b.0));
-        let it = chebyshev_integrals((a - self.a.0) / ha - 1.0, self.na);
-        let tb = chebyshev((b - self.b.0) / hb - 1.0, self.nb);
+        let xa = (a - self.a.0) / ha - 1.0;
+        let owned;
+        let it: &[f64] = if xa.to_bits() == self.full.0.to_bits() {
+            &self.full.1
+        } else {
+            owned = chebyshev_integrals(xa, self.na);
+            &owned
+        };
+        let xb = (b - self.b.0) / hb - 1.0;
+        let k = match tbs
+            .iter()
+            .position(|(x, n, _)| *x == xb.to_bits() && *n == self.nb)
+        {
+            Some(k) => k,
+            None => {
+                tbs.push((xb.to_bits(), self.nb, chebyshev(xb, self.nb)));
+                tbs.len() - 1
+            }
+        };
+        let tb = &tbs[k].2;
         let mut g = [0.0; NF];
-        for (ci, iti) in self.c.chunks(self.nb + 1).zip(&it) {
+        for (ci, iti) in self.c.chunks(self.nb + 1).zip(it) {
             let mut row = [0.0; NF];
-            for (c, t) in ci.iter().zip(&tb) {
+            for (c, t) in ci.iter().zip(tb) {
                 axpy(&mut row, *t, c);
             }
             axpy(&mut g, ha * iti, &row);
@@ -2540,7 +2614,7 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
                 })
             });
         if fit {
-            cx.inner = Inner::Cheb(tiles, all);
+            cx.inner = Inner::Cheb(Tiles::new(tiles, all.1), all);
         }
     }
     let mut units: Vec<Acc> = Vec::new();
