@@ -4676,8 +4676,11 @@ impl Cam {
                 }
             }
             if over > 0.0 {
+                // the planner's limit that failed, not the user's: no remedy offered (none is
+                // known to hold in general); 175° and over is a slot to the measure's rounding
+                let slot = if most >= 175.0 { ", a full slot" } else { "" };
                 self.warnings.push(format!(
-                    "{}: {:.0} mm of the cut engages the tool more than its {}° engagement cap (up to {:.0}°): it cuts heavier than asked; a smaller tool, a lower step-down, or clear() keeps it within",
+                    "{}: on {:.0} mm of the cut the tool engages more than its {}° cap (up to {:.0}°{slot}). The adaptive path couldn't keep to the cap there, so it cuts heavier than asked.",
                     out.name,
                     over,
                     mm(cap),

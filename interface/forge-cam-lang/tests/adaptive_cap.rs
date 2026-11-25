@@ -14,7 +14,7 @@ fn warnings(cap: &str) -> Vec<String> {
     assert!(cam.errors.is_empty(), "{:?}", cam.errors);
     cam.warnings
         .into_iter()
-        .filter(|w| w.contains("engagement cap"))
+        .filter(|w| w.contains("° cap (up to "))
         .collect()
 }
 
@@ -23,7 +23,11 @@ fn cutting_over_the_engagement_cap_is_reported() {
     let w = warnings("40");
     assert_eq!(w.len(), 1, "{w:?}");
     assert!(
-        w[0].starts_with("rough: ") && w[0].contains("more than its 40° engagement cap (up to "),
+        w[0].starts_with("rough: on ")
+            && w[0].contains(" mm of the cut the tool engages more than its 40° cap (up to ")
+            && w[0].ends_with(
+                "The adaptive path couldn't keep to the cap there, so it cuts heavier than asked."
+            ),
         "{}",
         w[0]
     );
