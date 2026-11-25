@@ -132,8 +132,11 @@ the user cannot settle.
   vertical spans: moving straight up off a terrain only moves away from it). Decided, not
   measured (measuring every near pair past the limit cost 0.86 s on load_tray; decided, 0.11-0.19
   s per reply), and only where the old envelopes (boxes and sphere: a proven pass when they clear)
-  do not settle it: load_tray's handling back at the envelopes' 0.08 s (the tessellation the path
-  needs), the TruBend replies 0.10-0.13 s. On the ten-case set every former undecided is settled: the staged TruBend tray
+  do not settle it, body by body (the envelopes now from the same prisms the search uses, no
+  meshes), the steps' contexts built once per scene, the pieces' tessellation kept by content
+  across steps and replies: handling 12-15 ms a reply (5 moves; was 80 ms before 3b), 2-4 ms a
+  move; of the 5 moves on load_tray std-eu none searched, TruBend 2 (1 body each), TruBend
+  stations auto 4 (6 of 80 bodies). On the ten-case set every former undecided is settled: the staged TruBend tray
   all pass; the forced sequence 3,1,2,4,5,6's last step a proven fail (the tray's right bend
   lifted into the punch body: the planned move, not every move). Tests: the enclosure against
   the move at samples (every span), a proven hit and a terrain left out, the real check against
