@@ -1,0 +1,43 @@
+T6  2/74 render=n gate=no  | train 6: merge tools/ci-size-guard @276e8d76 (FALLBACK: model-licence 
+T6  3/74 render=n gate=no  | registry: CAM-3D-FINISH's arc and closed-form entries (train 6)
+T6  3/74 render=n gate=no  | train 6: hidden inputs of the crates train 6 adds to the scan, classed
+T6 11/74 render=Y gate=no  | train 6: cam/3axis-fit-2 @ed82f126, squashed (CAM-3D-FINISH + CAM-3AXI
+T6  3/74 render=Y gate=no  | train 6: cam/sim-tools @08ed7833, squashed (CAM-SIM: grouped Checks, i
+T6  3/74 render=Y gate=no  | train 6: cam/ui-turn-words @f6f52eb5, squashed (CAM-UI: ui-said + lath
+T6  3/74 render=Y gate=no  | train 6: forge-render Cargo.lock: forge-material depends on forge-math
+T6  3/74 render=Y gate=no  | train 6: forge-render back to main's text where 3d-hops only reformatt
+T6 23/74 render=Y gate=no  | train 6: feeds/model @fe2e65bc, squashed (FEEDS-SPEEDS: turning feeds,
+T6 65/74 render=Y gate=YES | train 6: cam/3d-hops @cdaf264d, squashed (CAM-3D-FINISH: perf-rest 647
+T6  2/74 render=n gate=no  | train 6: merge cam/speed-ledger @0dcd8f4e (CAM-3D-FINISH: CAM speed le
+T6 13/74 render=Y gate=no  | train 6: merge machines/display-bodies @046b499e (CAM-MACHINE: per-bod
+T6 13/74 render=Y gate=no  | train 6: merge cam/train5-machine @efe0e1ee (CAM-MACHINE: lookahead ra
+T6 50/74 render=Y gate=YES | train 6: merge train6/drift-tols @63e163b2 (FLAT-SITES: imprint_tols, 
+T6 44/74 render=Y gate=YES | train 6: merge fix/git-repo-local-ext @8bec3325 (FALLBACK: git repo-lo
+T6 18/74 render=Y gate=no  | train 6: merge fix/dialect-decimals @3a5b576c (FALLBACK: dialect decim
+T6  3/74 render=n gate=no  | train 6: merge proof/conic-producers @655b5145 (FALLBACK: conic produc
+T6 38/74 render=Y gate=YES | train 6: merge feat/declared-libraries @3fa638dc (FALLBACK: Run::libra
+T6 29/74 render=Y gate=YES | train 6: merge tools/hidden-cfg-test @560e8ecb (FALLBACK: hidden cfg t
+T6 11/74 render=Y gate=no  | train 6: merge cam/3axis @a2cfcbe4 (CAM-3AXIS: zlevel all-blocked leve
+T6  3/74 render=Y gate=no  | train 6: merge ux/glyphs @06159ad4 (UX-LEAD: STANDARD.md + loading spi
+T6 31/74 render=Y gate=YES | train 6: merge bendsim/see-through @1f25b06d (BEND-SIM: forge-brake me
+T6 50/74 render=Y gate=YES | train 6: merge proof/spine-apply-ship @24a2d677 (SPINE: spine apply sh
+T7  3/74 render=n gate=no  | REMOVED-CHECKS: contact arc entries re-reviewed with arc_frame_ok
+T7 31/74 render=Y gate=YES | train 7: bendsim/next @9cce474e, squashed (BEND-SIM/BENDSIM-TOOLS: sta
+T7 34/74 render=Y gate=YES | train 7: merge machines/haas-model-import @84275668 (CAM-HAAS: Haas bo
+T7  7/74 render=Y gate=no  | train 7: merge machines/models-cli @d0c24370 (MACHINE-BUILDER: machine
+T7  3/74 render=Y gate=no  | train 7: merge machines/builder-off-reasons @440b3b47 (MACHINE-BUILDER
+T7  4/74 render=Y gate=no  | train 7: merge agent/stack @d4fb5469 (AGENT-TAB: approvals, context, p
+T7  3/74 render=Y gate=no  | train 7: merge render/studio-model @d0f82490 (RENDER-STUDIO: Model tab
+T7  3/74 render=Y gate=no  | train 7: merge cam/export-said @e658177f (CAM-UI: quality-measure race
+T7  6/74 render=Y gate=no  | train 7: cam/sim-fixes @5a67700b, squashed (CAM-SIM: soft-jaw part, to
+T7 24/74 render=Y gate=no  | train 7: cam/arc-frame @0762b5f3, squashed (CAM-3D-FINISH: arc frame o
+T7  7/74 render=Y gate=no  | train 7: merge cam/workholding-next @e4f13016 (WORKHOLDING: part_pose,
+T7 50/74 render=Y gate=YES | train 7: merge proof/check-rounding @28791248 (FLAT-SITES: check allow
+T7 41/74 render=Y gate=YES | train 7: merge proof/slit-faces @9b3bcecf (FLAT-SITES: unify drops a f
+T7  0/74 render=n gate=no  | train 7: merge ci/native-clippy @73b92945 (FALLBACK: native workspace 
+T7 50/74 render=Y gate=YES | train 7: merge fix/spine-b2c-clippy @5b1190e1 (SPINE: allow redundant_
+T7  1/74 render=n gate=no  | train 7: merge tools/lfs-models @1ca90198 (COORD/David: machine models
+T7  3/74 render=Y gate=no  | train 7: ui/bughunt-3 @f7facac5, squashed (UI-BUGHUNT: status line wit
+T7 24/74 render=Y gate=no  | train 7: cam/parity @315edab8, squashed (CAM-CORE: parity, axisplane f
+T7 64/74 render=Y gate=YES | train 7: merge exact-core/real-speed @497dd78f (EXACT-CORE: num-cam + 
+T7  2/74 render=n gate=no  | train 7: merge docs/machine-models-ok @79bc39bd (COORD/David: AGENTS.m
