@@ -96,6 +96,10 @@ pub struct BendSimUi {
     pub pane: Pane,
     /// The Axes switch as it was on entry (put back on Finish).
     pub axes_was: Option<bool>,
+    /// This simulation's identity, a number never given twice (the view's and the panel's caches
+    /// are keyed by it: the address of a simulation can come back for a new one, and a cache
+    /// keyed by it then showed the old one's bodies, a re-plan's first frame red).
+    pub made: u64,
     /// The press overview is shown (Press Overview): the stations' chips over the view.
     pub overview: bool,
     /// Collisions: each failing or near step's contact regions drawn on the part (red where a
@@ -141,6 +145,12 @@ pub struct DocState {
     pub stations: Vec<String>,
     /// Its own refusals (a statement it does not take, a program format, ..).
     pub errors: Vec<(String, String)>,
+}
+
+/// A simulation's identity: each made once.
+fn next_made() -> u64 {
+    static MADE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    MADE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
 fn dir_of(path: &str) -> Option<std::path::PathBuf> {
@@ -231,6 +241,7 @@ impl BendSimUi {
             axes_was: None,
             overview: false,
             collisions: true,
+            made: next_made(),
             follow: false,
             see_through: true,
             opacity: 0.45,
@@ -300,6 +311,7 @@ impl BendSimUi {
             axes_was: None,
             overview: false,
             collisions: true,
+            made: next_made(),
             follow: false,
             see_through: true,
             opacity: 0.45,
@@ -1352,7 +1364,7 @@ pub fn sequence_ui(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) {
         ui.add(egui::Label::new(egui::RichText::new(note).small().color(t.ink2)).wrap());
     }
     // each step's picture, drawn once for this simulation
-    let key = sim as *const Sim as usize;
+    let key = st.made as usize;
     if st.pictures.as_ref().is_none_or(|p| p.0 != key) {
         st.pictures = Some((key, cards::step_pictures(sim)));
     }

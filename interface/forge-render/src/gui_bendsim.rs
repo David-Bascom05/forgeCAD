@@ -782,7 +782,8 @@ impl Gui {
         }
         let step = b.step.min(n - 1);
         // (the Collisions switch in the key: turned, the bodies are drawn again)
-        let key = (sim as *const _ as usize, step * 2 + usize::from(b.collisions), b.t.to_bits());
+        // the simulation by its identity, not its address (an address comes back for a new one)
+        let key = (b.made as usize, step * 2 + usize::from(b.collisions), b.t.to_bits());
         if self.bend.shown == Some(key) && b.frame.is_none() {
             self.bendsim_follow();
             self.bendsim_see_through();
@@ -795,30 +796,39 @@ impl Gui {
         let mut bodies = sc.bodies(step, b.t);
         // the contact regions at this instant, on the part (Collisions)
         if b.collisions {
-            let id = sim as *const _ as usize;
+            let id = b.made as usize;
             if self.bend.contacts.as_ref().is_none_or(|c| c.0 != id) {
                 self.bend.contacts = Some((id, Default::default()));
             }
             let cache = &mut self.bend.contacts.as_mut().unwrap().1;
             let cs = cache.entry(step).or_insert_with(|| {
                 let st = &sim.plan.steps[step];
-                let colliding = st.checks.iter().any(|c| {
+                // a collision check that ran and failed or is near: a check that could not run
+                // (not checked: pass false, no value) is no collision verdict, and draws nothing
+                let verdict = |c: &forge_brake::Check| {
                     matches!(
                         c.rule,
                         forge_brake::Rule::ToolCollision
                             | forge_brake::Rule::ClosesOnPunch
                             | forge_brake::Rule::Withdraw
                             | forge_brake::Rule::SelfCollision
-                    ) && (!c.pass || c.near.is_some())
-                });
-                if !colliding {
+                    ) && c.unchecked.is_none()
+                        && (!c.pass || c.near.is_some())
+                };
+                let rules: Vec<forge_brake::Rule> = st.checks.iter().filter(|c| verdict(c)).map(|c| c.rule).collect();
+                if rules.is_empty() {
                     return Vec::new();
                 }
                 let mut done = vec![false; sim.model.bends.len()];
                 for s in &sim.plan.steps[..step] {
                     s.mark(&mut done);
                 }
+                // only the regions of those rules (contacts_of also reads a check that could not
+                // run as one that failed)
                 forge_brake::contacts_of(&sim.model, &sim.tooling, &done, st)
+                    .into_iter()
+                    .filter(|c| rules.contains(&c.rule))
+                    .collect()
             });
             let regions = sc.contact_bodies(step, b.t, cs);
             if !regions.is_empty() {

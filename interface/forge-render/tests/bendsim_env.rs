@@ -1970,3 +1970,67 @@ fn a_collision_is_drawn_on_the_part_where_it_is() {
     h.gui.shell.sheet.bend_sim.as_mut().unwrap().collisions = false;
     assert_eq!(at(&mut h, t_hit), 0);
 }
+
+/// Frame 0 of a showcase draws no collision when every check passes (the coordinator: red means a
+/// collision verdict). The view's caches were keyed by the simulation's address, and a re-plan's
+/// new simulation can take the old one's: seeking back to the first instant then drew the old
+/// plan's bodies, its failing tools red. Each showcase's setup: entered (the stand-in plan drawn
+/// at the first instant), re-planned as the clip asks, sought to the start.
+#[test]
+fn a_replans_first_frame_draws_its_own_plan() {
+    let ex = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/sheetmetal/");
+    let cases: [(&str, Choice); 2] = [
+        (
+            "hem_joggle.fg",
+            Choice {
+                press: Some("trumpf-trubend-5130".into()),
+                stations_auto: true,
+                punches: Some(
+                    ["trumpf/OW222-K", "wila/BIU-041", "wila/HU-001+INZU-002-Z6"].map(String::from).to_vec(),
+                ),
+                dies: Some(
+                    ["trumpf/EV002_30deg", "wila/OZU-384", "wila/HU-006+INZU-002-Z6"].map(String::from).to_vec(),
+                ),
+                ..Choice::default()
+            },
+        ),
+        (
+            "load_tray.fg",
+            Choice {
+                press: Some("trumpf-trubend-5130".into()),
+                stations_auto: true,
+                ..Choice::default()
+            },
+        ),
+    ];
+    for (part, choice) in cases {
+        let Some(mut h) = headless() else { return };
+        open(&mut h, &format!("{ex}{part}"));
+        click(&mut h, "tab:Environments");
+        click(&mut h, "tool:Bend Simulation");
+        // the plan on entry drawn at the first instant
+        {
+            let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+            b.playing = false;
+            b.step = 0;
+            b.t = 0.0;
+        }
+        for _ in 0..4 {
+            h.step();
+        }
+        h.gui.shell.sheet.bend_sim.as_mut().unwrap().redo(choice, "std-eu");
+        for _ in 0..4 {
+            h.step();
+        }
+        h.gui.shell.env_timeline().unwrap().seek(&mut h.gui.shell, 0.0);
+        h.step();
+        let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
+        let sim = b.sim.as_ref().expect("simulated");
+        assert!(
+            sim.plan.feasible && sim.plan.steps.iter().all(|s| s.pass()),
+            "{part}: the showcase's plan passes"
+        );
+        let red: Vec<String> = h.gui.bend.drawn().iter().filter(|x| x.hit).map(|x| x.name.clone()).collect();
+        assert!(red.is_empty(), "{part}: frame 0 draws {red:?} red, every check passing");
+    }
+}
