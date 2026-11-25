@@ -329,3 +329,10 @@ urdf-export, machines/builder, posts/dialects.
 - Train 5 lands as ONE squash commit (e3148c8b FTO commit in ancestry; David: no active-patent material in repo incl. history). 5b lands --no-ff (clean).
 - Bend sim within-res Clear: Near (my ruling) vs brake's documented contract (Policy.resolution=res) -> awaiting David. Measure-mode gap fixed ab994f62.
 - Line/circle merge (forge-num step 5): awaiting David; recommended (5b) one formula+exact classifier, judged bits per client, weld first.
+
+## 10e. Decisions 2026-11-25 (David)
+- SPEED IS THE MAIN THING. Rewriting code is allowed. The cost of re-proving (Lean/Aeneas), re-verifying, re-blessing pins and re-baselining is worth paying for speed. "Byte-identical" is a convenience, not a requirement: an output may change if its correctness is shown again (certificates hold, verdict diffs explained, proofs redone, ledger row). Correctness is never traded for speed; zero speed regressions still holds.
+- Show-before-checked: "not a huge fan", allowed only where truly needed (assembly shape-first stopgap). Default is verified-first; effort goes into making checks fast or proving them unnecessary. Never show then remove.
+- CAM: cycle time is the user's job (feeds/speeds/engagement). Ours: no crazy toolpaths (gouge, rapid into material, cap breaks, uncleared stock, air cutting, recuts, absurd links/retracts, micro-moves) and fast generation (<=1 s typical, "or less").
+- Hosted forgeCAD: design approved (design/hosted). Postgres chosen. Phase 1 (loopback/dev only) cleared by security review; N1-N9 must be fixed before any shared deployment. Desktop app is a full client; per-project LOCAL vs SERVED; bit-identical geometry everywhere is a hard requirement.
+- Big imports: open fully checked in <=1 s (VF-2 2.1 s now); 60 fps confirmed (BIG-RENDER closed).
