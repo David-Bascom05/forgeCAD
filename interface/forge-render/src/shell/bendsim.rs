@@ -1467,15 +1467,20 @@ fn prop(ui: &mut egui::Ui, t: &Theme, label: &str, value: String, key: Option<&s
 /// Returns the bend's name when its "flat pattern" link is clicked.
 /// A step's checks that are not passes, counted by kind, worst first, each in its colour: "1 fail",
 /// "2 warnings", "1 not checked", "1 near" (UX-LEAD: nothing that is not a pass goes uncounted).
-/// A check whose envelope (the part's boxes through the operator's move, against the press
-/// bodies' boxes) overlaps: not proven clear, not a measured collision (BENDSIM-TOOLS' undecided
-/// handling; UX-LEAD: counted apart from the warnings, never printed as a negative clearance).
+/// A warning-level check left undecided (neither a pass nor a collision proven): counted apart
+/// from the warnings as "not proven", never printed as a measured clearance (UX-LEAD).
 pub fn not_proven(c: &fb::Check) -> bool {
     !c.pass && c.undecided && c.severity == fb::Severity::Warning && c.unchecked.is_none() && c.near.is_none()
 }
 
-/// What an envelope check is, on hover.
-pub const ENVELOPE_METHOD: &str = "Checked with the part's bounding boxes through the operator's move, against the press's bodies: a pass is proven; this overlap is of those boxes, not a measured collision.";
+/// The operator's move proven to meet a press body (BENDSIM-TOOLS' certified handling: the part
+/// itself carried through the move by the bends' search; a real point, a real depth).
+pub fn move_meets(c: &fb::Check) -> bool {
+    c.rule == fb::Rule::Handling && !c.pass && !c.undecided && c.near.is_none() && c.unchecked.is_none()
+}
+
+/// How the handling check is made, on hover.
+pub const HANDLING_METHOD: &str = "The part itself carried through the operator's move (lift, pull out, turn, push in, set down) against every body of the press, by the same certified search the bends use.";
 
 fn tally(checks: &[fb::Check]) -> Vec<(String, egui::Color32)> {
     let n = |f: &dyn Fn(&fb::Check) -> bool| checks.iter().filter(|c| !c.pass && f(c)).count();
@@ -1900,6 +1905,8 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                         (look::NEAR, "near")
                     } else if not_proven(c) {
                         (look::NEAR, "not proven")
+                    } else if move_meets(c) {
+                        (look::WARN, "meets")
                     } else if c.severity == fb::Severity::Warning {
                         (look::WARN, "warning")
                     } else if c.undecided {
@@ -1918,10 +1925,15 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                             len(c.near.unwrap_or(0.0))
                         ),
                         (None, Some(x)) if not_proven(c) => format!(
-                            "{ENVELOPE_METHOD}\nThe envelopes overlap by {} against {}.",
-                            len((-c.value).max(0.0)),
+                            "Not decided: neither clear of {} nor a collision with it was proven.",
                             cards::body_words(cat, x)
                         ),
+                        (None, Some(x)) if move_meets(c) => format!(
+                            "{HANDLING_METHOD}\nThe planned move meets {} by {}.",
+                            cards::body_words(cat, x),
+                            len((-c.value).max(0.0))
+                        ),
+                        (None, _) if c.rule == fb::Rule::Handling => HANDLING_METHOD.to_string(),
                         (None, Some(x)) => format!("against {}", cards::body_words(cat, x)),
                         _ => String::new(),
                     };
@@ -1966,15 +1978,16 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                                 .wrap(),
                             );
                         }
-                        // an envelope's overlap, not a clearance: said so, muted; the method on hover
-                        None if not_proven(c) => {
+                        // undecided: no number to show; a proven meeting: by how much
+                        None if not_proven(c) || move_meets(c) => {
                             hover(
                                 ui.add(
                                     egui::Label::new(
-                                        egui::RichText::new(format!(
-                                            "envelope overlaps by {}",
-                                            len((-c.value).max(0.0))
-                                        ))
+                                        egui::RichText::new(if move_meets(c) {
+                                            format!("meets by {}", len((-c.value).max(0.0)))
+                                        } else {
+                                            "not decided".to_string()
+                                        })
                                         .font(super::theme::caption())
                                         .color(t.ink2),
                                     )
@@ -2365,16 +2378,22 @@ pub fn overlay(ui: &egui::Ui, rect: egui::Rect, st: &mut BendSimUi) {
                     ),
                     look::PASS,
                 ),
-                Some(c) => (
-                    format!(
-                        "operator handling: not proven clear{}{}",
-                        c.tool
-                            .as_deref()
-                            .map_or(String::new(), |t| format!(" of {}", cards::body_words(cat, t))),
-                        if not_proven(c) { " (envelope check)" } else { "" }
-                    ),
-                    if not_proven(c) { look::NEAR } else { look::WARN },
-                ),
+                Some(c) => {
+                    let of = c
+                        .tool
+                        .as_deref()
+                        .map_or("a press body".to_string(), |t| cards::body_words(cat, t));
+                    if move_meets(c) {
+                        (format!("operator handling: the planned move meets {of}"), look::WARN)
+                    } else if c.near.is_some() {
+                        (
+                            format!("operator handling: near {of}, within the check's resolution"),
+                            look::NEAR,
+                        )
+                    } else {
+                        (format!("operator handling: not proven clear of {of}"), look::NEAR)
+                    }
+                }
                 None => ("operator handling: the first step, none".into(), look::MUTED),
             });
         }
@@ -2416,19 +2435,18 @@ pub const OVERLAY_CUBE_ROOM: f32 = 130.0;
 mod tests {
     use super::*;
 
-    /// An envelope overlap of the handling check is counted as not proven, never as a warning
-    /// (UX-LEAD): "1 not proven", the badge outline not amber for it.
+    /// An undecided warning is counted as not proven, never as a warning (UX-LEAD); a certified
+    /// handling meeting is a warning, said as the move meeting the body.
     #[test]
-    fn an_envelope_overlap_is_not_proven_not_a_warning() {
-        let mut c = fb::Check::rule(fb::Rule::Handling, -21.0, 0.5, false);
+    fn an_undecided_check_is_not_proven_and_a_meeting_is_a_warning() {
+        let mut c = fb::Check::rule(fb::Rule::Handling, -6.6, 0.5, false);
         c.severity = fb::Severity::Warning;
         c.undecided = true;
-        assert!(not_proven(&c));
+        assert!(not_proven(&c) && !move_meets(&c));
         let words: Vec<String> = tally(std::slice::from_ref(&c)).into_iter().map(|x| x.0).collect();
         assert_eq!(words, ["1 not proven"]);
-        // a warning that is not an envelope stays a warning
         c.undecided = false;
-        assert!(!not_proven(&c));
+        assert!(!not_proven(&c) && move_meets(&c));
         let words: Vec<String> = tally(&[c]).into_iter().map(|x| x.0).collect();
         assert_eq!(words, ["1 warning"]);
     }
