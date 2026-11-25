@@ -187,20 +187,19 @@ pub fn read(name: &str, bytes: &[u8]) -> Result<Vec<Piece>, String> {
                 forge_step::import(bytes, &lim).map_err(|_| format!("{name}: not a model this reads"))?;
             // each solid meshed once, then placed where the assembly uses it (a solid no use
             // names stands as the file has it)
+            // (on all cores: `tessellate_tolerant` at `Solid::display_quality`, 5e-4 of the
+            // body's diagonal, or the same mesh the read kept from its check)
+            let pieces = forge_math::par::map_eager(imp.solids.len(), |k| {
+                let s = &imp.solids[k];
+                s.display_mesh().ok().map(|m| Piece {
+                    pos: m.positions.iter().map(|p| [p.x, p.y, p.z]).collect(),
+                    tri: m.triangles.clone(),
+                    name: s.name.clone(),
+                })
+            });
             let mut meshed: std::collections::BTreeMap<u32, Option<Piece>> = Default::default();
             let mut failed = 0;
-            for s in &imp.solids {
-                let q = forge_mesh::Quality {
-                    chord: 5e-4 * s.body.faces_box().diagonal(),
-                    ..forge_mesh::Quality::default()
-                };
-                let m = forge_mesh::tessellate::tessellate_tolerant(&s.body, &q)
-                    .ok()
-                    .map(|m| Piece {
-                        pos: m.positions.iter().map(|p| [p.x, p.y, p.z]).collect(),
-                        tri: m.triangles.clone(),
-                        name: s.name.clone(),
-                    });
+            for (s, m) in imp.solids.iter().zip(pieces) {
                 failed += usize::from(m.is_none());
                 meshed.insert(s.entity, m);
             }
