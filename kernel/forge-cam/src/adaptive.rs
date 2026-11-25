@@ -361,15 +361,29 @@ impl Field {
     /// any cell meeting the disk above z. Exact up to the cells' size the safe way: it may see
     /// material that is not there, never miss material that is.
     fn descent_meets(&self, x: f64, y: f64, z: f64) -> bool {
+        self.material_near(x, y, z, self.r)
+    }
+
+    /// Whether a park at (x, y, z) keeps PARK_CLEAR beyond the tool's radius from all material,
+    /// as `descent_meets` sees it (never missing material finer than the map's cells). Costly
+    /// (a small map rebuilt from the op's moves): for a start already chosen, not for a scan.
+    // (for the start choice to call on the start it picks)
+    #[allow(dead_code)]
+    fn park_clear(&self, x: f64, y: f64, z: f64) -> bool {
+        !self.disk_has_material(x, y, z) && !self.material_near(x, y, z, self.r + PARK_CLEAR)
+    }
+
+    /// `descent_meets` within `rad` of the axis (rad ≥ r).
+    fn material_near(&self, x: f64, y: f64, z: f64, rad: f64) -> bool {
         // on a grid an eighth of the map's (the cells' error, which makes the answer safe, also
         // widens it: at the map's own cell a park beside a wall was judged too near; at an eighth
         // the descents slowed cost under 1.2 % of any part's time), at most 400 cells a side
         let r = self.r;
         let hm = self.map.h;
-        let h = (0.125 * hm).max(2.0 * (r + hm) / 400.0);
+        let h = (0.125 * hm).max(2.0 * (rad + hm) / 400.0);
         let hh = h * std::f64::consts::FRAC_1_SQRT_2;
-        // a cell meets the disk where its centre is within r + h/√2 of the axis
-        let reach = r + hh;
+        // a cell meets the disk where its centre is within rad + h/√2 of the axis
+        let reach = rad + hh;
         let lo = [(x - reach).max(self.ip.min[0]), (y - reach).max(self.ip.min[1]), self.ip.min[2]];
         let hi = [(x + reach).min(self.ip.max[0]), (y + reach).min(self.ip.max[1]), self.ip.max[2]];
         if lo[0] >= hi[0] || lo[1] >= hi[1] || hi[2] <= z + self.eps {
@@ -2227,6 +2241,10 @@ fn simplify(p: &[[f64; 2]], tol: f64) -> Vec<[f64; 2]> {
     l.extend(r);
     l
 }
+
+/// The clearance a park keeps beyond the tool's radius (mm): the quality model's resolution
+/// (verify/forge-cam-quality reads the stock on a 0.1 mm grid).
+pub const PARK_CLEAR: f64 = 0.1;
 
 /// A pass of at most this many steps is a crumb, taken back (`adaptive`).
 pub const CRUMB_STEPS: usize = 3;
