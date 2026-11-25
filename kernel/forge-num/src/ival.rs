@@ -436,6 +436,61 @@ mod tests {
         }
     }
 
+    /// The exact point [0, 0] comes only from an exact zero: over every ordered interval of the
+    /// special values (both zeros, denormal limits, ±1, small and large magnitudes, the largest
+    /// finite, the infinities), no add, sub, mul, div, square or scale of operands that are not
+    /// the exact zero returns [0, 0] (every rounded result is widened past it), and with the
+    /// exact-zero rule only x + 0, x − 0 (the other operand back), x · 0 and 0 · x do.
+    #[test]
+    fn only_an_exact_zero_gives_an_exact_zero() {
+        let base = [
+            0.0,
+            5e-324,
+            f64::MIN_POSITIVE,
+            1e-300,
+            0.5,
+            1.0,
+            3.0,
+            1e300,
+            f64::MAX,
+            f64::INFINITY,
+        ];
+        let mut vals: Vec<f64> = Vec::new();
+        for &v in &base {
+            vals.push(v);
+            vals.push(-v);
+        }
+        let ivs: Vec<Ival> = vals
+            .iter()
+            .flat_map(|&lo| vals.iter().map(move |&hi| (lo, hi)))
+            .filter(|&(lo, hi)| lo <= hi)
+            .map(|(lo, hi)| Ival { lo, hi })
+            .collect();
+        let zero = |v: Ival| v.lo == 0.0 && v.hi == 0.0;
+        let mut checked = 0u64;
+        for &x in &ivs {
+            assert!(!zero(x.sqr()), "sqr {x:?}");
+            for k in [0.5, -3.0, 1e300] {
+                assert!(zero(x.scale(k)) == (zero(x) && !STRICT), "scale {x:?} {k}");
+            }
+            for &y in &ivs {
+                checked += 1;
+                for (op, v) in [("add", x.add(y)), ("sub", x.sub(y))] {
+                    // x ± 0 is x and 0 + y is y: [0, 0] only when both are the exact zero
+                    let want = !STRICT && zero(x) && zero(y);
+                    assert!(zero(v) == want, "{op} {x:?} {y:?}: {v:?}");
+                }
+                let m = x.mul(y);
+                let want = !STRICT
+                    && ((zero(x) && y.hi.is_finite() && y.lo.is_finite())
+                        || (zero(y) && x.hi.is_finite() && x.lo.is_finite()));
+                assert!(zero(m) == want, "mul {x:?} {y:?}: {m:?}");
+                assert!(!zero(x.div(y)), "div {x:?} {y:?}");
+            }
+        }
+        assert!(checked > 40_000, "{checked}");
+    }
+
     #[test]
     fn encloses() {
         let a = Ival::pt(0.1);
