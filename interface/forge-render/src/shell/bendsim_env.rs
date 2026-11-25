@@ -169,6 +169,7 @@ fn degrees(p: &str) -> String {
 /// The planner found no feasible order: the first reason, in words.
 pub(super) fn infeasible(b: &BendSimUi) -> Option<String> {
     let sim = b.sim.as_ref().ok().filter(|x| !x.plan.feasible)?;
+    let cat = b.catalog.as_ref().and_then(|c| c.as_ref().ok());
     let first = sim.plan.blocking.first().map(|k| {
         let rules: Vec<String> = k
             .checks
@@ -177,12 +178,12 @@ pub(super) fn infeasible(b: &BendSimUi) -> Option<String> {
             .map(|c| super::bendsim_cards::rule_failed(c.rule).to_string())
             .collect();
         format!(
-            "bend {} ({}) fails: {} (best tried: {} punch on {} die)",
+            "bend {} ({}) fails: {} (best tried: {} on {})",
             k.bend + 1,
             sim.names[k.bend],
             if rules.is_empty() { "its checks".to_string() } else { rules.join("; ") },
-            tool_words(&k.punch),
-            tool_words(&k.die)
+            super::bendsim_cards::tool_short(cat, &k.punch, true),
+            super::bendsim_cards::tool_short(cat, &k.die, false)
         )
     });
     Some(format!(
@@ -576,7 +577,6 @@ pub fn chips(ui: &Ui, view: Rect, camera: Option<(crate::camera::Camera, (u32, u
     };
     let ppp = ui.ctx().pixels_per_point();
     let here = sim.plan.steps.get(b.step).and_then(|s| s.station);
-    let short = tool_words;
     let mut out = Vec::new();
     for (k, st) in sim.tooling.stations.iter().enumerate() {
         let bends: Vec<String> = sim
@@ -587,16 +587,20 @@ pub fn chips(ui: &Ui, view: Rect, camera: Option<(crate::camera::Camera, (u32, u
             .filter(|(_, s)| s.station == Some(k))
             .map(|(i, _)| (i + 1).to_string())
             .collect();
+        let cat = b.catalog.as_ref().and_then(|c| c.as_ref().ok());
         let keys = format!(
-            "punch {} · die {}",
-            sim.tooling.punches[st.punch].id, sim.tooling.dies[st.die].id
+            "punch stack {:.0} mm · die stack {:.0} mm\npunch {} · die {}",
+            st.punch_length,
+            st.die_length,
+            sim.tooling.punches[st.punch].id,
+            sim.tooling.dies[st.die].id
         );
         // the stacks' lengths too: why the same tools stand at two stations (the coordinator)
         let text = format!(
-            "S{} · {} punch / {} die · stacks {:.0}/{:.0} mm · {}",
+            "S{} · {} / {} · stacks {:.0}/{:.0} mm · {}",
             k + 1,
-            short(&sim.tooling.punches[st.punch].id),
-            short(&sim.tooling.dies[st.die].id),
+            super::bendsim_cards::tool_short(cat, &sim.tooling.punches[st.punch].id, true),
+            super::bendsim_cards::tool_short(cat, &sim.tooling.dies[st.die].id, false),
             st.punch_length,
             st.die_length,
             if bends.is_empty() {

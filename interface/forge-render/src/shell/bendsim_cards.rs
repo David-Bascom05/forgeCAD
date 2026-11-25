@@ -27,6 +27,8 @@ pub fn punch_title(r: &PunchRec) -> String {
 /// A die's name as its maker gives it, with its V: "Trumpf OW200/K 86° die V16".
 pub fn die_title(r: &DieRec) -> String {
     match &r.die {
+        // the angle once: a maker's name that already says it ("EV004 30°") is not given it twice
+        Ok(d) if r.prov.name.contains('°') => format!("{} {} die V{}", r.prov.maker, r.prov.name, num(d.v)),
         Ok(d) => format!(
             "{} {} {:.0}° die V{}",
             r.prov.maker,
@@ -53,6 +55,35 @@ pub fn tool_title(cat: Option<&fb::catalog::Catalog>, id: &str, punch: bool) -> 
         }
     });
     found.unwrap_or_else(|| id.to_string())
+}
+
+/// A tool's short name, the library's own designation (UX-LEAD: one name per tool, the same as
+/// the panel's title gives it): "OW202/S punch", "EV004 30° die"; from the id when the library has
+/// none.
+pub fn tool_short(cat: Option<&fb::catalog::Catalog>, id: &str, punch: bool) -> String {
+    let found = cat.and_then(|c| {
+        if punch {
+            c.punches.iter().find(|r| r.id == id).map(|r| format!("{} punch", r.prov.name))
+        } else {
+            c.dies.iter().find(|r| r.id == id).map(|r| match &r.die {
+                Ok(_) if r.prov.name.contains('°') => format!("{} die", r.prov.name),
+                Ok(d) => format!("{} {:.0}° die", r.prov.name, d.angle.to_degrees()),
+                Err(_) => format!("{} die", r.prov.name),
+            })
+        }
+    });
+    found.unwrap_or_else(|| {
+        format!("{} {}", super::bendsim_env::tool_words(id), if punch { "punch" } else { "die" })
+    })
+}
+
+/// A length along the bed with a true minus (U+2212), as the glyphs expect for numbers: "−50".
+pub fn signed_mm(x: f64) -> String {
+    if x < -0.5 {
+        format!("\u{2212}{:.0}", -x)
+    } else {
+        format!("{:.0}", x.abs())
+    }
 }
 
 /// A scene body's name in words: "punch:trumpf/OW200-S/body" is "Trumpf OW200/K gooseneck

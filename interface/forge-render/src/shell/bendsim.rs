@@ -1453,7 +1453,7 @@ fn doc_buttons(ui: &mut egui::Ui, st: &mut BendSimUi) {
 
 /// A row of the property sheet: its label, its value (with its unit), its key on hover.
 /// Why a step has its tools, in a line, and the setups tried with the rule each failed (its hover).
-pub fn why_tools(sim: &Sim, k: usize) -> (String, String) {
+pub fn why_tools(sim: &Sim, cat: Option<&fb::catalog::Catalog>, k: usize) -> (String, String) {
     let Some(s) = sim.plan.steps.get(k) else {
         return (String::new(), String::new());
     };
@@ -1490,9 +1490,9 @@ pub fn why_tools(sim: &Sim, k: usize) -> (String, String) {
         .take(40)
         .map(|(p, d, rot, r)| {
             format!(
-                "{} punch on {} die{}: {}",
-                super::bendsim_env::tool_words(p),
-                super::bendsim_env::tool_words(d),
+                "{} on {}{}: {}",
+                cards::tool_short(cat, p, true),
+                cards::tool_short(cat, d, false),
                 if *rot { ", turned" } else { "" },
                 cards::rule_failed(*r)
             )
@@ -1791,7 +1791,7 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                         ui,
                         t,
                         "Station",
-                        format!("{} at {:.0} mm", k + 1, sim.tooling.stations[k].y),
+                        format!("{} at {} mm", k + 1, cards::signed_mm(sim.tooling.stations[k].y)),
                         None,
                     );
                 }
@@ -1806,7 +1806,7 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                 }
                 // why these tools (David): what the planner tried for this bend and why each
                 // went, or that it kept the tools on the bed
-                let (line, list) = why_tools(sim, st.step);
+                let (line, list) = why_tools(sim, cat, st.step);
                 ui.label(egui::RichText::new("Why").color(t.ink2));
                 let r = ui.add(egui::Label::new(egui::RichText::new(line).color(t.ink)).wrap());
                 if !list.is_empty() {
@@ -2416,6 +2416,7 @@ pub fn overlay(ui: &egui::Ui, rect: egui::Rect, st: &mut BendSimUi) {
     };
     let cat = st.catalog.as_ref().and_then(|c| c.as_ref().ok());
     let mut lines = vec![];
+    let mut hovers: Vec<(usize, String)> = vec![];
     if let Some(s) = sim.plan.steps.get(st.step) {
         let (stage, _) = stage_at(st.t);
         // the caption: which bend, what it makes, where in its motion; the tools are the sheet's
@@ -2436,12 +2437,19 @@ pub fn overlay(ui: &egui::Ui, rect: egui::Rect, st: &mut BendSimUi) {
         });
         if let Some(j) = moved {
             let ss = &sim.tooling.stations[j];
+            hovers.push((
+                lines.len(),
+                format!(
+                    "punch stack {:.0} mm · die stack {:.0} mm",
+                    ss.punch_length, ss.die_length
+                ),
+            ));
             lines.push((
                 format!(
-                    "To station {} · {} punch / {} die · stacks {:.0} / {:.0} mm",
+                    "To station {} · {} / {} · stacks {:.0}/{:.0} mm",
                     j + 1,
-                    super::bendsim_env::tool_words(&sim.tooling.punches[ss.punch].id),
-                    super::bendsim_env::tool_words(&sim.tooling.dies[ss.die].id),
+                    cards::tool_short(cat, &sim.tooling.punches[ss.punch].id, true),
+                    cards::tool_short(cat, &sim.tooling.dies[ss.die].id, false),
                     ss.punch_length,
                     ss.die_length
                 ),
@@ -2498,11 +2506,15 @@ pub fn overlay(ui: &egui::Ui, rect: egui::Rect, st: &mut BendSimUi) {
     // the text reads on the light bed and never runs under the cube (UX-LEAD)
     let wrap = (rect.width() - 24.0 - OVERLAY_CUBE_ROOM).max(120.0);
     let mut y = rect.top() + 44.0;
-    for (l, c) in lines {
+    for (i, (l, c)) in lines.into_iter().enumerate() {
         let g = p.layout(l, egui::FontId::proportional(13.0), c, wrap);
         let at = egui::pos2(rect.left() + 12.0, y);
         let plate = egui::Rect::from_min_size(at, g.size()).expand2(egui::vec2(6.0, 2.0));
         p.rect_filled(plate, 4.0, egui::Color32::from_black_alpha(170));
+        if let Some((_, h)) = hovers.iter().find(|x| x.0 == i) {
+            ui.interact(plate, egui::Id::unique("bendsim-caption").with(i), egui::Sense::hover())
+                .on_hover_text(h);
+        }
         y += g.size().y + 6.0;
         p.galley(at, g, c);
     }

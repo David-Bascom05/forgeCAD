@@ -1803,10 +1803,10 @@ fn the_eye_goes_to_every_station() {
     // tried, a later one at the same station kept
     {
         let sim = h.gui.shell.sheet.bend_sim.as_ref().unwrap().sim.as_ref().unwrap();
-        let (first, list) = forge_render::shell::bendsim::why_tools(sim, 0);
+        let (first, list) = forge_render::shell::bendsim::why_tools(sim, None, 0);
         assert!(first.starts_with("chosen from ") && first.contains("setups tried"), "{first}");
         assert!(!list.is_empty());
-        let (second, _) = forge_render::shell::bendsim::why_tools(sim, 1);
+        let (second, _) = forge_render::shell::bendsim::why_tools(sim, None, 1);
         assert!(second.starts_with("kept: station 1"), "{second}");
     }
     // the shots: step 3's move to station 2 (its caption), and the overview's chips
