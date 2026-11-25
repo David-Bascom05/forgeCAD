@@ -338,3 +338,21 @@ urdf-export, machines/builder, posts/dialects.
 - Big imports: open fully checked in <=1 s (VF-2 2.1 s now); 60 fps confirmed (BIG-RENDER closed).
 - REWRITES ARE HIGH RIGOR (David, same day). A speed rewrite lands only with: (1) a differential run, old vs new, over the full relevant corpus (gate parts, examples, fuzz, Haas sweep, CAM quality parts), with every difference listed and shown correct; (2) proofs/Aeneas/G11 obligations redone, none dropped; (3) oracles (volume sums, certificates, guards) passing; (4) new adversarial tests for the rewritten logic; (5) an independent review by a second agent; (6) the old path kept behind a switch for one train so a regression can be bisected and compared.
 - DETERMINISM SCOPE (David): bit-identical results everywhere (platforms, thread counts, call order) are REQUIRED for geometry: kernel, model build, imports, assemblies, sheet, everything that makes a part. For toolpaths/CAM (and sims), cross-platform bit identity is NOT required: they must be correct (certified, guards pass, deterministic per platform is nice), but may differ slightly across platforms/threads. Never make anything wrong for speed.
+
+## 10f. WIND-DOWN 2026-11-25 (David): focus is merging
+David: "start winding down and getting things merged". Per stream, finish the named scope, then wind down:
+- Machine collisions on real models (CAM-MACHINE, CAM-SIM): until relatively happy, then stop.
+- Real vises (WORKHOLDING): haas-05-0404 plus a few more; a few examples with real workholding (CAM-CORE); then stop.
+- Adaptive roughing (CAM-CORE, TOOLPATH-QUALITY): finish the current feature only.
+- The 5 crazy paths (CAM-2D-FINISH crn/shal/grv, CAM-3D-FINISH mold-left, CAM-CORE rptu1 nut): fix them, then stop.
+- Screw on nut (CURVED-SITES): fix it, then stop.
+- Hosted server (HOSTED-BUILD): KEEP GOING until it can run full bore with no issues.
+- Users/org/auth (HOSTED-DESIGN): write the plan only, no implementation.
+- Browser crash (CAM-PERF): fix it, then stop.
+- Kernel proofs (LANG-PROOFS): finish the current item (powi, lang-det), then stop.
+- Last Haas tools (KERNEL-STRESS, plus PARASOLID's miscount): finish them, then stop.
+- Speed (FLAT-SITES, FALLBACK, CURVED-SITES, IMPORT-SPEED, EXACT-CORE, CAM-SPEED): finish the CURRENT fix only. No new ones: IMPORT-SPEED's shared-projection (a) is NOT started.
+- Bend sim (BEND-SIM env, BENDSIM-TOOLS): finish the asked features (camera, tint, why-tools, pickers, hems, offsets, showcase), then stop.
+- Anything done: stop.
+Everyone who stops with work unfinished writes research/handoff/<NAME>.md on their branch: what, state, shas, unmerged branches, next steps, thoughts.
+Merge infrastructure (TRAIN-CONDUCTOR, FAST-VERIFY, VERIFY-*) runs until everything is merged. UX-LEAD only gives OKs for merging branches.
