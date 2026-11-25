@@ -1089,7 +1089,7 @@ pub fn adaptive(
                 && !f.disk_has_material(cur[0], cur[1], z);
             let target = if snap { cur } else { [p[0], p[1], z] };
             // what the pass changes, kept so a crumb pass can be taken back
-            let undo_map = f.map.z.clone();
+            let undo_map = if crumbs_now { f.map.z.clone() } else { Vec::new() };
             let undo_swept = f.swept.len();
             let undo = (
                 mv.len(),
@@ -1196,8 +1196,6 @@ pub fn adaptive(
             let mut removed = 0.0;
             let mut pos = target;
             let mut air_run = 0usize;
-            // the length of the steps that cut
-            let mut cut_len = 0.0;
             let mut pass: Vec<[f64; 3]> = Vec::new();
             for _ in 0..20_000 {
                 // the largest turn to the right (into material) whose engagement is within the
@@ -1304,7 +1302,6 @@ pub fn adaptive(
                 } else {
                     air_run = 0;
                     touched = true;
-                    cut_len += step_len;
                 }
                 moves_at_level.push((pos, q));
                 pass.push(q);
@@ -1315,11 +1312,7 @@ pub fn adaptive(
             let keep = pass.len().saturating_sub(air_run);
             // a crumb pass (a few steps into a sliver a corner or the cap left): taken back with
             // its link, the sliver left to the cleanup rings below, and counted as a stall
-            // (once the sweeps go round again with every pass kept, a crumb that cuts under
-            // CRUMB_CUT of the tool's diameter is still taken back: round islands the second
-            // round made hundreds of them, each a link and a stop, for under a millimetre of cut
-            // each; what they would take the rings and the wall pass take, volume equal)
-            if keep <= CRUMB_STEPS && (crumbs_now || cut_len < CRUMB_CUT * tool.tool.dc) {
+            if crumbs_now && keep <= CRUMB_STEPS {
                 f.map.z = undo_map;
                 f.swept.truncate(undo_swept);
                 *f.blocks.get_mut() = None;
@@ -2173,10 +2166,6 @@ fn simplify(p: &[[f64; 2]], tol: f64) -> Vec<[f64; 2]> {
 
 /// A pass of at most this many steps is a crumb, taken back (`adaptive`).
 pub const CRUMB_STEPS: usize = 3;
-
-/// Once a level's sweeps go round again with every pass kept, a crumb is still taken back when
-/// its cutting steps total under this fraction of the tool's diameter.
-pub const CRUMB_CUT: f64 = 1.0 / 6.0;
 
 /// How far a fitted arc or line may stray from the simulated steps it replaces (mm). The allowed
 /// tool centres keep this much more from the region's edge, and the feeds are set from the
