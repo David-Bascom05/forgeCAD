@@ -3,6 +3,7 @@
 //! its surface's domain, a narrow tip of an intersection curve, a round touching a flush torus,
 //! curves in sketches, fillets past slight kinks, topology that must not follow ids, and real
 //! parts that must mesh.
+use forge_math::ipow::Powi as _;
 mod common;
 mod kernel_util;
 
@@ -1010,7 +1011,7 @@ fn meshes(src: &str) {
     // the mesh's face indices are the compacted body's
     let b = built(src).body.compact();
     let bb = forge_math::Box3::from_points(b.vertices.iter().map(|v| v.point));
-    let diag = (bb.x.width().powi(2) + bb.y.width().powi(2) + bb.z.width().powi(2)).sqrt();
+    let diag = (bb.x.width().ipow(2) + bb.y.width().ipow(2) + bb.z.width().ipow(2)).sqrt();
     for chord in [0.25, 4e-4 * diag, 0.05] {
         let q = Quality {
             chord,

@@ -21,6 +21,7 @@ use crate::ops::{Cut, OpError, OpPath, PMove, Phase};
 use forge_cam_geom::check::{Face, Move, Surf, TSeg, Trim};
 use forge_cam_geom::drop::{self, Cl, Column, Gap};
 use forge_cam_geom::ival::Ival;
+use forge_math::ipow::Powi as _;
 
 /// The faces whose xy box meets a cell of a uniform grid.
 #[derive(Clone, Debug)]
@@ -238,7 +239,7 @@ impl<'a> Surfacer<'a> {
     /// the cutter anywhere within s) at `limit`, proves the arc at `limit`. Undecided: not proven
     /// (the fitter backs off).
     pub fn fit_arc(&self, a: [f64; 3], to: [f64; 3], c: [f64; 2], cw: bool, limit: f64) -> bool {
-        let r = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2)).sqrt();
+        let r = ((a[0] - c[0]).ipow(2) + (a[1] - c[1]).ipow(2)).sqrt();
         if !(r.is_finite() && r > 0.0 && to.iter().all(|v| v.is_finite()) && limit.is_finite()) {
             return false;
         }
@@ -454,7 +455,7 @@ impl<'a> Surfacer<'a> {
                 continue;
             }
             let q = pts[i - 1];
-            let len = ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2)).sqrt();
+            let len = ((p[0] - q[0]).ipow(2) + (p[1] - q[1]).ipow(2)).sqrt();
             let n = ((len / step).ceil() as usize).max(1);
             for k in 1..=n {
                 let t = k as f64 / n as f64;
@@ -480,7 +481,7 @@ impl<'a> Surfacer<'a> {
         out: &mut Vec<[f64; 3]>,
     ) -> Result<(), SurfError> {
         let m2 = [0.5 * (a[0] + b[0]), 0.5 * (a[1] + b[1])];
-        let len = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+        let len = ((b[0] - a[0]).ipow(2) + (b[1] - a[1]).ipow(2)).sqrt();
         let small = len <= self.tol || depth >= 24;
         if !small {
             let cm = self.cl(m2[0], m2[1]);
@@ -697,7 +698,7 @@ pub fn parallel(
 /// last sample proven free (CL.hi ≤ z) before it and the first proven blocked. None when no sample
 /// is proven blocked.
 pub fn push(sf: &Surfacer, a: [f64; 2], b: [f64; 2], z: f64, step: f64) -> Option<(f64, f64)> {
-    let len = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+    let len = ((b[0] - a[0]).ipow(2) + (b[1] - a[1]).ipow(2)).sqrt();
     let n = ((len / step).ceil() as usize).max(1);
     let at = |t: f64| [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
     let mut free = None;
@@ -879,7 +880,7 @@ fn level_refine(
     depth: usize,
     out: &mut Vec<[f64; 3]>,
 ) -> Result<(), SurfError> {
-    let len = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+    let len = ((b[0] - a[0]).ipow(2) + (b[1] - a[1]).ipow(2)).sqrt();
     // the middle pushed out to the free side's boundary (along the piece's normal, toward lower
     // CL): split there when the boundary strays from the chord, before any proof is tried
     let mid = |sf: &Surfacer| -> [f64; 3] {
@@ -898,7 +899,7 @@ fn level_refine(
     };
     if len > sf.tol && depth < 24 {
         let mm = mid(sf);
-        let off = ((mm[0] - 0.5 * (a[0] + b[0])).powi(2) + (mm[1] - 0.5 * (a[1] + b[1])).powi(2)).sqrt();
+        let off = ((mm[0] - 0.5 * (a[0] + b[0])).ipow(2) + (mm[1] - 0.5 * (a[1] + b[1])).ipow(2)).sqrt();
         if off > fit {
             level_refine(sf, a, mm, fit, depth + 1, out)?;
             return level_refine(sf, mm, b, fit, depth + 1, out);

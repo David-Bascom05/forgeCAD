@@ -10,6 +10,7 @@ use forge_machine::library::builtin_named;
 use forge_machine::removal::{self, TipForm};
 use forge_machine::sim::{self, Cut, Path, Segment, Setup, SimTool};
 use forge_math::dmath;
+use forge_math::ipow::Powi as _;
 
 const U: f64 = f64::EPSILON / 2.0;
 
@@ -95,7 +96,7 @@ fn xy_len(s: &Setup, seg: &Segment, t: u32) -> f64 {
     let mut l = 0.0;
     for i in 1..=256 {
         let x = p(i as f64 / 256.0);
-        l += ((x[0] - prev[0]).powi(2) + (x[1] - prev[1]).powi(2)).sqrt();
+        l += ((x[0] - prev[0]).ipow(2) + (x[1] - prev[1]).ipow(2)).sqrt();
         prev = x;
     }
     // chords under-measure an arc by at most (1 - sin(x)/x) of it, x half a chord's angle
@@ -126,14 +127,16 @@ fn height_bound(s: &Setup, seg: &Segment, t: u32, corner: f64) -> f64 {
 /// affine form with the search within their bounds of the reference (chained tip, search).
 fn compare(s: &Setup, prog: &str, min_cutting: usize) {
     let tl = sim::simulate(prog, s).unwrap();
-    let mut worst_tip = 0.0f64;
-    let mut max_bound = 0.0f64;
-    let mut max_h = 0.0f64;
-    let mut cutting = 0;
     let corner = match s.tools[0].cut {
         Cut::Mill { corner, .. } => corner,
         _ => unreachable!(),
     };
+    let (lo, hi) = ([-43.0, -43.0, 0.0], [43.0, 43.0, 23.0]);
+    let tl = &tl;
+    let mut worst_tip = 0.0f64;
+    let mut max_bound = 0.0f64;
+    let mut max_h = 0.0f64;
+    let mut cutting = 0;
     for seg in &tl.segments {
         let Some(t) = seg.tool else { continue };
         let (Some(a), Some(c)) = (s.tip_affine(seg, t), s.tip_along(seg, t)) else {
@@ -155,12 +158,17 @@ fn compare(s: &Setup, prog: &str, min_cutting: usize) {
             worst_tip = worst_tip.max(gap);
         }
     }
+    // the three height maps (the reference and the two forms) side by side, where threads are
+    // (forge_math::par; one after another under WASI): each the same computation as alone
+    let forms = [TipForm::Chained, TipForm::Affine, TipForm::Closed];
+    let mut maps = forge_math::par::map(forms.len(), |k| {
+        removal::mill_with(s, tl, lo, hi, 0.5, forms[k]).unwrap()
+    })
+    .into_iter();
+    let (rr, ra, rc) = (maps.next().unwrap(), maps.next().unwrap(), maps.next().unwrap());
     assert!(cutting >= min_cutting, "{cutting}");
-    let (lo, hi) = ([-43.0, -43.0, 0.0], [43.0, 43.0, 23.0]);
-    let rr = removal::mill_with(s, &tl, lo, hi, 0.5, TipForm::Chained).unwrap();
     let mut gaps = Vec::new();
-    for form in [TipForm::Affine, TipForm::Closed] {
-        let r = removal::mill_with(s, &tl, lo, hi, 0.5, form).unwrap();
+    for (form, r) in [(TipForm::Affine, ra), (TipForm::Closed, rc)] {
         assert_eq!(r.map.z.len(), rr.map.z.len());
         let worst = r
             .map

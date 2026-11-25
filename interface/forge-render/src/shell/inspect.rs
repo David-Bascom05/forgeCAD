@@ -16,6 +16,7 @@ use forge_agent::measure::{Free, Quantity, Reading};
 use forge_lang::error::Op;
 use forge_lang::props::{FIELDS, Physical, Props, STATES, Tab};
 use forge_math::Point3;
+use forge_math::ipow::Powi as _;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InspectCmd {
@@ -440,8 +441,8 @@ pub fn shown(q: Quantity, v: f64, (unit, angle): (&str, &str), places: usize) ->
         0 if angle == "rad" => format!("{:.places$} rad", v.to_radians()),
         0 => format!("{v:.places$}°"),
         5 => format!("{v:.places$}"),
-        2 => format!("{:.places$} {unit}²", v * per_unit(unit).powi(2)),
-        3 => format!("{:.places$} {unit}³", v * per_unit(unit).powi(3)),
+        2 => format!("{:.places$} {unit}²", v * per_unit(unit).ipow(2)),
+        3 => format!("{:.places$} {unit}³", v * per_unit(unit).ipow(3)),
         4 if matches!(unit, "in" | "ft") => format!("{:.places$} lb", v / 0.453_592_37),
         4 => format!("{v:.places$} kg"),
         _ => format!("{:.places$} {unit}", v * per_unit(unit)),
@@ -1832,6 +1833,8 @@ fn fig(x: f64) -> String {
     if !(1e-4..1e12).contains(&a) {
         return format!("{x:.4e}");
     }
+    // on-screen figures only (a value's digits before the point): never saved
+    #[allow(clippy::disallowed_methods)]
     let int = if a < 1.0 { 1 } else { a.log10().floor() as i32 + 1 };
     let places = (5 - int).clamp(0, 4) as usize;
     let s = format!("{a:.places$}");

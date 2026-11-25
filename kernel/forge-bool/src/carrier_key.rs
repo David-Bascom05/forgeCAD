@@ -168,7 +168,10 @@ mod tests {
             let f = Frame::from_z(o, z);
             // a point along the frame's x by a power of two: exact when it is
             let k = (rng.range(0.0, 8.0) as i32 - 4) as f64;
-            let q = o + f.x().get() * k.exp2();
+            // 2^k for a whole k in -4..4: exact on any libm (a test's input, not a result)
+            #[allow(clippy::disallowed_methods)]
+            let p2 = k.exp2();
+            let q = o + f.x().get() * p2;
             for (s, t) in [
                 (plane(o, z), plane(q, z)),
                 (plane(o, z), plane(q, -z)),
@@ -178,7 +181,7 @@ mod tests {
                         radius: 5.0,
                     }),
                     Surface::Cylinder(Cylinder {
-                        frame: Frame::from_z(o + z.get() * k.exp2(), z),
+                        frame: Frame::from_z(o + z.get() * p2, z),
                         radius: 5.0,
                     }),
                 ),

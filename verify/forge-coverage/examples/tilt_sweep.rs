@@ -14,6 +14,7 @@ use forge_bool::Op;
 use forge_coverage::Outcome;
 use forge_coverage::kernel_on;
 use forge_coverage::tilt::{FAMILIES, family, reading};
+use forge_math::ipow::Powi as _;
 
 fn fine(got: &Outcome, vols: &[f64]) -> bool {
     match got {
@@ -50,7 +51,7 @@ fn main() {
             let mut t = vec![0.0];
             for e in -13..=-1 {
                 for m in [1.0, 2.0, 5.0] {
-                    t.push(m * 10f64.powi(e));
+                    t.push(m * 10f64.ipow(e));
                 }
             }
             for th in [1e-11, 1e-9, 1e-6, 1e-4, 1e-3] {

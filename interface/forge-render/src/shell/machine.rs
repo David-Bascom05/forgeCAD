@@ -1854,7 +1854,16 @@ fn library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String,
         }
     });
     if !st.message.is_empty() {
-        ui.label(RichText::new(&st.message).font(sans(11.0)).color(t.ink2));
+        said(ui, &st.message, t.ink2);
+    }
+}
+
+/// A message: its first line, the reader's reason after it on hover.
+fn said(ui: &mut Ui, msg: &str, color: Color32) {
+    let (head, why) = crate::machine_model::headline(msg);
+    let r = ui.label(RichText::new(head).font(sans(11.0)).color(color));
+    if !why.is_empty() {
+        r.on_hover_text(why);
     }
 }
 
@@ -1954,7 +1963,7 @@ fn editor(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, 
         let got = if b >= d2.bodies.len() {
             Err("no body chosen".to_string())
         } else if not_part {
-            Err("a maker's STEP, IGES or STL file is attached as the body's Model (below): kept in your own library, never beside the machine in a project".into())
+            Err("a maker's STEP, IGES, Parasolid or STL file is attached as the body's Model (below): kept in your own library, never beside the machine in a project".into())
         } else if touch.detach {
             d2.bodies[b].part = None;
             Ok(format!(
@@ -2680,14 +2689,12 @@ struct ModelsCtx<'a> {
     kept: bool,
 }
 
-/// A model file to attach, from the platform's picker (every format forgecad reads, and the
-/// ones it does not so it can say what to send instead).
+/// A model file to attach, from the platform's picker (every format forgecad reads as a model).
 fn pick_model() -> Option<String> {
-    let mut exts: Vec<&str> = models::Format::EXTS.to_vec();
-    exts.extend(["x_t", "x_b"]);
+    let exts: Vec<&str> = models::Format::EXTS.to_vec();
     crate::plat::pick_file(
-        Some("A model of this body (STEP, IGES or STL)"),
-        "STEP, IGES or STL",
+        Some("A model of this body (STEP, IGES, Parasolid or STL)"),
+        "STEP, IGES, Parasolid or STL",
         &exts,
     )
 }
@@ -2839,9 +2846,7 @@ fn model_rows(
                 touch.fit_to_model = Some(i);
             }
         }
-        Some(Err(e)) => {
-            ui.label(RichText::new(e).font(sans(11.0)).color(t.error));
-        }
+        Some(Err(e)) => said(ui, e, t.error),
         _ => {}
     }
     if ch {
@@ -2915,7 +2920,7 @@ fn tab_bodies(
     if whole.is_empty()
         && ui
             .add_enabled(ms.kept && noted, egui::Button::new("Attach a model of the whole machine…"))
-            .on_hover_text("your own STEP, IGES or STL of the machine; split it afterwards to give its parts to the bodies; kept in your library, never in the project")
+            .on_hover_text("your own STEP, IGES, Parasolid or STL of the machine; split it afterwards to give its parts to the bodies; kept in your library, never in the project")
             .on_disabled_hover_text(why_off)
             .clicked()
         && let Some(f) = pick_model()
@@ -3095,7 +3100,7 @@ fn tab_bodies(
                 let r = ui.add_enabled(ms.kept && noted, egui::Button::new("Attach model…"));
                 *ms.attach_at = Some(r.rect);
                 if r
-                    .on_hover_text("your own STEP, IGES or STL of this body (the maker's, say): drawn in its place, placed on its envelope; kept in your library, never in the project")
+                    .on_hover_text("your own STEP, IGES, Parasolid or STL of this body (the maker's, say): drawn in its place, placed on its envelope; kept in your library, never in the project")
                     .on_disabled_hover_text(why_off)
                     .clicked()
                     && let Some(f) = pick_model()

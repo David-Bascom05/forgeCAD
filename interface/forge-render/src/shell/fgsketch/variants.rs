@@ -7,6 +7,7 @@ use crate::shell::sketching::rows::dsl::*;
 use crate::shell::sketching::rows::{D, Row};
 use crate::shell::sketching::{SkTool, SketchFor, SketchMode};
 use forge_math::Frame;
+use forge_math::ipow::Powi as _;
 
 type P = (f64, f64);
 
@@ -60,7 +61,7 @@ fn same(a: &[(char, Vec<P>)], b: &[(char, Vec<P>)]) -> bool {
                 && x.1
                     .iter()
                     .zip(&y.1)
-                    .all(|(p, q)| ((p.0 - q.0).powi(2) + (p.1 - q.1).powi(2)).sqrt() < 5e-3)
+                    .all(|(p, q)| ((p.0 - q.0).ipow(2) + (p.1 - q.1).ipow(2)).sqrt() < 5e-3)
         })
 }
 
@@ -177,7 +178,7 @@ fn lines_draw_chain_infer_and_read_back() {
     ]);
     let s = m.solved.as_ref().unwrap();
     let (a, b) = crate::shell::sketching::rows::line(s, "l1").unwrap();
-    assert!((((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt() - 30.0).abs() < 1e-6);
+    assert!((((b.x - a.x).ipow(2) + (b.y - a.y).ipow(2)).sqrt() - 30.0).abs() < 1e-6);
     assert!((forge_math::dmath::atan2(b.y - a.y, b.x - a.x).to_degrees() - 30.0).abs() < 1e-6);
     assert!(
         (a.x + b.x).abs() < 1e-6 && (a.y + b.y).abs() < 1e-6,

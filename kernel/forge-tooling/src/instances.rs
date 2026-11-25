@@ -10,6 +10,7 @@
 use crate::LibError;
 use crate::life::{Cut, FeedVar, Row};
 use crate::toml::{Table, num, nums, tables, text};
+use forge_math::ipow::Powi as _;
 
 pub const FILE: &str = "tool-instances.toml";
 
@@ -517,7 +518,7 @@ fn stats(cs: &[f64]) -> (f64, f64, f64, f64) {
     let l: Vec<f64> = cs.iter().map(|&c| forge_math::dmath::ln(c)).collect();
     let m = l.iter().sum::<f64>() / l.len() as f64;
     let var = if l.len() > 1 {
-        l.iter().map(|x| (x - m).powi(2)).sum::<f64>() / (l.len() - 1) as f64
+        l.iter().map(|x| (x - m).ipow(2)).sum::<f64>() / (l.len() - 1) as f64
     } else {
         0.0
     };

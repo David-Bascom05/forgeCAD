@@ -19,20 +19,6 @@ use crate::OpQ;
 /// (document stem, op, rule, value when listed, why and owner).
 pub const KNOWN: &[(&str, &str, &str, f64, &str)] = &[
     (
-        "mold_core_cam",
-        "left",
-        "air",
-        0.76,
-        "rest machining: most of its length in air (CAM-3D-FINISH)",
-    ),
-    (
-        "mold_core_cam",
-        "left",
-        "retracts",
-        35.0,
-        "rest machining: 35 retracts for 85 mm cut (CAM-3D-FINISH)",
-    ),
-    (
         "rptu1_clear_cam",
         "nut",
         "recut",
