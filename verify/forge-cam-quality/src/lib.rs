@@ -184,6 +184,10 @@ pub struct MoveQ {
     pub hex: f64,
     /// hex / the cutting data's fz (1 = the target chip).
     pub load: f64,
+    /// The move's length in plan (mm, along an arc) and whether it keeps one height (a level
+    /// move: not a plunge, ramp or helix turn that descends).
+    pub len_xy: f64,
+    pub level: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -841,6 +845,7 @@ pub fn measure_op_unless(
             let mut mq = MoveQ {
                 path: pi,
                 mv: mi,
+                level: dz == 0.0,
                 ..MoveQ::default()
             };
             let mut mq_target: f64 = 0.0;
@@ -849,6 +854,7 @@ pub fn measure_op_unless(
                 let len = dist(a, b);
                 let dt = if f > 0.0 { 60.0 * len / f } else { 0.0 };
                 let pxy = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+                mq.len_xy += pxy;
                 let eng = if q.side && pxy > 1e-9 {
                     let u = [(b[0] - a[0]) / pxy, (b[1] - a[1]) / pxy];
                     Some((map::engage(m, b, u, r, EPS_Z), u))

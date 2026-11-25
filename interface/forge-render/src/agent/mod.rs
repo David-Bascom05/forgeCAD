@@ -40,9 +40,57 @@ impl Out {
     }
 }
 
+/// A picture sent with a message: the view (markup, or the view attached) or one pasted.
+#[derive(Clone, PartialEq, Eq)]
+pub struct Picture {
+    /// Its type, for the model: image/png, image/jpeg, image/gif or image/webp.
+    pub media: &'static str,
+    pub bytes: Vec<u8>,
+}
+
+impl std::fmt::Debug for Picture {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Picture({}, {} bytes)", self.media, self.bytes.len())
+    }
+}
+
+/// The most a pasted picture may be: the models' own limit is about 5 MB a picture.
+pub const PICTURE_BYTES: usize = 5 << 20;
+/// The most pictures one message takes.
+pub const PICTURES: usize = 20;
+/// The most they may add up to (as sent: a message's body holds a third more, as base64, under
+/// forgecad web's 12 MB; room left for the view's picture).
+pub const PICTURES_BYTES: usize = 7 << 20;
+
+impl Picture {
+    pub fn png(bytes: Vec<u8>) -> Picture {
+        Picture {
+            media: "image/png",
+            bytes,
+        }
+    }
+
+    /// A picture the models read, by its first bytes (not its name): None for anything else.
+    pub fn sniff(bytes: Vec<u8>) -> Option<Picture> {
+        let media = match bytes.as_slice() {
+            [0x89, b'P', b'N', b'G', ..] => "image/png",
+            [0xFF, 0xD8, 0xFF, ..] => "image/jpeg",
+            [b'G', b'I', b'F', b'8', ..] => "image/gif",
+            [b'R', b'I', b'F', b'F', _, _, _, _, b'W', b'E', b'B', b'P', ..] => "image/webp",
+            _ => return None,
+        };
+        Some(Picture { media, bytes })
+    }
+
+    /// Its file name's extension.
+    pub fn ext(&self) -> &'static str {
+        self.media.strip_prefix("image/").unwrap_or("png")
+    }
+}
+
 pub trait Backend: Send {
-    /// A message from the person, and a picture with it (PNG): a new turn.
-    fn send(&mut self, prompt: String, picture: Option<Vec<u8>>);
+    /// A message from the person, and the pictures with it: a new turn.
+    fn send(&mut self, prompt: String, pictures: Vec<Picture>);
     /// Stop the turn that's running; it ends with `Done { stopped: true }`.
     fn stop(&mut self);
     /// The document open in the app now, in the same folder.
