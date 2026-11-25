@@ -5,7 +5,7 @@ import re
 ALONE = {}  # ("slow", binary, test) -> seconds alone, from native-tests.py's budget lines
 
 
-def items(name, text):
+def items(name, text, alone=None):
     """What failed in a step's log, as comparable items (no times, no line numbers)."""
     out, pending, binary = set(), [], ""
     for l in text.splitlines():
@@ -29,7 +29,7 @@ def items(name, text):
         if m:
             k = ("slow", m.group(1), m.group(2))
             out.add(k)
-            ALONE.setdefault(k, float(m.group(3)) if m.group(3) else 1e9)
+            (ALONE if alone is None else alone).setdefault(k, float(m.group(3)) if m.group(3) else 1e9)
             continue
         # over the budget but not an error (under the limit, or quick alone): on main's side it
         # makes a branch's slow verdict for the same test main-identical; never a failure itself

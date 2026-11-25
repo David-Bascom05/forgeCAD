@@ -181,7 +181,8 @@ def relative(name, cmd_for, pkgs_of):
         theirs = {tuple(x.split(" ", 2)) if x.count(" ") >= 2 else tuple(x.split(" ")) + ("",)
                   for x in doc["items"]}
         log = f"published results-{base}-{name}.json ({doc.get('toolchain', '')})"
-        judge(name, e, mine, theirs, log)
+        judge(name, e, mine, theirs, log,
+              {tuple(k.split(" ", 2)): v for k, v in doc.get("alone", {}).items()})
         return
     wt = tempfile.mkdtemp(prefix="pv-base.")
     subprocess.run(["git", "worktree", "add", "-q", "--detach", wt, base], check=True)
@@ -194,13 +195,28 @@ def relative(name, cmd_for, pkgs_of):
                 subprocess.run(c, cwd=os.path.join(wt, d), env=env, stdout=fh, stderr=subprocess.STDOUT)
     finally:
         subprocess.run(["git", "worktree", "remove", "--force", wt])
-    theirs = items(name, open(log, errors="replace").read())
-    judge(name, e, mine, theirs, log)
+    base_alone = {}
+    theirs = items(name, open(log, errors="replace").read(), base_alone)
+    judge(name, e, mine, theirs, log, base_alone)
 
 
-def judge(name, e, mine, theirs, log):
+WORSE = 1.2  # a test of main's already over the budget: RED only if over 20% slower alone than main's
+
+
+def judge(name, e, mine, theirs, log, base_alone=None):
+    base_alone = base_alone or {}
     theirs = set(theirs) | {("slow", b, t) for k, b, t in theirs if k == "slowish"}
     new = sorted(mine - theirs)
+    # main's own overruns (in the packages the branch changes): a warning, unless the branch made
+    # one materially worse: over WORSE x main's time alone, on this machine
+    worse = []
+    for x in sorted(mine & theirs):
+        if x[0] == "slow" and x in ALONE:
+            b = base_alone.get(x, SLOW_RED / 2 if ("slowish",) + x[1:] in theirs else None)
+            if b is not None and ALONE[x] > WORSE * b:
+                worse.append(f"{' '.join(x)} ({ALONE[x]:.1f} s alone vs main {b:.1f} s)")
+    e["worse"] = worse
+    new += worse
     e["main_identical"] = sorted(" ".join(x) for x in mine & theirs)
     e["new"] = [" ".join(x) for x in new]
     e["base_log"] = log
@@ -307,6 +323,19 @@ if pk:
     step("native", [[sys.executable, "tools/ci/native-tests.py", *ps(pk)]], env=test_env)
     relative("native", lambda p: [([sys.executable, "tools/ci/native-tests.py", *ps(p)], ".")],
              lambda it: target_pkgs(it[1]) & set(pk))
+def lavapipe():
+    """A Vulkan driver forge-render's tests can run on (lavapipe, mesa-vulkan-drivers)."""
+    import glob
+    return any(glob.glob(d + "/*.json") for d in ("/usr/share/vulkan/icd.d", "/etc/vulkan/icd.d"))
+
+
+if render and not lavapipe() and (not only or "render" in only):
+    # no driver here (and no permission to install one, say): render is not judged here at all.
+    # Neither GREEN nor RED: the train needs its verdict from a machine that has one
+    record["steps"]["render"] = {"ok": None, "not_run": "no Vulkan driver (mesa-vulkan-drivers)"}
+    print("pre-verify render  NOT RUN here: no Vulkan driver. Ask VERIFY-RENDER for this sha "
+          "(via TRAIN-CONDUCTOR): stage.py render <sha>", flush=True)
+    render = False
 if render:
     make_room()
     step("render", [["cargo", "test", "--release", "--locked", "--no-fail-fast"]],
@@ -351,12 +380,15 @@ if (sel["gate"] or a.always_gate) and (not only or "gate" in only):
     ok = bits_ok and band.returncode == 0
     record["steps"]["gate"] = {"ok": ok, "seconds": round(time.time() - t), "log": log}
     print(f"pre-verify gate    {'ok  ' if ok else 'FAIL'} {round(time.time() - t):5d}s  {log}")
-ok = all(s["ok"] for s in record["steps"].values())
+ok = all(s["ok"] is not False for s in record["steps"].values())
+pending = [k for k, s in record["steps"].items() if s["ok"] is None]
 record["ok"] = ok
 rec = os.path.join(cache, f"record-{head}.json")
 json.dump(record, open(rec, "w"), indent=1)
-steps = " ".join(f"{k}:{'ok' if v['ok'] else 'FAIL'}" for k, v in record["steps"].items())
-print(f"\nPRE-VERIFY {'GREEN' if ok else 'RED'} {head[:12]} on main {base[:12]}: {steps}; "
+steps = " ".join(f"{k}:{'ok' if v['ok'] else ('NOT-RUN' if v['ok'] is None else 'FAIL')}"
+                 for k, v in record["steps"].items())
+verdict = "RED" if not ok else ("GREEN-EXCEPT-" + "+".join(pending).upper() if pending else "GREEN")
+print(f"\nPRE-VERIFY {verdict} {head[:12]} on main {base[:12]}: {steps}; "
       f"{len(pk)} packages{' + forge-render' if render else ''}; gate "
       f"{'judged' if sel['gate'] else 'not reached'}; map {'yes' if record['reads_map'] else 'no'}; "
       f"e3148c8b {'yes' if record['e3148c8b'] else 'no'}"
