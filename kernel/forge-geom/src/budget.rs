@@ -44,6 +44,9 @@ thread_local! {
     static OWED: Cell<u64> = const { Cell::new(0) };
     /// Whether the budget in force was cut by `cap_total` (once only), while no bank is shared.
     static CAPPED: Cell<bool> = const { Cell::new(false) };
+    /// How many times `cap_total` was asked on this thread, and the last total asked: what a
+    /// cache of a search's answer keeps, to ask it again where it answers from memory.
+    static ASKED: Cell<(u64, u64)> = const { Cell::new((0, 0)) };
 }
 
 /// For tests: slices of `n` on this thread (a stop then reaches an op after `n` of its work, not a
@@ -165,6 +168,13 @@ fn bank() -> u64 {
     }
 }
 
+/// How many times `cap_total` was asked on this thread, and the total last asked: a cache of an
+/// answer whose finding asked it keeps that, to ask it again where it answers from memory (the
+/// cap would otherwise hang on whether the answer was fresh).
+pub fn caps_asked() -> (u64, u64) {
+    ASKED.get()
+}
+
 /// What a `cap_total` cut still owes the bank.
 fn owed() -> u64 {
     match shared() {
@@ -201,6 +211,8 @@ fn spent_of_total() -> u64 {
 /// the op's geometry, and what is spent does not hang on threads or order, so the verdict is the
 /// same everywhere. Nothing inside `uncounted`, or with no budget.
 pub fn cap_total(m: u64) {
+    let (n, _) = ASKED.get();
+    ASKED.set((n.wrapping_add(1), m));
     if FREE.get() || !LIMITED.get() {
         return;
     }

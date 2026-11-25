@@ -295,7 +295,8 @@ impl std::hash::Hasher for Mix {
 type Mets = (
     std::collections::HashMap<
         Met,
-        (Option<Proc>, Option<Proc>, SurfaceSurface, u64),
+        // (the last, the cap on its op's budget its search asked, if any: `budget::cap_total`)
+        (Option<Proc>, Option<Proc>, SurfaceSurface, u64, Option<u64>),
         std::hash::BuildHasherDefault<Mix>,
     >,
     usize,
@@ -353,13 +354,21 @@ pub fn searched(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
     let key = met(a, b, &region);
     // a remembered answer charges what it cost when it was found, so that an op spends the same
     // whether its answers are fresh or remembered, and whichever thread remembered them
-    if let Some((r, cost)) = MET.with(|m| m.borrow().0.get(&key).map(|e| (e.2.clone(), e.3))) {
+    if let Some((r, cost, cap)) = MET.with(|m| m.borrow().0.get(&key).map(|e| (e.2.clone(), e.3, e.4))) {
         forge_geom::budget::spend_many(cost);
+        // (and the cap it asked of its op, as the search did: a cap is a total, so asked again it
+        // leaves the op as the fresh search would have)
+        if let Some(m) = cap {
+            forge_geom::budget::cap_total(m);
+        }
         return r;
     }
     let before = forge_geom::budget::spent();
+    let asked = forge_geom::budget::caps_asked();
     let r = search(a, b, region);
     let cost = forge_geom::budget::spent().wrapping_sub(before);
+    let now = forge_geom::budget::caps_asked();
+    let cap = (now.0 != asked.0).then_some(now.1);
     // (one cut short by the budget or a stop is not remembered: a later op would take it whole)
     if forge_geom::budget::exhausted() {
         return r;
@@ -380,7 +389,7 @@ pub fn searched(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
                 Surface::Procedural(p) => Some(p.clone()),
                 _ => None,
             };
-            m.0.insert(key, (held(a), held(b), r.clone(), cost));
+            m.0.insert(key, (held(a), held(b), r.clone(), cost, cap));
         }
     });
     r
