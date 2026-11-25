@@ -1840,25 +1840,6 @@ fn a_stations_tools_are_changed_by_hand() {
     let f = d.join("load_tray.fg");
     let src = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/sheetmetal/load_tray.fg");
     std::fs::copy(src, &f).unwrap();
-
-/// The narrow, tall channel BENDSIM-TOOLS' contacts are tested on (a 30 x 200 plate, 60 mm
-/// flanges, straight punches, right then left): its second bend runs the first flange into the
-/// punch.
-const TALL_CHANNEL: &str = "shared t = 2\nshared r = 2\nshared k = ratio(0.4)\n\
-sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (30, 200))\n}\n\
-base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
-right = flange(base.edge(plan.outline[1]), height: 60)\n\
-left = flange(base.edge(plan.outline[3]), height: 60)\n";
-
-/// Collisions (David: "exact collision areas per step, tinted"): where the part meets the punch is
-/// drawn on the part in red while the bend passes through the region, and not before it; the
-/// switch takes it away.
-#[test]
-fn a_collision_is_drawn_on_the_part_where_it_is() {
-    let Some(mut h) = headless() else { return };
-    let d = scratch("tall-channel");
-    let f = d.join("tall_channel.fg");
-    std::fs::write(&f, TALL_CHANNEL).unwrap();
     open(&mut h, f.to_str().unwrap());
     click(&mut h, "tab:Environments");
     click(&mut h, "tool:Bend Simulation");
@@ -1913,7 +1894,30 @@ fn a_collision_is_drawn_on_the_part_where_it_is() {
     assert_eq!(sim.tooling.punches[sim.tooling.stations[0].punch].id, cur);
     b.pane = forge_render::shell::bendsim::Pane::Setup;
     shot(&mut h, "ux-station-pickers");
+}
 
+/// The narrow, tall channel BENDSIM-TOOLS' contacts are tested on (a 30 x 200 plate, 60 mm
+/// flanges, straight punches, right then left): its second bend runs the first flange into the
+/// punch.
+const TALL_CHANNEL: &str = "shared t = 2\nshared r = 2\nshared k = ratio(0.4)\n\
+sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (30, 200))\n}\n\
+base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
+right = flange(base.edge(plan.outline[1]), height: 60)\n\
+left = flange(base.edge(plan.outline[3]), height: 60)\n";
+
+/// Collisions (David: "exact collision areas per step, tinted"): where the part meets the punch is
+/// drawn on the part in red while the bend passes through the region, and not before it; the
+/// switch takes it away.
+#[test]
+fn a_collision_is_drawn_on_the_part_where_it_is() {
+    let Some(mut h) = headless() else { return };
+    let d = scratch("tall-channel");
+    let f = d.join("tall_channel.fg");
+    std::fs::write(&f, TALL_CHANNEL).unwrap();
+    open(&mut h, f.to_str().unwrap());
+    click(&mut h, "tab:Environments");
+    click(&mut h, "tool:Bend Simulation");
+    let c = Choice {
         punches: Some(vec!["std-eu/P85-R08-H120".into(), "std-eu/P88-R08".into()]),
         sequence: Some(vec!["right".into(), "left".into()]),
         ..Choice::default()
