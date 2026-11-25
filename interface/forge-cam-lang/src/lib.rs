@@ -4677,7 +4677,7 @@ impl Cam {
             }
             if over > 0.0 {
                 self.warnings.push(format!(
-                    "{}: {:.0} mm of the cut engages the tool more than its {}° engagement cap (up to {:.0}°): it cuts heavier than asked",
+                    "{}: {:.0} mm of the cut engages the tool more than its {}° engagement cap (up to {:.0}°): it cuts heavier than asked; a smaller tool, a lower step-down, or clear() keeps it within",
                     out.name,
                     over,
                     mm(cap),
