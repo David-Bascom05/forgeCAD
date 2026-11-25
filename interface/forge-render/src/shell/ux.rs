@@ -131,7 +131,7 @@ fn inch(x: f64) -> String {
     if a == 0.0 || a >= 0.01 {
         return trim_to(x, 3);
     }
-    let places = (1 - a.log10().floor() as i32).max(0) as usize;
+    let places = (1 - forge_lang::units::decimal_exponent(a)).max(0) as usize;
     trim_to(x, places)
 }
 
