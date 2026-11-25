@@ -787,19 +787,48 @@ mod tests {
     /// minimum sampled densely.
     #[test]
     fn never_above_the_true_minimum() {
-        never_above(&ball(6.0), 0x9e3779b97f4a7c15u64);
+        let closes = never_above(&ball(6.0), 0x9e3779b97f4a7c15u64, 0..150);
+        assert!(closes > 15, "{closes}");
     }
 
     /// The same for a bull-nose cutter (its disc capsule): the bound never exceeds the sampled
     /// true minimum, and never clears where the branch and bound finds a Hit.
+    /// (Its 150 cases in ten tests of 15, each replaying the same seeded sequence: the same
+    /// cases, side by side; this one also counts the closed form's clears over all 150.)
     #[test]
     #[cfg(not(feature = "old-closed-form"))]
     fn a_bull_noses_bound_is_never_above_the_true_minimum() {
-        let b = assemble(&Cutter::Bull { d: 10.0, re: 1.0 }, 30.0, 10.0, 40.0, None)
+        let closes = never_above(&bull_10_1(), 0x2545f4914f6cdd1du64, 0..15);
+        assert!(closes > 15, "{closes}");
+    }
+
+    fn bull_10_1() -> Body {
+        assemble(&Cutter::Bull { d: 10.0, re: 1.0 }, 30.0, 10.0, 40.0, None)
             .unwrap()
             .bodies[0]
-            .clone();
-        never_above(&b, 0x2545f4914f6cdd1du64);
+            .clone()
+    }
+
+    macro_rules! bull_never_above_cases {
+        ($($name:ident: $range:expr;)*) => {$(
+            /// `a_bull_noses_bound_is_never_above_the_true_minimum`'s cases in this range.
+            #[test]
+            #[cfg(not(feature = "old-closed-form"))]
+            fn $name() {
+                never_above(&bull_10_1(), 0x2545f4914f6cdd1du64, $range);
+            }
+        )*};
+    }
+    bull_never_above_cases! {
+        a_bull_noses_bound_is_never_above_the_true_minimum_15: 15..30;
+        a_bull_noses_bound_is_never_above_the_true_minimum_30: 30..45;
+        a_bull_noses_bound_is_never_above_the_true_minimum_45: 45..60;
+        a_bull_noses_bound_is_never_above_the_true_minimum_60: 60..75;
+        a_bull_noses_bound_is_never_above_the_true_minimum_75: 75..90;
+        a_bull_noses_bound_is_never_above_the_true_minimum_90: 90..105;
+        a_bull_noses_bound_is_never_above_the_true_minimum_105: 105..120;
+        a_bull_noses_bound_is_never_above_the_true_minimum_120: 120..135;
+        a_bull_noses_bound_is_never_above_the_true_minimum_135: 135..150;
     }
 
     /// A bull-nose's body has a disc capsule: its corner's radius, its corner centre's distance
@@ -821,6 +850,32 @@ mod tests {
     #[test]
     #[cfg(not(feature = "old-closed-form"))]
     fn review_a_disc_capsules_bound_never_exceeds_the_truth() {
+        // (its 400 poses in five tests of 80, each replaying the same seeded sequence; this one
+        // also checks that over 100 of all 400 had a closed form)
+        review_sweep(0..80);
+    }
+
+    macro_rules! review_sweep_cases {
+        ($($name:ident: $range:expr;)*) => {$(
+            /// `review_a_disc_capsules_bound_never_exceeds_the_truth`'s poses in this range.
+            #[test]
+            #[cfg(not(feature = "old-closed-form"))]
+            fn $name() {
+                review_sweep($range);
+            }
+        )*};
+    }
+    review_sweep_cases! {
+        review_a_disc_capsules_bound_never_exceeds_the_truth_80: 80..160;
+        review_a_disc_capsules_bound_never_exceeds_the_truth_160: 160..240;
+        review_a_disc_capsules_bound_never_exceeds_the_truth_240: 240..320;
+        review_a_disc_capsules_bound_never_exceeds_the_truth_320: 320..400;
+    }
+
+    /// The review's poses in `range` checked against the sampled truth; every pose drawn (the
+    /// same sequence whatever the range), and over 100 of all of them must have a closed form.
+    #[cfg(not(feature = "old-closed-form"))]
+    fn review_sweep(range: std::ops::Range<usize>) {
         let b = assemble(&Cutter::Bull { d: 10.0, re: 1.0 }, 30.0, 10.0, 40.0, None)
             .unwrap()
             .bodies[0]
@@ -922,6 +977,9 @@ mod tests {
             ];
             let Some(lo) = lower(&c, &f, a, bb) else { continue };
             cases += 1;
+            if !range.contains(&k) {
+                continue;
+            }
             let mut tmin = f64::INFINITY;
             let n = 40;
             for i in 0..=n {
@@ -1011,7 +1069,10 @@ mod tests {
             let lo = lower(&capsule(&b).unwrap(), f, [0.0, 0.0, 0.0], [1.0, 0.0, 0.3]).unwrap();
             assert!(lo <= -2.0, "{what}: the bound {lo} is above the true minimum");
             let (v, _) = certify(&b, f, &mv, -0.05, 0.01, 20_000);
-            assert!(!matches!(v, Verdict::Clear { .. }), "{what}: a gouge certified Clear: {v:?}");
+            assert!(
+                !matches!(v, Verdict::Clear { .. }),
+                "{what}: a gouge certified Clear: {v:?}"
+            );
         }
     }
 
@@ -1066,7 +1127,9 @@ mod tests {
         assert!(v.is_none(), "cleared a gouge of {tmin}: {v:?}");
     }
 
-    fn never_above(b: &Body, seed0: u64) {
+    /// The cases in `range` checked densely; every case drawn (the same sequence whatever the
+    /// range). Returns how many of all the cases the closed form clears (lo ≥ 0).
+    fn never_above(b: &Body, seed0: u64, range: std::ops::Range<usize>) -> usize {
         let b = b.clone();
         let c = capsule(&b).unwrap();
         let mut seed = seed0;
@@ -1076,7 +1139,7 @@ mod tests {
             seed ^= seed << 17;
             (seed >> 11) as f64 / (1u64 << 53) as f64
         };
-        let mut agreed = 0;
+        let mut closes = 0;
         let mut k = 0;
         while k < 150 {
             let kind = k % 3;
@@ -1119,6 +1182,13 @@ mod tests {
                 a[2] + rnd() * 4.0 - 2.0,
             ];
             let lo = lower(&c, &f, a, bb).unwrap();
+            if lo >= 0.0 {
+                closes += 1;
+            }
+            if !range.contains(&k) {
+                k += 1;
+                continue;
+            }
             // dense sample of the true minimum over the face (its parameter box) and the move
             let mut tmin = f64::INFINITY;
             let n = 24;
@@ -1161,11 +1231,10 @@ mod tests {
                     !matches!(v, Verdict::Hit { .. }),
                     "k={k}: closed form clears at {lo}, B&B hits: {v:?}"
                 );
-                agreed += 1;
             }
             k += 1;
         }
-        assert!(agreed > 15, "{agreed}");
+        closes
     }
 
     /// A level arc cleared by its chords is never cleared above its true minimum (dense
