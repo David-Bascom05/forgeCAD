@@ -1673,7 +1673,7 @@ fn no_feasible_order_is_said_and_bend_one_has_no_previous() {
         h.gui.shell.status.clear();
         click(&mut h, tool);
         let st = h.gui.shell.status.clone();
-        assert!(st.starts_with("No feasible order: bend ") && st.contains("fails: it closes on the punch"), "{tool}: {st:?}");
+        assert!(st.starts_with("No feasible order: left fails: ") && st.contains("it closes on the punch"), "{tool}: {st:?}");
     }
     shot(&mut h, "ux-no-feasible-order");
     let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
@@ -1884,6 +1884,11 @@ fn a_stations_tools_are_changed_by_hand() {
         .expect("the punch swapped");
     let sim = b.sim.as_ref().expect("simulated again");
     assert_eq!(sim.tooling.punches[sim.tooling.stations[0].punch].id, other);
+    // the pickers as the user sees them, after the swap (Machine & Tools)
+    b.pane = forge_render::shell::bendsim::Pane::Setup;
+    shot(&mut h, "ux-station-pickers");
+    let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+    let sim = b.sim.as_ref().unwrap();
     // a station added (past the others), then removed (no bend works at it)
     let before = std::fs::read_to_string(&file).unwrap();
     let first_bend = b.doc.as_ref().unwrap().bends.first().cloned();
@@ -1902,8 +1907,6 @@ fn a_stations_tools_are_changed_by_hand() {
     b.doc_step(true).expect("undo");
     let sim = b.sim.as_ref().unwrap();
     assert_eq!(sim.tooling.punches[sim.tooling.stations[0].punch].id, cur);
-    b.pane = forge_render::shell::bendsim::Pane::Setup;
-    shot(&mut h, "ux-station-pickers");
 }
 
 /// The narrow, tall channel BENDSIM-TOOLS' contacts are tested on (a 30 x 200 plate, 60 mm

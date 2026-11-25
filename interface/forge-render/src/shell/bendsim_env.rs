@@ -185,8 +185,8 @@ pub(super) fn infeasible(b: &BendSimUi) -> Option<String> {
                 v
             });
         format!(
-            "bend {} ({}) fails: {} (best tried: {} on {})",
-            k.bend + 1,
+            // the bend by its name (its index in the part is not the step the panel numbers)
+            "{} fails: {} (best tried: {} on {})",
             sim.names[k.bend],
             if rules.is_empty() { "its checks".to_string() } else { rules.join("; ") },
             super::bendsim_cards::tool_short(cat, &k.punch, true),
