@@ -373,3 +373,61 @@ bore = cut(hs, thru)
     assert!(close(v3(&h[0], "centre"), [120.0, 20.0, 2.0]), "{}", h[0]);
     assert!(close(v3(&h[1], "centre"), [120.0, 20.0, 12.0]), "{}", h[1]);
 }
+
+/// One pair's clash boolean refusing does not end the interference query: that pair is listed
+/// unconfirmed (no volume, the refusal as its reason, where the boxes meet) and the others are
+/// answered as before (rack18u's latch: two nut-on-screw clashes, the second refused here).
+#[test]
+fn a_refused_clash_is_unconfirmed_and_the_rest_go_on() {
+    let latch = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/rack18u/panels/latch_u.fg");
+    let both = ask_file(&latch, None, "interference");
+    assert!(both.ok, "{}", both.text);
+    let all = arr(&both.json, "interferences").to_vec();
+    assert_eq!(all.len(), 2);
+    forge_lang::query::refuse_clash_for_test("nut1", "scr1");
+    let a = ask_file(&latch, None, "interference");
+    assert!(a.ok, "{}", a.text);
+    let list = arr(&a.json, "interferences");
+    assert_eq!(list.len(), 2, "{}", a.text);
+    let pair = |j: &Json| {
+        (
+            j.get("a").and_then(Json::str).unwrap_or("").to_string(),
+            j.get("b").and_then(Json::str).unwrap_or("").to_string(),
+        )
+    };
+    // the other pair, exactly as when nothing refused
+    let kept = list
+        .iter()
+        .find(|j| pair(j) == ("nut0".into(), "scr0".into()))
+        .expect("nut0 x scr0");
+    assert_eq!(
+        kept.to_string(),
+        all.iter()
+            .find(|j| pair(j) == pair(kept))
+            .expect("before")
+            .to_string()
+    );
+    // the refused pair: unconfirmed, no volume, the reason given, placed
+    let r = list
+        .iter()
+        .find(|j| pair(j) == ("nut1".into(), "scr1".into()))
+        .expect("nut1 x scr1");
+    assert_eq!(r.get("confirmed"), Some(&Json::Bool(false)));
+    assert_eq!(r.get("volume"), Some(&Json::Null));
+    assert!(
+        r.get("boolean_failed")
+            .and_then(Json::str)
+            .is_some_and(|w| w.contains("refused")),
+        "{r}"
+    );
+    let (lo, hi) = (v3(r, "min"), v3(r, "max"));
+    assert!((0..3).all(|i| lo[i] <= hi[i]), "{r}");
+    // the total holds only what was confirmed
+    assert!(
+        (n(&a.json, "volume") - n(kept, "volume")).abs() < 1e-9,
+        "{}",
+        a.text
+    );
+    assert_eq!(n(&a.json, "unconfirmed"), 1.0);
+    assert!(a.text.contains("unconfirmed"), "{}", a.text);
+}
