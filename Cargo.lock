@@ -641,6 +641,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-sync"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-lang",
+ "forge-math",
+]
+
+[[package]]
 name = "forge-thermo"
 version = "0.1.0"
 dependencies = [
