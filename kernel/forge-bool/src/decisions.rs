@@ -577,7 +577,6 @@ pub fn ending<T>(r: &Result<T, crate::BoolError>) -> &'static str {
             Lost::DegenerateEdge { .. } => "Internal DegenerateEdge",
             Lost::MergedRegion { .. } => "Internal MergedRegion",
             Lost::RetryInvalid => "Internal RetryInvalid",
-            Lost::OpenShell { .. } => "Internal OpenShell",
             Lost::Uncut { .. } => "Internal Uncut",
         },
     }

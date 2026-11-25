@@ -1,5 +1,4 @@
 import ForgeCurved.BodyModel
-import ForgeBoolProof.FlatSites.Accum
 
 /-!
 # A tolerance `On` at trim_in's stretch sampler, correct under δ-Faithful
@@ -73,12 +72,5 @@ theorem edge_within_of_ends {δ η : ℝ} (hη : η ≤ δ) (b : BodyModel E) (i
   · intro c hc
     obtain ⟨_, q, hq, hd⟩ := hc
     exact ⟨q, hq, by rw [dist_comm]; exact hd⟩
-
-omit [NormedSpace ℝ E] in
-/-- `WithinH` is `Accum.Near`: the δ-accumulation lemma (`Accum.accum_within`) applies to the
-body layer's edge and region closeness as it stands. -/
-theorem withinH_iff_near (δ : ℝ) (A B : Set E) :
-    WithinH δ A B ↔ ForgeBoolProof.FlatSites.Accum.Near δ A B :=
-  Iff.rfl
 
 end ForgeBoolProof.FlatSites.TolOn

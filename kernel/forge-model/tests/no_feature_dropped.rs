@@ -236,9 +236,6 @@ fn a_result_that_is_not_closed_is_refused() {
                 assert_eq!(feature, 1, "{entry}");
                 assert!(what.contains("face(s), not 2"), "{entry}: {what}");
             }
-            // (the boolean refuses the open shell itself, where it made it, or a retry after that
-            // refuses the tangent touch: a refusal either way, never an open solid)
-            Err(RegenError::Boolean { feature, .. }) => assert_eq!(feature, 1, "{entry}"),
             Err(e) => panic!("{entry}: {e:?}"),
             Ok(bodies) => {
                 for b in &bodies {
