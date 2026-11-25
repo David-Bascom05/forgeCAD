@@ -1784,15 +1784,18 @@ impl Cheb {
     fn sum(tiles: &Tiles, all: ((f64, f64), (f64, f64)), a: f64, b: f64) -> (F, F) {
         let (mut g, mut e) = ([0.0; NF], [0.0; NF]);
         // the tiles of b's slab (all of them for a b that is not a number), in order
-        let k = tiles.ends.partition_point(|&x| x <= b);
-        let slab: Box<dyn Iterator<Item = &Cheb>> = if b.is_nan() {
-            Box::new(tiles.tiles.iter())
+        // (by index: a boxed iterator here was a heap allocation per sum)
+        let all_tiles = b.is_nan();
+        let slab: &[u32] = if all_tiles {
+            &[]
         } else {
-            Box::new(tiles.slabs[k].iter().map(|&i| &tiles.tiles[i as usize]))
+            &tiles.slabs[tiles.ends.partition_point(|&x| x <= b)]
         };
+        let n = if all_tiles { tiles.tiles.len() } else { slab.len() };
         // T_j at each tile's b argument, made once for the tiles that share it (most of a slab's)
         let mut tbs: Vec<(u64, usize, Vec<f64>)> = Vec::new();
-        for t in slab {
+        for j in 0..n {
+            let t = &tiles.tiles[if all_tiles { j } else { slab[j] as usize }];
             // a tile on the box's side also takes what lies beyond it
             let inb = (t.b.0 <= b || t.b.0 == all.1.0) && (b < t.b.1 || t.b.1 == all.1.1);
             if !inb || (a <= t.a.0 && t.a.0 != all.0.0) {
