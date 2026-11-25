@@ -5,7 +5,7 @@
 //! each is exact. Here: the same pairs, each confirmed with its exact volume, one exact boolean
 //! per new pair beyond the unedited document's, and well under the old times.
 //! Volumes cross-checked by mesh point sampling (CURVED-SITES): 10.51 ± 0.21 mm³ for hinge_pin's
-//! nut ∩ pin, 15.03 ± 0.20 for post_kit's nut_a[0] ∩ stud_a[0].
+//! nut ∩ pin, 14.612 ± 0.053 for post_kit's nut_a[0] ∩ stud_a[0] (mesh tolerance 0.00025 mm).
 use forge_lang::Run;
 use forge_lang::asm::Issue;
 use forge_lang::error::Warning;
@@ -60,7 +60,11 @@ fn grown(file: &Path, name: &str) -> String {
 fn repro(rel: &str, name: &str, want: &[(&str, &str)], volume: f64) {
     let file = repo().join(rel);
     let base = build(&file, &std::fs::read_to_string(&file).expect("example"));
-    let b = base.asm.as_ref().and_then(|a| a.overlap.clone()).expect("the overlap check ran");
+    let b = base
+        .asm
+        .as_ref()
+        .and_then(|a| a.overlap.clone())
+        .expect("the overlap check ran");
     let t = Instant::now();
     let r = build(&file, &grown(&file, name));
     let took = t.elapsed();
@@ -68,20 +72,39 @@ fn repro(rel: &str, name: &str, want: &[(&str, &str)], volume: f64) {
     let pairs: Vec<(&str, &str)> = got.iter().map(|g| (g.0.as_str(), g.1.as_str())).collect();
     assert_eq!(pairs, want, "{rel}: the interfering pairs");
     for (a, b, confirmed, v, failed) in &got {
-        assert!(*confirmed && failed.is_none(), "{rel}: {a}/{b} not exact: {failed:?}");
+        assert!(
+            *confirmed && failed.is_none(),
+            "{rel}: {a}/{b} not exact: {failed:?}"
+        );
         let v = v.expect("an exact volume");
-        assert!((v - volume).abs() <= 1e-3 * volume, "{rel}: {a}/{b} shares {v} mm³, not {volume}");
+        assert!(
+            (v - volume).abs() <= 1e-3 * volume,
+            "{rel}: {a}/{b} shares {v} mm³, not {volume}"
+        );
     }
     // the work: one exact boolean more per new interference than the document as it was
-    let o = r.asm.as_ref().and_then(|a| a.overlap.clone()).expect("the overlap check ran");
-    assert_eq!(o.exact_runs, b.exact_runs + want.len(), "{rel}: {o:?}, before {b:?}");
+    let o = r
+        .asm
+        .as_ref()
+        .and_then(|a| a.overlap.clone())
+        .expect("the overlap check ran");
+    assert_eq!(
+        o.exact_runs,
+        b.exact_runs + want.len(),
+        "{rel}: {o:?}, before {b:?}"
+    );
     // and the time, with room: 5.7 s and 9.7 s before, under 0.2 s now (release)
     assert!(took < Duration::from_secs(3), "{rel}: {took:?}");
 }
 
 #[test]
 fn a_thread_grown_into_its_nut_is_one_exact_interference() {
-    repro("examples/rack18u/hw/tests/hinge_pin.fg", "size_m6", &[("nut", "pin")], 10.688);
+    repro(
+        "examples/rack18u/hw/tests/hinge_pin.fg",
+        "size_m6",
+        &[("nut", "pin")],
+        10.688,
+    );
 }
 
 #[test]
@@ -89,7 +112,12 @@ fn post_kit_threads_grown_into_their_nuts_are_four_exact_interferences() {
     repro(
         "examples/rack18u/asm/post_kit.fg",
         "m6",
-        &[("nut_a[0]", "stud_a[0]"), ("nut_a[1]", "stud_a[1]"), ("stud_b[0]", "nut_b[0]"), ("stud_b[1]", "nut_b[1]")],
+        &[
+            ("nut_a[0]", "stud_a[0]"),
+            ("nut_a[1]", "stud_a[1]"),
+            ("stud_b[0]", "nut_b[0]"),
+            ("stud_b[1]", "nut_b[1]"),
+        ],
         14.641,
     );
 }
