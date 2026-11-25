@@ -26,6 +26,13 @@ pub struct Fixture {
     pub axis: usize,
     /// The clearance every body of the tool keeps from it.
     pub clearance: f64,
+    /// The plane its base stands on (the machine table), in the part's frame, when known: a
+    /// workholding library device's mount. None for the boxes `vise` makes (they stop at the
+    /// bed's depth and say nothing of the table).
+    pub table_z: Option<f64>,
+    /// The workholding library's placement it was made from (its bodies' roles, real parts and
+    /// their poses, for drawing), when it was.
+    pub placed: Option<forge_workholding::Placed>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -181,6 +188,8 @@ pub fn vise(
         jaw_top: top,
         axis,
         clearance,
+        table_z: None,
+        placed: None,
     })
 }
 
@@ -449,6 +458,8 @@ pub fn soft_jaws(
         jaw_top: vtop,
         axis,
         clearance,
+        table_z: None,
+        placed: None,
     };
     let contact = area(band.first().expect("a band"));
     Ok(SoftJaws {
@@ -459,6 +470,8 @@ pub fn soft_jaws(
             jaw_top: top,
             axis,
             clearance,
+            table_z: None,
+            placed: None,
         },
         hold,
         part,
@@ -468,6 +481,56 @@ pub fn soft_jaws(
         top,
         contact,
     })
+}
+
+impl Fixture {
+    /// The fixture a workholding library placement is (research/cam/workholding.md §5): its
+    /// bodies' axis-aligned blocks (keep-outs applied) as named pieces, every other primitive
+    /// (a cylinder, a block at an angle) as a shaped piece of its exact faces; the jaws' top is
+    /// the top of what the device holds (the stock below it is held); the table plane is the
+    /// device's mount. The checker sees exactly the library's bodies.
+    pub fn from_workholding(p: &forge_workholding::Placed, axis: usize, clearance: f64) -> Fixture {
+        use forge_workholding::{Mount, Prim, geom::IDENT};
+        let mut pieces = Vec::new();
+        let mut shaped = Vec::new();
+        for b in &p.bodies {
+            for prim in &b.prims {
+                let g = prim.grown(b.keepout);
+                match g {
+                    Prim::Block { o, axes, size } if axes == IDENT => pieces.push((
+                        b.name.clone(),
+                        Stock {
+                            min: o,
+                            max: [o[0] + size[0], o[1] + size[1], o[2] + size[2]],
+                        },
+                    )),
+                    _ => shaped.push((b.name.clone(), g.faces(0, 1e-9))),
+                }
+            }
+        }
+        let jaw_top = p.held.iter().map(|h| h.1[2]).fold(f64::NEG_INFINITY, f64::max);
+        let jaw_top = if jaw_top.is_finite() {
+            jaw_top
+        } else {
+            p.bodies
+                .iter()
+                .map(|b| b.bounds().1[2])
+                .fold(f64::NEG_INFINITY, f64::max)
+        };
+        Fixture {
+            name: p.name.clone(),
+            pieces,
+            shaped,
+            jaw_top,
+            axis,
+            clearance,
+            table_z: match p.mount {
+                Mount::Table { z } => Some(z),
+                _ => None,
+            },
+            placed: Some(p.clone()),
+        }
+    }
 }
 
 impl Fixture {
