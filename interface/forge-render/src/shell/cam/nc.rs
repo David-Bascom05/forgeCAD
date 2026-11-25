@@ -8,6 +8,23 @@
 //! - each program's state against its file: not posted, posted (the file is what it would
 //!   post now), stale (the ops changed since: re-post), or refused (an op of it is).
 use super::CamWs;
+
+/// How long the host's save dialog may take to answer before the click's line says it is still
+/// waiting, with a way to ask again (the app cannot know whether a dialog opened: a user may
+/// still be choosing a folder, so it never says none did).
+pub const EXPORT_WAIT_MS: f64 = 10_000.0;
+
+/// An export handed to the host, to wait on and to ask again.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExportAsked {
+    pub at_ms: f64,
+    pub which: Option<String>,
+    pub sheet: bool,
+    /// The words said at the click ("Export NC: choose where…"): another answer replaces them.
+    pub said: String,
+    /// Said already that it is still waiting.
+    pub waiting: bool,
+}
 use forge_cam_lang::export::{self, NcFile, ProgIn};
 use std::path::{Path, PathBuf};
 
@@ -123,6 +140,21 @@ impl CamWs {
         }
     }
 
+    /// The host's answer to an export, or 10 s of none: while the click's words stand that long,
+    /// they say it is still waiting (Try again asks again: `status_fix`). Any other words said
+    /// (the host's "Exported …", "Export cancelled", an edit) end the wait.
+    pub fn export_wait(&mut self, now_ms: f64) {
+        let Some(a) = &mut self.export_asked else { return };
+        let waiting_words = waiting_words(a.sheet);
+        let ours = self.said.as_deref() == Some(a.said.as_str()) || (a.waiting && self.said.as_deref() == Some(waiting_words));
+        if !ours {
+            self.export_asked = None;
+        } else if !a.waiting && now_ms - a.at_ms >= EXPORT_WAIT_MS {
+            a.waiting = true;
+            self.said = Some(waiting_words.to_string());
+        }
+    }
+
     /// Export…: the host's Save As for program `which` (or all).
     pub fn export_programs(&mut self, which: Option<&str>) {
         match self.nc_files(which) {
@@ -131,10 +163,18 @@ impl CamWs {
                 let stem = self.stem();
                 // said at once, in every host: the click answers before the host's dialog shows
                 // (or where there is none to show, as headless), until what was done is said
-                self.said = Some(match files.as_slice() {
+                let said = match files.as_slice() {
                     [f] => format!("Export NC: choose where to save {}\u{2026}", base(&f.path)),
                     many => format!("Export NC: choose a folder for {} programs\u{2026}", many.len()),
+                };
+                self.export_asked = Some(ExportAsked {
+                    at_ms: crate::viewer::now_ms(),
+                    which: which.map(str::to_string),
+                    sheet: false,
+                    said: said.clone(),
+                    waiting: false,
                 });
+                self.said = Some(said);
                 self.export = Some(ExportAsk {
                     files,
                     dir: first.filter(|d| d.is_dir()).unwrap_or_else(|| self.dir.clone()),
@@ -153,7 +193,15 @@ impl CamWs {
         };
         let stem = self.stem();
         let tools = export::tool_list(&self.text).join("\n") + "\n";
-        self.said = Some("Setup Sheet: choose where to save the sheet and the tool list\u{2026}".into());
+        let said = "Setup Sheet: choose where to save the sheet and the tool list\u{2026}".to_string();
+        self.export_asked = Some(ExportAsked {
+            at_ms: crate::viewer::now_ms(),
+            which: None,
+            sheet: true,
+            said: said.clone(),
+            waiting: false,
+        });
+        self.said = Some(said);
         self.export = Some(ExportAsk {
             files: vec![
                 NcFile {
@@ -308,6 +356,14 @@ pub fn page_json(x: &ExportAsk) -> String {
     ])
     .to_string()
 }
+
+/// The line while the host's save dialog has not answered.
+pub fn waiting_words(sheet: bool) -> &'static str {
+    if sheet { "Setup Sheet: waiting for the save dialog" } else { "Export NC: waiting for the save dialog" }
+}
+
+/// Try again's hover (UX-LEAD).
+pub const RETRY_TIP: &str = "If no save dialog is showing, Try again opens it again.";
 
 #[cfg(test)]
 mod tests {

@@ -366,7 +366,14 @@ pub(super) fn panels(s: &mut Shell, ctx: &egui::Context) {
                                 p.rect_filled(fill, 3.0, t.accent);
                             }
                             ui.add_space(10.0);
-                            let r = ui.button(RichText::new("Stop").font(super::theme::sans(13.0)));
+                            // Esc does the same, said beside it (BUTTON-AUDITOR)
+                            let r = ui
+                                .button(RichText::new("Cancel").font(super::theme::sans(13.0)))
+                                .on_hover_text(
+                                    "Stop recording (Esc): a video is discarded; frames already \
+                                     written are kept",
+                                );
+                            ui.label(RichText::new("Esc").font(super::theme::sans(11.0)).color(t.ink2));
                             s.places.push(("capture:stop".into(), r.rect));
                             stop |= r.clicked();
                         });

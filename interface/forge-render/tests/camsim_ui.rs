@@ -417,6 +417,20 @@ fn the_tool_label_does_not_follow_the_tool() {
         h.step();
     }
     assert!(h.placed("camsim:toolnote").is_some(), "asked for: shown");
+    // a window of the workspace open over the view (the tool library here; an op dialog the
+    // same): nothing of the simulation's floats behind it
+    h.gui.shell.cam.as_mut().unwrap().tools_open = true;
+    for _ in 0..4 {
+        h.step();
+    }
+    assert!(
+        h.gui.shell.cam.as_ref().unwrap().tools_open,
+        "the window stays open"
+    );
+    assert!(
+        h.placed("camsim:toolnote").is_none(),
+        "no label behind a dialog or window"
+    );
 }
 
 /// The cut surface as played (task 2 of the realistic simulation): the mould core's ball-end

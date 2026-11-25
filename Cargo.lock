@@ -166,6 +166,7 @@ dependencies = [
  "forge-sketch",
  "forge-step",
  "forge-tooling",
+ "forge-turn-lang",
  "forge-workholding",
  "forge-workholding-builder",
 ]
