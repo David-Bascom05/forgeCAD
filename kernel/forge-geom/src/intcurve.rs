@@ -28,6 +28,50 @@ pub struct IntCurve {
     /// Each chain point's parameters on each surface that can start its value there
     /// (`Procedural::value_near`), found on first use.
     hints: OnceLock<[Option<Vec<Point2>>; 2]>,
+    /// `eval`'s points by t, kept for `eval_kept`.
+    kept: Kept,
+}
+
+/// The points `eval` gave, by t's bits: a search that bisects the curve's range against one face
+/// after another (`intersect::subdivide_pieces`) asks for the same t again and again, and each is
+/// pulled onto both surfaces anew. `eval` is a function of t alone, so a kept point is the one it
+/// would give. At most `Kept::MAX` are kept; a clone starts with none.
+#[derive(Default)]
+struct Kept(std::sync::Mutex<std::collections::HashMap<u64, Point3, std::hash::BuildHasherDefault<Bits>>>);
+
+impl Kept {
+    const MAX: usize = 1 << 14;
+}
+
+impl Clone for Kept {
+    fn clone(&self) -> Kept {
+        Kept::default()
+    }
+}
+
+impl std::fmt::Debug for Kept {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Kept")
+    }
+}
+
+/// A hash of one u64 (a t's bits): one multiply, its high bits folded down.
+#[derive(Default)]
+struct Bits(u64);
+
+impl std::hash::Hasher for Bits {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.0 = (self.0 ^ b as u64).wrapping_mul(0x100_0000_01b3);
+        }
+    }
+    fn write_u64(&mut self, x: u64) {
+        let m = (x ^ (x >> 29)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        self.0 = m ^ (m >> 32);
+    }
 }
 
 impl PartialEq for IntCurve {
@@ -128,6 +172,7 @@ impl IntCurve {
             closed,
             sag,
             hints: OnceLock::new(),
+            kept: Kept::default(),
         }
     }
 
@@ -276,6 +321,21 @@ impl IntCurve {
 
     pub fn eval(&self, t: f64) -> Point3 {
         self.onto(self.hermite_point(t), t)
+    }
+
+    /// `eval`, kept: the same point, worked out once for each t this curve is asked for here.
+    pub fn eval_kept(&self, t: f64) -> Point3 {
+        let key = t.to_bits();
+        if let Some(p) = self.kept.0.lock().ok().and_then(|m| m.get(&key).copied()) {
+            return p;
+        }
+        let p = self.eval(t);
+        if let Ok(mut m) = self.kept.0.lock()
+            && m.len() < Kept::MAX
+        {
+            m.insert(key, p);
+        }
+        p
     }
 
     /// Each surface's value and gradient at p, and its parameters there where it was started
@@ -1151,6 +1211,40 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    /// A kept point is eval's own, bit for bit, the first time and after (the subdivision search
+    /// trusts it so: identical answers); a clone keeps none of its source's.
+    #[test]
+    fn a_kept_point_is_evals_bit_for_bit_and_a_clone_starts_afresh() {
+        let cyl = Surface::Cylinder(Cylinder {
+            frame: Frame::WORLD,
+            radius: 2.0,
+        });
+        let sph = Surface::Sphere(Sphere {
+            frame: Frame::WORLD.with_origin(Point3::new(0.5, 0.0, 1.0)),
+            radius: 4.0,
+        });
+        let region = Box3::from_points([Point3::new(-6.0, -6.0, -6.0), Point3::new(6.0, 6.0, 8.0)]);
+        for c in trace(&cyl, &sph, region).unwrap() {
+            let d = c.domain_hi();
+            let ts: Vec<f64> = (0..=97)
+                .map(|i| d * i as f64 / 97.0)
+                .chain([-0.0, 0.0, 0.5 * d])
+                .collect();
+            for _ in 0..2 {
+                for &t in &ts {
+                    let (k, e) = (c.eval_kept(t), c.eval(t));
+                    assert_eq!(
+                        (k.x.to_bits(), k.y.to_bits(), k.z.to_bits()),
+                        (e.x.to_bits(), e.y.to_bits(), e.z.to_bits()),
+                        "{t}"
+                    );
+                }
+            }
+            assert!(!c.kept.0.lock().unwrap().is_empty());
+            assert!(c.clone().kept.0.lock().unwrap().is_empty());
         }
     }
 

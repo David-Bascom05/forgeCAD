@@ -780,13 +780,22 @@ fn parabola_quadric(par: &Parabola, range: Interval, s: &Surface) -> Option<Curv
     Some(CurveSurface::Hits(hits))
 }
 
+/// `c.eval(t)`; a traced curve's kept (`IntCurve::eval_kept`): the subdivision search asks the
+/// same edge for the same t against one face after another.
+fn kept_eval(c: &Curve, t: f64) -> Point3 {
+    match c {
+        Curve::Intersection(ic) => ic.eval_kept(t),
+        _ => c.eval(t),
+    }
+}
+
 pub(crate) fn curve_surface_subdivide(
     c: &Curve,
     range: Interval,
     s: &Surface,
     near: Option<Box3>,
 ) -> CurveSurface {
-    let g = |t: f64| s.implicit(c.eval(t));
+    let g = |t: f64| s.implicit(kept_eval(c, t));
     let lip = speed_bound(c, range) * (1.0 + 1e-9) + f64::MIN_POSITIVE;
     let probes = 9;
     if (0..probes).all(|i| g(range.lo + range.width() * i as f64 / (probes - 1) as f64).abs() <= tol::LINEAR)
@@ -823,7 +832,7 @@ fn subdivide_pieces(
     near: Option<Box3>,
     mut stack: Vec<(f64, f64, f64)>,
 ) -> CurveSurface {
-    let g = |t: f64| s.implicit(c.eval(t));
+    let g = |t: f64| s.implicit(kept_eval(c, t));
     let off = |p: Point3| {
         near.map_or(0.0, |b| {
             let d = |x: f64, i: Interval| (i.lo - x).max(x - i.hi).max(0.0);
@@ -837,7 +846,7 @@ fn subdivide_pieces(
     let mut leaves: Vec<(f64, f64)> = Vec::new();
     while let Some((a, b, lip)) = stack.pop() {
         let m = 0.5 * (a + b);
-        let p = c.eval(m);
+        let p = kept_eval(c, m);
         let reach = lip * 0.5 * (b - a) + tol::LINEAR;
         if off(p) > reach || s.implicit(p).abs() > reach {
             continue;
