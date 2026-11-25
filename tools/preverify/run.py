@@ -221,11 +221,17 @@ if render:
 def lints(cmd, cwd):
     """The set of clippy/rustc diagnostics a command prints: (level, code, file, message), with no
     line numbers (they move between base and branch)."""
+    # without -D warnings: denied, a warning main has (in a crate the branch's crates depend on)
+    # stops the build there, and the crates after it are never linted at all. Warned, cargo lints
+    # every crate, and the two sides' sets compare whole
     c = [x for x in cmd]
     if c[0] == "cargo":
         c = c[:2] + ["--message-format=short"] + c[2:]
+        if c[-2:] == ["-D", "warnings"]:
+            c = c[:-2]
     else:
-        c = ["sh", "-c", c[2].replace("cargo clippy", "cargo clippy --message-format=short")]
+        c = ["sh", "-c", c[2].replace("cargo clippy", "cargo clippy --message-format=short")
+             .replace(" -- -D warnings", "")]
     # (the base's run shares the branch's target directory: its dependencies are already built)
     env = dict(os.environ, **test_env)
     env.setdefault("CARGO_TARGET_DIR", os.path.join(root, "target"))
@@ -257,6 +263,8 @@ if clippy:
         e = record["steps"]["clippy"]
         e["main_has"] = len(mine & theirs)
         e["new"] = [" ".join(x) for x in new]
+        # (mine is never empty here: the denied run failed, so the warned one printed something,
+        # unless the failure was not a lint, e.g. a build error, which stays RED)
         if mine and not new:
             e["ok"] = True
             print(f"pre-verify clippy ok   (only diagnostics main has too: {len(mine & theirs)})", flush=True)
