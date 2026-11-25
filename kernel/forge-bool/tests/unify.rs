@@ -246,3 +246,42 @@ fn seat_cut_into_a_joined_tube_end() {
     .unwrap();
     assert!((volume(&r) - volume(&seq)).abs() < 1e-6 * volume(&seq));
 }
+
+/// A face that is nothing but a tree of edges, each used by it on both sides (zero area): a
+/// boolean left one, the V of a drill point's tip imprinted twice, a hair apart, on a plane through
+/// its apex (Haas GM2-5AX, solid #650885, intersected with itself shifted; research/booleans/
+/// drift.md §10). `unify` dropped its loop as a slit and left the face with none (`check`:
+/// FaceNoLoops); the face goes with its loops.
+#[test]
+fn a_face_of_slits_alone_goes_whole() {
+    use forge_geom::{Curve, Line};
+    use forge_math::{Interval, UnitVec3};
+    use forge_topo::Name;
+    let mut b = block(0.0, 0.0, 10.0, 6.0, 4.0, 1);
+    let top = b
+        .face_ids()
+        .find(|&f| matches!(&b.face(f).surface, Surface::Plane(p) if p.frame.origin.z > 3.9))
+        .expect("the block's top");
+    let surface = b.face(top).surface.clone();
+    let sense = b.face(top).same_sense;
+    let v = |b: &mut Body, x: f64, y: f64| b.add_vertex(Point3::new(x, y, 4.0), Name::feature(9));
+    let (apex, a1, a2) = (v(&mut b, 5.0, 3.0), v(&mut b, 6.0, 2.0), v(&mut b, 6.0, 4.0));
+    let line = |b: &mut Body, from: forge_topo::VertexId, to: forge_topo::VertexId, k: u64| {
+        let (p, q) = (b.vertex(from).point, b.vertex(to).point);
+        let dir = UnitVec3::new_unchecked((q - p) * (1.0 / p.distance(q)));
+        b.add_edge(
+            Curve::Line(Line::new(p, dir)),
+            Interval::new(0.0, p.distance(q)),
+            from,
+            to,
+            Name::feature(10 + k),
+        )
+    };
+    let (e1, e2) = (line(&mut b, apex, a1, 1), line(&mut b, apex, a2, 2));
+    let shell = forge_topo::ShellId(0);
+    let f = b.add_face(shell, surface, sense, Name::feature(20));
+    b.add_loop(f, &[(e1, true), (e1, false), (e2, true), (e2, false)]);
+    let before = b.face_ids().count();
+    let r = unified(b);
+    assert_eq!(r.face_ids().count(), before - 1, "the slit face is gone");
+}

@@ -137,6 +137,8 @@ pub struct Occ {
     pub placement: Option<usize>,
     /// Its part's thermoform moulds, placed with it, drawn when their row's eye says.
     pub tooling: Option<usize>,
+    /// Its part's own material (the part document's `props(material:)`), for its look.
+    pub material: Option<String>,
 }
 
 /// An assembly's solve for the screen and the panel. Each distinct part is meshed once (by its
@@ -226,7 +228,9 @@ pub struct Built {
 }
 
 impl Built {
-    pub fn summary(&self) -> String {
+    /// The status line's words for the build: the short state first (valid, the volume in
+    /// `sys`'s units, the faces), the details after, so a narrow status bar's cut takes those.
+    pub fn summary(&self, sys: crate::shell::ux::System) -> String {
         if self.preview {
             return "opening: the last build on screen while it builds".into();
         }
@@ -235,10 +239,10 @@ impl Built {
         }
         let mut s = match &self.measure {
             Some(m) => format!(
-                "volume {} mm³ · {} faces · {} · ",
-                crate::shell::fg::short((m.volume * 10.0).round() / 10.0),
-                m.faces,
-                if m.problems == 0 { "valid" } else { "INVALID" }
+                "{} · {} · {} faces · ",
+                if m.problems == 0 { "valid" } else { "INVALID" },
+                crate::shell::ux::show(m.volume, crate::shell::ux::Qty::Volume, sys),
+                m.faces
             ),
             None if self.ok => "nothing built · ".into(),
             None => "not built · ".into(),
@@ -618,6 +622,7 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
                 Error::Asm(n) => Some(n.issue.clone()),
                 _ => None,
             },
+            stale: false,
         }
     };
     let mut issues: Vec<Issue> = run.errors.iter().map(|e| issue(e, Severity::Error)).collect();
@@ -642,6 +647,7 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
                     fixes: n.fixes.clone(),
                     feature: Some(n.id.clone()),
                     asm: None,
+                    stale: false,
                 });
                 continue;
             }
@@ -660,6 +666,7 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
                     fixes: n.fixes.clone(),
                     feature: Some(n.id.clone()),
                     asm: None,
+                    stale: false,
                 });
                 continue;
             }
@@ -674,6 +681,7 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
                     fixes: n.fixes(),
                     feature: feature_at(Some(n.span)),
                     asm: Some(n.issue.clone()),
+                    stale: false,
                 });
                 continue;
             }
@@ -695,6 +703,7 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
             fixes: vec![],
             feature: feature_at(Some(span)),
             asm: None,
+            stale: false,
         });
     }
     (feats, params, issues)
@@ -936,6 +945,14 @@ struct Worker {
     to_mesh: Sender<Whole>,
     /// A drive sent after a text, kept till that text is built.
     next: Option<Work>,
+    /// An assembly whose shape was sent (`Built { checked: false }`): its seq, so the run of the
+    /// same job that follows is the one with the overlap check and the expects.
+    asm_shaped: Option<u64>,
+    /// That checks run, waiting behind a drive that holds `next`.
+    asm_checks: Option<Job>,
+    /// The last checked assembly build's issue rows: what its checks found stays listed, marked
+    /// stale, while the next build's checks run.
+    asm_checked_rows: Vec<Issue>,
 }
 
 impl Worker {
@@ -969,6 +986,9 @@ impl Worker {
             #[cfg(not(target_arch = "wasm32"))]
             to_mesh,
             next: None,
+            asm_shaped: None,
+            asm_checks: None,
+            asm_checked_rows: vec![],
         }
     }
 
@@ -1029,6 +1049,10 @@ impl Worker {
                 if !self.send(Msg::Posed { seq: *seq, poses, ms }) {
                     return false;
                 }
+                // an assembly's checks that waited behind this drive
+                if self.next.is_none() {
+                    self.next = self.asm_checks.take().map(Work::Text);
+                }
                 return true;
             }
         }
@@ -1051,13 +1075,19 @@ impl Worker {
         if is_assembly(&job.1) {
             // the document's own model named too: picks in the posed view feed 3D Model's tools
             let want = self.anchored.as_deref() != Some(job.1.as_str());
+            // the overlap check and the expects are the slow part of a big assembly: on request,
+            // and then shape first (the posed parts on screen, `checked: false`), the checks in
+            // the step after, on the warm cache; a newer text in between replaces both
+            let checks = job.2 && self.asm_shaped == Some(job.0);
+            if self.asm_checks.as_ref().is_some_and(|c| c.0 != job.0) {
+                self.asm_checks = None;
+            }
             let opts = Options {
                 anchors: want,
                 dir: self.dir.clone(),
                 render: true,
-                // the overlap check and the expects are the slow part of a big assembly: on request
-                overlap: job.2,
-                expects: job.2,
+                overlap: checks,
+                expects: checks,
                 ..Options::default()
             };
             let watch = forge_lang::deps::watch();
@@ -1078,7 +1108,21 @@ impl Worker {
             }
             let (asm, view) = asm_view(&run, &mut self.asm_meshes, &mut self.gpu, &mut self.asm_shape);
             let mesh_ms = t.elapsed().as_secs_f64() * 1e3;
-            let (feats, params, issues) = rows(&run, &job.1);
+            let (feats, params, mut issues) = rows(&run, &job.1);
+            if checks || !job.2 {
+                // what the checks found now (or none asked for): the rows to keep for next time
+                self.asm_checked_rows = if checks { issues.clone() } else { vec![] };
+            } else {
+                // the shape alone: the last checks' findings stay, marked stale, till these
+                // checks are done (a clash never seems to vanish and come back)
+                let kept: Vec<Issue> = self
+                    .asm_checked_rows
+                    .iter()
+                    .filter(|r| !issues.iter().any(|i| i.kind == r.kind && i.text == r.text))
+                    .map(|r| Issue { stale: true, ..r.clone() })
+                    .collect();
+                issues.extend(kept);
+            }
             let built = Built {
                 seq: job.0,
                 ok: run.ok(),
@@ -1098,7 +1142,7 @@ impl Worker {
                 anchors,
                 inspect: asm.as_ref().map(|a| a.inspect.clone()),
                 preview: false,
-                checked: true,
+                checked: checks || !job.2,
                 cutlist: None,
                 asm,
                 build_ms,
@@ -1106,6 +1150,17 @@ impl Worker {
             };
             if !self.send(Msg::Built(Box::new(built))) {
                 return false;
+            }
+            if job.2 && !checks {
+                // the checks next: after a drive that waits in `next`, else at once
+                self.asm_shaped = Some(job.0);
+                if self.next.is_none() {
+                    self.next = Some(Work::Text(job));
+                } else {
+                    self.asm_checks = Some(job);
+                }
+            } else {
+                self.asm_shaped = None;
             }
             return true;
         }
@@ -1560,6 +1615,7 @@ fn asm_view(
             file: file.clone(),
             placement,
             tooling,
+            material: out.part_docs.get(file).and_then(|d| d.props.material.clone()),
         });
     }
     let mut harness_placed = vec![];
