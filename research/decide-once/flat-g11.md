@@ -147,7 +147,7 @@ for every site that merges within a stored tolerance.
 | boolean.rs:4695 imprint: a hit of another body's edge accepted by `on_edge` | T | the base predicate (boolean.rs:289): the δ-accumulation lemma. |
 | boolean.rs:2715 trim on a plane: `plane_meet`'s hits accepted by `on_edge` | T | as boolean.rs:3057 (`on_edge`, then the box-only accept of G14.lean). |
 | boolean.rs:3337 (first test) two neighbouring cuts within `1.2 max(tol)` are left for the dedup | T | they are merged by the dedup below, within the larger tolerance: the δ-accumulation lemma, taking the larger tolerance (as nary.rs:1514). Owed: why 1.2 and not 1.0 (the slack between this test and the dedup's own `reach`). |
-| boolean.rs:3337 (second test) cuts more than 0.3 mm apart are never one shallow pass | U | the comment's bound: a curve of radius R stays within t of a tangent for sqrt(8 R t), under 0.3 mm unless R is over a metre. That is an assumption on input size, not a theorem. Owed: sqrt(8 R tol) from the curve's own radius, or R ≤ 1 m stated as an InputSize bound, with what a missed shallow pass costs (two cuts a hair apart kept: a sliver edge). |
+| boolean.rs:3337 (second test) cuts more than 0.3 mm apart are never one shallow pass | U | an assumption, kept as one (coordinator's ruling, 2026-11-25). See "The 0.3 mm shallow-pass bound" below. |
 | boolean.rs:3521 (second column) trim_in's sampler, the 4·LINEAR end test on the golden-section samples | U | batch 1's 3521, its other operand: it chooses where samples go, not what they say. Same open part of trim_in. |
 | shape.rs:234 `on_sweep`: a sweep within 1e-12 rad of a whole turn is whole | S | shape.rs is a screen: In or Out only clear of the boundary by a margin, else Near, and the caller asks the B-rep (shape.rs's header, nary.rs:509, 1971, 2145). A gap of 1e-12 rad is r·1e-12 of arc. Owed: r·1e-12 ≤ the margin under InputSize (r ≤ the model box). |
 | shape.rs:131 the crossing count's ends test, for an arc not within 1e-12 rad of whole | S | same screen: a ray grazing an arc's end returns None (undecided, the caller asks the B-rep). Same lemma. |
@@ -160,3 +160,42 @@ Batch 2: 5 S (shape.rs's margin lemma covers three of them; 2257 needs no lemma)
 the n-ary interior probe's). With batch 1, of the 24 busiest: 8 S, 11 T, 4 U, 1 N. The
 δ-accumulation lemma would close 11; shape.rs's margin lemma 3; the 0.3 mm bound is the one site
 that rests on an unstated input-size assumption.
+
+## The 0.3 mm shallow-pass bound (boolean.rs:3337, second test): an explicit U
+
+**What it decides.** Two neighbouring cuts of a curve, the curve's midpoint between them on one
+cut's edge: within 0.3 mm they are collapsed to one touch point; past it both are kept and trim
+reads the stretch as running along the edge. The code's comment justified 0.3 by tangency (a curve
+of radius R stays within t of a tangent for sqrt(8 R t), under 0.3 mm for R ≤ 1 m).
+
+**What it does on the corpus** (FLAT-SITES, 2026-11-25, main ded2d224, every gate part seq and
+nary1, a counter on the pairs past 0.3 mm with the midpoint on an edge): 1,100+ such pairs, every
+one a circle (radius 1.9–15 mm) running along an existing circular edge, gaps 0.41–14 mm. The
+bound's real job is to tell a touch from a coincident run; no pair near R = 1 m was met. Under
+0.3 mm main collapses coincident runs too (mixed seq 10, patterns seq 1, gaps 0.06–0.27 mm), and
+its results there are right: the same topology and volume as a build keeping both ends, seq agreeing
+with nary1.
+
+**The adversarial parts.**
+- Two blind holes of radius 5, floors at one depth, centres 9 to 9.9999 mm apart (coincident runs
+  of 4.36 mm down to 0.045 mm): valid with the analytic volume to 1e-12 at every spacing
+  (`tests/trim_shallow.rs`, which pins it).
+- A cylinder of radius 2000 mm whose circle on a plate's top face dips past the plate's front edge:
+  at a dip of 1e-5 the two cuts are 0.40 mm apart and the midpoint is on the edge, the pass the
+  bound skips (it reaches the decision log, below). The result is valid (6 faces, `check` clean).
+
+**Why it stays U, not fixed.** A rule that makes the bound explicit for circles (cuts kept where the
+curve is the edge's own circle; otherwise joined only where sqrt(8 R_rel t) ≥ gap, R_rel =
+1/|1/R − 1/R'|) gives bits identical to main but costs +0.011% in total, +0.10% on patterns nary1:
+about 3,000 circle pairs past 0.3 mm a part, each tested where main tests none (proof/trim-coincident,
+81f91d2a, not shipped). With no wrong answer observed, it does not qualify as a correctness exception.
+
+**What watches it.** Under the `decisions` feature, a pass the bound skips that the midpoint would
+have joined (a circle against a line with sqrt(8 R t) ≥ gap, or two circles touching inside with
+sqrt(8 t R R'/|R − R'|) ≥ gap; not the curve's own circle) is counted as the site
+`trim: a long shallow pass the 0.3 mm bound skips (G11 U)`. The gate parts give 0; the 2 m cylinder
+above gives 1. KERNEL-STRESS's sweeps report it. If one ever comes with a wrong answer, the rule
+above, or a typed refusal at that site, is brought back as a correctness exception.
+
+**Still owed.** Curves other than lines and circles (ellipses, traced, spline, conic): their
+curvature is not bounded cheaply, and the counter does not see them.
