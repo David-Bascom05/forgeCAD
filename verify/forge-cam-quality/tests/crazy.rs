@@ -19,34 +19,6 @@ use std::path::PathBuf;
 /// (document stem, op, rule, value when listed, why).
 const KNOWN: &[(&str, &str, &str, f64, &str)] = &[
     (
-        "manifold_cam",
-        "crn",
-        "air",
-        0.995,
-        "pocket: 86 mm cut in 17 m of cutting moves (CAM-2D-FINISH)",
-    ),
-    (
-        "manifold_cam",
-        "crn",
-        "links",
-        2963.0,
-        "pocket: 3 m of links for 86 mm cut (CAM-2D-FINISH)",
-    ),
-    (
-        "manifold_cam",
-        "shal",
-        "air",
-        0.76,
-        "pocket: the shallow pocket's passes mostly over cleared floor (CAM-2D-FINISH)",
-    ),
-    (
-        "manifold_cam",
-        "grv",
-        "recut",
-        0.33,
-        "slot: a third of the groove's length passes again over what it cut (CAM-2D-FINISH)",
-    ),
-    (
         "mold_core_cam",
         "left",
         "air",

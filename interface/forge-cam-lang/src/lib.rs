@@ -3681,7 +3681,13 @@ impl Cam {
                         });
                         let (sa, ca) = forge_math::dmath::sin_cos(deg.to_radians());
                         let run = (above - z) * ca / sa;
+                        // an even number of legs, so the ramp ends back at the curve's start at
+                        // the level and the curve's own pass cuts what the ramp's wedge left
+                        // (an odd count ended at the far end: back along the line and then the
+                        // curve's pass along it again, a third of the groove cut twice); the
+                        // angle only gets shallower
                         let n = ((run / len - 1e-9).ceil().max(1.0)) as usize;
+                        let n = n + n % 2;
                         for k in 1..=n {
                             let zk = if k == n {
                                 z
@@ -3692,13 +3698,6 @@ impl Cam {
                             mv.push(PMove::Line {
                                 to: [p[0], p[1], zk],
                                 f: feed.1,
-                                phase: Phase::Cut,
-                            });
-                        }
-                        if n % 2 == 1 {
-                            mv.push(PMove::Line {
-                                to: [p0[0], p0[1], z],
-                                f: feed.0,
                                 phase: Phase::Cut,
                             });
                         }
@@ -5930,6 +5929,7 @@ impl Cam {
                             // material where it was (when that section can be made)
                             let below = part.section(bottom + 1e-3, 1e-5).ok();
                             let mut shallow: Vec<[f64; 4]> = vec![];
+                            let mut cleared: Vec<[f64; 4]> = vec![];
                             for rg in pockets {
                                 // (where no section can be made there, a drill point crossing
                                 // that height say, the part's hole features decide)
@@ -5952,28 +5952,92 @@ impl Cam {
                                     skipped.push(region_box(&rg));
                                     continue;
                                 }
-                                let p = ops::pocket(
-                                    &rg,
-                                    ops::Cut {
-                                        tool: t,
-                                        tidx: ti,
-                                        h,
-                                        feed: (vf, vp),
-                                        ramp_feed: None,
-                                        lead_feed: None,
-                                    },
-                                    ops::Span { top, bottom, step },
-                                    stepover,
-                                    leave,
-                                    ramp,
-                                );
-                                match p {
-                                    Ok(p) => paths.push(p),
-                                    Err(ops::OpError::ToolTooBig { .. }) => {
-                                        skipped.push(region_box(&rg));
+                                // only where there is material left: the hole within 2(r + leave)
+                                // of the stock still there at the floor (what earlier ops left)
+                                let rest = rest_region(&rg, &s.ip, bottom, 0.5 * d + leave);
+                                // each piece of it on its own, through all its levels (depth
+                                // first: no hop between pieces at every level); a piece whose
+                                // material all lies within reach of its outermost pass (within
+                                // 2(r + leave) of its edge) gets that pass alone
+                                let pieces: Vec<(Region, f64, f64)> = match &rest {
+                                    Rest::Cleared => {
+                                        cleared.push(region_box(&rg));
                                         continue;
                                     }
-                                    Err(e) => return Err(e.refusal("")),
+                                    Rest::Near(w, inside) => components(w)
+                                        .into_iter()
+                                        .map(|c| {
+                                            let so = if reach_of_edge(&c, inside, 2.0 * (0.5 * d + leave)) {
+                                                1e6
+                                            } else {
+                                                stepover
+                                            };
+                                            (c, so, leave)
+                                        })
+                                        .collect(),
+                                    // centres: passes from the region's own edge (leave −r puts
+                                    // the first pass on it); one pass where all the material is
+                                    // within reach of it
+                                    Rest::Centres(c, edge_only) => components(c)
+                                        .into_iter()
+                                        .map(|c| (c, if *edge_only { 1e6 } else { stepover }, -0.5 * d))
+                                        .collect(),
+                                    Rest::All => vec![(rg.clone(), stepover, leave)],
+                                };
+                                for (work, so, lv) in pieces {
+                                    // a centres piece swept by one pass: its wall run alone
+                                    // (forge_cam::rest), the way back a link
+                                    let single = matches!(rest, Rest::Centres(_, true));
+                                    let rp = if single {
+                                        forge_cam::rest::rest_pass(
+                                            &work,
+                                            &rg,
+                                            0.5 * d + leave,
+                                            ops::Cut {
+                                                tool: t,
+                                                tidx: ti,
+                                                h,
+                                                feed: (vf, vp),
+                                                ramp_feed: None,
+                                                lead_feed: None,
+                                            },
+                                            ops::Span { top, bottom, step },
+                                        )
+                                    } else {
+                                        None
+                                    };
+                                    if let Some(rp) = rp {
+                                        paths.push(rp);
+                                        continue;
+                                    }
+                                    let p = ops::pocket(
+                                        &work,
+                                        ops::Cut {
+                                            tool: t,
+                                            tidx: ti,
+                                            h,
+                                            feed: (vf, vp),
+                                            ramp_feed: None,
+                                            lead_feed: None,
+                                        },
+                                        ops::Span { top, bottom, step },
+                                        so,
+                                        lv,
+                                        // a piece of the rest is entered through what earlier ops
+                                        // cleared: a helix down that column is air, so plunge
+                                        if matches!(rest, Rest::All) { ramp } else { None },
+                                    );
+                                    match p {
+                                        Ok(p) => paths.push(p),
+                                        // a piece of the rest the tool does not fit: its material is
+                                        // out of reach (G4 lists it)
+                                        Err(ops::OpError::ToolTooBig { .. })
+                                            if !matches!(rest, Rest::All) => {}
+                                        Err(ops::OpError::ToolTooBig { .. }) => {
+                                            skipped.push(region_box(&rg));
+                                        }
+                                        Err(e) => return Err(e.refusal("")),
+                                    }
                                 }
                                 let o = if stepover <= 0.5 * d {
                                     opening(&rg, 0.5 * d)
@@ -5995,6 +6059,18 @@ impl Cam {
                                     "{name}: {} of {total} holes in the section end above z {bottom} and are left to their own op (G4 lists them): {}",
                                     shallow.len(),
                                     boxes(&shallow)
+                                ));
+                            }
+                            if !cleared.is_empty() {
+                                self.warnings.push(format!(
+                                    "{name}: {} of {total} holes in the section have no material left between z {top} and {bottom} (earlier ops cleared them): {}",
+                                    cleared.len(),
+                                    boxes(&cleared)
+                                ));
+                            }
+                            if paths.is_empty() && cleared.len() == total {
+                                return Err(format!(
+                                    "pocket: nothing left to cut: earlier ops cleared all the section's {total} holes between z {top} and {bottom}"
                                 ));
                             }
                             if paths.is_empty() {
@@ -8461,6 +8537,240 @@ fn hole_ends_above(holes: &[holes::HoleInfo], rg: &Region, bottom: f64) -> bool 
     })
 }
 
+/// Where a pocket has material left to cut.
+enum Rest {
+    /// Earlier ops left none in the hole.
+    Cleared,
+    /// The part of the hole the tool needs to visit (a sub-region of it), and the material
+    /// left in the hole.
+    Near(Region, Region),
+    /// The tool centres that touch the material left (inside the hole shrunk by r), and
+    /// whether all that material lies within r of the allowed centres' edge (the hole's wall
+    /// offset), so that one pass round the centres' edge sweeps it: pocketed as centres (its
+    /// passes from its own edge in).
+    Centres(Region, bool),
+    /// The hole as it is (the stock's material could not be formed: the conservative answer).
+    All,
+}
+
+/// The part of a pocket's region `rg` that a tool of radius `r` (plus leave) needs to visit
+/// to cut the material earlier ops left at or above `floor`, M (the stock's material just above
+/// the floor: the most material at any of the op's levels, a void counting from its floor up).
+/// The tool centres that matter are C = (rg ⊖ r) ∩ (M ⊕ r): allowed (the disk inside rg) and
+/// touching M. Passes covering C (its edge, then offsets in by the stepover) put the tool on
+/// or within a stepover of every such centre, so they clear all the material pocketing rg
+/// would, and they stay next to that material (rest machining by morphology: plain offsetting,
+/// no patented method). Where C cannot be formed, rg ∩ (M ⊕ 2r) pocketed as a hole (a
+/// superset, also correct); any other failure: the whole hole.
+fn rest_region(rg: &Region, ip: &forge_cam::stock::InProcess, floor: f64, r: f64) -> Rest {
+    use forge_cam_geom::boolean::{Op, boolean, region_of};
+    use forge_cam_geom::offset::offset;
+    let m = match ip.material(floor) {
+        Ok(Some(m)) => m,
+        Ok(None) => return Rest::Cleared,
+        Err(_) => return Rest::All,
+    };
+    let inside = match boolean(rg, &m, Op::Inter) {
+        Ok(l) if l.is_empty() => return Rest::Cleared,
+        Ok(l) => region_of(&l),
+        Err(_) => return Rest::All,
+    };
+    // all of the hole still there: pocketed as it is (entered by its ramp)
+    if matches!(boolean(rg, &m, Op::Diff), Ok(l) if l.is_empty()) {
+        return Rest::All;
+    }
+    // grown by d (negative offsets grow); material left as slivers (a corner a bigger tool
+    // left: two arcs meeting tangentially) has cusps the offset refuses as spikes: then each
+    // piece's bounding box is grown instead (a superset, so still every disk that meets it)
+    let grow = |g: &Region, d: f64| -> Option<Region> {
+        let once = |x: &Region| match offset(x, -d) {
+            Ok((l, _)) if !l.is_empty() => Some(region_of(&l)),
+            _ => None,
+        };
+        once(g).or_else(|| once(&boxes_of(g)?))
+    };
+    let near = || -> Rest {
+        match grow(&inside, 2.0 * r + 1e-3).and_then(|g| boolean(rg, &g, Op::Inter).ok()) {
+            Some(l) if !l.is_empty() => Rest::Near(region_of(&l), inside.clone()),
+            Some(_) => Rest::Cleared,
+            None => Rest::All,
+        }
+    };
+    let allowed = match offset(rg, r) {
+        Ok((l, _)) if !l.is_empty() => region_of(&l),
+        _ => return near(),
+    };
+    // M ⊕ r without growing M (whose slivers have cusps): M = S ∖ ∪ Vᵢ (the stock's box less the
+    // voids that count at this floor), and (S ∖ ∪ Vᵢ) ⊕ r ⊆ (S ⊕ r) ∖ ∪ (Vᵢ ⊖ r): a point at
+    // least r inside a void is at least r from all that is left (to 0.001, below). The voids are openings (smooth),
+    // so shrinking them is clean; where it is not, M's pieces grown as before
+    let near_material = || -> Option<Region> {
+        let g = r + 1e-3;
+        let (lo, hi) = (ip.min, ip.max);
+        let q = [
+            p2(lo[0] - g, lo[1] - g),
+            p2(hi[0] + g, lo[1] - g),
+            p2(hi[0] + g, hi[1] + g),
+            p2(lo[0] - g, hi[1] + g),
+        ];
+        let mut acc = Region {
+            loops: vec![Loop {
+                segs: (0..4)
+                    .map(|k| Seg::Line {
+                        a: q[k],
+                        b: q[(k + 1) % 4],
+                    })
+                    .collect(),
+            }],
+        };
+        let below = ip.under.iter().filter(|(_, c)| floor < *c);
+        for (v, _) in ip.voids.iter().filter(|(_, f)| *f <= floor).chain(below) {
+            // (r − 0.001: a void touching the walls leaves no 0.001 strip along them; a centre so
+            // dropped meets material by at most 0.001, under any tolerance)
+            let sh = match offset(v, r - 1e-3) {
+                Ok((l, _)) if l.is_empty() => continue,
+                Ok((l, _)) => region_of(&l),
+                Err(_) => return None,
+            };
+            let d = boolean(&acc, &sh, Op::Diff).ok()?;
+            if d.is_empty() {
+                return Some(Region { loops: vec![] });
+            }
+            acc = region_of(&d);
+        }
+        Some(acc)
+    };
+    let centres = match near_material()
+        .filter(|g| !g.loops.is_empty())
+        .or_else(|| grow(&inside, r + 1e-3))
+        .and_then(|g| boolean(&allowed, &g, Op::Inter).ok())
+    {
+        Some(l) if l.is_empty() => return Rest::Cleared,
+        Some(l) => region_of(&l),
+        None => return near(),
+    };
+    // all the material within r of the allowed centres' edge: none of it in (rg ⊖ r) ⊖ r. Then
+    // for a point x of it there is y on that edge with |x − y| ≤ r; y is an allowed centre
+    // touching the material, so in C and on C's edge (C ⊆ the allowed centres): one pass on C's
+    // edge sweeps x
+    // (the core lies in rg, so its meet with the stock's material is its meet with the material
+    // in rg; the stock's material has no cusp where a cleared arc meets rg's wall tangentially)
+    let edge_only = match offset(rg, 2.0 * r) {
+        Ok((l, _)) if l.is_empty() => true,
+        Ok((l, _)) => matches!(boolean(&region_of(&l), &m, Op::Inter), Ok(x) if x.is_empty()),
+        Err(_) => false,
+    };
+    Rest::Centres(centres, edge_only)
+}
+
+/// A region's connected pieces: each outer (counter-clockwise) loop with the holes directly
+/// inside it. On any failure, the region whole.
+fn components(rg: &Region) -> Vec<Region> {
+    use forge_cam_geom::region;
+    let mut cx = forge_cam_geom::real::Ctx::new();
+    let Ok(ex) = region::validate(&mut cx, rg) else {
+        return vec![rg.clone()];
+    };
+    let n = rg.loops.len();
+    if n == 1 {
+        return vec![rg.clone()];
+    }
+    let ccw: Vec<bool> = (0..n).map(|l| region::loop_ccw(&mut cx, &ex, l)).collect();
+    let rep: Vec<_> = ex
+        .loops
+        .iter()
+        .map(|&(first, _)| {
+            let e = ex.elems[first];
+            forge_cam_geom::arr::rep_point(&mut cx, &e.piece, e.piece.s, e.piece.e)
+        })
+        .collect();
+    let within: Vec<Vec<bool>> = rep
+        .iter()
+        .enumerate()
+        .map(|(k, q)| {
+            (0..n)
+                .map(|l| k != l && region::inside_loop(&mut cx, &ex, l, *q))
+                .collect()
+        })
+        .collect();
+    let mut out = vec![];
+    for h in (0..n).filter(|&h| ccw[h]) {
+        let mut loops = vec![rg.loops[h].clone()];
+        for k in (0..n).filter(|&k| !ccw[k]) {
+            if within[k][h] && !(0..n).any(|m| m != k && m != h && within[k][m] && within[m][h]) {
+                loops.push(rg.loops[k].clone());
+            }
+        }
+        out.push(Region { loops });
+    }
+    if out.is_empty() { vec![rg.clone()] } else { out }
+}
+
+/// Whether all of `material` inside `piece` lies within `reach` of the piece's edge: then the
+/// pocket's outermost pass (its centre `reach / 2` in) sweeps all of it. False when unsure.
+fn reach_of_edge(piece: &Region, material: &Region, reach: f64) -> bool {
+    use forge_cam_geom::boolean::{Op, boolean};
+    match forge_cam_geom::offset::offset(piece, reach) {
+        Ok((l, _)) if l.is_empty() => true,
+        Ok((l, _)) => matches!(
+            boolean(&forge_cam_geom::boolean::region_of(&l), material, Op::Inter),
+            Ok(x) if x.is_empty()
+        ),
+        Err(_) => false,
+    }
+}
+
+/// The union of a region's loops' bounding boxes (an arc's box taken as its whole circle's):
+/// a superset of the region with no cusps. None if the union cannot be formed.
+fn boxes_of(rg: &Region) -> Option<Region> {
+    use forge_cam_geom::boolean::{Op, boolean, region_of};
+    let mut u: Option<Region> = None;
+    for l in &rg.loops {
+        let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+        let mut take = |x: f64, y: f64| {
+            lo = [lo[0].min(x), lo[1].min(y)];
+            hi = [hi[0].max(x), hi[1].max(y)];
+        };
+        for sg in &l.segs {
+            match *sg {
+                Seg::Line { a, b } => {
+                    take(a.x, a.y);
+                    take(b.x, b.y);
+                }
+                Seg::Arc { a, c, .. } => {
+                    let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+                    take(c.x - r, c.y - r);
+                    take(c.x + r, c.y + r);
+                }
+            }
+        }
+        if !(lo[0] < hi[0] && lo[1] < hi[1]) {
+            continue;
+        }
+        let q = [
+            p2(lo[0], lo[1]),
+            p2(hi[0], lo[1]),
+            p2(hi[0], hi[1]),
+            p2(lo[0], hi[1]),
+        ];
+        let b = Region {
+            loops: vec![Loop {
+                segs: (0..4)
+                    .map(|k| Seg::Line {
+                        a: q[k],
+                        b: q[(k + 1) % 4],
+                    })
+                    .collect(),
+            }],
+        };
+        u = Some(match u {
+            None => b,
+            Some(r) => region_of(&boolean(&r, &b, Op::Union).ok()?),
+        });
+    }
+    u
+}
+
 fn pockets_of(sec: &Region) -> Result<Vec<Region>, String> {
     use forge_cam_geom::region;
     let mut cx = forge_cam_geom::real::Ctx::new();
@@ -9178,6 +9488,21 @@ impl Cam {
                         all.extend(cur_band.clone());
                         stages.push((i, faces_of(&stage_of(&all, deepest))));
                     }
+                }
+                // a plunge straight down to the next level after cutting one, with nothing later
+                // above it (a pocket that stays down level to level): that level is complete,
+                // as at the retract it replaced (below), so the op's own voids are staged to it
+                PMove::Line {
+                    phase: Phase::Plunge, ..
+                } if stock_needed
+                    && cut_z.is_some_and(|z| z < deepest && later_top[i] <= z)
+                    && !self.ops[oi].voids.is_empty() =>
+                {
+                    let z = cut_z.take().unwrap_or(deepest);
+                    deepest = z;
+                    let mut all = loop_bands.clone();
+                    all.extend(cur_band.clone());
+                    stages.push((i, faces_of(&stage_of(&all, z))));
                 }
                 // a level's depth: the lowest point it cut (the feed back up is not one)
                 PMove::Line {

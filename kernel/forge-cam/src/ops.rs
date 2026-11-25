@@ -1584,12 +1584,31 @@ pub fn pocket_in(
     let s0 = passes[order[0].0][order[0].1].segs[0].start();
     let start = [s0.x, s0.y, h.clear];
     let mut above = top;
-    for z in levels(top, bottom, step) {
+    // one pass a level and no ramp: the next level starts where this one ended, so the tool
+    // goes straight down there (the column the plunge from the retract height would take)
+    // instead of up to the retract height and back
+    let stay = order.len() == 1 && ramp.is_none();
+    let zs = levels(top, bottom, step);
+    let mut carried: Option<forge_cam_geom::region::P2> = None;
+    for (zi, &z) in zs.iter().enumerate() {
         // where the tool is when it stayed down after a pass (each pass ends at its start)
         let mut down: Option<forge_cam_geom::region::P2> = None;
         for &(li, lj, link) in &order {
             let l = &passes[li][lj];
             let s = l.segs[0].start();
+            if let Some(p) = carried.take().filter(|p| *p == s) {
+                mv.push(PMove::Line {
+                    to: [p.x, p.y, z],
+                    f: feed.1,
+                    phase: Phase::Plunge,
+                });
+                let point = l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b);
+                if !point {
+                    push_loop(&mut mv, &l.segs, z, feed.0);
+                }
+                down = Some(s);
+                continue;
+            }
             let linked = match down {
                 Some(p) if link => {
                     if p != s {
@@ -1690,11 +1709,15 @@ pub fn pocket_in(
             down = Some(s);
         }
         if let Some(p) = down {
-            mv.push(PMove::Line {
-                to: [p.x, p.y, h.retract],
-                f: feed.0,
-                phase: Phase::Link,
-            });
+            if stay && zi + 1 < zs.len() {
+                carried = Some(p);
+            } else {
+                mv.push(PMove::Line {
+                    to: [p.x, p.y, h.retract],
+                    f: feed.0,
+                    phase: Phase::Link,
+                });
+            }
         }
         above = z;
     }
