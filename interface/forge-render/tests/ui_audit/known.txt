@@ -1,0 +1,2 @@
+# Findings the UI audit knows about, one per line: FIXTURE/ENVTAB/TOOL<TAB>RULE.
+# Each is a defect on its way to a fix (research/ui-audit/report.md); remove the line with the fix.

@@ -21,6 +21,8 @@ const CLICK_SLOP: f32 = 4.0;
 /// How long a view change animates (ms).
 pub const TRANSITION_MS: f64 = 280.0;
 const CUBE_MARGIN_PX: f32 = 8.0;
+/// A view narrower than this (logical px) draws its cube at half size.
+pub const NARROW_VIEW_PX: f32 = 320.0;
 /// A wheel step of the section, as a share of the view's distance.
 const SECTION_STEP: f32 = 0.01;
 /// How long exploding or coming back together takes (ms).
@@ -253,7 +255,10 @@ impl Nav {
 
     /// Where the view cube is: the top right of the view.
     pub fn cube_place(&self) -> Place {
-        let side = viewcube::WIDGET_PX * self.scale;
+        // a narrow view (a phone-wide window): the cube at half size, so it leaves the part room
+        // (UX-LEAD: below ~320 px of view it covered the model)
+        let narrow = (self.size.0 as f32) < NARROW_VIEW_PX * self.scale;
+        let side = viewcube::WIDGET_PX * self.scale * if narrow { 0.5 } else { 1.0 };
         Place {
             at: (
                 self.size.0 as f32 - side - CUBE_MARGIN_PX * self.scale,

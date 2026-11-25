@@ -53,6 +53,8 @@ extern "C" {
 
 /// What the page asked of the app between frames.
 enum Ask {
+    /// What the page did with an export (`window.forge_export`): its words for the status.
+    Exported(String),
     Open(String),
     SaveAs(String),
     Save,
@@ -88,6 +90,9 @@ enum Ask {
     Machine(String),
     /// `Gui::capture_command`'s words: a photo or a recording, as Capture's settings say.
     Capture(String),
+    /// A picture pasted or dropped on the page, for the agent (`app_agent_picture`).
+    AgentPicture(Vec<u8>),
+    Studio(String),
 }
 
 thread_local! {
@@ -101,6 +106,46 @@ thread_local! {
     static FIRST_FRAME: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
     /// The page's own changes are not echoed back to it.
     static LOADING: RefCell<bool> = const { RefCell::new(false) };
+    /// The UI audit's (web/tests/ui_audit.cjs) extra state: off but when it asks.
+    static AUDIT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The UI audit's state in `app_state` from now on (`audit`: the ribbon's tools, the shell's
+/// placed names, egui's visible layers), or not.
+#[wasm_bindgen]
+pub fn app_audit(on: bool) {
+    AUDIT.with(|a| a.set(on));
+}
+
+/// What the UI audit reads of a frame: what there is to click and what is open.
+fn audit_json(g: &Gui) -> Json {
+    let rect = |r: egui::Rect| Json::Arr(vec![num(r.left() as f64), num(r.top() as f64), num(r.width() as f64), num(r.height() as f64)]);
+    let tools = g
+        .shell
+        .ribbon_live()
+        .into_iter()
+        .map(|(gr, name, live)| Json::Arr(vec![gr.into(), name.into(), live.into()]))
+        .collect();
+    let places = g
+        .shell
+        .places
+        .iter()
+        .map(|(k, r)| Json::Arr(vec![k.clone().into(), rect(*r)]))
+        .collect();
+    let layers = g.ctx.memory(|m| {
+        m.areas()
+            .visible_layer_ids()
+            .into_iter()
+            .filter_map(|l| m.area_rect(l.id).map(|r| Json::Arr(vec![format!("{:?}", l.order).into(), format!("{:x}", l.id.value()).into(), rect(r)])))
+            .collect()
+    });
+    let focus = g.ctx.memory(|m| m.focused()).is_some();
+    Json::obj(vec![
+        ("tools", Json::Arr(tools)),
+        ("places", Json::Arr(places)),
+        ("layers", Json::Arr(layers)),
+        ("focus", focus.into()),
+    ])
 }
 
 fn wake() {
@@ -470,14 +515,9 @@ impl Host {
         if let Some(w) = &mut self.gui.shell.cam
             && let Some(x) = w.export.take()
         {
+            // what was done is said when the page has done it (`app_exported`): the picker's
+            // save, a download, a cancel; until then the click's "choose where…" stands
             page_export(&crate::shell::cam::nc::page_json(&x));
-            let n = x.files.len();
-            w.said = Some(if n == 1 {
-                format!("Exported {}", crate::shell::cam::nc::base(&x.files[0].path))
-            } else {
-                format!("Exported {n} files in {}", x.zip)
-            });
-            w.exported += 1;
         }
         STATE.with(|s| *s.borrow_mut() = state_json(&self.gui, self.canvas_json()));
     }
@@ -543,6 +583,11 @@ impl Host {
                         self.gui.shell.status = e;
                     }
                 }
+                Ask::Studio(c) => {
+                    if let Some(l) = self.gui.studio_live() {
+                        l.target = if c == "stop" { l.traced() } else { 1024 };
+                    }
+                }
                 Ask::Rebuild => self.gui.rebuild_open(),
                 Ask::Apply(op) => {
                     if let Err(e) = self.gui.fg_apply(op) {
@@ -552,6 +597,22 @@ impl Host {
                 Ask::Pixels(f) => self.pixels(f),
                 Ask::StoreFailed(path, why) => self.gui.store_failed(&path, &why),
                 Ask::Say(text) => self.gui.shell.status = text,
+                Ask::AgentPicture(bytes) => {
+                    if !self.gui.agent_picture(bytes)
+                        && self.gui.shell.agent.tab != crate::shell::agent::SideTab::Agent
+                    {
+                        self.gui.shell.status =
+                            "A picture goes to the agent: open the Agent tab, then paste it".into();
+                    }
+                }
+                Ask::Exported(text) => {
+                    if let Some(w) = &mut self.gui.shell.cam {
+                        if !text.contains("cancelled") {
+                            w.exported += 1;
+                        }
+                        w.said = Some(text);
+                    }
+                }
                 Ask::CamSim(c) => {
                     if let Err(e) = self.gui.camsim_command(&c) {
                         self.gui.shell.status = e;
@@ -891,7 +952,11 @@ fn state_json(g: &Gui, canvas: Json) -> String {
         }
         Json::obj(f)
     });
-    Json::obj(vec![
+    let mut audit = vec![];
+    if AUDIT.with(|a| a.get()) {
+        audit.push(("audit", audit_json(g)));
+    }
+    Json::obj(audit.into_iter().chain(vec![
         ("ready", true.into()),
         ("first_frame_ms", num(FIRST_FRAME.with(|f| f.get()))),
         // frames drawn so far: a test waits on this, not on pictures, for a change to be drawn
@@ -948,6 +1013,17 @@ fn state_json(g: &Gui, canvas: Json) -> String {
                 ),
                 ("last", g.shell.capture.last.clone().into()),
             ]),
+        ),
+        // the Render Studio's live view: samples shown, traced, rows a frame
+        (
+            "studio",
+            g.studio_progress().map_or(Json::Null, |(shown, traced, rows)| {
+                Json::obj(vec![
+                    ("shown", num(shown as f64)),
+                    ("traced", num(traced as f64)),
+                    ("rows", num(rows as f64)),
+                ])
+            }),
         ),
         ("cam", cam_json(g)),
         ("robot", robot_json(g)),
@@ -1010,7 +1086,7 @@ fn state_json(g: &Gui, canvas: Json) -> String {
                     .collect(),
             ),
         ),
-    ])
+    ]).collect())
     .to_string()
 }
 
@@ -1376,6 +1452,12 @@ pub fn app_type(text: String, enter: bool) {
     ask(Ask::Type(text, enter));
 }
 
+/// A picture pasted or dropped on the page (its bytes): the Agent tab's, for its next message.
+#[wasm_bindgen]
+pub fn app_agent_picture(bytes: Vec<u8>) {
+    ask(Ask::AgentPicture(bytes));
+}
+
 /// The page's storage could not keep a file the app wrote (`forgecad web` refused it, the
 /// browser's store failed): said in the status, and in Versions for the history's files.
 #[wasm_bindgen]
@@ -1393,6 +1475,13 @@ pub fn app_sketches_kept() -> usize {
 
 /// Says `text` in the app's status line: what the page refused (a link's file outside the
 /// project, a name to save as that isn't a project path).
+/// What the page did with the files the app asked it to export: "Exported prog.nc" (the
+/// browser's save picker), "Downloaded prog.nc", "Export cancelled".
+#[wasm_bindgen]
+pub fn app_exported(text: String) {
+    ask(Ask::Exported(text));
+}
+
 #[wasm_bindgen]
 pub fn app_say(text: String) {
     ask(Ask::Say(text));
@@ -1416,6 +1505,12 @@ pub fn app_machine(cmd: String) {
 #[wasm_bindgen]
 pub fn app_capture(words: String) {
     ask(Ask::Capture(words));
+}
+
+/// The Render Studio's live view (tests): `stop` it where it is, or let it `go` on.
+#[wasm_bindgen]
+pub fn app_studio(cmd: String) {
+    ask(Ask::Studio(cmd));
 }
 
 /// The app's state as JSON: see `state_json`.

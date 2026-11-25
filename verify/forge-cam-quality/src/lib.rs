@@ -15,6 +15,7 @@
 //! The stock is a height map (map.rs) over the setup's stock box: a measurement model within
 //! about a cell of the exact sweep. Spindle rotation is taken as M03 (clockwise from above), so
 //! material right of the direction of travel is climb. Everything here is deterministic.
+pub mod crazy;
 pub mod endstate;
 pub mod foreign;
 pub mod map;
@@ -183,6 +184,10 @@ pub struct MoveQ {
     pub hex: f64,
     /// hex / the cutting data's fz (1 = the target chip).
     pub load: f64,
+    /// The move's length in plan (mm, along an arc) and whether it keeps one height (a level
+    /// move: not a plunge, ramp or helix turn that descends).
+    pub len_xy: f64,
+    pub level: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -203,6 +208,12 @@ pub struct OpQ {
     pub len_cut: f64,
     pub len_air: f64,
     pub len_rapid: f64,
+    /// Of len_air: at feed on a cutting move (not a link, hop or plunge), and of that, where the
+    /// tool's axis stood in stock when the op began (passing again over what the op itself cut).
+    pub len_air_cut: f64,
+    pub len_recut: f64,
+    /// Links and hops at feed (mm), material met or not.
+    pub len_link: f64,
     /// Times from length / feed (s).
     pub t_cut: f64,
     pub t_air: f64,
@@ -261,6 +272,10 @@ pub struct OpQ {
     pub p_avail: f64,
     /// Rapid pieces that met material (a certified path has none).
     pub rapid_cuts: usize,
+    /// Feed pieces at FAST_FEED or more that met material (a link or hop at the link feed
+    /// meeting stock the planner's map did not show), and the first such piece's end.
+    pub fast_cuts: usize,
+    pub fast_cut_at: Option<[f64; 3]>,
     /// Per move with feed (rapids and cycles left out), in path order.
     pub moves_q: Vec<MoveQ>,
     /// Hole cycles: the feed per spindle revolution (mm/rev), the least over the op's tools
@@ -391,6 +406,9 @@ fn power_at(curve: &[[f64; 2]], rpm: f64) -> f64 {
 
 /// The material threshold: a piece that removes less is in air (mm³).
 const AIR_VOL: f64 = 1e-4;
+
+/// A feed at or above this (mm/min) is a link's, not a cut's: no piece at it may meet material.
+pub const FAST_FEED: f64 = 5000.0;
 /// A point of the edge is in material if the stock there is this far above the tip (mm).
 const EPS_Z: f64 = 1e-3;
 
@@ -737,6 +755,8 @@ pub fn measure_op_unless(
     let mut hex_tt = 0.0;
     let mut hexes: Vec<(f64, f64)> = Vec::new();
     let mut tiles = map::Tiles::of(m);
+    // the stock as the op found it: a cutting move's air over it is a re-cut
+    let m0 = m.clone();
     for (pi, p) in paths.iter().enumerate() {
         let prof = profile(p.tool);
         let r = prof.r();
@@ -825,6 +845,7 @@ pub fn measure_op_unless(
             let mut mq = MoveQ {
                 path: pi,
                 mv: mi,
+                level: dz == 0.0,
                 ..MoveQ::default()
             };
             let mut mq_target: f64 = 0.0;
@@ -833,6 +854,7 @@ pub fn measure_op_unless(
                 let len = dist(a, b);
                 let dt = if f > 0.0 { 60.0 * len / f } else { 0.0 };
                 let pxy = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+                mq.len_xy += pxy;
                 let eng = if q.side && pxy > 1e-9 {
                     let u = [(b[0] - a[0]) / pxy, (b[1] - a[1]) / pxy];
                     Some((map::engage(m, b, u, r, EPS_Z), u))
@@ -841,7 +863,22 @@ pub fn measure_op_unless(
                 };
                 let removed = m.sweep_in(a, b, &prof, Some(&mut tiles));
                 q.removed += removed;
+                let link = matches!(phase, Phase::Link | Phase::Hop);
+                if link {
+                    q.len_link += len;
+                }
                 if removed > AIR_VOL {
+                    if f >= FAST_FEED {
+                        q.fast_cuts += 1;
+                        q.fast_cut_at.get_or_insert(b);
+                        if std::env::var_os("FORGE_QUALITY_FAST").is_some() {
+                            eprintln!(
+                                "fast {} f={f:.1} removed={removed:.6} a={a:?} b={b:?} mv={mv:?} side={:?}",
+                                q.name,
+                                eng.map(|e| (e.0.phi, e.0.ap))
+                            );
+                        }
+                    }
                     moved_in = true;
                     q.len_cut += len;
                     q.t_cut += dt;
@@ -911,6 +948,12 @@ pub fn measure_op_unless(
                 } else {
                     q.len_air += len;
                     q.t_air += dt;
+                    if !link && phase != Phase::Plunge {
+                        q.len_air_cut += len;
+                        if m0.top(b[0], b[1]) > b[2] + EPS_Z {
+                            q.len_recut += len;
+                        }
+                    }
                     if std::env::var_os("FORGE_QUALITY_AIR").is_some() {
                         eprintln!("air {} {:?} f={f:.0} dt={dt:.4} at={:?}", q.name, phase, b);
                     }
@@ -1334,11 +1377,11 @@ pub fn json(jobs: &[JobQ]) -> String {
             let _ = write!(
                 o,
                 "{{\"name\":{},\"setup\":{},\"kind\":{},\"status\":{},\"tool\":{},\"d\":{},\"flutes\":{},\"rpm\":{},\"moves\":{},\
-\"len_cut\":{},\"len_air\":{},\"len_rapid\":{},\"t_cut\":{},\"t_air\":{},\"t_min\":{},\"t_stop\":{},\"t_la\":{},\"t_scurve\":{},\
+\"len_cut\":{},\"len_air\":{},\"len_rapid\":{},\"len_air_cut\":{},\"len_recut\":{},\"len_link\":{},\"t_cut\":{},\"t_air\":{},\"t_min\":{},\"t_stop\":{},\"t_la\":{},\"t_scurve\":{},\
 \"retracts\":{},\"plunges\":{},\"ramps\":{},\"cycles\":{},\"corners30\":{},\"corners90\":{},\"turn_max\":{},\
 \"side\":{},\"phi_max\":{},\"phi_mean\":{},\"phi_hist\":[{}],\"climb\":{},\"conventional\":{},\"slotting\":{},\
 \"fz_target\":{},\"fz_class\":{},\"fz_class_rough\":{},\"hex_min\":{},\"hex_mean\":{},\"hex_max\":{},\"hex_p99\":{},\"thin\":{},\"thick\":{},\"removed\":{},\"mrr\":{},\
-\"fc_max\":{},\"p_max\":{},\"p_avail\":{},\"rapid_cuts\":{},\"f_rev\":{}}}",
+\"fc_max\":{},\"p_max\":{},\"p_avail\":{},\"rapid_cuts\":{},\"fast_cuts\":{},\"f_rev\":{}}}",
                 js(&q.name),
                 q.setup,
                 js(&q.kind),
@@ -1351,6 +1394,9 @@ pub fn json(jobs: &[JobQ]) -> String {
                 jn(q.len_cut),
                 jn(q.len_air),
                 jn(q.len_rapid),
+                jn(q.len_air_cut),
+                jn(q.len_recut),
+                jn(q.len_link),
                 jn(q.t_cut),
                 jn(q.t_air),
                 jn(q.t_min),
@@ -1386,6 +1432,7 @@ pub fn json(jobs: &[JobQ]) -> String {
                 jn(q.p_max),
                 jn(q.p_avail),
                 q.rapid_cuts,
+                q.fast_cuts,
                 jn(q.f_rev)
             );
         }

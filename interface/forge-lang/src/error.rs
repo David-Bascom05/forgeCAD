@@ -1586,7 +1586,28 @@ pub(crate) fn regen_text(e: &forge_model::RegenError) -> String {
             error: forge_model::BodyError::Unsupported(what),
             ..
         } => format!("{what} is not supported"),
+        G::Extent { error, .. } => extent_text(error),
         _ => words(e),
+    }
+}
+
+/// Why a feature's end could not be found, in words. Exhaustive: a new variant needs its words.
+fn extent_text(e: &forge_model::ExtentError) -> String {
+    use forge_model::ExtentError as X;
+    match e {
+        X::NoNextFace => "nothing lies ahead of it to end at".into(),
+        X::NotAhead => "the face it ends at is not wholly ahead of the sketch".into(),
+        X::NeverHits => "it runs along the face it should end at, so never meets it".into(),
+        X::NotCovered => "the face it ends at doesn't cover the whole profile".into(),
+        X::Ambiguous => "the profile meets different faces first, so its end isn't one face".into(),
+        X::ThroughJoins => "through all, joined to the part, has no end".into(),
+        X::NoFace => "the face or plane it ends at is not an earlier one".into(),
+        X::NotPlanar => "a revolve can end only at a flat face".into(),
+        X::NotSquare => "the plane it ends at isn't square to its travel".into(),
+        X::AlreadyThere => "the sketch already lies on that plane".into(),
+        X::AlongSketch => "its direction lies in the sketch's plane".into(),
+        X::BadSize => "its distance or angle must be above zero, and at most a whole turn".into(),
+        X::Unsupported(w) => format!("{w} is not supported"),
     }
 }
 

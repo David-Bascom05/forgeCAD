@@ -131,12 +131,17 @@ pub struct StudioUi {
     pub size: (u32, u32),
     pub spp: u32,
     pub frames: u32,
+    /// The file a render writes; empty: a fresh `<document>-render-<time>.png` where captures go.
     pub out: String,
     /// Bumped when anything the GUI must rebuild for changes (appearances, the light).
     pub version: u64,
     pub asks: Vec<Ask>,
     /// What the GUI says: samples in the view, the queue's state.
     pub samples: u32,
+    /// Samples traced (the picture in the view is shown at the denoise's steps), and how many
+    /// the live view refines to.
+    pub traced: u32,
+    pub target: u32,
     pub queue: String,
     pub library: Option<std::sync::Arc<Appearances>>,
 }
@@ -179,10 +184,12 @@ impl Default for StudioUi {
             size: (1920, 1080),
             spp: 512,
             frames: 36,
-            out: "render.png".into(),
+            out: String::new(),
             version: 0,
             asks: Vec::new(),
             samples: 0,
+            traced: 0,
+            target: 0,
             queue: String::new(),
             library: None,
         }
@@ -310,7 +317,7 @@ fn signed(v: f32) -> String {
 }
 
 /// A section folded to its one-line summary, open on a click.
-fn fold(ui: &mut Ui, s: &Shell, id: &str, summary: &str, body: impl FnOnce(&mut Ui)) {
+fn fold(ui: &mut Ui, s: &Shell, id: &str, summary: &str, body: impl FnOnce(&mut Ui)) -> Rect {
     ui.add_space(2.0);
     egui::CollapsingHeader::new(
         RichText::new(summary)
@@ -319,7 +326,9 @@ fn fold(ui: &mut Ui, s: &Shell, id: &str, summary: &str, body: impl FnOnce(&mut 
     )
     .id_salt(id)
     .default_open(false)
-    .show(ui, body);
+    .show(ui, body)
+    .header_response
+    .rect
 }
 
 /// A heading in the browser.
@@ -339,6 +348,8 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
     child.set_clip_rect(r);
     let mut st = std::mem::take(&mut s.studio);
     let before = (st.looks.clone(), st.light, st.hdri.clone());
+    // the folds' headers, for the tests' clicks (`studio:fold:light` ..)
+    let mut heads: Vec<(String, Rect)> = Vec::new();
     egui::ScrollArea::vertical()
         .id_salt("env-render-browser")
         .show(&mut child, |ui| {
@@ -350,7 +361,7 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
 
             let lights = lights();
             let light_name = lights[st.light.min(lights.len() - 1)].clone();
-            fold(
+            let head = fold(
                 ui,
                 s,
                 "studio-fold-light",
@@ -368,9 +379,8 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
                             "Poly Haven HDRIs, CC0; all but the bundled one come from tools/fetch-hdri.sh",
                         );
                     if st.light == lights.len() - 1 {
-                        ui.horizontal(|ui| {
-                            ui.label("File");
-                            ui.text_edit_singleline(&mut st.hdri)
+                        row(ui, "File".into(), |ui| {
+                            ui.add(egui::TextEdit::singleline(&mut st.hdri).desired_width(f32::INFINITY))
                                 .on_hover_text("a Radiance .hdr, equirectangular");
                         });
                     }
@@ -389,13 +399,14 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
                     });
                 },
             );
+            heads.push(("studio:fold:light".into(), head));
 
             let lens = if st.view_focal_mm > 0.0 {
                 format!("{:.0} mm", st.view_focal_mm)
             } else {
                 "parallel".into()
             };
-            fold(ui, s, "studio-fold-camera", &format!("Camera · {lens}"), |ui| {
+            let head = fold(ui, s, "studio-fold-camera", &format!("Camera · {lens}"), |ui| {
                 ui.label(
                     RichText::new(if st.view_focal_mm > 0.0 {
                         format!("Lens {:.0} mm (the view's)", st.view_focal_mm)
@@ -420,11 +431,11 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
                     );
                 }
             });
+            heads.push(("studio:fold:camera".into(), head));
 
             let out = format!("Output · {} × {}, {} samples", st.size.0, st.size.1, st.spp);
-            fold(ui, s, "studio-fold-output", &out, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label("Size");
+            let head = fold(ui, s, "studio-fold-output", &out, |ui| {
+                row(ui, "Size".into(), |ui| {
                     ui.add(egui::DragValue::new(&mut st.size.0).range(16..=8192));
                     ui.label("×");
                     ui.add(egui::DragValue::new(&mut st.size.1).range(16..=8192));
@@ -439,11 +450,19 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
                 row(ui, format!("Turntable {} frames", st.frames), |ui| {
                     ui.add(egui::Slider::new(&mut st.frames, 4..=360).show_value(false));
                 });
-                ui.horizontal(|ui| {
-                    ui.label("File");
-                    ui.text_edit_singleline(&mut st.out);
+                row(ui, "File".into(), |ui| {
+                    ui.add(
+                        egui::TextEdit::singleline(&mut st.out)
+                            .hint_text("Capture folder")
+                            .desired_width(f32::INFINITY),
+                    )
+                    .on_hover_text(
+                        "Empty: a new file, <document>-render-<time>.png, in the Capture settings' folder \
+                         (else the document's). A name alone goes there too.",
+                    );
                 });
             });
+            heads.push(("studio:fold:output".into(), head));
             if !st.queue.is_empty() {
                 ui.add_space(6.0);
                 ui.label(RichText::new(&st.queue).small());
@@ -453,6 +472,7 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
         st.version += 1;
     }
     s.studio = st;
+    s.places.extend(heads);
     s.places.push(("env:render:browser".into(), r));
     true
 }
@@ -463,12 +483,19 @@ pub fn live_words(st: &StudioUi) -> String {
     match st.samples {
         0 => "Preparing".into(),
         s if s < READABLE => "Starting again…".into(),
+        _ if refining(st) => format!("Tracing · {} samples", st.traced),
         s => format!(
             "{s} sample{}{}",
             if s == 1 { "" } else { "s" },
             if st.denoise { " · denoised" } else { "" }
         ),
     }
+}
+
+/// The live view is still adding samples to a picture already shown (it shows them at the
+/// denoise's steps, so the picture may sit unchanged a while on a slow GPU).
+pub fn refining(st: &StudioUi) -> bool {
+    st.samples >= READABLE && st.traced < st.target && st.rendering.is_none()
 }
 
 /// The status bar's line: the live picture's samples, then what a render would make.
@@ -607,16 +634,49 @@ fn render_cards(s: &mut Shell, ui: &mut Ui, view: Rect) {
     }
 }
 
-/// The sample count over the view's lower left corner.
+/// The sample count over the view's lower left corner; while the picture still refines, with a
+/// spinner (§7: between the denoise's steps the picture itself doesn't say so).
 pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
+    let t = s.theme;
     let st = &s.studio;
     let text = live_words(st);
-    let p = ui.painter();
-    let g = p.layout_no_wrap(text, super::theme::sans(12.0), egui::Color32::WHITE);
-    let at = view.left_bottom() + egui::vec2(10.0, -10.0 - g.size().y);
-    let r = Rect::from_min_size(at, g.size()).expand2(egui::vec2(8.0, 4.0));
-    p.rect_filled(r, 4.0, egui::Color32::from_black_alpha(140));
-    p.galley(at, g, egui::Color32::WHITE);
+    // a working state (preparing, starting again, refining) has the spinner
+    let busy = refining(st) || (st.samples < READABLE && st.rendering.is_none());
+    let refines = refining(st);
+    // its own layer over the view, so the pointer reaches it (the view's takes it otherwise)
+    let target = st.target;
+    egui::Area::new(egui::Id::unique("studio-live-badge"))
+        .pivot(egui::Align2::LEFT_BOTTOM)
+        .fixed_pos(view.left_bottom() + egui::vec2(10.0, -10.0))
+        .order(egui::Order::Foreground)
+        .interactable(true)
+        .show(ui.ctx(), |ui| {
+            let r = super::theme::panel_frame(&t)
+                .inner_margin(egui::vec2(8.0, 4.0))
+                .show(ui, |ui| {
+                    if busy {
+                        super::ux::loading(ui, &t, &text);
+                    } else {
+                        ui.label(RichText::new(&text).font(super::theme::small()).color(t.ink2));
+                    }
+                })
+                .response;
+            if refines {
+                // (a frame's own response doesn't sense the pointer)
+                ui.interact(
+                    r.rect,
+                    egui::Id::unique("studio-live-badge-hover"),
+                    egui::Sense::hover(),
+                )
+                .on_hover_text(format!(
+                    "The live view refines until {target} samples; edits restart it. A \
+                         render uses Output's samples."
+                ));
+            }
+            if busy {
+                ui.ctx().request_repaint();
+            }
+        });
     render_cards(s, ui, view);
     let st = &s.studio;
     let p = ui.painter();
@@ -654,5 +714,18 @@ mod tests {
         st.denoise = false;
         st.samples = READABLE + 1;
         assert!(!live_words(&st).contains("denoised"));
+        // a picture shown, more samples going in: it says it's still refining, with the count
+        // traced (the picture shows fewer until the next denoise)
+        st.samples = 16;
+        st.traced = 24;
+        st.target = 1024;
+        assert!(refining(&st));
+        assert_eq!(live_words(&st), "Tracing · 24 samples");
+        // done: the picture's own count
+        st.samples = 1024;
+        st.traced = 1024;
+        st.denoise = true;
+        assert!(!refining(&st));
+        assert_eq!(live_words(&st), "1024 samples · denoised");
     }
 }

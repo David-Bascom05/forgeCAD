@@ -38,6 +38,8 @@ per_doc!(
         name: String,
         versions: super::versions::Versions,
         status: String,
+        status_state: String,
+        status_event: Option<(String, f64)>,
         view_tex: Option<egui::TextureId>,
         view_over_tex: Option<egui::TextureId>,
         view_over_alpha: f32,
@@ -70,7 +72,7 @@ per_doc!(
     ],
     app [
         theme, view, out, view_rect, places, cube_menu, cube_menu_fresh, cube_region, marking, window_box,
-        view_blocks, view_owned, side_px, overlays, file_menu, style_set, settings,
+        view_blocks, props_alternate, column_shown, view_hidden, view_owned, side_px, overlays, file_menu, style_set, settings,
         prefs, doc_tabs, active_doc, close_ask, open_paths, open_blocks, doc_scroll, doc_drag, agent,
         machine, waiting, status_shown,
     ]
@@ -93,6 +95,8 @@ impl ShellDoc {
             name: String::new(),
             versions: Default::default(),
             status: String::new(),
+            status_state: String::new(),
+            status_event: None,
             view_tex: None,
             view_over_tex: None,
             view_over_alpha: 1.0,

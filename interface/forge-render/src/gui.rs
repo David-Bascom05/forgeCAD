@@ -67,6 +67,16 @@ pub type Waker = Arc<dyn Fn() + Send + Sync>;
 /// as stored.
 pub const HEADLESS_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
+/// An assembly's view to make again from its renderer: its parts and scene.
+pub(crate) struct Restage {
+    file: Option<String>,
+    name: String,
+    scene: Scene,
+    parts: Vec<crate::mesh::PartMesh>,
+    /// Whose meshes these are, and how many (`fg::AsmMeshes::lineage`); none for others.
+    lineage: Option<(u64, usize)>,
+}
+
 pub(crate) struct Loaded {
     /// Its file, if it has one.
     file: Option<String>,
@@ -191,6 +201,9 @@ pub struct Gui {
     /// The Machine Builder's scene (`gui_machine.rs`).
     pub mach: gui_machine::MachHost,
     pub ctx: egui::Context,
+    /// The UI audit's (tests/ui_audit): when `Some`, each frame's shapes are kept here, the text
+    /// and where it was clipped, for its judge to read. `None` (always, in the app) costs nothing.
+    pub audit_shapes: Option<Vec<egui::epaint::ClippedShape>>,
     /// The Agent tab's backend and its turns (`gui_agent.rs`).
     pub agent: gui_agent::AgentHost,
     /// The agent's app tools' view steps and driven joints (`gui_apptools.rs`).
@@ -222,7 +235,7 @@ pub struct Gui {
     /// later task: `picks` finishes it).
     window_out: Option<WindowAsk>,
     /// A message with marks, sent once the frame showing them is drawn.
-    markup_job: Option<(String, Vec<String>)>,
+    markup_job: Option<(String, Vec<String>, Vec<crate::agent::Picture>)>,
     /// A message with marks taken, waiting on its names; an assembly's occurrences' own names,
     /// by the text they were found for, and the thread finding them.
     markup_wait: Option<Box<gui_markup::Waiting>>,
@@ -235,6 +248,8 @@ pub struct Gui {
     /// The last build the part's session gave: what a host (the browser page, a test) reports.
     pub last_built: Option<LastBuilt>,
     fg_view: Option<Loaded>,
+    /// An assembly's parts placed anew, for the view's renderer to take (`Renderer::restage`).
+    fg_restage: Option<Restage>,
     /// The Forge part's last meshes, folded and (a sheet's) flat, and its sheets' DXF.
     fg_folded: Option<crate::mesh::PartMesh>,
     fg_flat: Option<crate::mesh::PartMesh>,
@@ -349,6 +364,7 @@ impl Gui {
         let warm = ctx.run_ui(warm_input, |ui| warm_shell.ui(ui));
         warm_shell.out.clear();
         Gui {
+            audit_shapes: None,
             photo: None,
             recording: None,
             studio: None,
@@ -384,6 +400,7 @@ impl Gui {
             fg: None,
             last_built: None,
             fg_view: None,
+            fg_restage: None,
             fg_folded: None,
             fg_flat: None,
             fg_sketch: None,
@@ -1030,6 +1047,14 @@ impl Gui {
                 Action::Machine(c) => self.machine_cmd(c),
                 Action::Versions(c) => {
                     use crate::shell::versions::{VersionsAct, VersionsCmd};
+                    // a folder with no history can't keep a version: the panel says so and offers
+                    // Turn on history (a Create there failed with its words never shown)
+                    let kept = self.vers_kept();
+                    if !kept && matches!(c, VersionsCmd::Create | VersionsCmd::Release) {
+                        let what = if matches!(c, VersionsCmd::Create) { "Create Version" } else { "Release" };
+                        self.shell.status =
+                            format!("{what}: this folder keeps no history. Turn it on in Versions first");
+                    }
                     let v = &mut self.shell.versions;
                     if self.shell.agent.tab != crate::shell::agent::SideTab::Versions {
                         self.shell.agent.tab = crate::shell::agent::SideTab::Versions;
@@ -1037,8 +1062,9 @@ impl Gui {
                     }
                     match c {
                         VersionsCmd::Show => {}
-                        VersionsCmd::Create => v.dialog = Some((String::new(), String::new())),
-                        VersionsCmd::Release => v.release = Some((String::new(), String::new(), false)),
+                        VersionsCmd::Create if kept => v.dialog = Some((String::new(), String::new())),
+                        VersionsCmd::Release if kept => v.release = Some((String::new(), String::new(), false)),
+                        VersionsCmd::Create | VersionsCmd::Release => {}
                         VersionsCmd::UpdateAll => v.out.push(VersionsAct::Update(None)),
                         // the newest version against the working copy
                         VersionsCmd::CompareCurrent => {
@@ -1389,6 +1415,9 @@ impl Gui {
         self.sync_tab();
         let shell = &mut self.shell;
         let mut output = self.ctx.run_ui(raw, |ui| shell.ui(ui));
+        if let Some(a) = &mut self.audit_shapes {
+            a.clone_from(&output.shapes);
+        }
         self.asm_drag_cursor(&mut output.platform_output);
         self.sync_selection();
         self.pixels_per_point = output.pixels_per_point;
@@ -1877,6 +1906,9 @@ pub struct Headless {
     time: f64,
     pending: Vec<egui::Event>,
     pointer: egui::Pos2,
+    /// Each step's frame on the UI thread (ms, the GPU's wait after it left out), while `Some`:
+    /// the big-model bench's (research/big-render).
+    pub frame_log: Option<Vec<[f64; 5]>>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1919,6 +1951,7 @@ impl Headless {
             time: 0.0,
             pending: Vec::new(),
             pointer: egui::Pos2::ZERO,
+            frame_log: None,
         })
     }
 
@@ -1989,8 +2022,13 @@ impl Headless {
         self.time += 1.0 / 60.0;
         let view = self.view.clone();
         let px = self.px();
+        let t = crate::viewer::now_ms();
         let out = self.gui.frame(raw, &view, px);
         self.gui.picks();
+        if let Some(log) = &mut self.frame_log {
+            let m = &out.times;
+            log.push([crate::viewer::now_ms() - t, m.ui, m.tess, m.view, m.draw]);
+        }
         let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
         self.gui.picks();
         out
@@ -2072,6 +2110,16 @@ impl Headless {
             },
             button: MouseButton::Right,
         });
+    }
+
+    /// Shift held down (true) or let go, for the view: a click with it adds to the selection.
+    pub fn shift(&mut self, on: bool) {
+        let m = if on {
+            winit::keyboard::ModifiersState::SHIFT
+        } else {
+            winit::keyboard::ModifiersState::empty()
+        };
+        self.gui.view_event(&WindowEvent::ModifiersChanged(m.into()));
     }
 
     /// A left click here.
@@ -2309,6 +2357,7 @@ impl Gui {
                 };
                 self.fg = Some(s);
                 self.fg_view = None;
+                self.fg_restage = None;
                 self.fg_folded = None;
                 self.fg_flat = None;
                 self.fg_sheets.clear();
@@ -2374,7 +2423,7 @@ impl Gui {
         // the anchors a selection was of, and those of the body now
         let mut renamed: Option<(Arc<crate::fg::AnchorView>, Arc<crate::fg::AnchorView>)> = None;
         for m in s.poll() {
-            let b = match m {
+            let mut b = match m {
                 crate::fg::Msg::Built(b) => *b,
                 crate::fg::Msg::Posed { poses, .. } => {
                     posed = poses.or(posed);
@@ -2437,8 +2486,21 @@ impl Gui {
                 }) {
                     p.selected = None;
                 }
-                self.shell.status = p.summary.clone();
+                // the edit that asked for this build says what it did first, then the build: on
+                // every build of that edit (its number was kept when it was sent)
+                self.shell.status = match &p.said {
+                    Some((w, Some(at))) if *at == b.seq && b.checked && !b.preview => {
+                        format!("{w}: done · {}", p.summary)
+                    }
+                    Some((w, Some(at))) if *at == b.seq => format!("{w} · {}", p.summary),
+                    _ => {
+                        p.said = None;
+                        p.summary.clone()
+                    }
+                };
             }
+            // every mesh so far, moved out rather than copied (a big import's are tens of MB)
+            let restaged = b.asm.as_mut().and_then(|a| a.restage.take());
             if let Some(a) = &b.asm
                 && let Some(p) = &mut self.shell.fg
             {
@@ -2514,11 +2576,12 @@ impl Gui {
                 Self::robot_solved(&mut self.shell.robot);
                 asm_moved = true;
                 // which part is placed where changed: the view made again, the camera kept
-                if let Some(all) = &a.restage {
+                if let Some(all) = restaged {
+                    let lineage = (!all.is_empty()).then_some(a.lineage);
                     let parts: Vec<crate::mesh::PartMesh> = if all.is_empty() {
                         vec![crate::mesh::PartMesh::empty()]
                     } else {
-                        all.clone()
+                        all
                     };
                     let placements: Vec<Placement> = if a.placed.is_empty() {
                         vec![Placement::at(0, [0.0; 3])]
@@ -2535,24 +2598,18 @@ impl Gui {
                     let mut scene = Scene::new(&part_info(&parts), placements);
                     scene.set_explode(0.0);
                     scene.set_part_boxes(a.boxes.clone());
-                    let renderer = Renderer::new(
-                        self.device.clone(),
-                        self.queue.clone(),
-                        self.adapter.clone(),
-                        render::OFFSCREEN,
-                        (16, 16),
-                        &parts,
-                        &scene,
-                    );
                     if let Some(v) = &self.view {
                         self.fg_keep_camera = Some(v.nav.camera);
                     }
-                    self.fg_view = Some(Loaded {
+                    // the view's renderer takes them when the view is made again (no pipelines
+                    // made in a frame); one made only if there is no view to take
+                    self.fg_view = None;
+                    self.fg_restage = Some(Restage {
                         file: s.path.clone(),
                         name: name_of(s.path.as_deref().unwrap_or("part.fg")),
-                        empty: false,
                         scene,
-                        renderer,
+                        parts,
+                        lineage,
                     });
                 }
             }
@@ -2565,6 +2622,7 @@ impl Gui {
                 {
                     self.fg_keep_camera = Some(v.nav.camera);
                 }
+                self.fg_restage = None;
                 self.fg_view = Some(Loaded {
                     file: s.path.clone(),
                     name: name_of(s.path.as_deref().unwrap_or("part.fg")),
@@ -2643,6 +2701,37 @@ impl Gui {
         }
         self.fg_text();
         // the view takes its size from the layout
+        if self.shell.view_rect.area() > 0.0
+            && let Some(r) = self.fg_restage.take()
+        {
+            let renderer = match self.view.take() {
+                Some(v) => {
+                    let mut renderer = v.renderer;
+                    renderer.restage(&r.parts, &r.scene, r.lineage);
+                    renderer
+                }
+                None => {
+                    let mut renderer = Renderer::new(
+                        self.device.clone(),
+                        self.queue.clone(),
+                        self.adapter.clone(),
+                        render::OFFSCREEN,
+                        (16, 16),
+                        &r.parts,
+                        &r.scene,
+                    );
+                    renderer.set_lineage(r.lineage);
+                    renderer
+                }
+            };
+            self.fg_view = Some(Loaded {
+                file: r.file,
+                name: r.name,
+                empty: false,
+                scene: r.scene,
+                renderer,
+            });
+        }
         if self.shell.view_rect.area() > 0.0
             && let Some(l) = self.fg_view.take()
         {
@@ -2766,7 +2855,7 @@ impl Gui {
                             if s.previewing {
                                 s.preview(None);
                             }
-                            format!("{label} refused: {}: {}", e.kind(), e.text())
+                            format!("{label} refused: {}", e.text())
                         }
                     };
                     self.fg_text();
@@ -2787,7 +2876,7 @@ impl Gui {
                     self.shell.status = match s.refactor(&r) {
                         Ok(files) if files.is_empty() => "Done: one undo step".into(),
                         Ok(files) => format!("Wrote {}", files.join(", ")),
-                        Err(e) => format!("{}: {}", e.kind(), e.text()),
+                        Err(e) => e.text(),
                     };
                 }
             }
@@ -2820,16 +2909,23 @@ impl Gui {
                 };
                 if let Some(p) = p {
                     p.refused = None;
+                    p.said = Some((self.shell.status.clone(), None));
                 }
                 self.fg_text();
+                // the build this edit asked for: its number, now it's sent
+                let seq = self.fg.as_ref().map(|s| s.seq);
+                if let Some((_, at)) = self.shell.fg.as_mut().and_then(|p| p.said.as_mut()) {
+                    *at = seq;
+                }
                 Ok(())
             }
             Err(e) => {
+                // typed for the agent and the tests; in words for a person (no error code)
                 let why = format!("{}: {}", e.kind(), e.text());
                 if let Some(p) = p {
                     p.refused = Some(why.clone());
                 }
-                self.shell.status = format!("{label} refused: {why}");
+                self.shell.status = format!("{label} refused: {}", e.text());
                 Err(why)
             }
         }
@@ -3105,7 +3201,7 @@ impl Gui {
             }
             Err(e) => {
                 s.preview(None);
-                Some(format!("{}: {}", e.kind(), e.text()))
+                Some(e.text())
             }
         };
         if let Some(t) = self.shell.fg.as_mut().and_then(|p| p.tool.as_mut()) {
@@ -3203,9 +3299,9 @@ impl Gui {
     pub fn fg_refuse(&mut self, e: crate::shell::fgtool::ToolError) {
         let why = format!("{}: {}", e.kind(), e.text());
         if let Some(p) = &mut self.shell.fg {
-            p.refused = Some(why.clone());
+            p.refused = Some(why);
         }
-        self.shell.status = why;
+        self.shell.status = e.text();
     }
 
     /// Clicks on the part with Project Geometry on: each edge or face picked (a click's one, or all
@@ -3320,6 +3416,7 @@ impl Gui {
             Item::ZAxis => Some(("origin axis", "Z")),
             Item::Center => None,
         });
+        let was_posed = posed.is_some();
         let (what, text, edge): (&'static str, Result<String, ToolError>, Option<u32>) = match (ent, posed) {
             // the posed view's pick, named through the model (its edges' indices are the model's
             // no more: no sheet edge by index)
@@ -3364,7 +3461,7 @@ impl Gui {
                         None => self.shell.status = format!("{t} is not a plane to sketch on"),
                     }
                 }
-                (_, Err(e)) => self.shell.status = format!("{}: {}", e.kind(), e.text()),
+                (_, Err(e)) => self.shell.status = e.text(),
                 _ => {
                     self.shell.status =
                         format!("a sketch goes on a planar face or an origin plane, not a {what}")
@@ -3404,7 +3501,27 @@ impl Gui {
             v.dirty = true;
             return;
         }
+        // more than one picked (posed views aside): each named, for the Agent tab
+        let all: Vec<String> = if !was_posed && v.nav.selected.len() > 1 {
+            let mut names: Vec<String> = Vec::new();
+            for &(_, e) in &v.nav.selected {
+                let n = match e {
+                    Entity::Face(f) => named(a.as_ref().map(|a| &a.faces), f, "face").ok(),
+                    Entity::Edge(k) => named(a.as_ref().map(|a| &a.edges), k, "edge").ok(),
+                    _ => None,
+                };
+                if let Some(n) = n
+                    && !names.contains(&n)
+                {
+                    names.push(n);
+                }
+            }
+            names
+        } else {
+            Vec::new()
+        };
         let Some(p) = &mut self.shell.fg else { return };
+        p.picked_all = all;
         let Some(tool) = &mut p.tool else {
             self.shell.status = match &text {
                 // in words, as the Agent tab's chip says it: "end face of extrude1"
@@ -3516,7 +3633,7 @@ impl Gui {
         }
         let got = o
             .write_back(&m.rows, m.kept())
-            .map_err(|e| format!("{}: {}", e.kind(), e.text()));
+            .map_err(|e| e.text());
         let got = got.and_then(|ops| {
             if ops.is_empty() {
                 return Ok(());
@@ -3529,7 +3646,7 @@ impl Gui {
                 } else {
                     format!(" (fix: {})", fixes.join(", "))
                 };
-                format!("{}: {}{fix}", e.kind(), e.text())
+                format!("{}{fix}", e.text())
             })
         });
         match got {
@@ -3618,13 +3735,19 @@ impl Gui {
         let thermo = if flat { None } else { self.thermo_compose(m) };
         let m = thermo.as_ref().unwrap_or(m);
         let chords: Vec<f32> = m.lods.iter().map(|x| x.chord).collect();
-        if let Some(l) = &mut self.fg_view {
+        if let Some(r) = &mut self.fg_restage {
+            r.parts = vec![m.clone()];
+            r.lineage = None;
+            r.scene.set_part(0, m.center, m.radius, chords);
+        } else if let Some(l) = &mut self.fg_view {
             l.renderer.set_parts(std::slice::from_ref(m));
             l.scene.set_part(0, m.center, m.radius, chords);
+            l.scene.set_part_box(0, crate::explode::mesh_box(m));
         } else if let Some(v) = &mut self.view {
             let part = v.scene.placements[0].part;
             v.renderer.set_parts(std::slice::from_ref(m));
             v.scene.set_part(part, m.center, m.radius, chords);
+            v.scene.set_part_box(part, crate::explode::mesh_box(m));
             v.dirty = true;
         }
     }

@@ -8,6 +8,7 @@ use super::Shell;
 use super::dwgcmd::{Ghost, Inp, Track, grid_step, want};
 use super::dwgdoc::View;
 use super::dwgdoc_ui::{to_screen, to_world};
+use super::placed::Placed as _;
 use super::theme::{mono, sans};
 use egui::{Align2, Color32, Pos2, Rect, Shape, Stroke, StrokeKind, pos2, vec2};
 use forge_dwg::draft::snap::SnapKind;
@@ -373,7 +374,7 @@ impl Shell {
             .resizable(false)
             .default_pos(pos2(area.center().x - 200.0, area.top() + 80.0))
             .constrain_to(area)
-            .show(ctx, |ui| {
+            .show_fit(ctx, |ui| {
                 let s = &mut d.ed.set;
                 ui.checkbox(&mut s.osnap, "Object Snap On (F3)");
                 ui.add_space(4.0);
@@ -451,7 +452,7 @@ impl Shell {
             .default_size(vec2(420.0, 200.0))
             .default_pos(pos2(area.center().x - 210.0, area.top() + 120.0))
             .constrain_to(area)
-            .show(ctx, |ui| {
+            .show_fit(ctx, |ui| {
                 let r = ui.add(
                     egui::TextEdit::multiline(&mut d.mtext)
                         .font(mono(13.0))
