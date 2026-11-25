@@ -567,6 +567,17 @@ impl Store for SharedMem {
             .unwrap_or_else(|e| e.into_inner())
             .compact(doc, snap)
     }
+    fn read_range(
+        &mut self,
+        doc: &str,
+        after: u64,
+        upto: u64,
+    ) -> std::io::Result<Option<Vec<forge_sync::Entry>>> {
+        self.0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .read_range(doc, after, upto)
+    }
 }
 
 /// What every document's actor shares.
@@ -1200,10 +1211,15 @@ fn hub(shared: &Arc<Shared>, rx: Receiver<Ev>, tx: SyncSender<Ev>, stop: &Atomic
                                         DocEv::Join { conn, .. } | DocEv::Up { conn, .. } => *conn,
                                         _ => continue,
                                     };
+                                    let join = matches!(ev, DocEv::Join { .. });
                                     if shed.contains(&k) {
+                                        // shed while it waited: its join reaches no actor, so it
+                                        // is no member (its Leave must not count against one)
+                                        if join {
+                                            conns.remove(&k);
+                                        }
                                         continue;
                                     }
-                                    let join = matches!(ev, DocEv::Join { .. });
                                     if h.tx.try_send(ev).is_ok() {
                                         h.members += join as usize;
                                     } else if let Some((_, out)) = conns.get(&k) {
@@ -1211,6 +1227,9 @@ fn hub(shared: &Arc<Shared>, rx: Receiver<Ev>, tx: SyncSender<Ev>, stop: &Atomic
                                         // join no actor holds would never be served or closed)
                                         out.close(Some("this document is too busy: reconnect"));
                                         shed.insert(k);
+                                        if join {
+                                            conns.remove(&k);
+                                        }
                                     }
                                 }
                                 docs.insert(doc.clone(), h);
@@ -1302,6 +1321,9 @@ fn open_actor(
                 }
                 return ended(End::Quarantined);
             }
+            // its counters let go first: the hub may drop the document's abandoned count once
+            // nothing holds it, as soon as it hears this
+            drop(a);
             ended(End::Normal);
         })
         .map_err(|e| e.to_string())?;

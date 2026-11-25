@@ -267,6 +267,13 @@ impl FileLogStore {
 }
 
 impl Store for FileLogStore {
+    fn read_range(&mut self, doc: &str, after: u64, upto: u64) -> io::Result<Option<Vec<Entry>>> {
+        Ok(self.history(doc)?.map(|es| {
+            es.into_iter()
+                .filter(|e| e.seq > after && e.seq <= upto)
+                .collect()
+        }))
+    }
     fn latest_snapshot(&mut self, doc: &str) -> io::Result<Option<Snapshot>> {
         let got = self.load(doc)?;
         // the entries kept for the read_since that follows (an open reads both)
@@ -442,6 +449,15 @@ mod tests {
             (n, at),
             (6, b.len()),
             "first text, 3 entries, the snapshot, 1 entry"
+        );
+        // and an op made before the snapshot reads them back to rebase through
+        assert_eq!(
+            s.read_range("p/a.fg", 0, 3).unwrap(),
+            Some(vec![e(1), e(2), e(3)])
+        );
+        assert_eq!(
+            s.read_range("p/a.fg", 1, 4).unwrap(),
+            Some(vec![e(2), e(3), e(4)])
         );
         // a second snapshot: an open starts from the latest
         let snap2 = Snapshot {
