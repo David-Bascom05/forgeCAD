@@ -5,6 +5,8 @@
 //   ?env=NAME        the environment to open it in (thermoform, bendsim, render, ...: shell/env)
 //   ?project=NAME    the browser-kept project (default "default")
 //   ?token=T         `forgecad web`'s token, when it was started with one (kept for the tab)
+//   #agent=T         `forgecad web --agent`'s agent token: held in memory only, taken off the
+//                    address bar; a reload pairs again from the link forgecad web printed
 //   ?storage=memory  nothing kept (tests)
 //   ?offscreen=WxH  frames drawn to a texture, not the canvas (a headless browser's software
 //                    WebGPU can't show a canvas); forgecad.pixels() reads them
@@ -291,7 +293,7 @@ await home?.load();
 // ?noapp: the files and the kernel only, no canvas (the parity test)
 if (!q.has("noapp")) {
   fc.start_app(undefined, q.get("offscreen") ?? undefined);
-  if (asked) fc.app_say("Loading project…");
+  if (asked) fc.app_waiting(asked);
   else if (q.get("env")) fc.app_env(q.get("env"));
   if (refused) fc.app_say(refused);
 }
@@ -308,8 +310,8 @@ const loaded = (async () => {
   }
   if (q.has("noapp")) return;
   if (asked) {
-    fc.app_open(`${MOUNT}/${asked}`);
-    if (q.get("env")) fc.app_env(q.get("env"));
+    // (what the person opened or made meanwhile is kept: the app says the link's file wasn't)
+    fc.app_open_linked(`${MOUNT}/${asked}`, asked, q.get("env") ?? undefined);
   } else if (!refused) {
     // (a link refused: nothing else opened in its place, the status saying why)
     const first = files().filter((p) => p.endsWith(".fg")).sort()[0];
@@ -317,6 +319,68 @@ const loaded = (async () => {
   }
   say("every file in");
 })();
+// The agent: the person's own Claude Code on the machine serving this page (`forgecad web DIR
+// --agent`, interface/forge-cli/src/agent_bridge.rs). Its token is held here only, never stored;
+// the page's id (which page owns the session) lasts the tab, so a reload keeps it.
+const agentToken = (() => {
+  const m = /(?:^#|&)agent=([0-9a-f]{32})(?:&|$)/.exec(location.hash);
+  if (m) history.replaceState(null, "", location.pathname + location.search);
+  return m ? m[1] : null;
+})();
+let agentClient = sessionStorage.getItem("forgecad-agent-client");
+if (!agentClient) {
+  agentClient = crypto.randomUUID();
+  sessionStorage.setItem("forgecad-agent-client", agentClient);
+}
+let agentStream = null;
+const agentHeaders = () => ({ Authorization: `Bearer ${agentToken}`, "X-Forge-Client": agentClient });
+window.forge_agent_ready = () => agentToken !== null;
+/// A call: its status and body, as JSON text (status 0: it didn't reach the server).
+window.forge_agent_call = async (name, body) => {
+  try {
+    const r = await fetch(`/api/agent/${name}`, {
+      method: "POST",
+      headers: { ...agentHeaders(), "Content-Type": "application/json" },
+      body,
+    });
+    return JSON.stringify({ status: r.status, body: await r.text() });
+  } catch (e) {
+    return JSON.stringify({ status: 0, body: JSON.stringify({ error: String(e) }) });
+  }
+};
+/// The session's lines from the `from`th, each to onLine as it comes; a new call ends the last.
+window.forge_agent_events = (from, onLine) => {
+  agentStream?.abort();
+  const ctl = new AbortController();
+  agentStream = ctl;
+  const said = (e) => onLine(JSON.stringify({ type: "forge_bridge", error: e }));
+  (async () => {
+    try {
+      const r = await fetch(`/api/agent/events?from=${from}`, { headers: agentHeaders(), signal: ctl.signal });
+      if (!r.ok) return said(`The agent's stream was refused (HTTP ${r.status})`);
+      const rd = r.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { value, done } = await rd.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let k;
+        while ((k = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, k).trim();
+          buf = buf.slice(k + 1);
+          if (line) onLine(line);
+        }
+      }
+      if (!ctl.signal.aborted) said("The connection to forgecad web closed");
+    } catch (e) {
+      if (!ctl.signal.aborted) said(`The connection to forgecad web failed: ${e}`);
+    }
+  })();
+};
+/// A file the agent wrote, already in the app's filesystem: its version, so the next save is
+/// made against it and isn't refused as stale.
+window.forge_agent_adopt = (rel, etag) => mirror?.versions.set(rel, etag);
 window.forgecad = {
   fc,
   threaded,

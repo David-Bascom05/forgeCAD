@@ -147,7 +147,9 @@ fn machine_bounds(def: &forge_machine::def::MachineDef) -> Option<crate::frame::
         .flat_map(|p| match p {
             Prim::Box { min, max } => vec![*min, *max],
             Prim::Cyl { base, axis, r, h } => crate::shell::lib_form::cyl_pts(*base, *axis, *r, *h),
-            Prim::OBox { o, axes, size } => (0..8u8).map(|i| Prim::obox_at(o, axes, size, [i & 1, (i >> 1) & 1, (i >> 2) & 1].map(f64::from))).collect::<Vec<_>>(),
+            Prim::OBox { o, axes, size } => (0..8u8)
+                .map(|i| Prim::obox_at(o, axes, size, [i & 1, (i >> 1) & 1, (i >> 2) & 1].map(f64::from)))
+                .collect::<Vec<_>>(),
         });
     crate::frame::Bounds::of(pts.map(|p| p.map(|x| x as f32)))
 }
@@ -464,8 +466,17 @@ impl Gui {
             }
         }
         let Some(m) = &self.shell.machine else { return };
-        // the chosen body's envelope, while its model is drawn in its place
+        // the chosen body's envelope, while its model is drawn in its place; a split's part
+        // under the pointer, lit
         self.mach.envelope.clear();
+        if let Some(sp) = &m.split
+            && let Some(p) = sp.hover.or(sp.picked).and_then(|k| sp.parts.get(k))
+        {
+            let f = |a: [f64; 3]| a.map(|x| x as f32);
+            self.mach
+                .envelope
+                .push(crate::frame::Bounds::new(f(p.bounds.0), f(p.bounds.1)));
+        }
         if tooling.is_none()
             && m.problem.is_none()
             && m.tab == crate::shell::machine::Tab::Bodies
@@ -489,7 +500,9 @@ impl Gui {
                         })
                         .unwrap_or_default(),
                     Prim::OBox { o, axes, size } => (0..8u8)
-                        .map(|i| Prim::obox_at(o, axes, size, [i & 1, (i >> 1) & 1, (i >> 2) & 1].map(f64::from)))
+                        .map(|i| {
+                            Prim::obox_at(o, axes, size, [i & 1, (i >> 1) & 1, (i >> 2) & 1].map(f64::from))
+                        })
                         .collect(),
                 };
                 if let Some((lo, hi)) =
@@ -531,9 +544,33 @@ impl Gui {
                 })
             });
             let worst = worst.and_then(|(p, d)| px(p).map(|q| (q, d)));
+            // a split's parts on the screen, so a click in the view can choose one
+            let split_px: Vec<Option<egui::Rect>> = m
+                .split
+                .as_ref()
+                .map(|sp| {
+                    sp.parts
+                        .iter()
+                        .map(|p| {
+                            let (lo, hi) = p.bounds;
+                            let pts: Option<Vec<egui::Pos2>> = (0..8)
+                                .map(|k| {
+                                    px(std::array::from_fn(
+                                        |a| if k >> a & 1 == 1 { hi[a] } else { lo[a] },
+                                    ))
+                                })
+                                .collect();
+                            pts.map(|v| egui::Rect::from_points(&v))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
             if let Some(m) = &mut self.shell.machine {
                 m.envelope_px = boxes;
                 m.out_px = worst;
+                if let Some(sp) = &mut m.split {
+                    sp.screen = split_px;
+                }
             }
         }
         let Some(m) = &self.shell.machine else { return };
