@@ -23,6 +23,8 @@ d = a² − b², A = (a x)², B = (b y)²:
   (cu + cv)³ > d²; G strictly decreasing for p ≤ p₀ = d cu / (cu + cv) (`mid_anti`) and strictly
   increasing for p ≥ p₀ (`mid_mono`): at most one root each side, in the code's brackets
   p ∈ [U, p₀] and q ∈ [V, q₀] (q₀ = d cv / (cu + cv), the code's e ∈ [e*, −V]).
+* Axes the other way (b > a): the slope is the swapped ellipse's at (y, −x), angles shifted by π/2
+  (`slope_swap`, `slope_swap_angle`).
 * On the axes, at the centre and for b = 0, the slope factors (`slope_major_axis`,
   `slope_minor_axis`, `slope_centre`, `slope_flat`): the code's closed forms.
 
@@ -303,5 +305,18 @@ theorem slope_centre (a b c s : ℝ) : slope a b 0 0 c s = -((a ^ 2 - b ^ 2) * s
 /-- Flat (b = 0, a segment run twice): s = 0, or a c = x. -/
 theorem slope_flat (a x y c s : ℝ) : slope a 0 x y c s = a * s * (x - a * c) := by
   unfold slope; ring
+
+/-- **Axes the other way round** (b > a; `ellipse_square_any`): at t = s + π/2, (cos t, sin t) =
+(−sin s, cos s), and the slope of the ellipse (a cos t, b sin t) at (x, y) is that of the ellipse
+(b cos s, a sin s), whose longer semi-axis is along x, at (y, −x). So the a ≥ b case's angles,
+shifted by π/2, are all of them. -/
+theorem slope_swap (a b x y c s : ℝ) : slope a b x y c s = slope b a y (-x) s (-c) := by
+  unfold slope; ring
+
+/-- The same at an angle: the point at s + π/2 is the swapped ellipse's at s. -/
+theorem slope_swap_angle (a b x y s : ℝ) :
+    slope a b x y (Real.cos (s + Real.pi / 2)) (Real.sin (s + Real.pi / 2)) =
+      slope b a y (-x) (Real.cos s) (Real.sin s) := by
+  rw [Real.cos_add_pi_div_two, Real.sin_add_pi_div_two, slope_swap, neg_neg]
 
 end ForgeCurved.EllipseFoot

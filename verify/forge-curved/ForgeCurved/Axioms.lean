@@ -204,3 +204,5 @@ import ForgeCurved
 #print axioms ForgeCurved.EllipseFoot.slope_minor_axis
 #print axioms ForgeCurved.EllipseFoot.slope_centre
 #print axioms ForgeCurved.EllipseFoot.slope_flat
+#print axioms ForgeCurved.EllipseFoot.slope_swap
+#print axioms ForgeCurved.EllipseFoot.slope_swap_angle

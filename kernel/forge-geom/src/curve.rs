@@ -398,7 +398,23 @@ fn closest_numeric(c: &impl CurveGeom, p: Point3, range: Interval) -> f64 {
     best.1
 }
 
-/// Every angle t, in (-pi, pi], at which the ellipse (a cos t, b sin t), a > 0, b >= 0, is square
+/// `ellipse_square` for semi-axes in either order (`Ellipse::new` does not order them: a STEP
+/// ellipse's semi_axis_1 may be the shorter). With b > a, t = s + pi/2: the ellipse
+/// (a cos t, b sin t) at the point (x, y) is the ellipse (b cos s, a sin s) at (y, -x), whose
+/// major semi-axis is along x (EllipseFoot.lean `slope_swap`). The angles come back in
+/// (-pi/2, 3pi/2].
+fn ellipse_square_any(x: f64, y: f64, a: f64, b: f64) -> ([f64; 4], usize) {
+    if b <= a {
+        return ellipse_square(x, y, a, b);
+    }
+    let (mut ts, n) = ellipse_square(y, -x, b, a);
+    for t in &mut ts[..n] {
+        *t += dmath::FRAC_PI_2;
+    }
+    (ts, n)
+}
+
+/// Every angle t, in (-pi, pi], at which the ellipse (a cos t, b sin t), a >= b >= 0, a > 0, is square
 /// to the point (x, y) (where the distance from it, in any plane parallel to the ellipse's, is
 /// stationary): at most four.
 ///
@@ -437,7 +453,10 @@ fn ellipse_square(x: f64, y: f64, a: f64, b: f64) -> ([f64; 4], usize) {
             if v < d {
                 let s = -b * y / d;
                 let c = (1.0 - s * s).sqrt();
-                return ([FRAC_PI_2, -FRAC_PI_2, dmath::atan2(s, c), dmath::atan2(s, -c)], 4);
+                return (
+                    [FRAC_PI_2, -FRAC_PI_2, dmath::atan2(s, c), dmath::atan2(s, -c)],
+                    4,
+                );
             }
             return ([FRAC_PI_2, -FRAC_PI_2, 0.0, 0.0], 2);
         }
@@ -449,7 +468,8 @@ fn ellipse_square(x: f64, y: f64, a: f64, b: f64) -> ([f64; 4], usize) {
         let (p, q) = (u / (d + e), v / e);
         (p * p + q * q - 1.0, -2.0 * (p * p / (d + e) + q * q / e))
     };
-    let h = u.hypot(v);
+    // not `hypot`: the platform's libm rounds differently on each target (dmath's rule)
+    let h = (u * u + v * v).sqrt();
     let e = held_newton(g, v, h, false);
     out[0] = dmath::atan2(b * y / e, a * x / (d + e));
     // in k = d + e, measured from the pole at e = -d
@@ -553,7 +573,7 @@ impl CurveGeom for Ellipse {
         // the nearest of the range's ends and every point square to `p` inside it: the least
         // distance over the range is at an end or at an interior point, which is square to `p`
         let l = self.frame.point_to_local(p);
-        let (ts, n) = ellipse_square(l.x, l.y, self.major, self.minor);
+        let (ts, n) = ellipse_square_any(l.x, l.y, self.major, self.minor);
         let mut best = (self.eval(r.lo).distance_sq(p), r.lo);
         let dhi = self.eval(r.hi).distance_sq(p);
         if dhi < best.0 {
@@ -851,6 +871,14 @@ mod tests {
             let a = r.range(0.1, 50.0);
             shapes.push((a, a * r.range(0.01, 1.0)));
         }
+        // semi-axes the other way round (a STEP ellipse's semi_axis_1 may be the shorter)
+        let n = shapes.len();
+        for i in 0..n {
+            let (a, b) = shapes[i];
+            if b > 0.0 && b < a {
+                shapes.push((b, a));
+            }
+        }
         for (a, b) in shapes {
             let s = r.range(0.5, 200.0);
             let (a, b) = (a * s, b * s);
@@ -897,6 +925,26 @@ mod tests {
         out
     }
 
+    /// The minor semi-axis longer than the major (a STEP ellipse may be so): the second review's
+    /// repros, against fine sampling. The first assumed a >= b and gave t = 0 at 1.41421 for the
+    /// first (the truth t = 0.3973 at 1.10136).
+    #[test]
+    fn an_ellipse_with_its_axes_the_other_way_finds_its_nearest_point() {
+        let e = Ellipse::new(Frame::WORLD, 1.0, 2.0);
+        for (x, y, want) in [(2.0, 1.0, 1.10136), (0.3, 0.5, 0.66153)] {
+            let p = Point3::new(x, y, 0.0);
+            let t = e.closest(p, Interval::new(0.0, dmath::TAU));
+            let d = e.eval(t).distance(p);
+            let best = (0..=200_000)
+                .map(|i| e.eval(dmath::TAU * i as f64 / 200_000.0).distance(p))
+                .fold(f64::INFINITY, f64::min);
+            assert!(
+                d <= best + 1e-12 && (d - want).abs() < 1e-5,
+                "({x}, {y}): t {t} at {d}, best {best}"
+            );
+        }
+    }
+
     /// Old against new: the exact foot point is never farther than the sampled one (to rounding),
     /// and where it is nearer, the sampler missed a minimum between two of its samples.
     #[test]
@@ -913,7 +961,7 @@ mod tests {
             let t_new = e.closest(p, range);
             assert!(t_new >= full.lo && t_new <= full.hi, "{t_new} outside {full:?}");
             let (d_old, d_new) = (e.eval(t_old).distance(p), e.eval(t_new).distance(p));
-            let tol = 1e-12 * (e.major + p.distance(e.frame.origin));
+            let tol = 1e-12 * (e.major.max(e.minor) + p.distance(e.frame.origin));
             assert!(
                 d_new <= d_old + tol,
                 "farther: {e:?} {p:?} {range:?}: new {t_new} at {d_new}, old {t_old} at {d_old}"
@@ -936,7 +984,9 @@ mod tests {
         eprintln!("{n} cases: the same point {same}, nearer than the sampler {nearer}, a tie {tie}");
     }
 
-    /// Against brute force: no point of 20 001 on the range is nearer than the foot point.
+    /// Against brute force: no point of 20 001 on the range is nearer than the foot point. (Not
+    /// with the old sampler switched back on: it misses minima between its samples.)
+    #[cfg(not(feature = "ellipse-foot-sampled"))]
     #[test]
     fn no_sample_of_the_range_is_nearer_than_the_ellipse_foot_point() {
         let mut r = Rng::new(0xb2_07e);
@@ -947,7 +997,7 @@ mod tests {
                 range
             };
             let d = e.eval(e.closest(p, range)).distance(p);
-            let tol = 1e-12 * (e.major + p.distance(e.frame.origin));
+            let tol = 1e-12 * (e.major.max(e.minor) + p.distance(e.frame.origin));
             for i in 0..=20_000 {
                 let t = full.lo + full.width() * (i as f64 / 20_000.0);
                 let s = e.eval(t).distance(p);
@@ -964,7 +1014,7 @@ mod tests {
         let mut r = Rng::new(0x5_90a7e);
         for (e, p, _) in ellipse_cases(&mut r) {
             let l = e.frame.point_to_local(p);
-            let (ts, n) = ellipse_square(l.x, l.y, e.major, e.minor);
+            let (ts, n) = ellipse_square_any(l.x, l.y, e.major, e.minor);
             for &t in &ts[..n] {
                 let dv = e.deriv(t);
                 let off = Point3::new(l.x, l.y, 0.0) - e.frame.point_to_local(dv.p);
@@ -972,7 +1022,8 @@ mod tests {
                 let (lo, lt) = (off.length(), tan.length());
                 // the point on the curve, or the tangent vanishing (a flat ellipse's ends, where
                 // sin pi rounds to 1e-16): square there whatever the direction
-                if lo <= 1e-12 * e.major || lt <= 1e-12 * e.major {
+                let size = e.major.max(e.minor);
+                if lo <= 1e-12 * size || lt <= 1e-12 * size {
                     continue;
                 }
                 // square to a cosine of 1e-7, or along the tangent within the tests' 1e-12 of the
@@ -980,7 +1031,7 @@ mod tests {
                 // the offset is then tiny and its direction rounding)
                 let cos = off.dot(tan) / (lo * lt);
                 let along = (off.dot(tan) / lt).abs();
-                let tol = 1e-12 * (e.major + p.distance(e.frame.origin));
+                let tol = 1e-12 * (e.major.max(e.minor) + p.distance(e.frame.origin));
                 assert!(
                     cos.abs() <= 1e-7 || along <= tol,
                     "{e:?} at ({}, {}): t {t}, cos {cos}, along {along}",
