@@ -2357,6 +2357,12 @@ fn cyl_chord_iv(segs: &[CSeg], f: &Face, a: [Ival; 3], b: [Ival; 3]) -> Option<f
 /// below it and as wide or wider. None for other profiles. Empty: a ≥ R (no part of the column
 /// there). Convex if the column is (b convex and non-decreasing, √(u² + a²) convex).
 fn section(segs: &[CSeg], a: f64) -> Option<Vec<CSeg>> {
+    // (the `old-closed-form` feature: one-piece profiles only, as before)
+    if let [_, _] = segs
+        && !cfg!(feature = "old-closed-form")
+    {
+        return bull_section(segs, a);
+    }
     // one piece (a flat end, a ball): each bound rounded the column's way (wider, lower)
     let [sg] = segs else {
         return None;
@@ -2389,6 +2395,84 @@ fn section(segs: &[CSeg], a: f64) -> Option<Vec<CSeg>> {
         }
         _ => None,
     }
+}
+
+/// x − y when it is exact (Knuth's two-sum: its rounding error, computed exactly, is 0), else
+/// None.
+fn exact_diff(x: f64, y: f64) -> Option<f64> {
+    let s = x - y;
+    let ny = -y;
+    let bv = s - x;
+    let av = s - bv;
+    let e = (x - av) + (ny - bv);
+    (s.is_finite() && e == 0.0).then_some(s)
+}
+
+/// `section` for a bull-nose column: a flat ring from the axis, (0, z0) to (f, z0), then a
+/// quarter arc about (f, z0 + r) up to (R, z0 + r), R = f + r. Its section at a is
+/// b_a(u) = b(√(u² + a²)), |u| ≤ √(R² − a²): bounded below by the same shape, a flat ring to w
+/// then the quarter arc of radius r about (w, z0 + r), with w = √(R² − a²) − r (0 if less). That
+/// profile is below b_a: on the arc, (u − w) ≤ √(u² + a²) − f ⟺ w ≥ u − √(u² + a²) + f, whose
+/// right side grows with u and at the section's edge u = √(R² − a²) is √(R² − a²) − r = w; on
+/// b_a's flat part (√(u² + a²) ≤ f) u ≤ √(f² − a²) ≤ w, where it is flat too. And as wide:
+/// w + r = √(R² − a²); where that is less than r, w = 0 and the section is wider than the true
+/// one (r > √(R² − a²)): a superset of the column there, still sound. √(R² − a²) is taken at its
+/// upper end, w rounded up (wider, lower), the arc's end w + r exact. Reached only for a > 0
+/// (`section`'s caller); a ≤ 0 keeps the whole-profile bound. Empty: a ≥ R.
+fn bull_section(segs: &[CSeg], a: f64) -> Option<Vec<CSeg>> {
+    let [CSeg::Line { a: la, b: lb }, CSeg::Arc { a: aa, b: ab, c, r }] = *segs else {
+        return None;
+    };
+    // the shape exactly: the ring from the axis, level; the arc from its end, centred straight
+    // above it, ending level with its centre at R
+    if !(la[0] == 0.0
+        && la[1] == lb[1]
+        && lb[0] > 0.0
+        && aa == lb
+        && c[0] == lb[0]
+        && r > 0.0
+        && ab[1] == c[1]
+        && ab[0] > c[0])
+    {
+        return None;
+    }
+    let r_big = ab[0];
+    let z0 = la[1];
+    // the arc a quarter turn of radius r exactly: its ends on its circle, each difference
+    // proven exact by two-sum (a pair of plain subtractions does not prove it when signs differ)
+    if !(exact_diff(c[1], z0) == Some(r) && exact_diff(ab[0], c[0]) == Some(r)) {
+        return None;
+    }
+    if !(a < r_big) {
+        return Some(Vec::new());
+    }
+    let half = Ival::pt(r_big).sqr().sub(Ival::pt(a).sqr()).sqrt();
+    let w = half.sub(Ival::pt(r)).hi;
+    let w = if w > 0.0 { w } else { 0.0 };
+    // w up to a multiple of 2⁻²⁰, so that the arc's end w + r is exact (on its circle: two-sum
+    // error 0); else no section (the caller's whole-profile bound, as before)
+    const G: f64 = 1048576.0;
+    let w = (w * G).ceil() / G;
+    let e = w + r;
+    let (bv, av) = (e - w, e - (e - w));
+    if !(e.is_finite() && (w - av) + (r - bv) == 0.0) {
+        return None;
+    }
+    let zc = c[1];
+    let mut out = Vec::new();
+    if w > 0.0 {
+        out.push(CSeg::Line {
+            a: [0.0, z0],
+            b: [w, z0],
+        });
+    }
+    out.push(CSeg::Arc {
+        a: [w, z0],
+        b: [e, zc],
+        c: [w, zc],
+        r,
+    });
+    Some(out)
 }
 
 /// How far (a lower bound, ≥ 0) the tool's axis is beyond a horizontal cylinder face's span
@@ -2541,6 +2625,107 @@ mod tests {
     use super::*;
     use crate::check::{Surf, TSeg, Trim};
     use crate::tool::{Cutter, Part};
+
+    /// A profile whose arc only seems to start on its ring (EXACT-CORE's case: z0 < 0, the
+    /// centre's z a denormal, both plain subtractions passing) gets no section; an exact one
+    /// with z0 < 0 still does.
+    #[test]
+    #[cfg(not(feature = "old-closed-form"))]
+    fn a_bull_section_needs_its_arc_exactly_on_its_ring() {
+        for cz in [5e-324, -5e-324] {
+            let segs = [
+                CSeg::Line {
+                    a: [0.0, -3.0],
+                    b: [4.0, -3.0],
+                },
+                CSeg::Arc {
+                    a: [4.0, -3.0],
+                    b: [7.0, cz],
+                    c: [4.0, cz],
+                    r: 3.0,
+                },
+            ];
+            assert!(bull_section(&segs, 1.0).is_none(), "centre z {cz:e}");
+        }
+        let segs = [
+            CSeg::Line {
+                a: [0.0, -3.0],
+                b: [4.0, -3.0],
+            },
+            CSeg::Arc {
+                a: [4.0, -3.0],
+                b: [7.0, 0.0],
+                c: [4.0, 0.0],
+                r: 3.0,
+            },
+        ];
+        assert!(bull_section(&segs, 1.0).is_some());
+    }
+
+    /// A bull-nose column's section at a (`bull_section`) is below the true section
+    /// b(√(u² + a²)) everywhere across it, and at least as wide: sampled densely for several
+    /// bull-noses and offsets, including the ones where the flat ring has gone (a near R).
+    #[test]
+    #[cfg(not(feature = "old-closed-form"))]
+    fn a_bull_noses_section_is_below_and_as_wide_as_the_true_one() {
+        let mut checked = 0;
+        for (d, re) in [(10.0, 1.0), (6.0, 0.5), (12.0, 3.0), (8.0, 2.0)] {
+            let col = Column::of(&cutter(Cutter::Bull { d, re })).unwrap();
+            let r_big = 0.5 * d;
+            let mut k = 0;
+            while k <= 200 {
+                let a = r_big * k as f64 / 200.0;
+                k += 1;
+                let Some(sec) = bull_section(&col.segs, a) else {
+                    panic!("d {d} re {re}: no section at a {a}");
+                };
+                if a >= r_big {
+                    assert!(sec.is_empty(), "a section past the column");
+                    continue;
+                }
+                let width = sec.last().unwrap().b()[0];
+                let true_width = (r_big * r_big - a * a).sqrt();
+                assert!(
+                    width >= true_width * (1.0 - 1e-15),
+                    "d {d} re {re} a {a}: {width} < {true_width}"
+                );
+                // the section's profile at u (flat, then its arc)
+                let prof = |u: f64| -> f64 {
+                    for sg in &sec {
+                        match *sg {
+                            CSeg::Line { a: p, b: q } if u <= q[0] => return p[1],
+                            CSeg::Arc { c, r, b: q, .. } if u <= q[0] => {
+                                let du = (u - c[0]).max(0.0);
+                                return c[1] - (r * r - du * du).max(0.0).sqrt();
+                            }
+                            _ => {}
+                        }
+                    }
+                    f64::INFINITY
+                };
+                let mut j = 0;
+                while j <= 401 {
+                    // the samples, and last the edge u = √(R² − a²) itself (the tight point)
+                    let u = if j == 401 {
+                        true_width
+                    } else {
+                        true_width * j as f64 / 400.0
+                    };
+                    j += 1;
+                    let rho = (u * u + a * a).sqrt().min(r_big);
+                    let Some(t) = col.b(Ival::pt(rho)) else { continue };
+                    let ps = prof(u);
+                    assert!(
+                        ps <= t.lo + 1e-12,
+                        "d {d} re {re} a {a} u {u}: section {ps} above true {}",
+                        t.lo
+                    );
+                    checked += 1;
+                }
+            }
+        }
+        assert!(checked > 100_000, "{checked}");
+    }
 
     fn cutter(c: Cutter) -> Body {
         let sh = crate::tool::assemble(&c, 15.0, 2.0 * c.radius(), 30.0, None).unwrap();

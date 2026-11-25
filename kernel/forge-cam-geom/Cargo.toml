@@ -17,6 +17,11 @@ forge-num = { path = "../forge-num", features = ["real"] }
 # ipow: powers as on every target, folded or not
 forge-math = { path = "../forge-math" }
 
+[features]
+# the closed forms as they were before the bull-nose ones (contact::disc_capsule, drop::bull_section):
+# kept for one train as the rewrite's way back (research/cam/speed-ledger.md)
+old-closed-form = []
+
 [lints]
 workspace = true
 
