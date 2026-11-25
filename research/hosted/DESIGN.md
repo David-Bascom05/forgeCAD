@@ -152,15 +152,22 @@ Yes, in the existing ForgeLang model, op type by op type:
   `setLit_comm` (SetParams on different sites commute), `setLit_lww` (same site: last wins),
   `concurrent_setParam_traces` (two unobserved SetParams leave traces, ids and control log as
   they were: a concurrent pair of dimension edits cannot change the feature list).
+- **Done** (`lean/Rebase.lean`, same build, no sorry): the Rename transform
+  `apply (rename a b S) (rn a b op) = rename a b (apply S op)` for SetParam (by statement name
+  and literal position), Add, Delete, Move, Replace/SetArg and Rename (`rebase_rename`, and per
+  op `setParam_rn` .. `replace_rn`); Rename/Rename of one name do not commute
+  (`rename_race_differ`; the later one is a no-op, `rename_absorbed`, and refused on the head,
+  `rename_after_rename_refused`); renames of different names commute (`rename_comm`); two renames
+  to one target: the later refused (`rename_same_target_refused`); convergence by construction
+  (`converge`, `converge_chunks`) and one-step client replay (`client_replay_rename`). Not in the
+  model: nested ids (top-level names only), byte-span ops, Suppress/AddLocalParam/MakeShared/
+  SplitInstance/SetProperty (file header).
 - **Next** (sizes are guesses, S ≈ 1–2 days of a proof agent, M ≈ a week):
-  - Rename transform: `apply (rename a b S) (rn a b op) = rename a b (apply S op)` for each op
-    kind — from `RenamePart`/`RenameDefs` (M).
   - Different-statement edits commute: ReplaceFeature/SetArg on different statements, Delete of a
     statement nobody reads, Add at different anchors — from `Struct`, `Complete`, `EditClosure`
     (M).
-  - Convergence of the protocol: every client that applies the server's sequence ends at the
-    server's text — this is by construction (a total order, a deterministic `apply`); stating it
-    is S; proving client replay equals server application needs the rebase lemma per op (M).
+  - Client replay through several server ops and pending ops (the general rebase, by induction
+    over the log, from `rebase_rename` and re-validation) (M).
   - Geometry convergence needs determinism of the kernel across platforms: not a Lean question;
     covered by measurement + runtime hash check (§3).
 
