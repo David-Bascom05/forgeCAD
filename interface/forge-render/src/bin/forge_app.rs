@@ -52,6 +52,8 @@ enum Step {
     /// A key going down, or coming up, alone (a key held to talk).
     KeyDown(String),
     KeyUp(String),
+    /// A length param of the open document set, as its field does (by its name).
+    Set(String, f64),
 }
 
 struct Args {
@@ -230,6 +232,11 @@ fn args() -> Result<Args, String> {
             }
             "--marking" => a.marking = true,
             "--bench" => a.bench = true,
+            "--set" => {
+                let name = it.next().ok_or("--set PARAM VALUE")?;
+                let v = it.next().and_then(|v| v.parse().ok()).ok_or("--set PARAM VALUE")?;
+                a.steps.push(Step::Set(name, v));
+            }
             "--times" => a.times = true,
             "--frame-log" => a.frame_log = true,
             "--present" => a.present = Some(v()?),
@@ -661,6 +668,19 @@ fn run() -> Result<(), String> {
             }
             Step::Hover(x, y) => {
                 hover(&mut h, *x, *y);
+                continue;
+            }
+            Step::Set(name, v) => {
+                let key = h.gui.shell.fg.as_ref().and_then(|p| {
+                    p.params.iter().find(|r| r.key.name == *name).map(|r| r.key.clone())
+                });
+                let Some(key) = key else {
+                    return Err(format!("no param {name}"));
+                };
+                if !set_length(&mut h, &key, *v) {
+                    return Err(format!("{name} = {v} refused"));
+                }
+                h.step();
                 continue;
             }
             Step::Sleep(secs) => {
