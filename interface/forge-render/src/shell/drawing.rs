@@ -2847,6 +2847,9 @@ fn fcf_form(ui: &mut Ui, f: &mut FcfForm, t: super::theme::Theme) {
     ui.horizontal(|ui| {
         ui.toggle_value(&mut f.dia, "\u{d8}");
         ui.add(egui::TextEdit::singleline(&mut f.tol).desired_width(70.0));
+        // a drawing's lengths are millimetres (the sheet's, forge_draw)
+        ui.label(egui::RichText::new("mm").color(t.ink2))
+            .on_hover_text("The tolerance zone's size, in the drawing's millimetres");
         for (k, m) in MODS.iter().enumerate() {
             ui.toggle_value(&mut f.mods[k], *m);
         }

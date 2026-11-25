@@ -252,19 +252,26 @@ pub fn bare_number(s: &str) -> bool {
 
 const UNITS: &[&str] = &[
     "mm", "in", "°", "deg", "%", "rpm", "kg", "g", "N", "kN", "s", "ms", "min", "m/min", "mm/min", "ipm",
-    "sfm", "Nm", "W", "kW", "mm²", "mm³", "cm", "m", "ft", "\"", "x", "×", "/", "lb", "MPa",
+    "sfm", "Nm", "W", "kW", "mm²", "mm³", "cm", "m", "ft", "\"", "x", "×", "/", "lb", "MPa", "µm", "µin",
 ];
+
+/// Quantities with no unit: a number on their row is whole as it is.
+const UNITLESS: &[&str] = &["K-factor", "ratio", "factor", "count", "scale"];
 
 fn row_has_unit(t: &Text, all: &[&Text]) -> bool {
     all.iter().any(|o| {
         let same_row = (o.rect.center().y - t.rect.center().y).abs() < t.rect.height().max(8.0) * 0.6;
         same_row
-            && o.s
-                .split(|c: char| c.is_whitespace() || c == '(' || c == ')' || c == '·')
-                .any(|w| {
-                    UNITS
-                        .contains(&w.trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == '-'))
-                })
+            && (UNITLESS
+                .iter()
+                .any(|u| o.s.to_lowercase().contains(&u.to_lowercase()))
+                || o.s
+                    .split(|c: char| c.is_whitespace() || c == '(' || c == ')' || c == '·')
+                    .any(|w| {
+                        UNITS.contains(
+                            &w.trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == '-'),
+                        )
+                    }))
     })
 }
 

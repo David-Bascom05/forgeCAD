@@ -98,7 +98,7 @@ pub(super) fn sheet_groups(s: &Shell) -> Vec<Group> {
         g(
             "Punch",
             vec![
-                tool("PunchTool", SheetCmd::Punch, on(SheetCmd::Punch)),
+                tool("Punch Tool", SheetCmd::Punch, on(SheetCmd::Punch)),
                 tool("Insert Hardware", SheetCmd::Hardware, on(SheetCmd::Hardware)),
             ],
             vec![],
