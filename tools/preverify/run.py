@@ -312,6 +312,16 @@ test_env = {"TMPDIR": private_tmp, "CARGO_PROFILE_TEST_DEBUG": "0", "CARGO_PROFI
 clippy = []
 if pk:
     clippy.append(["cargo", "clippy", "--locked", "--all-targets", *ps(pk), "--", "-D", "warnings"])
+# forge-render's clippy is for wasm32-unknown-unknown, which rust-toolchain.toml does not list (CI
+# adds it by hand): added here for the pinned toolchain; where it cannot be, render is NOT RUN,
+# not a RED (E0463 "can't find crate for std" is the machine, not the branch)
+if render and subprocess.run(["rustup", "target", "add", "wasm32-unknown-unknown"],
+                             cwd=os.path.join(root, "interface/forge-render"),
+                             capture_output=True).returncode != 0:
+    record["steps"]["render"] = {"ok": None, "not_run": "no wasm32-unknown-unknown target (rustup target add failed)"}
+    print("pre-verify render  NOT RUN here: `rustup target add wasm32-unknown-unknown` failed; "
+          "ask VERIFY-RENDER for this sha (via TRAIN-CONDUCTOR)", flush=True)
+    render = False
 if render:
     clippy.append(["sh", "-c", "cd interface/forge-render && CLIPPY_CONF_DIR=\"$PWD/web/clippy\" "
                    "cargo clippy --lib --locked --target wasm32-unknown-unknown -- -D warnings"])

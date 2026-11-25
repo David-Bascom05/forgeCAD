@@ -50,6 +50,10 @@ STAGES = {
                ([py, "-I", "tools/ci/no-fusion-gallery.py"], "."),
                ([py, "-I", "tools/ci/no-vendor-tool-libraries.py"], ".")],
 }
+if stage == "render":
+    # its clippy builds wasm32-unknown-unknown, which rust-toolchain.toml does not list
+    subprocess.run(["rustup", "target", "add", "wasm32-unknown-unknown"],
+                   cwd=os.path.join(repo, "interface/forge-render"), capture_output=True)
 log = os.path.join(logs, f"{stage}-{sha[:12]}.log")
 t, code = time.time(), 0
 with open(log, "w") as fh:
