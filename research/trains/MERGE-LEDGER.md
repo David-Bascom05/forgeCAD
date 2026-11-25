@@ -4,8 +4,8 @@ Kept by TRAIN-CONDUCTOR. One row per branch. The status values are: queued, pre-
 Rules: each item needs a GREEN pre-verify on the train's main, made with tools/preverify ≥13d78f06 or proven clean by a record check or my own test build. UI changes need UX-LEAD's OK. Branches with the flagged history land squashed.
 This branch (coord/trains) is never merged into main.
 
-Main: 247a26942e5cc29a2ddc6b80ae43d6fe1751f45a (train 10, #64). Before it: d6820393 (train 9, #62), 5767cdb4 (gate-memfns alone, #63), 10d87778 (train 8, #61).
-Train 11 ([#65](https://github.com/David-Bascom05/forgeCAD/pull/65)) is in gates. Exact head and gate evidence are below.
+Main: 5a3f4875b4d57f23f8e1f653b4f43c84b5c01031 (train CI, #66). Train 11 landed at 568d5f497c3c343b8fafeebe6f1b50e13d9c56e3 (#65). Before it: 247a26942e5cc29a2ddc6b80ae43d6fe1751f45a (train 10, #64), d6820393 (train 9, #62), 5767cdb4 (gate-memfns alone, #63), 10d87778 (train 8, #61).
+Train 12 ([#67](https://github.com/David-Bascom05/forgeCAD/pull/67)) is in gates. Train 13 ([#68](https://github.com/David-Bascom05/forgeCAD/pull/68)) is stacked for review.
 UI OKs now come from the coordinator (UX-LEAD wound down), judged against docs/ux/STANDARD.md.
 
 | branch | owner | sha | status | notes |
@@ -24,23 +24,23 @@ UI OKs now come from the coordinator (UX-LEAD wound down), judged against docs/u
 | fix/asm-shape-first | HOSTED-DESIGN | 0ebc123f | merged (train 10) | |
 | parasolid/xt-reader | PARASOLID | 9e207b79 | merged (train 10) | sampled cubic reverted (coordinator ruling); near misses in handoff |
 | cam/sim-machine, cam/adaptive-only | CAM-SIM, TOOLPATH-QUALITY | 2d3968e3, a7d36860 | merged (train 10, content only) | |
-| perf/ellipse-foot | CURVED-SITES | 22b612b9 | in train 11 | volute noise waived, bits change accepted |
+| perf/ellipse-foot | CURVED-SITES | 22b612b9 | merged (train 11) | volute noise waived, bits change accepted |
 | perf/intcurve-eval-memo | FALLBACK | a7d773c5 | held | Reverted at f02a0bbf. Net −3.27%, valve app +6.09%, shaft nary1 +4.90%. Needs a repeat-heavy-path implementation and fresh gates. |
-| perf/varblend-rail-uv | FALLBACK | 55d9d68d | in train 11 | review SAFE; STEP pcurves of vary-blend springs may move last bits |
-| flat/subdivide-reuse | FLAT-SITES | f0adb8dc02155c285b73188df7cc3aa44547afb4 | in train 11 | Gated and retained. |
-| FLAT-SITES series | FLAT-SITES | see below | queued | Reverted at 5975a755. Each needs a gate line. Cone-apex held for manifold parity (209 → 212 faces). |
-| perf/asm-overlap-walks | HOSTED-DESIGN | 62d85634 | in train 11 | |
-| ci/corpus-guard-budget | FALLBACK | 55791412 | in train 11 | |
+| perf/varblend-rail-uv | FALLBACK | 55d9d68d | merged (train 11) | review SAFE; STEP pcurves of vary-blend springs may move last bits |
+| flat/subdivide-reuse | FLAT-SITES | f0adb8dc02155c285b73188df7cc3aa44547afb4 | merged (train 11) | Gated and retained. |
+| FLAT-SITES series | FLAT-SITES | see below | in train 13, cone-apex held | Reverted at 5975a755. Each needs a gate line. Cone-apex held for manifold parity (209 → 212 faces). |
+| perf/asm-overlap-walks | HOSTED-DESIGN | 62d85634 | merged (train 11) | |
+| ci/corpus-guard-budget | FALLBACK | 55791412 | merged (train 11) | |
 | cam/speed-bull | CAM-SPEED | 7faf830a | in train 11 (content over 3a3fe6d0) | |
-| kernel-stress | KERNEL-STRESS | 85601f88 | in train 11 | op-budget, mass-cap, face-box, import-sheets to follow |
-| hosted/release-sketches | HOSTED | a7668e22 | in train 11 | |
-| cam/clear-degenerate | CAM-CORE | 56ca6ad8 | in train 11 | |
-| fix/query-interference-refusal | HOSTED-DESIGN | fbe2959b | in train 11 | |
-| cam/workholding-any2 (vise, haas) | WORKHOLDING | e53f6e78 | in train 11 | |
-| machines/real-collision | CAM-MACHINE | 93b50f50 | in train 11 | |
+| kernel-stress | KERNEL-STRESS | 85601f88 | merged (train 11) | op-budget, mass-cap, face-box, import-sheets to follow |
+| hosted/release-sketches | HOSTED | a7668e22 | merged (train 11) | |
+| cam/clear-degenerate | CAM-CORE | 56ca6ad8 | merged (train 11) | |
+| fix/query-interference-refusal | HOSTED-DESIGN | fbe2959b | merged (train 11) | |
+| cam/workholding-any2 (vise, haas) | WORKHOLDING | e53f6e78 | merged (train 11) | |
+| machines/real-collision | CAM-MACHINE | 93b50f50 | merged (train 11) | |
 | cam/sim-vise-haas | CAM-SIM | cac0d489 | in train 11 (content only) | UI OK coordinator; supersedes cam/sim-vise 614e9808 (dropped) |
-| ci/determinism | HOSTED-BUILD | f6f92445 | in train 11 | |
-| claude/expect-words | LANG-PROOFS | 2096b4a7 | in train 11 | |
+| ci/determinism | HOSTED-BUILD | f6f92445 | merged (train 11) | |
+| claude/expect-words | LANG-PROOFS | 2096b4a7 | merged (train 11) | |
 | bendsim/showcase | BENDSIM-ENV | 07b6b19b | in train 11 (content only) | UI OK coordinator; contains exact-core/bb-brake |
 | cam/workholding-default2 | WORKHOLDING | dc60f541 | held | undecidable checker case at exact fixture clearance (coordinator ruling) |
 | hosted/web-worker | WEB-WORKER (archived) | 4ea27f52 | held | needs a main merge after train 10: move main's set_part_boxes, set_explode and set_lineage into scene_of/view_on, re-run render and browser tests |
@@ -78,3 +78,14 @@ Current disposition is in the queue above.
 TRAIN-CONDUCTOR remains paused.
 
 The ledger write through the GitHub connector returned an internal error. A normal fast-forward push to coord/trains returned HTTP 403 for David-Bascom05. This reconciliation is saved in the Codex workspace.
+
+## Train 11 landed
+
+- [#65](https://github.com/David-Bascom05/forgeCAD/pull/65) merged at `568d5f497c3c343b8fafeebe6f1b50e13d9c56e3`, verified as current main. The user confirmed the prior agent passed the outstanding gates.
+- Local Train 12 candidate `3bd9cb3a869599321f783b9227f303d18d8bc39e` integrates the landed main. Its tree `e153bbf082c5e6e8c8b4e7c13ded8b7654959efe` is identical to the existing Train 12 head. The fast-forward push returned HTTP 403. No Train 12 PR is open. The four-machine gate evidence remains unverified.
+
+## New CI and the next trains
+
+- [#66](https://github.com/David-Bascom05/forgeCAD/pull/66) merged at `5a3f4875b4d57f23f8e1f653b4f43c84b5c01031`. [The hosted run](https://github.com/David-Bascom05/forgeCAD/actions/runs/45662062523) passed all seven pre-verify checks and the AMD64 and ARM64 geometry reference checks. The exact Callgrind comparison measured 20,017,033,325 strict instructions on each side and identical geometry hashes.
+- [Train 12 #67](https://github.com/David-Bascom05/forgeCAD/pull/67), head `39b2c04df1671d867943c9b25870b11f63763736`, base `5a3f4875b4d57f23f8e1f653b4f43c84b5c01031`. [New CI](https://github.com/David-Bascom05/forgeCAD/actions/runs/45670156710) started. Final hosted review coverage and applicable gate evidence must be confirmed before merge.
+- [Train 13 #68](https://github.com/David-Bascom05/forgeCAD/pull/68), draft head `7ed230ec0b554a8b1a3eb3b0bbdd8390edc67aa3`, stacked on `39b2c04df1671d867943c9b25870b11f63763736`. Flush-per-plane, open-shell, check-chords, G11, accumulation margin and whole-turn were integrated locally, including the drift documentation and both regression tests. Cone-apex remains held. Per-item gates and applicable independent reviews are pending against landed main.
