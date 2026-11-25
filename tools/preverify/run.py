@@ -44,6 +44,10 @@ def git(*args):
 # forge-par, forge-alloc, forge-num included): without it, E0463 "can't find crate for std"
 WASM_UNKNOWN = subprocess.run(["rustup", "target", "add", "wasm32-unknown-unknown", "wasm32-wasip1"],
                               cwd=root, capture_output=True).returncode == 0
+# this tool's own version, in every record and verdict line: a record from an older copy (one
+# without a later fix) can be told apart and refused
+TOOL = subprocess.run(["git", "-C", os.path.dirname(os.path.abspath(__file__)), "rev-parse", "--short=8",
+                       "HEAD"], capture_output=True, text=True).stdout.strip() or "unknown"
 head, base = git("rev-parse", "HEAD"), git("rev-parse", a.base)
 if subprocess.run(["git", "merge-base", "--is-ancestor", base, head]).returncode:
     sys.exit(f"pre-verify: {a.base} ({base[:8]}) is not in this branch: merge it first")
@@ -70,7 +74,7 @@ sel = json.loads(subprocess.run(sel_cmd, capture_output=True, text=True, check=T
 pk = sel["workspaces"]["."]["packages"]
 render = bool(sel["workspaces"]["interface/forge-render"]["packages"])
 only = set(a.only.split(",")) if a.only else None
-record = {"branch": head, "base": base, "reads_map": os.path.exists(reads),
+record = {"tool": TOOL, "branch": head, "base": base, "reads_map": os.path.exists(reads),
           "selected": {ws: w["packages"] for ws, w in sel["workspaces"].items()},
           "gate_reached": sel["gate"], "steps": {},
           # (the train squashes a branch that carries e3148c8b, else merges it --no-ff)
@@ -81,6 +85,11 @@ log_dir = tempfile.mkdtemp(prefix="preverify.")
 
 def step(name, cmds, cwd=root, env=None):
     if only and name not in only:
+        return
+    # no room to build: RED without running (a step that cannot write its build is not judged)
+    if name in ("native", "render", "wasm", "clippy", "hidden") and free_gb() < 2:
+        record["steps"][name] = {"ok": False, "seconds": 0, "why_red": "no disk (under 2 GB free)"}
+        print(f"pre-verify {name:7s} FAIL stays: no disk ({free_gb():.1f} GB free)", flush=True)
         return
     t, ok = time.time(), True
     log = os.path.join(log_dir, name + ".log")
@@ -186,7 +195,7 @@ def relative(name, cmd_for, pkgs_of):
     packages whose tests failed; RED only for what BASE does not fail too (a test main fails, or a
     test of main's over the time budget on this machine, is not the branch's)."""
     e = record["steps"].get(name)
-    if not e or e["ok"]:
+    if not e or e["ok"] or "log" not in e:
         return
     text = open(e["log"], errors="replace").read()
     mine = {x for x in items(name, text) if x[0] != "slowish"}
@@ -473,6 +482,6 @@ verdict = "RED" if not ok else ("GREEN-EXCEPT-" + "+".join(pending).upper() if p
 print(f"\nPRE-VERIFY {verdict} {head[:12]} on main {base[:12]}: {steps}; "
       f"{len(pk)} packages{' + forge-render' if render else ''}; gate "
       f"{'judged' if sel['gate'] else 'not reached'}; map {'yes' if record['reads_map'] else 'no'}; "
-      f"e3148c8b {'yes' if record['e3148c8b'] else 'no'}"
+      f"e3148c8b {'yes' if record['e3148c8b'] else 'no'}; tool {TOOL}"
       f"\nrecord: {rec}")
 sys.exit(0 if ok else 1)
