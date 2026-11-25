@@ -54,6 +54,28 @@ if stage == "render":
     # its clippy builds wasm32-unknown-unknown, which rust-toolchain.toml does not list
     subprocess.run(["rustup", "target", "add", "wasm32-unknown-unknown"],
                    cwd=os.path.join(repo, "interface/forge-render"), capture_output=True)
+def make_room(need=15):
+    """Under NEED GB free: whole build profiles (target/{debug,release,wasm32-*}, the root's and
+    forge-render's), least recently used first, until there is room (a profile goes whole: cargo
+    rebuilds it next time; a profile half pruned could be trusted with outputs gone)."""
+    import shutil
+    free = lambda: shutil.disk_usage(repo).free / 2**30
+    if free() >= need:
+        return
+    profs = []
+    for t in (os.path.join(repo, "target"), os.path.join(repo, "interface/forge-render/target")):
+        for d in ([os.path.join(t, x) for x in ("debug", "release")] +
+                  [os.path.join(t, x) for x in (os.listdir(t) if os.path.isdir(t) else []) if x.startswith("wasm32")]):
+            if os.path.isdir(d):
+                profs.append((os.path.getmtime(d), d))
+    for _, d in sorted(profs):
+        if free() >= need:
+            break
+        print(f"(only {free():.0f} GB free: removing {d}, the least recently used build)", flush=True)
+        shutil.rmtree(d, ignore_errors=True)
+
+
+make_room()
 log = os.path.join(logs, f"{stage}-{sha[:12]}.log")
 t, code = time.time(), 0
 with open(log, "w") as fh:
