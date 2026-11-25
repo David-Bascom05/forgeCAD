@@ -12,7 +12,7 @@ session_01WJtawwACx4hZuk77VMadNk.
 | numbers | `research/hosted/MEASUREMENTS.md`, `research/hosted/data/` | phase-2 Postgres/HA runs pending a quiet machine |
 | cited sources | `research/hosted/PRIOR-ART.md`, `PRIOR-ART-PHASE2.md` | fetched 2026-11-25 |
 | reviews | `research/hosted/reviews/N1-N9.md`, `clients.md` | N1-N9 fixes at 5c8eb061/470e7e90 under re-review |
-| users/orgs/auth plan | `research/hosted/USERS-ORGS-AUTH.md` | in progress (coordinator's ask of 05:05) |
+| users/orgs/auth plan | `research/hosted/USERS-ORGS-AUTH.md` (sources `PRIOR-ART-AUTH.md`) | written 2026-11-25; design only |
 | bench scripts | `research/hosted/bench/` (`phase2_pg.py`, `phase2_ha.py`, `server_load.rs`, older ones) | smoke-tested |
 
 ## Open items
@@ -30,7 +30,7 @@ session_01WJtawwACx4hZuk77VMadNk.
 4. **Server memory**: RSS grows ~100 KB per committed op under `server_load.rs` (not glibc
    arenas: same with MALLOC_ARENA_MAX=2) and 3.1 MB per connection. Heap profile running
    (heaptrack); send the culprit to HOSTED-BUILD.
-5. **USERS-ORGS-AUTH.md** (design only), then send the path to the coordinator and stop.
+5. USERS-ORGS-AUTH.md: done (phases A–D; A goes with DESIGN §17's phase 2).
 
 ## Decisions a successor must not undo without new evidence
 
