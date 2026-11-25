@@ -1,6 +1,6 @@
 # Hem and offset tooling: published data (P0)
 
-Read 2026-11-25 from makers' public catalogue and product pages only; no patents. Anything not
+Read 2026-11-25 from makers' public catalogue and product pages only. Anything not
 published is UNKNOWN. Figures enter the tooling TOML only with a `[[cite]]` naming the page.
 
 ## Hemming

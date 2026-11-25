@@ -322,6 +322,8 @@ no-output (powi: small integer exponents, same bits native and wasm; ban-list it
 no-output (prints only)  @ forge-brake/src/plan.rs|env|if std::env::var_os("BENDSIM_TRACE").is_some() {
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|dead: HashSet<u64>,  x 2
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|fixed: HashMap<(u64, usize, bool, usize), Vec<Check>>,  x 2
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|flat_fulls: HashMap<(u64, usize, Setup), Step>,
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|flats: HashMap<(u64, usize), Option<Setup>>,
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|gauges: HashMap<(u64, usize, bool), (Check, Option<crate::sim::Gauged>)>,  x 2
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|kept: HashMap<(u64, usize, usize, usize), Option<Step>>,
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|legs: HashMap<(u64, usize), (f64, f64, f64)>,  x 2
