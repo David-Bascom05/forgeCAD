@@ -6,7 +6,10 @@ forge-cam-lang plumbing around them. This note covers what was in flight when th
 the branches, their state, what is unmerged, what to do next, and the risks.
 Shas are as pushed, on main c135b274 (train 7) unless said.
 
-## Branches for train 8 (merge-ready, pre-verified or being)
+## Branches for train 9 (merge-ready, pre-verified or being)
+
+Train 8 closed before these were ready; TRAIN-CONDUCTOR takes them in train 9 (lines made on
+c135b274 with tools/preverify 13d78f06 stand). `cam/adaptive-cap-warning` went in train 8.
 
 | branch @ sha | what | state |
 |---|---|---|
@@ -14,7 +17,7 @@ Shas are as pushed, on main c135b274 (train 7) unless said.
 | `cam/engage-conservative` @ 11eb7fcb | the engagement read of the feeds never under-reads (each edge point dilated by half a cell); flange/plate_break .nc regenerated (feed words only, all lower) | re-running (first run: a forge-render timing test under load) |
 | `cam/adaptive-ties` @ edc2f3d8 | adaptive reports stock left after every pass and ring | queued |
 | `cam/fixture-box-mu` @ f357f65f | a shaped fixture piece's box grows by its faces' mu (it shrank: the machine-sim collision boxes were not conservative); test fails on the old signs | running |
-| `cam/clear-degenerate` @ d9c8ddaa | rptu1 `nut` (clear): a line cut again the other way is air (ends matched within 1e-5 mm, not by bits), and same-height rapids go straight. Re-cut 161 → 1 mm; rapids 593 → 397 mm | queued; train 8 or next |
+| `cam/clear-degenerate` @ d9c8ddaa | rptu1 `nut` (clear): a line cut again the other way is air (ends matched within 1e-5 mm, not by bits), and same-height rapids go straight. Re-cut 161 → 1 mm; rapids 593 → 397 mm | queued. **Must land after TQ's `cam/crazy-guards`**, with one more commit on main that has it: in verify/forge-cam-quality/src/crazy.rs drop `("rptu1_clear_cam", "nut", "recut", …)` (a listed entry no longer broken fails guards.rs) and set the nut `rapids` entry to 397.0, why "clear round the nut: the slot's far-end trips for the islands' corner arcs (trim_air's box test cannot see they remove nothing; a stock-aware air test)" |
 
 ## Unmerged and not ready
 
@@ -105,7 +108,24 @@ Older branches of mine that show open (`cam/bits-pin`, `move-memo`, `origin-snap
 squash merges. They have not been checked one by one: the train records are the source of truth.
 `cam/bits-pin` is a stale one-line re-pin.
 
+- **`fixture: plate(NAME, ..)` / `zero_point(NAME, ..)`** (forge-cam-lang, ours): needed for the
+  mould cores on a real plate.
+  - WORKHOLDING's recipe: resolve the name in the workholding library as `vise_record` does, then
+    `forge_workholding::mill::fixture_plate` or `::zero_point` (each returns a `Placed`), then
+    `Fixture::from_workholding`.
+  - No Haas plate has a library record yet (05-0301…0321 are catalogued in
+    research/cam/workholding-haas.md on cam/workholding-haas; a record needs the real mounting
+    grid and clamp keep-outs).
+  - Until then, a vise with soft jaws or a stand-in plate record is honest, if the doc says which.
+
 ## Risks
+
+- **"Held by the fixture" tests boxes, not bodies** (forge-cam-lang lib.rs ~2845, the leftover
+  reasons). A leftover band below the jaw top and within clearance of a fixture *box* is excused.
+  With a real model (haas-vise-05-0404: 3522 faces), the box is an enclosure that reaches past the
+  body, so it excuses more leftover than the body would. That bears on "stock cleared or
+  reported". It should test the faces (a box-to-face distance per band, shaped faces included).
+  Not small; not done.
 
 - **Adaptive is slower on purpose, and the cap is still broken on most parts.**
   - Rings (plain offsets half a diameter apart: 90° by construction) and the helix's bottom turn
