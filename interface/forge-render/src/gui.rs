@@ -201,6 +201,9 @@ pub struct Gui {
     /// The Machine Builder's scene (`gui_machine.rs`).
     pub mach: gui_machine::MachHost,
     pub ctx: egui::Context,
+    /// The UI audit's (tests/ui_audit): when `Some`, each frame's shapes are kept here, the text
+    /// and where it was clipped, for its judge to read. `None` (always, in the app) costs nothing.
+    pub audit_shapes: Option<Vec<egui::epaint::ClippedShape>>,
     /// The Agent tab's backend and its turns (`gui_agent.rs`).
     pub agent: gui_agent::AgentHost,
     /// The agent's app tools' view steps and driven joints (`gui_apptools.rs`).
@@ -361,6 +364,7 @@ impl Gui {
         let warm = ctx.run_ui(warm_input, |ui| warm_shell.ui(ui));
         warm_shell.out.clear();
         Gui {
+            audit_shapes: None,
             photo: None,
             recording: None,
             studio: None,
@@ -1043,6 +1047,14 @@ impl Gui {
                 Action::Machine(c) => self.machine_cmd(c),
                 Action::Versions(c) => {
                     use crate::shell::versions::{VersionsAct, VersionsCmd};
+                    // a folder with no history can't keep a version: the panel says so and offers
+                    // Turn on history (a Create there failed with its words never shown)
+                    let kept = self.vers_kept();
+                    if !kept && matches!(c, VersionsCmd::Create | VersionsCmd::Release) {
+                        let what = if matches!(c, VersionsCmd::Create) { "Create Version" } else { "Release" };
+                        self.shell.status =
+                            format!("{what}: this folder keeps no history. Turn it on in Versions first");
+                    }
                     let v = &mut self.shell.versions;
                     if self.shell.agent.tab != crate::shell::agent::SideTab::Versions {
                         self.shell.agent.tab = crate::shell::agent::SideTab::Versions;
@@ -1050,8 +1062,9 @@ impl Gui {
                     }
                     match c {
                         VersionsCmd::Show => {}
-                        VersionsCmd::Create => v.dialog = Some((String::new(), String::new())),
-                        VersionsCmd::Release => v.release = Some((String::new(), String::new(), false)),
+                        VersionsCmd::Create if kept => v.dialog = Some((String::new(), String::new())),
+                        VersionsCmd::Release if kept => v.release = Some((String::new(), String::new(), false)),
+                        VersionsCmd::Create | VersionsCmd::Release => {}
                         VersionsCmd::UpdateAll => v.out.push(VersionsAct::Update(None)),
                         // the newest version against the working copy
                         VersionsCmd::CompareCurrent => {
@@ -1402,6 +1415,9 @@ impl Gui {
         self.sync_tab();
         let shell = &mut self.shell;
         let mut output = self.ctx.run_ui(raw, |ui| shell.ui(ui));
+        if let Some(a) = &mut self.audit_shapes {
+            a.clone_from(&output.shapes);
+        }
         self.asm_drag_cursor(&mut output.platform_output);
         self.sync_selection();
         self.pixels_per_point = output.pixels_per_point;
@@ -2470,7 +2486,18 @@ impl Gui {
                 }) {
                     p.selected = None;
                 }
-                self.shell.status = p.summary.clone();
+                // the edit that asked for this build says what it did first, then the build: on
+                // every build of that edit (its number was kept when it was sent)
+                self.shell.status = match &p.said {
+                    Some((w, Some(at))) if *at == b.seq && b.checked && !b.preview => {
+                        format!("{w}: done · {}", p.summary)
+                    }
+                    Some((w, Some(at))) if *at == b.seq => format!("{w} · {}", p.summary),
+                    _ => {
+                        p.said = None;
+                        p.summary.clone()
+                    }
+                };
             }
             // every mesh so far, moved out rather than copied (a big import's are tens of MB)
             let restaged = b.asm.as_mut().and_then(|a| a.restage.take());
@@ -2828,7 +2855,7 @@ impl Gui {
                             if s.previewing {
                                 s.preview(None);
                             }
-                            format!("{label} refused: {}: {}", e.kind(), e.text())
+                            format!("{label} refused: {}", e.text())
                         }
                     };
                     self.fg_text();
@@ -2849,7 +2876,7 @@ impl Gui {
                     self.shell.status = match s.refactor(&r) {
                         Ok(files) if files.is_empty() => "Done: one undo step".into(),
                         Ok(files) => format!("Wrote {}", files.join(", ")),
-                        Err(e) => format!("{}: {}", e.kind(), e.text()),
+                        Err(e) => e.text(),
                     };
                 }
             }
@@ -2882,16 +2909,23 @@ impl Gui {
                 };
                 if let Some(p) = p {
                     p.refused = None;
+                    p.said = Some((self.shell.status.clone(), None));
                 }
                 self.fg_text();
+                // the build this edit asked for: its number, now it's sent
+                let seq = self.fg.as_ref().map(|s| s.seq);
+                if let Some((_, at)) = self.shell.fg.as_mut().and_then(|p| p.said.as_mut()) {
+                    *at = seq;
+                }
                 Ok(())
             }
             Err(e) => {
+                // typed for the agent and the tests; in words for a person (no error code)
                 let why = format!("{}: {}", e.kind(), e.text());
                 if let Some(p) = p {
                     p.refused = Some(why.clone());
                 }
-                self.shell.status = format!("{label} refused: {why}");
+                self.shell.status = format!("{label} refused: {}", e.text());
                 Err(why)
             }
         }
@@ -3167,7 +3201,7 @@ impl Gui {
             }
             Err(e) => {
                 s.preview(None);
-                Some(format!("{}: {}", e.kind(), e.text()))
+                Some(e.text())
             }
         };
         if let Some(t) = self.shell.fg.as_mut().and_then(|p| p.tool.as_mut()) {
@@ -3265,9 +3299,9 @@ impl Gui {
     pub fn fg_refuse(&mut self, e: crate::shell::fgtool::ToolError) {
         let why = format!("{}: {}", e.kind(), e.text());
         if let Some(p) = &mut self.shell.fg {
-            p.refused = Some(why.clone());
+            p.refused = Some(why);
         }
-        self.shell.status = why;
+        self.shell.status = e.text();
     }
 
     /// Clicks on the part with Project Geometry on: each edge or face picked (a click's one, or all
@@ -3427,7 +3461,7 @@ impl Gui {
                         None => self.shell.status = format!("{t} is not a plane to sketch on"),
                     }
                 }
-                (_, Err(e)) => self.shell.status = format!("{}: {}", e.kind(), e.text()),
+                (_, Err(e)) => self.shell.status = e.text(),
                 _ => {
                     self.shell.status =
                         format!("a sketch goes on a planar face or an origin plane, not a {what}")
@@ -3599,7 +3633,7 @@ impl Gui {
         }
         let got = o
             .write_back(&m.rows, m.kept())
-            .map_err(|e| format!("{}: {}", e.kind(), e.text()));
+            .map_err(|e| e.text());
         let got = got.and_then(|ops| {
             if ops.is_empty() {
                 return Ok(());
@@ -3612,7 +3646,7 @@ impl Gui {
                 } else {
                     format!(" (fix: {})", fixes.join(", "))
                 };
-                format!("{}: {}{fix}", e.kind(), e.text())
+                format!("{}{fix}", e.text())
             })
         });
         match got {

@@ -84,9 +84,9 @@ fn the_file_menu_asks_for_each_export() {
         h.gui.shell.status
     );
     for (label, f) in [
-        ("Export STL...", Format::Stl),
-        ("Export 3MF...", Format::ThreeMf),
-        ("Export OBJ...", Format::Obj),
+        ("Export STL…", Format::Stl),
+        ("Export 3MF…", Format::ThreeMf),
+        ("Export OBJ…", Format::Obj),
     ] {
         assert!(h.click("file"), "no File button");
         h.step();

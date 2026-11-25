@@ -2579,13 +2579,14 @@ impl Shell {
                 m.more.placing,
             )
         });
-        self.status = match m.solved.as_ref().map(|s| sk::freedom(s).0) {
+        let own = match m.solved.as_ref().map(|s| sk::freedom(s).0) {
             _ if asks.is_some() => asks.unwrap_or_default().to_string(),
             _ if drawing.is_some() => drawing.unwrap_or_default().to_string(),
             Some(0) => "Fully constrained".to_string(),
             Some(n) => format!("{n} degrees of freedom"),
             None => String::new(),
         };
+        self.state_status(ctx, own);
         self.sketch_options(ctx, &mut m);
         if let Some(e) = &m.error {
             let g = ctx.fonts_mut(|f| f.layout(e.clone(), sans(12.0), Color32::WHITE, 420.0));
