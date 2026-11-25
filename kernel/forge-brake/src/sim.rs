@@ -424,6 +424,9 @@ pub enum Side {
     B,
     /// Zone j itself (in zone j's coordinates, moving).
     J,
+    /// An offset's far side: beyond its second bend k, in zone k's end coordinates (k turning
+    /// with j).
+    C,
 }
 
 #[derive(Clone, Debug)]
@@ -444,12 +447,18 @@ pub enum Kind {
     },
     /// The zone being bent.
     ZoneJ { region: Region },
+    /// An offset's second zone, turning with j: zone k's coordinates carried by `iso` into j's
+    /// end coordinates.
+    ZoneK { k: usize, iso: Iso3, region: Region },
 }
 
 impl Piece {
     pub fn region(&self) -> &Region {
         match &self.kind {
-            Kind::Wall { region, .. } | Kind::Zone { region, .. } | Kind::ZoneJ { region } => region,
+            Kind::Wall { region, .. }
+            | Kind::Zone { region, .. }
+            | Kind::ZoneJ { region }
+            | Kind::ZoneK { region, .. } => region,
         }
     }
 }
@@ -538,6 +547,21 @@ pub struct StepCtx<'a> {
     pub legs: Option<(f64, f64, f64)>,
     /// A hem's flattening stroke, in place of an air bend (`flattening`).
     pub flatten: Option<Flat>,
+    /// An offset's stroke: bend j and its neighbour k together (`set_offset`).
+    pub offset: Option<Off>,
+}
+
+/// An offset's stroke: bends j and k (k off j's wall b, the web) turned together by the same
+/// turn, opposite ways, the outer walls kept level: wall a on the die's high face, the far wall
+/// pushed down by the punch's step.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Off {
+    pub k: usize,
+    /// Zone k's coordinates into j's end coordinates (at the stroke's every turn: the web does
+    /// not bend).
+    pub zk: Iso3,
+    /// Where across the bed (zone j's x) the tools' step is: the web's middle.
+    pub x_ref: f64,
 }
 
 /// Flattening: how far below the flat die's top a cell of the base's side may be enclosed and
@@ -773,6 +797,7 @@ impl<'a> StepCtx<'a> {
             memo: None,
             legs: None,
             flatten: None,
+            offset: None,
         }
     }
 
@@ -782,6 +807,7 @@ impl<'a> StepCtx<'a> {
             Kind::Wall { iso, .. } => iso.apply(V3::new(u, v, w)),
             Kind::Zone { k, phi: pk, iso, .. } => iso.apply(self.m.bends[*k].fold(u, v, w, T::c(*pk))),
             Kind::ZoneJ { .. } => self.bj.fold(u, v, w, phi),
+            Kind::ZoneK { k, iso, .. } => iso.apply(self.m.bends[*k].fold(u, v, w, phi)),
         }
     }
 
@@ -790,8 +816,20 @@ impl<'a> StepCtx<'a> {
         let b = self.bj;
         let p = match side {
             Side::B => b.end_apply(phi, q),
+            Side::C => {
+                let o = self.offset.as_ref().expect("a far side only in an offset");
+                b.end_apply(phi, o.zk.apply(self.m.bends[o.k].end_apply(phi, q)))
+            }
             _ => q,
         };
+        if let Some(o) = &self.offset {
+            // level: wall a on the die's high face, its z flipped so the web goes down as the
+            // turn grows (y with it: a turn, not a mirror)
+            let x = (p.x + (-o.x_ref)) * self.rot;
+            let y = (p.y + (-0.5 * b.len)) * (-self.rot * b.sigma);
+            let z = p.z * (-b.sigma) + self.off_lift() - self.ztip(phi);
+            return V3::new(x, y, z);
+        }
         if let Some(f) = &self.flatten {
             // zone coordinates keep wall a flat at every turn: it lies on the die, its outside
             // skin down (z flipped with sigma, and y with it, a turn, not a mirror)
@@ -917,6 +955,96 @@ impl<'a> StepCtx<'a> {
         (apex.z * sg).max(e0.z * sg).max(e1.z * sg) + off
     }
 
+    /// Offset: wall a's lift so its die side lies at z = 0.
+    fn off_lift(&self) -> f64 {
+        if self.bj.sigma > 0.0 { 0.0 } else { self.t }
+    }
+
+    /// Offset: the punch's lower face, on the far wall's upper skin at turn phi (the wall is
+    /// level: one point of it holds its height). It comes down as the turn grows.
+    fn off_top<T: Sc>(&self, o: &Off, phi: T) -> T {
+        let b = self.bj;
+        let bk = &self.m.bends[o.k];
+        let z0 = T::c(0.0);
+        let at = |w: f64| {
+            let q = bk.end_apply(phi, V3::new(z0, z0, T::c(w)));
+            b.end_apply(phi, o.zk.apply(q)).z * (-b.sigma)
+        };
+        at(0.0).max(at(-self.t)) + self.off_lift()
+    }
+
+    /// This step as an offset: bends j and k (k off j's web, the same turn the other way, on a
+    /// parallel line, k not yet bent, nothing else off the web) in one stroke. False, nothing
+    /// changed, where the part is not such a pair.
+    pub fn set_offset(&mut self, k: usize) -> bool {
+        let (j, bj) = (self.j, self.bj);
+        let m = self.m;
+        let bk = &m.bends[k];
+        if k == j
+            || self.done[k]
+            || bk.a != bj.b
+            || bk.sigma == bj.sigma
+            || (bk.theta - bj.theta).abs() > 1e-9
+            || m.kids[bj.b].iter().any(|&x| x != k)
+        {
+            return false;
+        }
+        let Some(zi) = self
+            .pieces
+            .iter()
+            .position(|p| matches!(p.kind, Kind::Zone { k: x, .. } if x == k))
+        else {
+            return false;
+        };
+        let Kind::Zone { iso: zk, region, .. } = self.pieces[zi].kind.clone() else {
+            return false;
+        };
+        // parallel lines: zone k's y axis along j's
+        let ey = zk
+            .apply(V3::new(0.0, 1.0, 0.0))
+            .minus(zk.apply(V3::new(0.0, 0.0, 0.0)));
+        if (ey.y.abs() - 1.0).abs() > 1e-9 {
+            return false;
+        }
+        let ek = zk.then(&Iso3::shift(bk.ba));
+        let ek_inv = ek.inverse();
+        for (i, pc) in self.pieces.iter_mut().enumerate() {
+            if i == zi {
+                pc.kind = Kind::ZoneK {
+                    k,
+                    iso: zk,
+                    region: region.clone(),
+                };
+                pc.inv = zk.inverse();
+                continue;
+            }
+            let beyond = match pc.kind {
+                Kind::Wall { w, .. } => m.beyond(k, w),
+                Kind::Zone { k: x, .. } => m.beyond(k, m.bends[x].b),
+                _ => false,
+            };
+            if !beyond {
+                continue;
+            }
+            match &mut pc.kind {
+                Kind::Wall { iso, .. } | Kind::Zone { iso, .. } => {
+                    *iso = ek_inv.then(iso);
+                    pc.inv = iso.inverse();
+                }
+                _ => {}
+            }
+            pc.side = Side::C;
+        }
+        // the web's middle across the bed, at the start (zone j's coordinates)
+        let far = zk.apply(V3::new(bk.ba, 0.0, 0.0));
+        self.offset = Some(Off {
+            k,
+            zk,
+            x_ref: 0.5 * (bj.ba + far.x),
+        });
+        true
+    }
+
     /// The shoulder's contact on the leg through the motion: its least and farthest place, where
     /// the least is, and whether both are certified. It reads the bend, the die and the overbend
     /// only (a search keeps it by bend and die: `contact_kept`).
@@ -932,6 +1060,9 @@ impl<'a> StepCtx<'a> {
         let b = self.bj;
         if let Some(f) = &self.flatten {
             return self.flat_top(f, phi);
+        }
+        if let Some(o) = &self.offset {
+            return self.off_top(o, phi);
         }
         let h = phi * 0.5;
         let k = self.rs + b.r - b.rn + self.t;
@@ -989,6 +1120,16 @@ impl<'a> StepCtx<'a> {
         if kind == Work::None {
             return false;
         }
+        if let Some(o) = &self.offset {
+            // the offset itself between the inserts' faces: its outer walls, the web and both
+            // zones (the stroke's own contact; its rules are the offset's)
+            let (b, bk) = (self.bj, &self.m.bends[o.k]);
+            return match pc.kind {
+                Kind::ZoneJ { .. } | Kind::ZoneK { .. } => true,
+                Kind::Wall { w, .. } => w == b.a || w == b.b || w == bk.b,
+                _ => false,
+            };
+        }
         if self.flatten.is_some() {
             // the hem itself between the faces: the base on the die, the fold and the leg under
             // the punch face (the stroke's own contact; its rules are the flattening's)
@@ -1021,6 +1162,7 @@ impl<'a> StepCtx<'a> {
             Side::A => q.x.hi <= e,
             Side::B => q.x.lo >= -e,
             Side::J => return true,
+            Side::C => return false,
         };
         if !past {
             return false;
@@ -2822,7 +2964,8 @@ fn piece_sd(ctx: &StepCtx, pc: &Piece, p: [f64; 3]) -> (f64, f64) {
             }
             zone_sd(b, *phi, t, region, [q.x, q.y, q.z])
         }
-        Kind::ZoneJ { .. } => (f64::INFINITY, f64::INFINITY),
+        // moving with the stroke: never a fixed piece another is measured against
+        Kind::ZoneJ { .. } | Kind::ZoneK { .. } => (f64::INFINITY, f64::INFINITY),
     }
 }
 
@@ -3357,5 +3500,159 @@ mod hem_tests {
                 .flattening(1.0)
                 .is_none()
         );
+    }
+}
+
+#[cfg(test)]
+mod offset_tests {
+    use super::*;
+    use forge_math::Frame;
+    use forge_ops::{ProfileLoop, Segment};
+    use forge_sheet::{BendRule, FeatureId, Gauge, Sheet, WallId};
+
+    /// A Z: a 60 x 100 base, a web `z` high off its right edge (+90), a 30 long far wall off the
+    /// web's top (-90), 1 mm.
+    fn zed(z: f64) -> Sheet {
+        let pts = [(0.0, 0.0), (60.0, 0.0), (60.0, 100.0), (0.0, 100.0)];
+        let lp = ProfileLoop::new(
+            (0..4)
+                .map(|i| {
+                    let (a, b) = (pts[i], pts[(i + 1) % 4]);
+                    (
+                        Segment::Line {
+                            a: Point2::new(a.0, a.1),
+                            b: Point2::new(b.0, b.1),
+                        },
+                        i as u64,
+                    )
+                })
+                .collect(),
+        );
+        let (mut s, base) = Sheet::face(
+            FeatureId(1),
+            Gauge {
+                thickness: 1.0,
+                radius: 1.0,
+                rule: BendRule::K(0.4),
+            },
+            Frame::WORLD,
+            &[lp],
+        )
+        .unwrap();
+        let q = dmath::PI / 2.0;
+        let (web, _) = s.flange(base, 1, q, z).unwrap();
+        let _ = web;
+        s.flange(WallId(1), 1, -q, 30.0).unwrap();
+        s
+    }
+
+    fn su() -> Setup {
+        Setup {
+            punch: 0,
+            die: 0,
+            rotate: false,
+        }
+    }
+
+    fn at(ctx: &StepCtx, pc: &Piece, u: f64, v: f64, w: f64, phi: f64) -> [f64; 3] {
+        let r = ctx.rel(ctx.side_point(pc, u, v, w, phi), pc.side, phi);
+        [r.x, r.y, r.z + ctx.ztip(phi)]
+    }
+
+    /// An offset's stroke: the base stays on the die (its die side at 0) and level; the far
+    /// wall stays level, its upper skin where the punch's face is, coming down as the turn
+    /// grows; intervals of turns enclose the face's heights; and at the bends' own turn the
+    /// part is the folded part (every distance between its points the model's).
+    #[test]
+    fn an_offsets_outer_walls_stay_level_and_the_end_is_the_part() {
+        let tl = crate::library::std_eu();
+        let m = Model::new(&zed(8.0)).unwrap();
+        assert_eq!(m.bends.len(), 2);
+        let mut ctx = StepCtx::new(&m, &tl, &[false, false], 0, su(), 0.0);
+        assert!(ctx.set_offset(1));
+        let (a, c) = (m.bends[0].a, m.bends[1].b);
+        let wall = |w: usize| {
+            ctx.pieces
+                .iter()
+                .find(|p| matches!(p.kind, Kind::Wall { w: x, .. } if x == w))
+                .unwrap()
+        };
+        assert_eq!(wall(c).side, Side::C);
+        let corners = |pc: &Piece| {
+            let [u, v, _] = pc.dom;
+            let mut out = Vec::new();
+            for uu in [u.lo + 0.5, u.hi - 0.5] {
+                for vv in [v.lo + 0.5, v.hi - 0.5] {
+                    out.push((uu, vv));
+                }
+            }
+            out
+        };
+        let mut last = f64::INFINITY;
+        let theta = m.bends[0].theta;
+        for i in 0..=10 {
+            let phi = theta * i as f64 / 10.0;
+            let za: Vec<f64> = corners(wall(a))
+                .into_iter()
+                .flat_map(|(u, v)| [0.0, -1.0].map(|w| at(&ctx, wall(a), u, v, w, phi)[2]))
+                .collect();
+            let lo = za.iter().copied().fold(f64::INFINITY, f64::min);
+            let hi = za.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            assert!(
+                lo.abs() < 1e-9 && (hi - 1.0).abs() < 1e-9,
+                "phi {phi}: base {lo}..{hi}"
+            );
+            let zc: Vec<f64> = corners(wall(c))
+                .into_iter()
+                .flat_map(|(u, v)| [0.0, -1.0].map(|w| at(&ctx, wall(c), u, v, w, phi)[2]))
+                .collect();
+            let top = ctx.ztip(phi);
+            let chi = zc.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            let clo = zc.iter().copied().fold(f64::INFINITY, f64::min);
+            assert!(
+                (chi - top).abs() < 1e-9 && (chi - clo - 1.0).abs() < 1e-9,
+                "phi {phi}: far {clo}..{chi}, face {top}"
+            );
+            assert!(top <= last + 1e-12, "the face goes up at {phi}");
+            last = top;
+        }
+        for k in 0..10 {
+            let (x, y) = (theta * k as f64 / 10.0, theta * (k + 1) as f64 / 10.0);
+            let e = ctx.ztip(Interval::new(x, y));
+            for i in 0..=10 {
+                let z = ctx.ztip(x + (y - x) * i as f64 / 10.0);
+                assert!(e.lo <= z && z <= e.hi);
+            }
+        }
+        // the end: the folded part, up to a rigid motion
+        let f = m.frames(&[theta, theta]);
+        let mut mine = Vec::new();
+        let mut theirs = Vec::new();
+        for w in [a, m.bends[0].b, c] {
+            let pc = wall(w);
+            let Kind::Wall { to_param, .. } = &pc.kind else {
+                unreachable!()
+            };
+            for (u, v) in corners(pc) {
+                mine.push(at(&ctx, pc, u, v, 0.0, theta));
+                // the wall's own coordinates of that parameter point
+                let own = to_param.inverse().apply(Point2::new(u, v));
+                theirs.push(f[w].apply(V3::new(own.x, own.y, 0.0)).arr());
+            }
+        }
+        let d = |p: [f64; 3], q: [f64; 3]| {
+            ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2) + (p[2] - q[2]).powi(2)).sqrt()
+        };
+        for i in 0..mine.len() {
+            for j in 0..mine.len() {
+                assert!(
+                    (d(mine[i], mine[j]) - d(theirs[i], theirs[j])).abs() < 1e-9,
+                    "{i} {j}"
+                );
+            }
+        }
+        // what is not such a pair is refused
+        let mut other = StepCtx::new(&m, &tl, &[false, false], 1, su(), 0.0);
+        assert!(!other.set_offset(0));
     }
 }
