@@ -956,10 +956,56 @@ fn handling_is_certified_on_a_staged_press() {
                 assert_eq!(c.get("certified"), Some(&Json::Bool(true)), "{c}");
             }
             assert!(
-                c.get("method").and_then(Json::str).unwrap().contains("certified search"),
+                c.get("method")
+                    .and_then(Json::str)
+                    .unwrap()
+                    .contains("certified search"),
                 "{c}"
             );
         }
     }
     assert_eq!(n, steps.len() - 1);
+}
+
+/// examples/sheetmetal/narrow_channel.fg, the collision its header names: on straight punches in
+/// that order, step 2 closes the first flange on the punch, a proven hit with its region; left
+/// to itself on std-eu the planner finds no order: both are blocked the same way.
+#[test]
+fn the_narrow_channel_example_collides_as_its_header_says() {
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/sheetmetal/narrow_channel.fg"
+    ))
+    .unwrap();
+    let line = src
+        .lines()
+        .find_map(|l| l.trim_start_matches('#').trim().strip_prefix("bendsim "))
+        .expect("the header names the words");
+    let words: Vec<String> = line.split_whitespace().map(String::from).collect();
+    let ask = forge_lang::bendsim::parse(&words).unwrap();
+    assert!(ask.collisions && ask.step == Some(2));
+    let a = ask_src(&src, None, None, &ask);
+    assert!(a.ok, "{}", a.text);
+    let cs = arr(&a.json, "contacts");
+    assert!(
+        cs.iter()
+            .any(|c| c.get("rule").and_then(Json::str) == Some("closes_on_punch")
+                && c.get("depth").and_then(Json::num).is_some()),
+        "{}",
+        a.text
+    );
+    let free = ask_src(&src, None, None, &Ask::default());
+    assert_eq!(
+        free.json.get("feasible"),
+        Some(&Json::Bool(false)),
+        "{}",
+        free.text
+    );
+    for order in ["right after [left]", "left after [right]"] {
+        assert!(
+            free.text.contains(&format!("blocked: {order}: closes_on_punch")),
+            "{}",
+            free.text
+        );
+    }
 }

@@ -1,0 +1,20 @@
+# A narrow, tall channel, 2 steel: a 30 wide web, 200 long, with two 60 high flanges.
+# frame: the web's top skin on xy, x across the web, y along it; the flanges on x = 0 and x = 30.
+# It shows a collision: on straight punches only, in this order, the second bend closes the first
+# flange on the punch:
+#   bendsim punches std-eu/P85-R08-H120,std-eu/P88-R08 sequence 1,2 collisions step 2
+# Left to choose its own tools and order on std-eu, it finds none: in either order the second
+# flange closes the first on the punch.
+shared t = 2
+shared r = 2
+shared k = ratio(0.4)
+shared W = 30                   # the web, across
+shared L = 200                  # along
+shared H = 60                   # the flanges
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (W, L))
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k))
+right = flange(base.edge(plan.outline[1]), height: H)
+left = flange(base.edge(plan.outline[3]), height: H)
