@@ -98,16 +98,19 @@ In 90 s, 60 such pairs ended `Undecided` and 32 of them spent the full budget. T
 jaws are the same planes with μ = 0, so the same passes are at exactly the limit and clear at
 once.
 
-Why the passes are there: the passes run past the stock's edge by the setup's clearance
-(`clear_gap: s.clearance`), and with the vise closed on the stock the jaw's inner face is the
-stock's edge, so a pass ends at exactly the fixture clearance from the jaw. Two possible fixes
+Why the passes are there: the passes run past the stock's edge and end at exactly the fixture
+clearance from the jaw, whose inner face is the stock's edge with the vise closed on it. Where
+those ops size their region against the fixture is not yet found (CAM-CORE: not `clear_gap`,
+which is probing's alone). The stand-in's own `ok false` is CAM-CORE's op2 heights in the wrong
+frame (theirs, known). Two possible fixes
 (neither done):
 - the planner keeps the fixture's clearance plus its faces' largest μ (and a little room) from
   the fixture, so it never plans a pass inside the band (CAM-CORE's: the overrun); or
 - `certify_bb` returns `Undecided` as soon as it pops a cell that lies wholly inside the band
   and is below the resolution, instead of spending the rest of its budget. A Hit elsewhere on
   the face would be lost as a witness (both are refusals), and the kernel's proofs would need to
-  cover it, so this is the larger change.
+  cover it, so this is the larger change. It caps the cost for every tolerant face, not just
+  this one: EXACT-CORE's to weigh.
 
 Until one of them lands, `-default2` must not be merged: any document whose passes end at the
 jaws would spend minutes per setup against the real vise. `-any2` (opt-in by name) is
