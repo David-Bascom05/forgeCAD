@@ -4534,7 +4534,8 @@ impl Cam {
         let trusted = !self.ops.iter().any(|o| o.setup == su && o.status != "built");
         // the setup's map as its last hopped op left it (on the same grid), lowered to the voids
         // recorded since; else the recorded voids alone. Every op of the setup built: else the
-        // uncut box
+        // uncut box. Lowered only where a cell is wholly cut (`sweep_under`, `lower_voids_under`):
+        // the hops' clearance must see a sliver finer than a cell
         let carried = self
             .hop_maps
             .get(su)
@@ -4543,10 +4544,10 @@ impl Cam {
             .cloned();
         let mut map = match carried {
             Some(mut m) => {
-                m.lower_voids(&s.ip);
+                m.lower_voids_under(&s.ip);
                 m
             }
-            None if trusted => HeightMap::of_stock(&s.ip, cell),
+            None if trusted => HeightMap::of_stock_under(&s.ip, cell),
             None => HeightMap::new(s.ip.min, s.ip.max, cell),
         };
         let paths = paths
