@@ -3536,9 +3536,13 @@ mod tests {
         let mut r = Rng::new(12);
         for c in cases() {
             let s = c.blend.surface();
-            let Surface::Procedural(pr) = &s else { panic!("{} is procedural", c.name) };
+            let Surface::Procedural(pr) = &s else {
+                panic!("{} is procedural", c.name)
+            };
             for k in 0..2 {
-                let crate::Curve::Procedural(pc) = c.blend.track(k) else { panic!("a track") };
+                let crate::Curve::Procedural(pc) = c.blend.track(k) else {
+                    panic!("a track")
+                };
                 let (base, dir) = pr.curve_uv(&pc).expect("this blend's spring");
                 let dom = pc.domain().interval();
                 for _ in 0..20 {
@@ -3548,15 +3552,31 @@ mod tests {
                     assert!(pr.point(uv).distance(p) < 1e-9, "{} spring {k} at {t}", c.name);
                     let q = pr.project(p);
                     assert!(pr.point(q).distance(p) < 1e-9, "{} spring {k} projects", c.name);
-                    assert!((q.y - uv.y).abs() < 1e-6 && (q.x - uv.x).abs() < 1e-6, "{} {q:?} {uv:?}", c.name);
+                    assert!(
+                        (q.y - uv.y).abs() < 1e-6 && (q.x - uv.x).abs() < 1e-6,
+                        "{} {q:?} {uv:?}",
+                        c.name
+                    );
                 }
             }
-            let crate::Curve::Procedural(centre) = c.blend.track(2) else { panic!("a track") };
-            assert!(pr.curve_uv(&centre).is_none(), "{}: the centre is off the surface", c.name);
+            let crate::Curve::Procedural(centre) = c.blend.track(2) else {
+                panic!("a track")
+            };
+            assert!(
+                pr.curve_uv(&centre).is_none(),
+                "{}: the centre is off the surface",
+                c.name
+            );
             let f = crate::testing::rand_frame(&mut r);
-            let crate::Curve::Procedural(moved) = c.blend.track(0) else { panic!("a track") };
+            let crate::Curve::Procedural(moved) = c.blend.track(0) else {
+                panic!("a track")
+            };
             let moved = moved.0.transformed(&f);
-            assert!(pr.curve_uv(&moved).is_none(), "{}: a moved copy's spring is another blend's", c.name);
+            assert!(
+                pr.curve_uv(&moved).is_none(),
+                "{}: a moved copy's spring is another blend's",
+                c.name
+            );
         }
     }
 
