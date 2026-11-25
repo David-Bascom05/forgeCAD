@@ -10,7 +10,7 @@ use forge_geom::{
     Circle, Cone, Curve, CurveGeom, Cylinder, Ellipse, Hyperbola, Line, Parabola, Plane, Sphere, Surface,
     Torus,
 };
-use forge_math::{Box3, Frame, Interval, Point3, UnitVec3, Vec3, dmath};
+use forge_math::{Box3, Frame, Interval, Point2, Point3, UnitVec3, Vec3, dmath};
 use forge_topo::{Body, Name};
 use std::collections::BTreeMap;
 
@@ -1670,6 +1670,41 @@ fn debug_head(x: &impl std::fmt::Debug, n: usize) -> String {
 const FAR_FACE_MM: f64 = 1.0;
 const FAR_FACE_PART: f64 = 0.01;
 
+/// How far face `fi`'s edges lie off its surface, measured so that a nearest-point search's local
+/// answer cannot pass for the truth: each point's distance is the least over a 64 x 64 grid of the
+/// surface's parameter box (bounded to 1e5) and a projection started from the nearest grid point.
+/// Asked only of a face whose quick measure (`measure_gaps`) already says it lies far off.
+fn far_gap(proto: &Proto, fi: usize) -> f64 {
+    let fa = &proto.faces[fi];
+    let s = &fa.surface;
+    let d = s.domain();
+    let (u0, u1) = (d.u.lo.max(-1e5), d.u.hi.min(1e5));
+    let (v0, v1) = (d.v.lo.max(-1e5), d.v.hi.min(1e5));
+    const N: usize = 64;
+    let grid: Vec<(Point2, Point3)> = (0..=N)
+        .flat_map(|i| (0..=N).map(move |j| (i, j)))
+        .map(|(i, j)| {
+            let uv = Point2::new(u0 + (u1 - u0) * i as f64 / N as f64, v0 + (v1 - v0) * j as f64 / N as f64);
+            (uv, s.eval(uv))
+        })
+        .collect();
+    let mut worst = 0.0_f64;
+    for u in fa.loops.iter().flatten() {
+        let e = &proto.edges[u.0];
+        let w = e.range.width();
+        for k in 0..=8 {
+            let x = e.curve.eval(e.range.lo + w * k as f64 / 8.0);
+            let (near, at) = grid
+                .iter()
+                .map(|&(uv, p)| (p.distance(x), uv))
+                .fold((f64::INFINITY, Point2::new(0.0, 0.0)), |a, b| if b.0 < a.0 { b } else { a });
+            let refined = s.eval(s.project_near(x, at)).distance(x);
+            worst = worst.max(s.distance(x).min(near).min(refined));
+        }
+    }
+    worst
+}
+
 /// A distance in mm, in words.
 fn far(mm: f64) -> String {
     if mm >= 1000.0 {
@@ -1984,10 +2019,12 @@ fn healed(
     // a face whose edges lie far off its surface has the wrong surface in the file (VS-3 #478011:
     // a B-spline patch 5 m from its face's edges): nothing in the file says where it is
     let size = Box3::from_points(proto.verts.iter().map(|v| v.0)).diagonal();
-    if let Some((fi, &gap)) = gaps
+    if let Some((fi, gap)) = gaps
         .iter()
         .enumerate()
-        .find(|&(_, &g)| g > FAR_FACE_MM && g > FAR_FACE_PART * size)
+        .filter(|&(_, &g)| g > FAR_FACE_MM && g > FAR_FACE_PART * size)
+        .map(|(fi, _)| (fi, far_gap(&proto, fi)))
+        .find(|&(_, g)| g > FAR_FACE_MM && g > FAR_FACE_PART * size)
     {
         let face = proto.face_ids.get(fi).map_or(String::new(), |id| format!(" #{id}"));
         return Err(format!(
