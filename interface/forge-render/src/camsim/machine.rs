@@ -526,6 +526,32 @@ pub fn models_dir(machine: &str) -> Option<std::path::PathBuf> {
     forge_machine_builder::models::drawn_dir(forge_machine_builder::catalog::user_dir().as_deref(), machine)
 }
 
+/// Where forgecad's workholding models are (forge-workholding's data/models: the makers'
+/// published models, Git LFS): `FORGECAD_WORKHOLDING_MODELS`, else the build's source tree.
+fn holding_roots() -> Vec<std::path::PathBuf> {
+    let mut out = vec![];
+    if let Some(d) = std::env::var_os("FORGECAD_WORKHOLDING_MODELS") {
+        out.push(d.into());
+    }
+    out.push(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../kernel/forge-workholding/data/models"),
+    );
+    out
+}
+
+/// A workholding body's real part as a mesh (an STL relative to the models folder), read once;
+/// None where it is not there or not downloaded (an LFS pointer is no mesh).
+pub fn holding_part(part: &str) -> Option<std::sync::Arc<Tris>> {
+    if !part.to_ascii_lowercase().ends_with(".stl") {
+        return None;
+    }
+    holding_roots()
+        .into_iter()
+        .map(|r| r.join(part))
+        .find(|p| forge_dirs::fs::metadata(p).is_ok_and(|m| m.len() > 1024))
+        .and_then(|p| crate::machine_model::file_tris(&p).ok())
+}
+
 /// The command that fetches forgecad's shipped models of a machine, where it ships some that
 /// are not downloaded (a clone's LFS pointers) and the user has none of their own: the machine
 /// is drawn from its record's parts meanwhile.
@@ -543,6 +569,9 @@ pub enum Source {
     Model(String),
     Part(String),
     Prims,
+    /// A workholding's `Fixture::boxes()`: for a model body, the box about its faces (it can
+    /// reach past the body), which the machine run checks today.
+    Boxes,
     None,
 }
 
@@ -600,6 +629,38 @@ pub fn sources(def: &forge_machine::MachineDef) -> Vec<BodySources> {
                     Source::Prims
                 } else {
                     Source::None
+                },
+            }
+        })
+        .collect()
+}
+
+/// Every body of a placed workholding device (any: a catalogue vise, the user's own import, a
+/// stand-in): what the simulation draws it as (its mesh, its `.fg` part, or its own prims) and
+/// what the machine run's collision check takes for it (the fixture's boxes: for a model body,
+/// the box about its faces). Certification checks a model body's faces themselves, from the
+/// same compile as the drawn mesh (forge_cam::fixture::body_source); the machine run's check
+/// moves onto them with CAM-MACHINE's real-model collisions, and these become one.
+pub fn holding_sources(f: &forge_cam::fixture::Fixture) -> Vec<BodySources> {
+    let Some(p) = &f.placed else {
+        return vec![];
+    };
+    p.bodies
+        .iter()
+        .map(|b| {
+            let drawn = match &b.part {
+                Some(part) if holding_part(part).is_some() => Source::Model(part.clone()),
+                Some(part) if part.ends_with(".fg") => Source::Part(part.clone()),
+                _ if b.prims.is_empty() => Source::None,
+                _ => Source::Prims,
+            };
+            BodySources {
+                body: b.name.clone(),
+                drawn,
+                checked: if b.exact.is_some() {
+                    Source::Boxes
+                } else {
+                    Source::Prims
                 },
             }
         })

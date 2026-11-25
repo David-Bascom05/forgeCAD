@@ -1106,3 +1106,84 @@ fn what_is_drawn_against_what_is_checked() {
     const GAPS_AT_MOST: usize = 1170;
     assert!(gaps.len() <= GAPS_AT_MOST, "{} gaps", gaps.len());
 }
+
+/// Any workholding, not one vise (David: "do not over fit to one haas vise; collision should
+/// use any vise geometry including custom imports"): a plate of the user's own, a STEP in their
+/// project (cam/workholding/mine.toml, `fixture: workholding("my-plate", at: ..)`), in no
+/// catalogue. The simulation draws it from the mesh its compile wrote, and that mesh and the
+/// faces certification checks are one compile (forge_cam::fixture::body_source): the same
+/// file, and their boxes agree. The machine run still checks the fixture's boxes (the box
+/// about its faces): counted, as a gap, until it takes the faces too.
+#[test]
+fn a_fixture_of_the_users_own_is_drawn_as_it_is_checked() {
+    use forge_render::camsim::machine::{Source, holding_sources};
+    let d = forge_dirs::temp_dir().join(format!("fg-camsim-hold-{}", forge_dirs::process_id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(d.join("cam/workholding")).unwrap();
+    std::fs::copy(machined().join("flange.fg"), d.join("flange.fg")).unwrap();
+    // a plate 400 square, 20 thick, its top at z = 0, a bolt hole through it, as a STEP
+    let plate = "shared L = 400\nshared W = 400\nshared T = 20\nparam bolt.d = 12\nparam top.hx = 150\n\nsketch plan(on: xy) {\n  outline = rect(corner: (-L / 2, -W / 2), size: (L, W))\n}\nplate = extrude(plan, T)\nsketch top(on: plate.end) {\n  h = pt(hx, hx)\n}\nbolt = hole(at: top.h, d: d, depth: thru)\n";
+    let (run, _) = forge_lang::run(plate, forge_lang::Options::default(), Default::default());
+    assert!(run.ok(), "{:?}", run.errors);
+    let step = forge_step::export(run.body.as_ref().unwrap(), &forge_step::Options::default()).unwrap();
+    std::fs::write(d.join("my-plate.step"), step.text).unwrap();
+    std::fs::write(
+        d.join("cam/workholding/mine.toml"),
+        "[[workholding]]\nname = \"my-plate\"\nkind = \"custom\"\nvendor = \"me\"\nproduct = \"a plate of my own\"\nmodel_file = \"my-plate.step\"\n",
+    )
+    .unwrap();
+    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2)), origin: \"top-center\", tol: 0.01, fixture: workholding(\"my-plate\", at: (0, 0, -20)))\nskim = facing(op1, tool: t1, to: 19.95, step: 1)\nprog = program(op1, post: \"fanuc\")\n";
+    let sim = Sim::open(src, &d);
+    assert!(sim.cam.ok, "{:?} {:?}", sim.cam.errors, sim.cam.warnings);
+    let f = sim.cam.setup_view(0).unwrap().fixture.unwrap();
+    let placed = f.placed.as_ref().expect("a placed device");
+    let s = &sim.setups[0];
+    assert_eq!(s.holding.len(), placed.bodies.len());
+    let mut gaps = 0;
+    for (b, hb) in placed.bodies.iter().zip(&s.holding) {
+        let (mesh, faces) = forge_cam::fixture::body_source(b).expect("a model body");
+        let mesh = mesh.expect("its compile's mesh, written beside its faces");
+        let faces = faces.unwrap();
+        assert!(!faces.is_empty());
+        // drawn: the simulation's part is that mesh, read and posed
+        let (part, m, t) = hb.part.as_ref().expect("drawn from its mesh");
+        assert_eq!(std::path::Path::new(part), mesh.as_path(), "{}", b.name);
+        let tr = forge_render::camsim::machine::holding_part(part).expect("the mesh reads");
+        let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+        for v in &tr.pos {
+            for k in 0..3 {
+                let x = m[k][0] * v[0] + m[k][1] * v[1] + m[k][2] * v[2] + t[k];
+                lo[k] = lo[k].min(x);
+                hi[k] = hi[k].max(x);
+            }
+        }
+        // checked: the faces' box, the same within their own error
+        let (mut flo, mut fhi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+        for fc in &faces {
+            for k in 0..3 {
+                flo[k] = flo[k].min(fc.bbox[k].lo + fc.mu);
+                fhi[k] = fhi[k].max(fc.bbox[k].hi - fc.mu);
+            }
+        }
+        for k in 0..3 {
+            assert!(
+                (lo[k] - flo[k]).abs() < 0.05 && (hi[k] - fhi[k]).abs() < 0.05,
+                "{} axis {k}: drawn {lo:?}..{hi:?}, checked {flo:?}..{fhi:?}",
+                b.name
+            );
+        }
+        // the plate where the setup put it: its underside on the table at z = -20, its top at 0
+        assert!(hi[2].abs() < 0.05 && (lo[2] + 20.0).abs() < 0.05, "{lo:?} {hi:?}");
+        // the machine run checks this body by the box about its faces: a gap, counted below
+        gaps += 1;
+    }
+    // the machine run's side: drawn from the mesh, checked by the box about its faces
+    let src = holding_sources(f);
+    assert!(
+        src.iter()
+            .all(|b| matches!(b.drawn, Source::Model(_)) && b.checked == Source::Boxes),
+        "{src:?}"
+    );
+    const HOLDING_GAPS_AT_MOST: usize = 1;
+    assert!(gaps <= HOLDING_GAPS_AT_MOST, "{gaps}");
+}
