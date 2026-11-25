@@ -1195,3 +1195,29 @@ fn the_hem_and_joggle_example_runs_on_three_stations() {
         assert!(punches.contains(&p), "{punches:?}");
     }
 }
+
+/// Stations naming the same punch apart (not neighbours): each tool is put on the press once,
+/// not refused as a duplicate.
+#[test]
+fn a_tool_shared_by_stations_apart_is_one_tool() {
+    use forge_lang::bendsim::StationAsk;
+    let st = |punch: &str, die: &str, y: f64| StationAsk {
+        punch: punch.into(),
+        die: die.into(),
+        y,
+        punch_length: 115.0,
+        die_length: 125.0,
+    };
+    let ask = Ask {
+        press: Some("trumpf-trubend-5130".into()),
+        stations: vec![
+            st("trumpf/OW222-K", "trumpf/EV004_30deg", -265.0),
+            st("trumpf/OW202-S", "trumpf/EV002_30deg", -50.0),
+            st("trumpf/OW222-K", "trumpf/EV001_30deg", 160.0),
+        ],
+        ..Ask::default()
+    };
+    let a = ask_src(&channel(), None, None, &ask);
+    assert!(!a.text.contains("Duplicate"), "{}", a.text);
+    assert!(a.ok, "{}", a.text);
+}
