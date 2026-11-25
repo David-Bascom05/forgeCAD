@@ -119,6 +119,8 @@ pub struct Config {
     pub checkpoint_idle: Duration,
     /// The upgrade and the Hello must be done within this (absolute): [`HANDSHAKE`] by default.
     pub handshake: Duration,
+    /// A hash-check build running longer is given up on: [`BUILD_BUDGET`] by default.
+    pub build_budget: Duration,
     /// Serve on a non-loopback address with no TLS (the token and every op in clear): a LAN demo
     /// only, said loudly.
     pub insecure_lan: bool,
@@ -139,6 +141,7 @@ impl Config {
             cap_loopback: false,
             checkpoint_idle: Duration::from_secs(300),
             handshake: HANDSHAKE,
+            build_budget: BUILD_BUDGET,
             insecure_lan: false,
         }
     }
@@ -170,6 +173,7 @@ pub struct Handle {
     stop: Arc<AtomicBool>,
     dead: Arc<AtomicBool>,
     hub: Option<std::thread::JoinHandle<()>>,
+    builds: Arc<AtomicUsize>,
 }
 
 impl Handle {
@@ -184,6 +188,11 @@ impl Handle {
     }
     /// True if the hub stopped on a panic: the server serves no one and should exit (the binary
     /// exits with 70).
+    /// Hash-check builds holding a slot now.
+    pub fn builds(&self) -> usize {
+        self.builds.load(Ordering::SeqCst)
+    }
+
     pub fn dead(&self) -> bool {
         self.dead.load(Ordering::SeqCst)
     }
@@ -573,6 +582,7 @@ pub fn start_on(l: TcpListener, c: Config) -> Result<Handle, String> {
         abandoned: Mutex::new(HashMap::new()),
         abandoned_all: Arc::new(AtomicUsize::new(0)),
     });
+    let shared_builds = shared.builds.clone();
     let (tx, rx) = sync_channel::<Ev>(INBOX);
     let stop = Arc::new(AtomicBool::new(false));
     let dead = Arc::new(AtomicBool::new(false));
@@ -657,6 +667,7 @@ pub fn start_on(l: TcpListener, c: Config) -> Result<Handle, String> {
         stop,
         dead,
         hub: Some(hub_thread),
+        builds: shared_builds,
     })
 }
 
@@ -909,8 +920,13 @@ impl Closing {
 }
 
 /// Tells an actor to save and end (the flag first: the message may not fit).
-fn close_actor(d: &DocHandle) {
+fn close_actor(d: &DocHandle, _doc: &str) {
     d.closing.store(true, Ordering::SeqCst);
+    // (the test hook: the Close lost, as to a full inbox)
+    #[cfg(feature = "test-hooks")]
+    if _doc.starts_with("test_hook_lost_close") {
+        return;
+    }
     let _ = d.tx.try_send(DocEv::Close);
 }
 
@@ -945,8 +961,8 @@ fn hub(shared: &Arc<Shared>, rx: Receiver<Ev>, tx: SyncSender<Ev>, stop: &Atomic
             // stopping: each document's head saved before the folder is let go. An actor ends
             // with a blocking send to this inbox, so it is drained while they finish.
             let mut threads = vec![];
-            for (_, d) in docs.drain() {
-                close_actor(&d);
+            for (doc, d) in docs.drain() {
+                close_actor(&d, &doc);
                 threads.push(d.thread);
             }
             threads.extend(closing.drain().map(|(_, c)| c.thread));
@@ -1065,7 +1081,7 @@ fn hub(shared: &Arc<Shared>, rx: Receiver<Ev>, tx: SyncSender<Ev>, stop: &Atomic
                 if d.members == 0 {
                     // no one left: it saves, snapshots and ends on its own; joins wait for that
                     let d = docs.remove(&doc).expect("there");
-                    close_actor(&d);
+                    close_actor(&d, &doc);
                     closing.insert(
                         doc,
                         Closing {
@@ -1332,6 +1348,11 @@ impl Actor {
                         self.closing.store(true, Ordering::SeqCst);
                         continue;
                     }
+                    // (the test hook: a save that takes a while, so joins and ops come during it)
+                    #[cfg(feature = "test-hooks")]
+                    if self.doc.starts_with("test_hook_slow_close") {
+                        std::thread::sleep(Duration::from_millis(1500));
+                    }
                     self.checkpoint();
                     // the next open replays nothing: the head becomes the snapshot
                     if self.room.seq.seq() > self.room.seq.floor()
@@ -1528,6 +1549,7 @@ impl Actor {
                     return;
                 }
                 let state = Arc::new(AtomicU8::new(0));
+                let _slow = self.doc.starts_with("test_hook_slow_build");
                 let (dir, root, tx, builds, st) = (
                     self.room.seq.dir.clone(),
                     self.s.c.root.clone(),
@@ -1538,6 +1560,11 @@ impl Actor {
                 let spawned = std::thread::Builder::new()
                     .name("forge-server hash build".into())
                     .spawn(move || {
+                        // (the test hook: a build past a short budget)
+                        #[cfg(feature = "test-hooks")]
+                        if _slow {
+                            std::thread::sleep(Duration::from_millis(1500));
+                        }
                         let hash = catch_unwind(AssertUnwindSafe(|| {
                             // as the app builds it (render: an assembly's placed parts, which
                             // its hash is of)
@@ -1650,7 +1677,7 @@ impl Actor {
         }
         // a hash-check build past its budget: abandoned, its reports dropped
         if let Some((seq, t, _)) = &self.building
-            && t.elapsed() > BUILD_BUDGET
+            && t.elapsed() > self.s.c.build_budget
         {
             let seq = *seq;
             if let Some((_, _, st)) = self.building.take() {

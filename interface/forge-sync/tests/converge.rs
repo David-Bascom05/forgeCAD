@@ -461,3 +461,105 @@ fn the_log_compacts_and_a_far_client_catches_up_by_snapshot() {
     assert_eq!(sim.clients[1].seq(), sim.room.seq.seq());
     assert_eq!(sim.clients[1].text(), sim.room.seq.head());
 }
+
+fn set_w(v: f64) -> Op {
+    Op::SetParam {
+        param: forge_lang::error::ParamKey::parse("w").unwrap(),
+        value: Literal {
+            value: v,
+            dim: forge_lang::values::Dim::Length,
+        },
+    }
+}
+
+/// HOSTED-DESIGN's review of N1–N9, H1: a client's ops wait for its connection's Welcome, and
+/// every pending op is sent on it (an op sent before the server placed the connection could be
+/// lost with it).
+#[test]
+fn ops_wait_for_welcome_and_welcome_sends_every_pending_op() {
+    let mut c = Client::new("part.fg", "c0", "t");
+    assert!(matches!(c.outbox.as_slice(), [Up::Hello { .. }]));
+    c.outbox.clear();
+    let welcome = |seq| Down::Welcome {
+        seq,
+        text: DOC.into(),
+        you: "ada".into(),
+        snap: true,
+    };
+    c.receive(welcome(0));
+    assert!(c.outbox.is_empty(), "nothing pending");
+    c.edit(set_w(41.0)).unwrap();
+    assert!(
+        matches!(c.outbox.as_slice(), [Up::Op { id: 1, .. }]),
+        "welcomed: sent at once"
+    );
+    // the link drops: Hello only; an edit meanwhile is held
+    c.reconnect();
+    assert!(matches!(c.outbox.as_slice(), [Up::Hello { .. }]));
+    c.outbox.clear();
+    c.edit(set_w(42.0)).unwrap();
+    assert!(c.outbox.is_empty(), "held until Welcome");
+    // both pending ops on the new Welcome, in order
+    c.receive(welcome(0));
+    assert!(
+        matches!(c.outbox.as_slice(), [Up::Op { id: 1, .. }, Up::Op { id: 2, .. }]),
+        "{:?}",
+        c.outbox
+    );
+}
+
+/// M3: dedup by a per-client high-water mark plus refused ids. A refused op below a later
+/// committed one is checked again on a retry (never "already committed"); a committed op from
+/// before the log's start is AlreadyCommitted; the marks survive a reopen from the snapshot.
+#[test]
+fn retries_are_answered_by_marks_and_refused_ids() {
+    let mut st = MemStore::default();
+    let mut seq = Sequencer::open(&mut st, "part.fg", DOC, None).unwrap();
+    let bad = Op::Rename {
+        from: "nothing_here".into(),
+        to: "x".into(),
+    };
+    assert!(seq.submit(&mut st, "ada", "ada/c", 0, 1, &set_w(41.0)).is_ok());
+    assert!(
+        seq.submit(&mut st, "ada", "ada/c", 1, 2, &bad).is_err(),
+        "op 2 refused"
+    );
+    assert!(seq.submit(&mut st, "ada", "ada/c", 1, 3, &set_w(43.0)).is_ok());
+    // in the log: the same entry again
+    let again = seq.submit(&mut st, "ada", "ada/c", 0, 1, &set_w(41.0)).unwrap();
+    assert!(again.duplicate && again.entry.seq == 1);
+    seq.compact(&mut st).unwrap();
+    // before the log: committed ones are AlreadyCommitted, the refused one is checked again
+    for id in [1, 3] {
+        let r = seq.submit(&mut st, "ada", "ada/c", 0, id, &set_w(99.0));
+        assert!(
+            matches!(r, Err(forge_sync::Refusal::AlreadyCommitted { .. })),
+            "{id}: {r:?}"
+        );
+    }
+    let r = seq.submit(&mut st, "ada", "ada/c", 2, 2, &bad);
+    assert!(
+        !matches!(r, Err(forge_sync::Refusal::AlreadyCommitted { .. })),
+        "{r:?}"
+    );
+    // another client's same ids are its own
+    assert!(seq.submit(&mut st, "ada", "ada/d", 2, 1, &set_w(44.0)).is_ok());
+    // reopened from the snapshot (a restart): the same answers
+    seq.compact(&mut st).unwrap();
+    let mut seq = Sequencer::open(&mut st, "part.fg", DOC, None).unwrap();
+    let r = seq.submit(&mut st, "ada", "ada/c", 0, 3, &set_w(99.0));
+    assert!(
+        matches!(r, Err(forge_sync::Refusal::AlreadyCommitted { .. })),
+        "{r:?}"
+    );
+    let r = seq.submit(&mut st, "ada", "ada/c", 3, 2, &bad);
+    assert!(
+        !matches!(r, Err(forge_sync::Refusal::AlreadyCommitted { .. })),
+        "{r:?}"
+    );
+    let r = seq.submit(&mut st, "ada", "ada/d", 0, 1, &set_w(99.0));
+    assert!(
+        matches!(r, Err(forge_sync::Refusal::AlreadyCommitted { .. })),
+        "{r:?}"
+    );
+}
