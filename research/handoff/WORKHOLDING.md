@@ -9,12 +9,14 @@ its builder (`interface/forge-workholding-builder`), and how CAM holds a part.
 | branch | sha | state |
 |---|---|---|
 | `cam/workholding` | 9edad4f6 | merged in train 7 (the library, kinds, lathe, generators, vendor data) |
-| `cam/workholding-vise` | d9040ec4 | pre-verified, UX-LEAD OK, with TRAIN-CONDUCTOR for train 8 |
-| `cam/workholding-haas` | 41d3276e | contains `-vise`; real Haas models (05-0404, 05-0405) in the certified path |
-| `cam/workholding-default` | 6950ec87+ | contains `-haas`; `generic-vise-150`/`-100` mean the real Haas vises |
-| `cam/workholding-any` | d23db4bd | contains `-default`; any geometry: no model named in code, `workholding(..)`, user imports |
+| `cam/workholding-vise` | d9040ec4 | PRE-VERIFY GREEN-EXCEPT-RENDER, sent to TRAIN-CONDUCTOR (render: VERIFY-RENDER) |
+| `cam/workholding-haas` | 783e2d57 | contains `-vise`; real Haas models (05-0404, 05-0405) in the certified path |
+| `cam/workholding-any2` | f2321a5b | contains `-haas`; any geometry, user imports, the speed fix |
+| `cam/workholding-default2` | (this) | contains `-any2`; `generic-vise-150`/`-100` mean the real Haas vises |
 
-Each contains the one before (vise → haas → default → any), so they land in that order or together.
+They land in that order; each line goes to TRAIN-CONDUCTOR as its pre-verify comes in.
+`cam/workholding-any` and `cam/workholding-default` are superseded (by `-any2` and `-default2`):
+`-any` sat on the old default switch, so it could not land without it.
 
 ## What `cam/workholding-vise` does
 
@@ -80,15 +82,21 @@ sha256 the record cites, so a model swapped under a citation is caught either wa
 
 ## Unfinished, in the order I would do it
 
-0. **Soft jaws on a model vise's own bodies.** `forge_cam::fixture::soft_jaws` builds the vise
+0. **Parasolid**: PARASOLID's .x_t/.x_b importer is heading for a train; once it lands,
+   `model_file` should accept it with a one-line dispatch in `Cam::import_model` (beside the
+   `.fg` branch: read it to bodies, then `compile_bodies`).
+   **Soft jaws on a model vise's own bodies.** `forge_cam::fixture::soft_jaws` builds the vise
    under the jaws from `ViseSize` boxes; with a model it should place `mill::model_bodies` there
    instead (the hard jaws' faces against the soft jaws' backs). Until then each box is reported.
    Also: a non-Haas maker's model (none openly fetchable without sign-up was found), Parasolid
    (forge-step does not read it), and writing an STL beside a runtime import's compiled faces
    if CAM-SIM wants one to draw.
 
-1. **Make a real vise the default.** (Done on `cam/workholding-default`, kept here for what it
-   measured.) The coordinator approved repointing `generic-vise-150` to
+1. **Make a real vise the default.** Done on `cam/workholding-default2`, once the speed fix on
+   `-any2` made it cost +2.6% / +2.7% instructions on bracket / manifold (it was +18% / +43%:
+   the memo key printed the whole fixture each op, the faces were cloned each op, the text parsed
+   each setup, and the fixture grid returned the vise's body under every move; `Grid::near_z`
+   skips what `apart` drops anyway, in the same order). NC and verdicts identical to main. The coordinator approved repointing `generic-vise-150` to
    `haas-vise-05-0404`, with the full before/after (NC, verdicts, cam_time, band) and every
    verdict change explained — a new contact against the real vise is a real finding, not a
    regression. I did not get to it. It is a one-line change in `VISE_SUCCESSOR`
