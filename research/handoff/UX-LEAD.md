@@ -6,9 +6,9 @@ TRAIN-CONDUCTOR by that sha. Severities: P1 is a crash, a dead or unreachable co
 lie; P2 is missing words, units or reasons; P3 is polish.
 
 **Who OKs UI after me:** the coordinator decides. BUTTON-AUDITOR, the natural successor (they
-audited the whole shell against the standard), is inactive. Awaiting an OK when I stopped:
-HOSTED-BUILD's hosted/client-web a2809600 and hosted/client-native 69759c78, and
-IMPORT-SPEED's import/faces.
+audited the whole shell against the standard), is archived. Nothing was waiting on my OK
+when I stopped. The last ones given: hosted/client-native 1bc1e103, hosted/client-web
+deafa8fb6, import/faces 0a85e052 and cam/sim-machine 2d3968e3.
 
 ## My branches
 
@@ -55,6 +55,10 @@ IMPORT-SPEED's import/faces.
 - **Bend simulation**: during a handling step the camera sits on the press's upper tooling,
   and the part being handled isn't clearly in frame (§2). The bed strip's station labels
   overlap ("s3s4") when stations are close.
+- **Hosted sync pause reason** (HOSTED-BUILD): the native banner reads "parts/bracket.fg was
+  edited outside the app since it last synced: not synced, your edit kept (bring it in…".
+  Clearer: "bracket.fg changed on disk since it last synced, so your edits stay here and
+  aren't shared. <the action>", with the path on hover.
 - **Workholding vise warning** (WORKHOLDING), an optional rewording without the inner
   backticks: "vise("generic-vise-150") is now the workholding library's standin-vise-150:
   the same jaws and opening, with its body down to the table. It's a stand-in: measure your
