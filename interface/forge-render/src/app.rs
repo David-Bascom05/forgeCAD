@@ -525,9 +525,18 @@ impl ApplicationHandler for App {
                 redraw = true;
             }
             WindowEvent::ModifiersChanged(m) => self.mods = m.state(),
-            // a file dropped on the window opens in its tab, as File > Open would
+            // a file dropped on the window opens in its tab, as File > Open would; a picture,
+            // with the Agent tab showing, goes with its next message
             WindowEvent::DroppedFile(path) => {
-                l.gui.open(&path.to_string_lossy());
+                let picture = path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+                    ["png", "jpg", "jpeg", "gif", "webp"].contains(&e.to_ascii_lowercase().as_str())
+                });
+                let taken = picture
+                    && l.gui.shell.agent.tab == crate::shell::agent::SideTab::Agent
+                    && std::fs::read(path).is_ok_and(|b| l.gui.agent_picture(b));
+                if !taken {
+                    l.gui.open(&path.to_string_lossy());
+                }
                 redraw = true;
             }
             WindowEvent::KeyboardInput { event, .. }

@@ -15,6 +15,8 @@ const DENOISE: &str = include_str!("denoise.wgsl");
 /// The denoiser's passes: prepare, five a-trous steps, finish; each pass's uniform 256 bytes
 /// apart (the alignment a dynamic offset needs everywhere).
 const PASSES: u64 = 7;
+/// The denoiser's passes: prepare, five steps, finish.
+pub const DENOISE_PASSES: u32 = PASSES as u32;
 const SLOT: u64 = 256;
 
 struct Denoiser {
@@ -373,7 +375,7 @@ impl Tracer {
         }
     }
 
-    fn params(&self, view: &View, s: &Settings) -> Vec<u8> {
+    fn params(&self, view: &View, s: &Settings, y0: u32) -> Vec<u8> {
         let (w, h) = self.size;
         let aspect = w as f32 / h as f32;
         let ty = (view.fovy * 0.5).tan();
@@ -392,7 +394,7 @@ impl Tracer {
         };
         let mut v: Vec<u32> = vec![w, h, self.samples, s.seed];
         v.extend([self.top, self.env_size.0, self.env_size.1, s.bounces]);
-        v.extend([self.lut_at, self.placements, 1, 0]);
+        v.extend([self.lut_at, self.placements, 1, y0]);
         let f = |x: f32| x.to_bits();
         v.extend([f(view.eye[0]), f(view.eye[1]), f(view.eye[2]), f(view.parallel)]);
         v.extend([f(right[0]), f(right[1]), f(right[2]), 0]);
@@ -411,29 +413,81 @@ impl Tracer {
 
     /// `n` more samples per pixel.
     pub fn step(&mut self, view: &View, settings: &Settings, n: u32) {
-        self.group();
-        let (w, h) = self.size;
         for _ in 0..n {
-            self.queue
-                .write_buffer(&self.params, 0, &self.params(view, settings));
-            let mut e = self.device.create_command_encoder(&Default::default());
-            {
-                let mut pass = e.begin_compute_pass(&Default::default());
-                pass.set_pipeline(&self.trace);
-                pass.set_bind_group(0, self.trace_group.as_ref(), &[]);
-                pass.dispatch_workgroups(w.div_ceil(8), h.div_ceil(8), 1);
-            }
-            self.queue.submit([e.finish()]);
+            self.trace_rows(view, settings, 0, self.size.1);
             self.samples += 1;
         }
+    }
+
+    /// The next sample in rows `y0..y0 + rows` only (`rows` a multiple of 8, or to the bottom):
+    /// a sample traced a band at a time, counted with `sample_done` when its last band is in.
+    pub fn trace_rows(&mut self, view: &View, settings: &Settings, y0: u32, rows: u32) {
+        self.group();
+        let w = self.size.0;
+        self.queue
+            .write_buffer(&self.params, 0, &self.params(view, settings, y0));
+        let mut e = self.device.create_command_encoder(&Default::default());
+        {
+            let mut pass = e.begin_compute_pass(&Default::default());
+            pass.set_pipeline(&self.trace);
+            pass.set_bind_group(0, self.trace_group.as_ref(), &[]);
+            pass.dispatch_workgroups(w.div_ceil(8), rows.div_ceil(8), 1);
+        }
+        self.queue.submit([e.finish()]);
+    }
+
+    /// Every row of the next sample is traced (`trace_rows`): it counts.
+    pub fn sample_done(&mut self) {
+        self.samples += 1;
     }
 
     /// The sum so far into `picture`, exposed by `ev` stops; denoised first when asked.
     pub fn show(&mut self, ev: f32, denoise: bool) {
         self.group();
         if denoise {
-            self.denoise();
+            self.denoise(0..DENOISE_PASSES);
         }
+        self.show_pass(ev, denoise);
+    }
+
+    /// The denoiser's pass `k` of `DENOISE_PASSES` (0 reads the sum as it is) in rows
+    /// `y0..y0 + rows` only (a multiple of 8, or to the bottom): a denoise spread over frames,
+    /// each pass over every row before the next; `show_denoised` after the last.
+    pub fn denoise_rows(&mut self, k: u32, y0: u32, rows: u32) {
+        self.group();
+        let w = self.size.0;
+        if k == 0 && y0 == 0 {
+            // its bind groups made, its uniforms written (no pass run)
+            self.denoise(0..0);
+        }
+        let dn = &self.denoiser;
+        // the pass's first row, in its uniforms' last word
+        let at = k as u64 * SLOT + 28;
+        self.queue.write_buffer(&dn.uniforms, at, &y0.to_le_bytes());
+        let groups = dn.groups.as_ref().expect("made with the first pass");
+        let (pipeline, g) = match k {
+            0 => (&dn.prepare, &groups[0]),
+            6 => (&dn.finish, &groups[0]),
+            k if k % 2 == 1 => (&dn.atrous, &groups[1]),
+            _ => (&dn.atrous, &groups[0]),
+        };
+        let mut e = self.device.create_command_encoder(&Default::default());
+        {
+            let mut pass = e.begin_compute_pass(&Default::default());
+            pass.set_pipeline(pipeline);
+            pass.set_bind_group(0, g, &[k * SLOT as u32]);
+            pass.dispatch_workgroups(w.div_ceil(8), rows.div_ceil(8), 1);
+        }
+        self.queue.submit([e.finish()]);
+    }
+
+    /// The denoised mean (every pass of `denoise_rows` run) into `picture`.
+    pub fn show_denoised(&mut self, ev: f32) {
+        self.group();
+        self.show_pass(ev, true);
+    }
+
+    fn show_pass(&mut self, ev: f32, denoise: bool) {
         self.denoised = denoise;
         let n = if denoise { 1.0 } else { self.samples as f32 };
         let v = [n, 2f32.powf(ev), 0.0, 0.0];
@@ -475,8 +529,8 @@ impl Tracer {
         self.queue.submit([e.finish()]);
     }
 
-    /// The denoised mean into the denoiser's first buffer.
-    fn denoise(&mut self) {
+    /// The denoiser's passes `passes` (all: the denoised mean into its first buffer).
+    fn denoise(&mut self, passes: std::ops::Range<u32>) {
         let (w, h) = self.size;
         let dn = &mut self.denoiser;
         if dn.groups.is_none() {
@@ -514,7 +568,34 @@ impl Tracer {
             };
             dn.groups = Some([group(&dn.b, &dn.a), group(&dn.a, &dn.b)]);
         }
-        // the passes' uniforms: prepare, steps 1..16, finish
+        // the passes' uniforms: prepare, steps 1..16, finish (written as the first pass goes)
+        if passes.start == 0 {
+            self.write_denoise_uniforms(w, h);
+        }
+        let dn = &self.denoiser;
+        let groups = dn.groups.as_ref().expect("made above");
+        let mut e = self.device.create_command_encoder(&Default::default());
+        {
+            let mut pass = e.begin_compute_pass(&Default::default());
+            let (gx, gy) = (w.div_ceil(8), h.div_ceil(8));
+            // prepare: into a; steps: a -> b -> a -> b -> a -> b; finish: b -> a
+            for k in passes {
+                let (pipeline, g) = match k {
+                    0 => (&dn.prepare, &groups[0]),
+                    6 => (&dn.finish, &groups[0]),
+                    k if k % 2 == 1 => (&dn.atrous, &groups[1]),
+                    _ => (&dn.atrous, &groups[0]),
+                };
+                pass.set_pipeline(pipeline);
+                pass.set_bind_group(0, g, &[k * SLOT as u32]);
+                pass.dispatch_workgroups(gx, gy, 1);
+            }
+        }
+        self.queue.submit([e.finish()]);
+    }
+
+    fn write_denoise_uniforms(&mut self, w: u32, h: u32) {
+        let dn = &self.denoiser;
         let mut u = vec![0u8; (PASSES * SLOT) as usize];
         for k in 0..PASSES as usize {
             let step = if (1..6).contains(&k) { 1u32 << (k - 1) } else { 1 };
@@ -532,26 +613,6 @@ impl Tracer {
             u[k * SLOT as usize..][..32].copy_from_slice(&bytes(&words));
         }
         self.queue.write_buffer(&dn.uniforms, 0, &u);
-        let groups = dn.groups.as_ref().expect("made above");
-        let mut e = self.device.create_command_encoder(&Default::default());
-        {
-            let mut pass = e.begin_compute_pass(&Default::default());
-            let (gx, gy) = (w.div_ceil(8), h.div_ceil(8));
-            // prepare: into a; steps: a -> b -> a -> b -> a -> b; finish: b -> a
-            pass.set_pipeline(&dn.prepare);
-            pass.set_bind_group(0, &groups[0], &[0]);
-            pass.dispatch_workgroups(gx, gy, 1);
-            pass.set_pipeline(&dn.atrous);
-            for k in 1..6u32 {
-                let g = if k % 2 == 1 { &groups[1] } else { &groups[0] };
-                pass.set_bind_group(0, g, &[k * SLOT as u32]);
-                pass.dispatch_workgroups(gx, gy, 1);
-            }
-            pass.set_pipeline(&dn.finish);
-            pass.set_bind_group(0, &groups[0], &[6 * SLOT as u32]);
-            pass.dispatch_workgroups(gx, gy, 1);
-        }
-        self.queue.submit([e.finish()]);
     }
 
     /// The denoised mean, linear RGBA per pixel (after `show(_, true)`; native only).
