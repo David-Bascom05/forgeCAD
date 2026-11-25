@@ -612,6 +612,7 @@ dependencies = [
  "forge-agent",
  "forge-git",
  "forge-history",
+ "forge-keep",
  "forge-lang",
  "forge-remote",
  "forge-server",
