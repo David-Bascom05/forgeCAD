@@ -12,9 +12,7 @@ jobs:
       fail-fast: false
       matrix:
         revision:
-          - 5a3f4875b4d57f23f8e1f653b4f43c84b5c01031
-          - 18169987f63df6c0ee7ece19aec8d9c2b280bfa1
-          - 2e7d9a2d7a4c9029cd8c45ddb744b6e0455757b9
+          - 73513c86aab85b90d68259a3fb5867ec9583ff72
     env:
       CARGO_INCREMENTAL: 0
       CARGO_PROFILE_RELEASE_DEBUG: 0
