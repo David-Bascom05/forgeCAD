@@ -215,11 +215,13 @@ fn a_boolean_and_a_check_past_their_budget_refuse() {
 }
 
 /// UMC-400 #63060 (73 faces): a bore through it, which ran without end in the curve-surface search
-/// on its NURBS faces (K051/K052 of the corpus), now stops at the operation's work budget and
-/// refuses (about 90 s at opt-level 3).
+/// on its NURBS faces (K051/K052 of the corpus), now stops at its work budget and refuses. Under
+/// an outer budget of 2^22, which the boolean's own (`budget::OP`, 2^29: about 90 s at opt-level
+/// 3) is held within: the search stops at whatever it is given.
 #[test]
 #[cfg_attr(target_os = "wasi", ignore = "90 s natively")]
 fn a_bore_through_umc400s_part_finishes() {
+    let _within = forge_geom::budget::scoped(1 << 22);
     use forge_bool::{BoolError, Op, boolean};
     use forge_math::{Frame, Point2, UnitVec3, Vec3};
     let b = one("umc400_bore_runaway_73faces.step");

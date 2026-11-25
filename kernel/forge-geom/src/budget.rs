@@ -13,7 +13,7 @@
 //! when it ends, so what is spent is counted whole wherever it was spent. A thread that finds the
 //! shared bank empty marks it dry, and the op, whichever thread looks (`exhausted`), refuses.
 
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
@@ -28,11 +28,14 @@ thread_local! {
     /// The slice last handed out (what a watch is told was spent at the next).
     static GIVEN: Cell<u64> = const { Cell::new(0) };
     static LIMITED: Cell<bool> = const { Cell::new(false) };
-    static WATCH: RefCell<Option<Arc<Watch>>> = const { RefCell::new(None) };
+    static WATCH: Cell<Option<Arc<Watch>>> = const { Cell::new(None) };
     /// The bank this thread shares with the op's other threads, once it has started one.
-    static SHARED: RefCell<Option<Arc<Shared>>> = const { RefCell::new(None) };
+    static SHARED: Cell<Option<Arc<Shared>>> = const { Cell::new(None) };
     /// The slice handed out at once on this thread (`SLICE`; less only in tests: `slice_for_tests`).
     static SLICE_NOW: Cell<u64> = const { Cell::new(SLICE) };
+    /// Inside `uncounted`: the op's budget held aside, its counters lifted, so nothing here spends
+    /// it, is stopped by its watch or cut short by its shared bank (and no `scoped` adds a cap).
+    static FREE: Cell<bool> = const { Cell::new(false) };
 }
 
 /// For tests: slices of `n` on this thread (a stop then reaches an op after `n` of its work, not a
@@ -103,24 +106,42 @@ pub struct Watching(Option<Arc<Watch>>);
 #[must_use = "the watch is taken off when this is dropped"]
 pub fn watched(w: Arc<Watch>) -> Watching {
     hand_down();
-    Watching(WATCH.with(|x| x.borrow_mut().replace(w)))
+    Watching(WATCH.with(|x| x.replace(Some(w))))
 }
 
 impl Drop for Watching {
     fn drop(&mut self) {
         let before = self.0.take();
-        WATCH.with(|x| *x.borrow_mut() = before);
+        WATCH.with(|x| x.set(before));
     }
 }
 
 /// Whether a watch on this thread was stopped: what is made now may have been cut short (an op
 /// refused as past its budget, a fallback taken for it), so nothing made is to be kept for later.
 pub fn stopped() -> bool {
-    WATCH.with(|w| w.borrow().as_ref().is_some_and(|w| w.stopped()))
+    !FREE.get() && with_watch(|w| w.as_ref().is_some_and(|w| w.stopped()))
 }
 
 fn shared() -> Option<Arc<Shared>> {
-    SHARED.with(|s| s.borrow().clone())
+    if FREE.get() {
+        return None;
+    }
+    SHARED.with(|s| {
+        let v = s.take();
+        let c = v.clone();
+        s.set(v);
+        c
+    })
+}
+
+/// `f` of this thread's watch (taken out of its cell while `f` runs: `f` must not look at it).
+fn with_watch<R>(f: impl FnOnce(&Option<Arc<Watch>>) -> R) -> R {
+    WATCH.with(|c| {
+        let v = c.take();
+        let r = f(&v);
+        c.set(v);
+        r
+    })
 }
 
 /// What the bank holds beyond the slice in hand.
@@ -153,7 +174,7 @@ fn bank_take(want: u64) -> u64 {
 /// `n` to spend from now: a slice in hand, the rest in the bank (this thread's own).
 fn set_total(n: u64) {
     let s = n.min(SLICE_NOW.get());
-    SHARED.with(|x| *x.borrow_mut() = None);
+    SHARED.with(|x| x.set(None));
     DRAWN.set(spent().wrapping_add(s));
     LEFT.set(s);
     BANK.set(n - s);
@@ -162,7 +183,7 @@ fn set_total(n: u64) {
 
 /// No limit again.
 fn end() {
-    SHARED.with(|x| *x.borrow_mut() = None);
+    SHARED.with(|x| x.set(None));
     DRAWN.set(spent().wrapping_add(u64::MAX));
     LEFT.set(u64::MAX);
     BANK.set(0);
@@ -173,7 +194,7 @@ fn end() {
 /// Whether a `scoped` budget lives on this thread. (Not `left() == u64::MAX`: what is spent with
 /// no limit set still counts down from there.)
 pub fn limited() -> bool {
-    LIMITED.get()
+    LIMITED.get() && !FREE.get()
 }
 
 /// `most` evaluations while this lives, no limit again when it goes, unwinding too: a read that
@@ -193,7 +214,7 @@ pub struct Budget {
 #[must_use = "the budget ends when this is dropped"]
 pub fn scoped(most: u64) -> Budget {
     hand_down();
-    if shared().is_some() {
+    if FREE.get() || shared().is_some() {
         return Budget {
             outer: None,
             start: 0,
@@ -283,7 +304,7 @@ fn refill() -> bool {
     if !LIMITED.get() {
         return false;
     }
-    let stopped = WATCH.with(|w| match &*w.borrow() {
+    let stopped = with_watch(|w| match w {
         Some(w) => {
             w.spent.fetch_add(GIVEN.get(), Ordering::Relaxed);
             w.stopped()
@@ -322,27 +343,32 @@ pub fn left() -> u64 {
 /// its budget, would hang on what ran before it and, on several threads, on which got there
 /// first. Uncounted, a cache costs every op the same: nothing. `f` runs as with no budget (no
 /// limit, no watch, no shared bank), and this thread's budget is as it was after.
+#[inline]
 pub fn uncounted<T>(f: impl FnOnce() -> T) -> T {
-    if !LIMITED.get() {
-        return f();
-    }
-    let was = Taken {
-        left: LEFT.get(),
-        drawn: DRAWN.get(),
-        bank: BANK.get(),
-        given: GIVEN.get(),
-        limited: true,
-        watch: WATCH.with(|w| w.borrow_mut().take()),
-        shared: SHARED.with(|x| x.borrow_mut().take()),
-    };
-    DRAWN.set(spent().wrapping_add(u64::MAX));
-    LEFT.set(u64::MAX);
-    BANK.set(0);
-    GIVEN.set(0);
-    LIMITED.set(false);
-    // (put back on the way out, unwinding too)
-    let _back = Back(was);
+    // only the slice in hand held aside (a cache fill is the most frequent call here: taking the
+    // whole state out and back was 0.8% of a small part's regen); the bank, the watch and the
+    // shared bank stay where they are, unseen while FREE. (`spent` inside counts on from a slice
+    // of u64::MAX: only its differences mean anything there.) A fill inside a fill (an edge's box
+    // inside its face's) is free already. One call of `f`, so it inlines where it is written.
+    let _back = (LIMITED.get() && !FREE.get()).then(|| Freed {
+        left: LEFT.replace(u64::MAX),
+        free: FREE.replace(true),
+    });
     f()
+}
+
+/// `uncounted`'s slice in hand put back when it goes, unwinding too.
+struct Freed {
+    left: u64,
+    free: bool,
+}
+
+impl Drop for Freed {
+    #[inline]
+    fn drop(&mut self) {
+        LEFT.set(self.left);
+        FREE.set(self.free);
+    }
 }
 
 /// `f` on a counter of its own: at most `limit`, drawn from no bank but its own (not the op's, even
@@ -352,14 +378,21 @@ pub fn uncounted<T>(f: impl FnOnce() -> T) -> T {
 /// What `f` sees as over is `f`'s own budget, as for `scoped`.
 pub fn isolated<T>(limit: u64, f: impl FnOnce() -> T) -> (u64, T) {
     hand_down();
+    // inside `uncounted`, the op's watch is out of reach here too
+    let free = FREE.replace(false);
     let was = Taken {
         left: LEFT.get(),
         drawn: DRAWN.get(),
         bank: BANK.get(),
         given: GIVEN.get(),
         limited: LIMITED.get(),
-        watch: WATCH.with(|w| w.borrow().clone()),
-        shared: SHARED.with(|x| x.borrow_mut().take()),
+        free,
+        watch: if free {
+            WATCH.with(|w| w.take())
+        } else {
+            with_watch(|w| w.clone())
+        },
+        shared: SHARED.with(|x| x.take()),
     };
     let _back = Back(was);
     set_total(limit);
@@ -390,6 +423,7 @@ struct Taken {
     bank: u64,
     given: u64,
     limited: bool,
+    free: bool,
     watch: Option<Arc<Watch>>,
     shared: Option<Arc<Shared>>,
 }
@@ -402,8 +436,9 @@ impl Taken {
         BANK.set(self.bank);
         GIVEN.set(self.given);
         LIMITED.set(self.limited);
-        WATCH.with(|w| *w.borrow_mut() = self.watch.take());
-        SHARED.with(|x| *x.borrow_mut() = self.shared.take());
+        FREE.set(self.free);
+        WATCH.with(|w| w.set(self.watch.take()));
+        SHARED.with(|x| x.set(self.shared.take()));
     }
 }
 
@@ -415,7 +450,7 @@ impl Drop for Started {
         if let Some(s) = shared() {
             s.bank.fetch_add(LEFT.get(), Ordering::Relaxed);
         }
-        if let Some(w) = WATCH.with(|w| w.borrow().clone()) {
+        if let Some(w) = with_watch(|w| w.clone()) {
             w.spent
                 .fetch_add(GIVEN.get() - LEFT.get().min(GIVEN.get()), Ordering::Relaxed);
         }
@@ -424,7 +459,11 @@ impl Drop for Started {
 }
 
 fn capture() -> Option<Box<dyn std::any::Any + Send>> {
-    let watch = WATCH.with(|w| w.borrow().clone());
+    // a thread started inside `uncounted` runs as it does: with no budget, no watch
+    if FREE.get() {
+        return None;
+    }
+    let watch = with_watch(|w| w.clone());
     let limited = LIMITED.get();
     if !limited && watch.is_none() {
         return None;
@@ -436,7 +475,7 @@ fn capture() -> Option<Box<dyn std::any::Any + Send>> {
                 dry: AtomicBool::new(false),
             });
             BANK.set(0);
-            SHARED.with(|x| *x.borrow_mut() = Some(s.clone()));
+            SHARED.with(|x| x.set(Some(s.clone())));
             s
         })
     });
@@ -454,8 +493,9 @@ fn enter(h: Box<dyn std::any::Any + Send>) -> Box<dyn std::any::Any> {
         bank: BANK.get(),
         given: GIVEN.get(),
         limited: LIMITED.get(),
-        watch: WATCH.with(|w| w.borrow_mut().take()),
-        shared: SHARED.with(|x| x.borrow_mut().take()),
+        free: FREE.replace(false),
+        watch: WATCH.with(|w| w.take()),
+        shared: SHARED.with(|x| x.take()),
     };
     let limited = shared.is_some();
     let l = if limited { 0 } else { u64::MAX };
@@ -464,8 +504,8 @@ fn enter(h: Box<dyn std::any::Any + Send>) -> Box<dyn std::any::Any> {
     BANK.set(0);
     GIVEN.set(0);
     LIMITED.set(limited);
-    WATCH.with(|w| *w.borrow_mut() = watch);
-    SHARED.with(|x| *x.borrow_mut() = shared);
+    WATCH.with(|w| w.set(watch));
+    SHARED.with(|x| x.set(shared));
     Box::new(Started(taken))
 }
 
@@ -532,6 +572,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(target_os = "wasi", ignore = "a thread of its own: WASI has none")]
     fn a_watched_op_is_stopped_from_another_thread_and_shows_its_progress() {
         let w = super::Watch::new();
         let seen = w.clone();
@@ -612,6 +653,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(target_os = "wasi", ignore = "a thread of its own: WASI has none")]
     fn a_stop_reaches_the_threads_an_op_starts() {
         let w = super::Watch::new();
         let seen = w.clone();

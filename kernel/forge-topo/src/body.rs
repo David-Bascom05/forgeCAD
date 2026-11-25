@@ -166,11 +166,44 @@ impl<T> Default for Cached<T> {
 }
 
 impl<T> Cached<T> {
-    /// Its value, `f`'s the first time: a fill not counted in the work budget
-    /// (`forge_geom::budget::uncounted`), so what an op spends is the same whichever asked first,
-    /// and a fill is never cut short (a value kept half made).
+    /// Its value, `f`'s the first time, for a fill that spends nothing of the work budget (of
+    /// closed forms only, or of other caches' values: `may_spend` false; checked in debug builds).
+    /// A fill that may spend goes through `get_or_init_uncounted`.
     pub fn get_or_init(&self, f: impl FnOnce() -> T) -> &T {
+        self.0.get_or_init(|| {
+            #[cfg(debug_assertions)]
+            let was = forge_geom::budget::spent();
+            let v = f();
+            #[cfg(debug_assertions)]
+            debug_assert_eq!(
+                forge_geom::budget::spent(),
+                was,
+                "a plain cache fill spent the budget"
+            );
+            v
+        })
+    }
+
+    /// Its value, `f`'s the first time: a fill that may spend (it evaluates a procedural curve or
+    /// surface), not counted in the work budget (`forge_geom::budget::uncounted`), so what an op
+    /// spends is the same whichever asked first, and a fill is never cut short (a value kept half
+    /// made).
+    pub fn get_or_init_uncounted(&self, f: impl FnOnce() -> T) -> &T {
         self.0.get_or_init(|| forge_geom::budget::uncounted(f))
+    }
+
+    /// `get_or_init_uncounted` where the fill `may_spend` (asked only when there is no value yet),
+    /// else `get_or_init`.
+    #[inline]
+    pub fn get_or_init_if(&self, may_spend: impl FnOnce() -> bool, f: impl FnOnce() -> T) -> &T {
+        if let Some(v) = self.0.get() {
+            return v;
+        }
+        if may_spend() {
+            self.get_or_init_uncounted(f)
+        } else {
+            self.get_or_init(f)
+        }
     }
     pub fn get(&self) -> Option<&T> {
         self.0.get()
@@ -1281,8 +1314,19 @@ impl Body {
     /// their edges, so their whole surface box is added. Cached on the face.
     /// A box holding edge `e` (cached on the edge).
     pub fn edge_box(&self, e: EdgeId) -> Box3 {
+        match self.edge(e).bbox.get() {
+            Some(b) => *b,
+            None => self.edge_box_fill(e),
+        }
+    }
+
+    /// `edge_box` the first time: `uncounted` only where it may spend.
+    #[inline(never)]
+    fn edge_box_fill(&self, e: EdgeId) -> Box3 {
         let edge = self.edge(e);
-        *edge.bbox.get_or_init(|| edge.curve.bbox(edge.range))
+        *edge
+            .bbox
+            .get_or_init_if(|| edge.curve.may_spend(), || edge.curve.bbox(edge.range))
     }
 
     fn hulls(&self) -> &FaceHulls {
@@ -1353,10 +1397,42 @@ impl Body {
     }
 
     pub fn face_box(&self, f: FaceId) -> Box3 {
-        *self
-            .face(f)
-            .bbox
-            .get_or_init(|| self.face_box_with(f, |e| self.edge_box(e)))
+        match self.face(f).bbox.get() {
+            Some(b) => *b,
+            None => self.face_box_fill(f),
+        }
+    }
+
+    /// `face_box` the first time: `uncounted` only where it may spend.
+    #[inline(never)]
+    fn face_box_fill(&self, f: FaceId) -> Box3 {
+        *self.face(f).bbox.get_or_init_if(
+            || self.face_box_may_spend(f),
+            || self.face_box_with(f, |e| self.edge_box(e)),
+        )
+    }
+
+    /// Whether `face_box_with` may spend: a procedural surface's box, or a torus's (its loops drawn:
+    /// their edges evaluated). Else it is its edges' boxes (their own fills) and a closed form.
+    fn face_box_may_spend(&self, f: FaceId) -> bool {
+        match &self.face(f).surface {
+            Surface::Procedural(_) => true,
+            Surface::Torus(_) => self.face_may_spend(f),
+            _ => false,
+        }
+    }
+
+    /// Whether working a face out may spend an op's work budget: its surface or one of its edges'
+    /// curves is procedural (`Surface::may_spend`, `Curve::may_spend`). A fill of a cache of the
+    /// face's that is not is `Cached::get_or_init`; else `get_or_init_uncounted`.
+    pub fn face_may_spend(&self, f: FaceId) -> bool {
+        let face = self.face(f);
+        face.surface.may_spend()
+            || face.loops.iter().any(|&l| {
+                self.lp(l)
+                    .coedges()
+                    .any(|c| self.edge(self.coedge(c).edge).curve.may_spend())
+            })
     }
 
     /// `face_box`, the same box, worked out with nothing kept: neither the face's box nor any
