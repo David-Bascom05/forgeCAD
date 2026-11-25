@@ -366,6 +366,9 @@ pub struct FgPanel {
     pub asm: Option<super::fgasm::AsmPanel>,
     /// The last thing picked in the view, as Forge names it (or why nothing does).
     pub picked: Option<Result<String, super::fgtool::ToolError>>,
+    /// Everything picked, as Forge names them, when it's more than one (Ctrl+click): the
+    /// Agent tab offers them all.
+    pub picked_all: Vec<String>,
     /// The Parameters dialog is up.
     pub params_open: bool,
     /// The weldments' cut list, as the last build had it; its panel up.
