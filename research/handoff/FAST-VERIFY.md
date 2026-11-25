@@ -36,17 +36,32 @@ Owner command:
 Each takes `verify <40-hex sha>` from TRAIN-CONDUCTOR, runs its stage whole in a warm worktree, and replies
 `VERIFY <stage> <sha> exit N <s> [toolchain] failed: …`. None of them publishes anything.
 Measured on train 7's head: identical verdicts both ways, about 28 min in parallel (near-cold) against about 77 min serial.
+- Refresh a verifier's scripts (~/pv is a detached worktree, so `git pull` fails there):
+  `git -C ~/pv fetch -q origin tools/preverify && git -C ~/pv checkout -q --detach FETCH_HEAD`.
+- Disk (stage.py, 127b82f7 or later): before a run, make_room keeps 25 GB free by removing whole profiles, any over 30 GB
+  first, then 1 GB-plus ones least recently used, small ones last. After a run, prune_stale removes older hashed copies of
+  the test executables that run executed (cargo's "Running …/deps/X-HASH" lines, and wasm-tests.py's "X-HASH.wasm:" lines).
+  Each commit had left ~10 GB of new forge-render test binaries. A pruned copy is rebuilt by cargo if it is ever needed
+  (missing output). Steady state on VERIFY-RENDER: debug 13 GB, release 9.4 GB, 33–34 GB free, both warm; render ~36–45 min.
 
 ## Speed gate (tools/speed, FALLBACK's)
-- tools/gate-jobs-3 (GATE_JOBS, GATE_MEMO) and tools/gate-src-sync-2 (sync the build source instead of re-extracting it): approved by
-  FALLBACK. They land after FALLBACK's gate-memfns re-baseline, rebased onto it, with the S/4/3/memo identity table. On one VM:
-  serial 391–407 s, 4 workers 119 s, memo hit 1 s, all byte-identical.
+- GATE_JOBS, GATE_MEMO and the source sync: tools/gate-jobs-4 @7b3a387a, on main 247a2694 after gate-memfns (#63) landed.
+  Folded into train 12 (merge-train/12 f85ec2aa). Off unless set. On one VM: serial 391–407 s, 4 workers 119 s counting
+  (~5 min with a cold build), memo hit 1 s, all byte-identical. With #63's machine-independent counts, main 247a2694 counted
+  here with GATE_JOBS=4 matched the committed baseline on all 99 lines.
+- Run: copy gate.sh and srcsync.py over a detached checkout of the sha, then
+  `GATE_COUNTER=callgrind GATE_JOBS=$(nproc) GATE_MEMO=~/.cache/gate-memo CARGO_TARGET_DIR=~/.cache/gate-target sh tools/speed/gate.sh`;
+  judge with `band.py main.txt branch.txt` (gate.sh alone flags any increase as REGRESSED; band.py is the rule).
+- GATE_MEMO is keyed on what is measured (binaries, preload, bench .fg files, gate.sh, valgrind, loaded libraries, kernel,
+  CPU, reps), not on source: one memo dir per machine.
+- Train 12 (057b7334): band PASS, strict total -3.68%, worst strict +0.0006% (guard edit); bits changed on 21 parts, all
+  perf/ellipse-foot's (accepted).
 
 ## Open items
-- gate-memfns (FALLBACK) → then rebase and land gate-jobs-3 and gate-src-sync-2.
+- Train 12's final head: one more band run when TRAIN-CONDUCTOR sends it.
 - forge-sheet contour fuzz_random_profiles: one case of 250 takes 322 s (the folded-clash search refines an
   at-the-limit stretch down to 2^-48). Diagnosed and with forge-sheet's owner, via the coordinator.
-- tests/faster-slow (font race fix, reparse 2×, mill_with in parallel with bit-identical results) rides train 10.
+- tests/faster-slow (font race fix, reparse 2×, mill_with in parallel with bit-identical results) landed with train 10.
 - Published reads maps and main results (preverify/maps) would make pre-verify narrower and faster, but need David's
   permission for a session to push data there.
 - Pipelined trains (D): mechanics agreed, reparent.sh ready, starting from 8→9.
