@@ -144,6 +144,42 @@ pub fn map_until<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync, stop: impl Fn
     out
 }
 
+/// `f` of each of `0..n` on all cores, for items whose answers no budget changes (they test none):
+/// the answers, and this thread charged what they spent together (to none left at most). That
+/// sum is one by one's whatever the order, though not each item's share: an evaluation that
+/// fills a cache is paid by whichever item fills it first, once. With no budget set, the items
+/// just run on all cores.
+pub fn map_counted<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
+    if !limited() {
+        return forge_math::par::map(n, f);
+    }
+    let got = forge_math::par::map(n, |k| {
+        struct Put(u64, bool);
+        impl Drop for Put {
+            fn drop(&mut self) {
+                LEFT.set(self.0);
+                LIMITED.set(self.1);
+            }
+        }
+        let _put = Put(LEFT.get(), LIMITED.get());
+        // a budget no item runs out: what it spends, counted
+        LEFT.set(u64::MAX);
+        LIMITED.set(true);
+        let t = f(k);
+        (t, u64::MAX - LEFT.get())
+    });
+    let mut spent = 0u64;
+    let out = got
+        .into_iter()
+        .map(|(t, s)| {
+            spent = spent.saturating_add(s);
+            t
+        })
+        .collect();
+    spend_many(spent);
+    out
+}
+
 /// `f` of each of `0..n` on all cores, where together they spend less than this thread's budget
 /// has left (then no item, nor any order of them one by one, ran it out: the answers are those of
 /// any such order), and `accept` (the caller's own test of the answers together) holds, this
@@ -317,6 +353,22 @@ mod tests {
         assert_eq!(super::left(), 6);
         drop(b);
         let _ = seen;
+    }
+
+    /// Items that test no budget: their answers whatever is left, the sum charged, to none left.
+    #[test]
+    fn map_counted_charges_the_sum() {
+        let one = |k: usize| {
+            super::spend_many(k as u64);
+            k
+        };
+        let b = super::scoped(100);
+        assert_eq!(super::map_counted(10, one), (0..10).collect::<Vec<_>>());
+        assert_eq!(super::left(), 55);
+        assert_eq!(super::map_counted(20, one), (0..20).collect::<Vec<_>>());
+        assert_eq!(super::left(), 0);
+        assert!(super::over());
+        drop(b);
     }
 
     #[test]

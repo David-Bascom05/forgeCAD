@@ -1273,11 +1273,11 @@ pub(crate) fn edge_range(c: &Curve, a: Point3, b: Point3, closed: bool) -> (Inte
 fn record_deviations(body: &mut Body, stats: &mut Stats) {
     use forge_math::tol::LINEAR;
     let ids: Vec<forge_topo::EdgeId> = body.edge_ids().collect();
-    // each edge's measure reads no edge's tolerance: all of them on all cores, as edge by edge
-    // (`budget::map`), then the tolerances set in edge order
+    // each edge's measure reads no edge's tolerance and tests no budget: all of them on all cores,
+    // what they spend together charged (`budget::map_counted`), then the tolerances set in edge order
     let devs = {
         let body = &*body;
-        forge_geom::budget::map(ids.len(), |k| edge_deviation(body, ids[k]))
+        forge_geom::budget::map_counted(ids.len(), |k| edge_deviation(body, ids[k]))
     };
     for (e, dev) in ids.into_iter().zip(devs) {
         if dev > LINEAR {
@@ -1871,20 +1871,11 @@ fn healed(
     Ok((proto.into_body(), budget))
 }
 
-/// A body as far as it is shown, before its checks: [`finish`] to the body healed, its edges'
-/// tolerances set, and its display mesh; what [`finish_checked`] needs to end as `finish` would.
+/// A body as far as it is shown before its checks ([`open`]): its display mesh, as
+/// [`Solid::display_mesh`] makes it (none: it cannot be drawn, or not within what the check's mesh
+/// could have at most).
 pub(crate) struct Shown {
-    body: Body,
-    /// The display mesh, as [`Solid::display_mesh`] makes it (none: it cannot be drawn, or not
-    /// within what the check's mesh could have: drawn after the checks where the body is kept).
     mesh: Option<forge_mesh::TriMesh>,
-    /// What drawing it spent.
-    mesh_spent: Option<u64>,
-    /// The read's budget left once the body was healed.
-    left: u64,
-    /// What setting the edges' tolerances counted and spent.
-    dev: Stats,
-    dev_spent: u64,
 }
 
 /// `finish`'s first part, for showing a body at once: healed under the read's budget, as
@@ -1922,44 +1913,8 @@ pub(crate) fn finish_shown(
             l => (m, Some(most - l)),
         }
     };
-    Ok(Shown {
-        body,
-        mesh,
-        mesh_spent,
-        left,
-        dev,
-        dev_spent,
-    })
-}
-
-/// The rest of `finish` after [`finish_shown`], with `finish`'s answer: the speck check on the
-/// healed body's budget (the tolerances set since change no point it draws), the tolerances'
-/// counts and spend charged after it, then the measures. The check's mesh is the display mesh
-/// where that is the same computation: drawn without running its own budget out, on less than is
-/// left here (so here it would meet no budget test true either).
-pub(crate) fn finish_checked(sh: Shown, stats: &mut Stats) -> Result<Finished, String> {
-    use forge_geom::budget;
-    let Shown {
-        mut body,
-        mesh,
-        mesh_spent,
-        left,
-        dev,
-        dev_spent,
-    } = sh;
-    let checks = budget::scoped(left);
-    if laid_out_in_a_speck(&body) {
-        return Err(SPECK.into());
-    }
-    stats.tolerant_edges += dev.tolerant_edges;
-    stats.max_edge_tol = stats.max_edge_tol.max(dev.max_edge_tol);
-    budget::spend_many(dev_spent);
-    let agree = measures_agree(&body, mesh.as_ref().zip(mesh_spent));
-    drop(checks);
-    let (unverified, mass, _) = agree?;
-    body.unverified = unverified;
-    // (shown, the body's display mesh: kept whether or not the check drew the same)
-    Ok((body, mass, mesh))
+    let _ = mesh_spent;
+    Ok(Shown { mesh })
 }
 
 /// Whether a face's parameter loops, drawn as finely as `forge_topo::check` draws them, hold a
@@ -1978,9 +1933,11 @@ fn laid_out_in_a_speck(body: &Body) -> bool {
             .iter()
             .any(|l| l.points.iter().any(|p| tiny(p.x) || tiny(p.y)))
     };
-    // every face on all cores, as face by face to the first speck (`budget::map_until`)
+    // every face on all cores (`budget::map_counted`: a face's loops test no budget, so each answer
+    // is one by one's, and so is what they spend together; one by one stopped at the first speck,
+    // and spent less, but then the body is refused and nothing more is spent)
     let ids: Vec<forge_topo::FaceId> = body.face_ids().collect();
-    forge_geom::budget::map_until(ids.len(), |k| speck(ids[k]), |&x| x)
+    forge_geom::budget::map_counted(ids.len(), |k| speck(ids[k]))
         .into_iter()
         .any(|x| x)
 }
@@ -1997,10 +1954,24 @@ pub fn import(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
 }
 
 /// [`import`], and every solid drawn for display ([`Solid::display_mesh`], kept in
-/// [`Solid::mesh`] wherever it can be drawn): for a viewer, which draws every solid. The same
-/// read: [`open`], then [`Opened::finish`].
+/// [`Solid::mesh`] wherever it can be drawn): for a viewer, which draws every solid. The read
+/// itself as `import` (drawn in its order: a drawing fills caches whose first filler pays their
+/// evaluations, and a read's refusals as too long to measure count them), each solid the read's
+/// check did not draw drawn after it, on all cores.
 pub fn import_drawn(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
-    open(text, lim)?.finish()
+    let mut imp = import(text, lim)?;
+    let drawn = forge_math::par::map_eager(imp.solids.len(), |k| {
+        let s = &imp.solids[k];
+        s.mesh
+            .is_none()
+            .then(|| s.display_mesh().ok().map(std::borrow::Cow::into_owned))
+    });
+    for (s, m) in imp.solids.iter_mut().zip(drawn) {
+        if let Some(m) = m {
+            s.mesh = m;
+        }
+    }
+    Ok(imp)
 }
 
 /// The most any edge of a file lies off a face it bounds, by the same measure a read reports.
@@ -2170,124 +2141,53 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
     gathered(&h, outs, only_measure)
 }
 
-/// A root read as far as shown ([`finish_shown`]): its read so far, and the shown part's answer
-/// (none: no body to show, the root's refusal is in `out`).
+/// A root read as far as shown ([`finish_shown`]), none where it has no body to show.
 struct RootShown {
-    out: RootOut,
-    name: String,
-    first: Option<(Units, Result<Shown, String>)>,
+    first: Option<Result<Shown, String>>,
 }
 
 fn show_root(b: Built, lim: &Limits) -> RootShown {
-    let Built { mut out, name, built } = b;
+    let Built { mut out, built, .. } = b;
     let first = match built {
-        None => None,
-        Some((_, Err(x))) => {
-            out.got = Some(Err(x));
-            None
-        }
-        Some((u, Ok(proto))) => {
-            out.finished = true;
-            Some((u, finish_shown(proto, u.uncertainty, lim, &mut out.stats)))
-        }
+        Some((u, Ok(proto))) => Some(finish_shown(proto, u.uncertainty, lim, &mut out.stats)),
+        _ => None,
     };
-    RootShown { out, name, first }
-}
-
-/// The rest of a root's read after [`show_root`], as [`finish_root`] reads it: its checks, and
-/// the void's other way where the first is refused or bounds no negative volume.
-fn check_root(f: &File<'_>, id: u32, r: Record, rs: RootShown, lim: &Limits) -> RootOut {
-    let RootShown { mut out, name, first } = rs;
-    let Some((u, first)) = first else {
-        return out;
-    };
-    let stats = &mut out.stats;
-    let mut done = first.and_then(|sh| finish_checked(sh, stats));
-    // files differ on what a void's .F. turns: a void must bound negative volume
-    if f.name(&r) == "BREP_WITH_VOIDS" && !done.as_ref().is_ok_and(|(b, _, _)| voids_inward(b)) {
-        done = match build_shell(f, id, r, u, false, stats) {
-            Ok(proto) => finish(proto, u.uncertainty, lim, stats),
-            Err(x) => {
-                out.got = Some(Err(x));
-                return out;
-            }
-        };
-    }
-    out.got = Some(match done {
-        Ok((mut body, mass, mesh)) => {
-            body.unplaced = stats.assembly > 0;
-            let mut s = Solid {
-                entity: id,
-                name,
-                body,
-                mass,
-                mesh,
-            };
-            // (the void's other way: drawn here, after its read, as `display_mesh` draws it)
-            if s.mesh.is_none() {
-                s.mesh = s.display_mesh().ok().map(std::borrow::Cow::into_owned);
-            }
-            Ok(s)
-        }
-        Err(why) => Err(Refusal {
-            entity: id,
-            kind: f.name(&r).to_string(),
-            why,
-        }),
-    });
-    out
+    RootShown { first }
 }
 
 /// A file read as far as its solids can be shown ([`open`]); [`Opened::finish`] reads the rest.
 pub struct Opened<'a> {
+    text: &'a [u8],
+    lim: Limits,
     inner: OpenedAs<'a>,
 }
 
 enum OpenedAs<'a> {
-    /// A STEP file: its roots, each shown or refused, the checks to come.
-    Step {
-        h: Head<'a>,
-        lim: Limits,
-        roots: Vec<RootShown>,
-        order: Vec<usize>,
-    },
+    /// A STEP file: its roots, each shown or refused.
+    Step { h: Head<'a>, roots: Vec<RootShown> },
     /// Another format, read whole and drawn.
     Read(Imported),
 }
 
 /// Opens a file to show it at once: each solid read as far as its body, healed, and its display
-/// mesh ([`Solid::display_mesh`]'s), on all cores; the checks and measures that decide whether a
-/// solid is refused, and its integrals, wait for [`Opened::finish`], which gives exactly what
-/// [`import_drawn`] gives. Until then the solids shown are those the read has not yet refused:
-/// the checks may refuse some of them yet.
+/// mesh ([`Solid::display_mesh`]'s), on all cores, before the checks and measures that decide
+/// whether a solid is refused. The solids shown are those not refused so far: the checks may
+/// refuse some yet. [`Opened::finish`] gives what [`import_drawn`] gives.
 pub fn open<'a>(text: &'a [u8], lim: &Limits) -> Result<Opened<'a>, ImportError> {
     if crate::brep::is_brep(text) || crate::iges::is_iges(text) {
-        let mut imp = import(text, lim)?;
-        let drawn = forge_math::par::map_eager(imp.solids.len(), |k| {
-            let s = &imp.solids[k];
-            s.mesh
-                .is_none()
-                .then(|| s.display_mesh().ok().map(std::borrow::Cow::into_owned))
-        });
-        for (s, m) in imp.solids.iter_mut().zip(drawn) {
-            if let Some(m) = m {
-                s.mesh = m;
-            }
-        }
         return Ok(Opened {
-            inner: OpenedAs::Read(imp),
+            text,
+            lim: *lim,
+            inner: OpenedAs::Read(import_drawn(text, lim)?),
         });
     }
     let h = head(text, lim)?;
     let (built, order) = built(&h);
     let roots = each_in(built, &order, |_, b| show_root(b, lim));
     Ok(Opened {
-        inner: OpenedAs::Step {
-            h,
-            lim: *lim,
-            roots,
-            order,
-        },
+        text,
+        lim: *lim,
+        inner: OpenedAs::Step { h, roots },
     })
 }
 
@@ -2301,7 +2201,7 @@ impl Opened<'_> {
                 .iter()
                 .zip(roots)
                 .filter_map(|(&(id, _, _), rs)| match &rs.first {
-                    Some((_, Ok(sh))) => sh.mesh.as_ref().map(|m| (id, m)),
+                    Some(Ok(sh)) => sh.mesh.as_ref().map(|m| (id, m)),
                     _ => None,
                 })
                 .collect(),
@@ -2313,21 +2213,13 @@ impl Opened<'_> {
         }
     }
 
-    /// The rest of the read: what [`import_drawn`] gives.
+    /// The whole read: what [`import_drawn`] gives. It reads the file again, in `import`'s
+    /// order: the shown part drew each body before its checks, and a drawing fills caches whose
+    /// first filler pays their evaluations, which a read's refusals as too long count.
     pub fn finish(self) -> Result<Imported, ImportError> {
         match self.inner {
             OpenedAs::Read(imp) => Ok(imp),
-            OpenedAs::Step { h, lim, roots, order } => {
-                let roots = roots
-                    .into_iter()
-                    .map(|r| std::sync::Mutex::new(Some(r)))
-                    .collect();
-                let outs = each_in(roots, &order, |k, rs| {
-                    let (id, r, _) = h.roots[k];
-                    check_root(&h.f, id, r, rs, &lim)
-                });
-                gathered(&h, outs, false)
-            }
+            OpenedAs::Step { .. } => import_drawn(self.text, &self.lim),
         }
     }
 }
