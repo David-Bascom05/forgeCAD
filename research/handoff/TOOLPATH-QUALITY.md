@@ -86,5 +86,10 @@ in the environment.
   steering map and `disk_has_material` are still centre-sampled. Any new fast move judged against
   a centre-sampled map can graze a sub-cell skin. The fast-cut guard catches it on the harness
   only, so keep new parks and descents on `descent_meets` / `park_clear`.
+- **`crazy::KNOWN` after CAM-CORE's `cam/clear-degenerate` (d9c8ddaa).** It fixes rptu1 nut's
+  re-cut. When it merges main after train 8, it must drop ("rptu1_clear_cam", "nut", "recut", …)
+  and set the nut "rapids" entry to 397.0 (the slot's far-end trips for the islands' corner arcs;
+  a stock-aware air test is in CAM-CORE's handoff). Otherwise guards.rs fails: the stale entry
+  errors.
 - **`crazy::KNOWN`.** Values carry 10 % headroom, and a listed op that no longer breaks its bound
   fails the test. A legitimate change that fixes one must take its entry off in the same commit.
