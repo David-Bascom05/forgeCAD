@@ -91,6 +91,9 @@ pub struct AdaptiveOut {
     /// The rings each level ends with: one record per ring or run
     /// of one, its moves `path.moves[first..end]`.
     pub rings: Vec<RingRun>,
+    /// The passes, each `path.moves[first..end]`: the steps the planner held to the engagement
+    /// cap (its links, entries, rings and wall pass are not passes).
+    pub passes: Vec<(usize, usize)>,
     /// The links at depth that retrace a pass: `path.moves[first..end]`
     /// each; their arcs are links, not cuts (a posted arc carries no phase).
     pub retraces: Vec<(usize, usize)>,
@@ -1105,7 +1108,20 @@ pub fn adaptive(
                         if w[0] * dir[0] + w[1] * dir[1] < peel_cos {
                             return (f64::INFINITY, w, q);
                         }
-                        (f.phi(q, w), w, q)
+                        // the posted path is arcs through the steps' ends: at q the tool heads
+                        // along the chord turned on by up to the step's turn (toward the side it
+                        // turns), so the engagement is read both ways and the larger kept
+                        let mut ph = f.phi(q, w);
+                        if d.abs() > 1e-9 && ph.is_finite() {
+                            ph = ph.max(f.phi(q, rot(w, d)));
+                        }
+                        // and halfway (a corner of stock earlier passes left can meet the edge
+                        // between a step's ends), heading half the turn
+                        if ph.is_finite() {
+                            let mid = [pos[0] + 0.5 * len * w[0], pos[1] + 0.5 * len * w[1], z];
+                            ph = ph.max(f.phi(mid, rot(u, 0.5 * d)));
+                        }
+                        (ph, w, q)
                     };
                     // turns within ±90° of the heading and within PEEL of the sweep direction
                     let th_u = dmath::atan2(dir[0] * u[1] - dir[1] * u[0], dir[0] * u[0] + dir[1] * u[1]);
@@ -1725,6 +1741,7 @@ pub fn adaptive(
         },
         voids,
         rings: rings_log,
+        passes: pass_ranges,
         retraces: retraces_log,
         notes,
     })
@@ -3008,5 +3025,158 @@ mod tests {
         assert!(over * 50 <= steps, "{over} of {steps} steps over the cap");
         // and it cleared most of the pocket's floor area (claimed voids)
         assert!(!out.voids.is_empty());
+    }
+    /// The planner's engagement and an independent measure of it agree on the passes: replaying
+    /// the path through a fresh model of the stock (engage.rs, the feeds' own engagement, at a
+    /// 0.1 mm cell: finer than the planner's), every point of every pass, read before the piece
+    /// reaching it is swept, engages the tool within the cap plus the two models' rounding. One deep level beside a
+    /// boss, with a 6 mm and a 10 mm tool under a 40° cap (verify/forge-cam-quality's boss
+    /// documents); the stock's box round and off the grids by a thousandth. (Entries, rings and
+    /// the wall pass are not passes: they cut a slot by design, reported by forge-cam-lang.)
+    #[test]
+    fn passes_hold_the_cap_by_an_independent_measure() {
+        let cap: f64 = 40.0;
+        // the measure's cell
+        let hm = 0.1;
+        let mut report = Vec::new();
+        let mut bad = Vec::new();
+        for id in ["flat-6", "flat-10"] {
+            for d in [0.0, 0.001] {
+                let t = tool(id);
+                let r = 0.5 * t.tool.dc;
+                // the tolerance, from the two models' resolution: each places the stock's edge
+                // to half a cell's diagonal (the planner's cell dc/40 as `adaptive` takes it, the
+                // measure's hm), which at the cap moves the angle by that over r sin(cap); and
+                // the planner's edge is read every 2° (91 points over the front half)
+                let hp = (t.tool.dc / 40.0).clamp(0.05, 0.25);
+                let tol = ((hp + hm) / 2f64.sqrt() / (r * dmath::sin(cap.to_radians()))).to_degrees() + 2.0;
+                let (x0, y0, x1, y1) = (-3.0 - d, -3.0 - d, 73.0 + d, 73.0 + d);
+                let g = 2.0 * r + 1.0;
+                let rg = Region {
+                    loops: vec![
+                        rect(x0 - g, y0 - g, x1 + g, y1 + g),
+                        rect(20.0, 20.0, 50.0, 50.0).reversed(),
+                    ],
+                };
+                let ip = InProcess::new([x0, y0, 0.0], [x1, y1, 25.0]);
+                let prm = Adaptive {
+                    phi_max: cap,
+                    step: 0.0,
+                    leave: 0.0,
+                    wall_pass: true,
+                    sweep: 0.0,
+                    two_way: false,
+                    link_feed: 0.0,
+                };
+                let out = adaptive(
+                    &rg,
+                    Cut {
+                        tool: &t,
+                        tidx: 0,
+                        h: Heights {
+                            clear: 40.0,
+                            retract: 28.0,
+                        },
+                        feed: (1000.0, 300.0),
+                        ramp_feed: None,
+                        lead_feed: None,
+                    },
+                    Span {
+                        top: 25.0,
+                        bottom: 10.2,
+                        step: 15.0,
+                    },
+                    &ip,
+                    &prm,
+                )
+                .unwrap();
+                let prof = Profile::of(&t.tool).unwrap();
+                let mut m = HeightMap::of_stock(&ip, hm);
+                let in_pass = |i: usize| out.passes.iter().any(|&(a, b)| i >= a && i < b);
+                let (mut n, mut worst, mut over_len, mut pass_len) = (0usize, 0.0f64, 0.0, 0.0);
+                let mut at = out.path.start;
+                for (i, mv) in out.path.moves.iter().enumerate() {
+                    let to = match *mv {
+                        PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
+                        PMove::Cycle { .. } | PMove::Probe { .. } => continue,
+                    };
+                    // the move as pieces of at most 0.25 mm (an arc by its angle)
+                    let pt: Box<dyn Fn(f64) -> [f64; 3]> = match *mv {
+                        PMove::Arc { c, cw, .. } => {
+                            let rr = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
+                            let a0 = dmath::atan2(at[1] - c[1], at[0] - c[0]);
+                            let a1 = dmath::atan2(to[1] - c[1], to[0] - c[0]);
+                            let tau = std::f64::consts::TAU;
+                            let sw = if cw {
+                                -((a0 - a1).rem_euclid(tau))
+                            } else {
+                                (a1 - a0).rem_euclid(tau)
+                            };
+                            let sw = if sw == 0.0 {
+                                if cw { -tau } else { tau }
+                            } else {
+                                sw
+                            };
+                            let (a, z0) = (at, at[2]);
+                            Box::new(move |s: f64| {
+                                if s >= 1.0 {
+                                    return to;
+                                }
+                                let (sn, cs) = dmath::sin_cos(a0 + s * sw);
+                                let _ = a;
+                                [c[0] + rr * cs, c[1] + rr * sn, z0 + s * (to[2] - z0)]
+                            })
+                        }
+                        _ => {
+                            let a = at;
+                            Box::new(move |s: f64| {
+                                [
+                                    a[0] + s * (to[0] - a[0]),
+                                    a[1] + s * (to[1] - a[1]),
+                                    a[2] + s * (to[2] - a[2]),
+                                ]
+                            })
+                        }
+                    };
+                    let len = match *mv {
+                        PMove::Arc { c, .. } => {
+                            let rr = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
+                            2.0 * std::f64::consts::PI * rr
+                        }
+                        _ => ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt(),
+                    };
+                    let k = (len / 0.25).ceil().max(1.0) as usize;
+                    let mut p = at;
+                    for j in 1..=k {
+                        let q = pt(j as f64 / k as f64);
+                        let dl = ((q[0] - p[0]).powi(2) + (q[1] - p[1]).powi(2)).sqrt();
+                        if in_pass(i) && dl > 1e-9 && q[2] == p[2] {
+                            let u = [(q[0] - p[0]) / dl, (q[1] - p[1]) / dl];
+                            n += 1;
+                            pass_len += dl;
+                            if let Some(e) = m.engage(q, u, r, 1e-3) {
+                                let deg = e.phi.to_degrees();
+                                worst = worst.max(deg);
+                                if deg > cap + tol {
+                                    over_len += dl;
+                                    if bad.len() < 8 {
+                                        bad.push(format!("{id} box +{d}: {deg:.1}° at {q:?} (move {i})"));
+                                    }
+                                }
+                            }
+                        }
+                        m.sweep(p, q, &prof);
+                        p = q;
+                    }
+                    at = to;
+                }
+                assert!(n > 500, "{id}: {n} pass points");
+                report.push(format!(
+                    "{id} box +{d}: {n} pass points, {pass_len:.0} mm, worst {worst:.1}°, {over_len:.1} mm over {cap}° + {tol:.1}°"
+                ));
+            }
+        }
+        assert!(bad.is_empty(), "{}\n{}", bad.join("\n"), report.join("\n"));
+        eprintln!("{}", report.join("\n"));
     }
 }

@@ -84,8 +84,8 @@ fn left_above(
                     PMove::Arc { to, c, cw, .. } => {
                         // chords of at most 0.05 mm sag, the height linear in the angle
                         let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
-                        let a0 = (at[1] - c[1]).atan2(at[0] - c[0]);
-                        let mut a1 = (to[1] - c[1]).atan2(to[0] - c[0]);
+                        let a0 = forge_math::dmath::atan2(at[1] - c[1], at[0] - c[0]);
+                        let mut a1 = forge_math::dmath::atan2(to[1] - c[1], to[0] - c[0]);
                         if cw {
                             while a1 >= a0 {
                                 a1 -= std::f64::consts::TAU;
@@ -104,8 +104,8 @@ fn left_above(
                                 to
                             } else {
                                 [
-                                    c[0] + r * a.cos(),
-                                    c[1] + r * a.sin(),
+                                    c[0] + r * forge_math::dmath::cos(a),
+                                    c[1] + r * forge_math::dmath::sin(a),
                                     at[2] + s * (to[2] - at[2]),
                                 ]
                             };
