@@ -4,7 +4,7 @@
 # research/kernel-stress/haas-report.md from them (report.py).
 #
 #   tools/kernel-stress/run.sh [-o OUT] [-j JOBS] [-t OP_TIMEOUT_S] [-f FILE_TIMEOUT_S]
-#                              [-n MAX_SOLIDS] [-z ZIPDIR] [ZIP_NAME ...]
+#                              [-n MAX_SOLIDS] [-z ZIPDIR] [-s haas|tooling] [ZIP_NAME ...]
 #   KS_DECISIONS=1 tools/kernel-stress/run.sh ...   (the decision log's named sites, as `site` events)
 #   KS_NARY=1 tools/kernel-stress/run.sh ...        (booleans through n-ary on all threads, as the app)
 #
@@ -23,7 +23,8 @@ op_t=60
 file_t=3600
 max_solids=24
 zipdir=""
-while getopts "o:j:t:f:n:z:" o; do
+src=haas
+while getopts "o:j:t:f:n:z:s:" o; do
   case $o in
     o) out="$OPTARG" ;;
     j) jobs="$OPTARG" ;;
@@ -31,6 +32,7 @@ while getopts "o:j:t:f:n:z:" o; do
     f) file_t="$OPTARG" ;;
     n) max_solids="$OPTARG" ;;
     z) zipdir="$OPTARG" ;;
+    s) src="$OPTARG" ;;
     *) exit 2 ;;
   esac
 done
@@ -58,13 +60,22 @@ trap 'rm -rf "$scratch"' EXIT
 cp "$bin" "$scratch/forge-stress" || exit 1
 bin="$scratch/forge-stress"
 
+# the sources: the machine models' zips (haas), or the workholding models' STEP files (tooling:
+# branch haas-tooling-step, 1.2 GB, fetched shallow and never merged)
+case "$src" in
+  haas) branch=haas-3d-models; tree=research/haas-models/ ;;
+  tooling) branch=haas-tooling-step; tree=research/haas-tooling-workholding/ ;;
+  *) echo "run.sh: -s haas or -s tooling" >&2; exit 2 ;;
+esac
 if [ -z "$zipdir" ]; then
-  git -C "$root" rev-parse -q --verify origin/haas-3d-models >/dev/null ||
-    git -C "$root" fetch -q origin haas-3d-models || exit 1
+  git -C "$root" rev-parse -q --verify "origin/$branch" >/dev/null ||
+    git -C "$root" fetch -q --depth 1 origin "$branch" || exit 1
 fi
 
 list() {
-  if [ -n "$zipdir" ]; then
+  if [ "$src" = tooling ]; then
+    git -C "$root" ls-tree -r --name-only "origin/$branch" "$tree" | grep -i '\.ste\?p$' | sed 's|.*/||'
+  elif [ -n "$zipdir" ]; then
     (cd "$zipdir" && ls -1 *.zip)
   else
     git -C "$root" ls-tree --name-only origin/haas-3d-models research/haas-models/ |
@@ -79,13 +90,16 @@ one() {
   [ -s "$res" ] && grep -q '"ev":"zip_done"' "$res" && return 0
   : >"$res"
   mkdir -p "$dir"
-  if [ -n "$zipdir" ]; then
+  if [ "$src" = tooling ]; then
+    # one STEP file is the unit: no zip
+    git -C "$root" show "origin/$branch:$tree$zip" >"$dir/$zip"
+  elif [ -n "$zipdir" ]; then
     cp "$zipdir/$zip" "$dir/z.zip"
   else
     git -C "$root" show "origin/haas-3d-models:research/haas-models/$zip" >"$dir/z.zip"
   fi
   # what the zip holds: STEP and Parasolid (x_t / x_b), by size
-  unzip -Z1 "$dir/z.zip" 2>/dev/null | while read -r m; do
+  [ -f "$dir/z.zip" ] && unzip -Z1 "$dir/z.zip" 2>/dev/null | while read -r m; do
     case "${m,,}" in
       __macosx/*) ;;
       *.x_t | *.x_b | *.xmt_txt | *.xmt_bin)
@@ -93,7 +107,7 @@ one() {
         printf '{"ev":"parasolid","zip":"%s","file":"%s","bytes":%s}\n' "$zip" "${m//\"/}" "${sz:-0}" >>"$res" ;;
     esac
   done
-  (cd "$dir" && unzip -qq -o z.zip -x '*.x_t' '*.X_T' '*.x_b' '*.X_B' '*.pdf' '*.PDF' '__MACOSX/*' 2>/dev/null)
+  [ -f "$dir/z.zip" ] && (cd "$dir" && unzip -qq -o z.zip -x '*.x_t' '*.X_T' '*.x_b' '*.X_B' '*.pdf' '*.PDF' '__MACOSX/*' 2>/dev/null)
   rm -f "$dir/z.zip"
   # zips inside the zip: one level
   find "$dir" -iname '*.zip' -print0 | while IFS= read -r -d '' z; do
@@ -137,7 +151,7 @@ one() {
   echo "done $zip" >&2
 }
 export -f one
-export scratch out bin op_t file_t max_solids zipdir root nary
+export scratch out bin op_t file_t max_solids zipdir root src branch tree nary
 
 if [ $# -gt 0 ]; then printf '%s\n' "$@"; else list; fi |
   xargs -P "$jobs" -I{} bash -c 'one "$@"' _ {}
