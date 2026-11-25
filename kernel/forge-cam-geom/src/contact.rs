@@ -964,6 +964,57 @@ mod tests {
     /// FALLBACK's review: the straddle case (the arm's own value 0) floors the bound at -rho,
     /// but a face point can lie up to `a` deep in the core, so `a + rho` deep in the body. With
     /// a negative limit (limit = stock to leave - inner tolerance) `clear` then clears a gouge.
+    /// The second review's cases, through the gouge certifier itself (`check::certify`, which
+    /// takes the closed form first): a bull-nose with a corner smaller than the tolerance
+    /// (re 0.02, limit −0.05) whose core crosses a plane, and a cylinder, is never certified
+    /// Clear (the true minima are −2.02 and −3.0 mm). Before the −(a + ρ) floor both came out
+    /// Clear { −0.02 } with no cells searched.
+    #[test]
+    #[cfg(not(feature = "old-closed-form"))]
+    fn review_a_small_corner_bull_through_a_face_is_never_certified() {
+        use crate::check::certify;
+        let b = assemble(&Cutter::Bull { d: 10.0, re: 0.02 }, 30.0, 10.0, 40.0, None)
+            .unwrap()
+            .bodies[0]
+            .clone();
+        let mv = Move::Line {
+            a: [0.0, 0.0, 0.0],
+            b: [1.0, 0.0, 0.3],
+        };
+        let plane = Face::new(
+            Surf::Plane {
+                o: [0.0, 0.0, 2.0],
+                u: [1.0, 0.0, 0.01],
+                v: [0.0, 1.0, 0.0],
+            },
+            Ival::new(-30.0, 30.0),
+            Ival::new(-30.0, 30.0),
+            None,
+            0.0,
+            1,
+        );
+        let cyl = Face::new(
+            Surf::Cyl {
+                o: [0.0, 0.0, 2.0],
+                x: [0.0, 1.0, 0.0],
+                y: [0.0, 0.0, 1.0],
+                ax: [1.0, 0.0, 0.0],
+                r: 1.0,
+            },
+            Ival::new(-1.0, 1.0),
+            Ival::new(-20.0, 20.0),
+            None,
+            0.0,
+            2,
+        );
+        for (what, f) in [("plane", &plane), ("cylinder", &cyl)] {
+            let lo = lower(&capsule(&b).unwrap(), f, [0.0, 0.0, 0.0], [1.0, 0.0, 0.3]).unwrap();
+            assert!(lo <= -2.0, "{what}: the bound {lo} is above the true minimum");
+            let (v, _) = certify(&b, f, &mv, -0.05, 0.01, 20_000);
+            assert!(!matches!(v, Verdict::Clear { .. }), "{what}: a gouge certified Clear: {v:?}");
+        }
+    }
+
     #[test]
     #[cfg(not(feature = "old-closed-form"))]
     fn review_a_straddling_disc_capsule_clears_a_gouge() {

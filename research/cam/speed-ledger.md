@@ -39,13 +39,16 @@ checked. TRAIN-CONDUCTOR expects a row in any CAM speed PR that moves outputs.
 - **Sound.** Both are lower bounds on the cutter's clearance: the capsule contains the body
   (piece by piece, exact two-sum comparisons at tight points), the section lies below the true
   section b(√(u² + a²)) and is at least as wide (proof in its doc comment). A tighter bound only
-  proves Clear where the true clearance holds; every posted path is still certified by the
-  checker independently. Reviewed: CAM-3D-FINISH (section proof by hand), EXACT-CORE (SAFE,
+  proves Clear where the true clearance holds. Note: the gouge certifier (`check::certify` →
+  `closed_form` → `contact::clear`) takes the same closed form first, so the disc capsule's
+  soundness is the certificate's too: the bound floors at −(a + ρ) where a face crosses the
+  core (without that, the second review found a bull with re ≤ tol − mu certified Clear through
+  a face; pinned by review_a_small_corner_bull_through_a_face_is_never_certified). Reviewed: CAM-3D-FINISH (section proof by hand), EXACT-CORE (SAFE,
   after the two-sum fix 14df2eb4), FALLBACK (contact.rs: the floor fix eb5f279e); the
   coordinator's independent second review is pending.
 - **Pinned by.** contact.rs: never_above (ball), a_bull_noses_bound_is_never_above_the_true_minimum,
   a_bull_nose_has_a_disc_capsule, review_a_disc_capsules_bound_never_exceeds_the_truth, the
-  straddle review test; drop.rs: a_bull_noses_section_is_below_and_as_wide_as_the_true_one,
+  straddle review test, review_a_small_corner_bull_through_a_face_is_never_certified; drop.rs: a_bull_noses_section_is_below_and_as_wide_as_the_true_one,
   a_bull_section_needs_its_arc_exactly_on_its_ring; finish3d_memo_tests' bull-10-r1 case.
 
 ### SurfDrop's drape gap budget: 2000 -> 1000 cells (CAM-3D-FINISH)
