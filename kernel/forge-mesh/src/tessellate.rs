@@ -1089,12 +1089,19 @@ impl Samples {
 
 fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, TessError> {
     // an intersection curve with fewer chords (`chain_samples`) can lay a thin face's boundary
-    // across itself where its chain did not: a face drawn so parts from the next (tangled). Each
-    // such face's coarsened edges take their old samples again, and the body is drawn again, once
+    // across itself where its chain did not (a face drawn so parts from the next), and a face
+    // zipped from its boundary alone is refined no further (HRP-2 #366427: a 46 mm triangle across
+    // a curved face, 9.8 mm off it). Each such face's coarsened edges take their old samples
+    // again (as do the coarsened edges of a face along an open mesh edge, or unsettled: neither is
+    // a mesh within the chord), and the body is drawn again, once
     let mut keep = vec![false; body.edges.len()];
-    let (mesh, tangled, coarse) = tessellate_once(body, q, mend, &keep)?;
+    let (mesh, tangled, coarse, open) = tessellate_once(body, q, mend, &keep)?;
     let mut again = false;
-    for f in tangled {
+    let mut faces = tangled;
+    faces.extend(open.into_iter().map(|f| f as u32));
+    faces.sort_unstable();
+    faces.dedup();
+    for f in faces {
         for &l in &body.face(FaceId(f)).loops {
             for c in body.lp(l).coedges() {
                 let e = body.coedge(c).edge.index();
@@ -1108,13 +1115,21 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
     if !again {
         return Ok(mesh);
     }
-    tessellate_once(body, q, mend, &keep).map(|(m, _, _)| m)
+    tessellate_once(body, q, mend, &keep).map(|(m, ..)| m)
 }
 
-/// `tessellate_with` once: the mesh, the faces drawn tangled, and the edges sampled with fewer
-/// chords than one per chain link; `keep`: edges to sample as before.
-fn tessellate_once(body: &Body, q: &Quality, mend: bool, keep: &[bool]) -> Result<(TriMesh, Vec<u32>, Vec<bool>), TessError> {
+/// `tessellate_with` once: the mesh, the faces drawn tangled or zipped, the edges sampled with
+/// fewer chords than one per chain link, and the faces along an open mesh edge or unsettled
+/// (where any edge was); `keep`: edges to sample as before.
+#[allow(clippy::type_complexity)]
+fn tessellate_once(
+    body: &Body,
+    q: &Quality,
+    mend: bool,
+    keep: &[bool],
+) -> Result<(TriMesh, Vec<u32>, Vec<bool>, Vec<usize>), TessError> {
     let mut tangled: Vec<u32> = Vec::new();
+    let mut open: Vec<usize> = Vec::new();
     let mut coarse = vec![false; body.edges.len()];
     let mut mesh = TriMesh::default();
     let vertex_index: Vec<u32> = body.vertices.iter().map(|v| mesh.add_vertex(v.point)).collect();
@@ -1343,7 +1358,23 @@ fn tessellate_once(body: &Body, q: &Quality, mend: bool, keep: &[bool]) -> Resul
         .iter()
         .map(|s| s.iter().map(|&(_, v)| v).collect())
         .collect();
-    Ok((mesh, tangled, coarse))
+    // and the faces along an open mesh edge (they do not meet there) or left unsettled (refined
+    // only as far as its cap): theirs are not meshes within the chord either
+    if coarse.iter().any(|&c| c) {
+        let open_edges = mesh.open_edges();
+        if !open_edges.is_empty() {
+            for (t, tri) in mesh.triangles.iter().enumerate() {
+                for k in 0..3 {
+                    if open_edges.binary_search(&(tri[k], tri[(k + 1) % 3])).is_ok() {
+                        open.push(mesh.face_of[t] as usize);
+                        break;
+                    }
+                }
+            }
+        }
+        open.extend(mesh.unsettled.iter().map(|&f| f as usize));
+    }
+    Ok((mesh, tangled, coarse, open))
 }
 
 /// A file's body of at least this many faces has its faces drawn on all cores.
@@ -1882,7 +1913,8 @@ fn mesh_face(
     mesh: &mut impl Out,
 ) -> Result<bool, CdtError> {
     let face = body.face(f);
-    // drawn as its boundary lies, crossing itself where laid flat: parted from the next face
+    // drawn as its boundary lies, crossing itself where laid flat (parted from the next face), or
+    // zipped from its boundary alone: either way only as good as its boundary's samples
     let mut tangled = false;
     let surface = &face.surface;
     let Prep {
@@ -2264,6 +2296,9 @@ fn mesh_face(
         [lp] if interior.is_empty() && twice.is_empty() => zip(&scaled, lp, &strays),
         _ => None,
     };
+    // a zipped face is triangles straight between its boundary's samples, refined no further:
+    // only as close to its surface as its boundary is dense
+    tangled |= zipped.is_some();
     // (a file's face whose refinement does not settle is drawn as far as it got, and said to be)
     let mut settled = true;
     let mut far = |tangled: bool| -> Result<Triangulation, CdtError> {

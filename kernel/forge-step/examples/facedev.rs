@@ -40,6 +40,22 @@ fn main() {
         }
     }
     println!("  worst edge midpoint dist {:.4} on boundary {} length {:.3} from {:?} to {:?}", wm.0, wm.1, wm.2, wm.3, wm.4);
+    // brute force: the surface sampled on a fine grid of its parameter box, then refined from the
+    // nearest sample (an upper bound that does not depend on where a search starts)
+    let x = wm.3.lerp(wm.4, 0.5);
+    let d = f.surface.domain();
+    let (u0, u1, v0, v1) = (d.u.lo.max(-1e6), d.u.hi.min(1e6), d.v.lo.max(-1e6), d.v.hi.min(1e6));
+    let n = 600;
+    let mut best = (f64::INFINITY, forge_math::Point2::new(0.0, 0.0));
+    for i in 0..=n {
+        for j in 0..=n {
+            let uv = forge_math::Point2::new(u0 + (u1 - u0) * i as f64 / n as f64, v0 + (v1 - v0) * j as f64 / n as f64);
+            let dd = f.surface.eval(uv).distance(x);
+            if dd < best.0 { best = (dd, uv); }
+        }
+    }
+    let refined = f.surface.eval(f.surface.project_near(x, best.1)).distance(x).min(best.0);
+    println!("  brute-force distance of that midpoint: grid {:.4} refined {:.4}", best.0, refined);
     for &l in &f.loops {
         for c in s.body.lp(l).coedges() {
             let e = s.body.edge(s.body.coedge(c).edge);
