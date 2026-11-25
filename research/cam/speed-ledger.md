@@ -246,6 +246,26 @@ A correctness change that costs speed; recorded here because it moves outputs an
   beside a slot, and slots slanted at 17°, 30°, 45° and 62°. It fails on the old read (7.47 %).
   Also forge-cam-quality's chip-load guard.
 
+## Temporary safety exceptions
+
+Speed given up on purpose, for safety, until a named condition is met. Each row says what was
+switched off, what it costs, and what turns it back on.
+
+### The threaded page's per-thread block caches off (CAM-PERF), from 2026-11-24
+
+- **What.** `kernel/forge-alloc/src/lib.rs` `THREAD_CACHE = false` (branch `alloc/cache-off`): in
+  the threaded browser build every small block goes through the eight shared heaps again, as
+  before 34d6cad8. The heaps' quick look first (c0c6143f) stays on.
+- **Why.** A threaded page's worker died with "memory access out of bounds" in
+  `GlobalAlloc::realloc` (CI #56, parity shard 1/3, two workers, the same stack, building
+  examples/rack18u/asm/rack.fg). Not reproduced locally (about 14 runs on 1, 2 and 4 CPUs, a
+  256 KiB worker stack, cache on and off), nor by the native threaded stress (`alloc/threaded-stress`).
+- **Costs.** About 20 ms of a manifold rerun in the threaded page (worker median about 104 ms with
+  the caches, about 127 ms without). Outputs are unchanged: the allocator moves no output.
+- **Back on when.** The root cause is found and fixed, and the caches come back with a regression
+  test: the threaded realloc stress (`threaded_stress`, alloc/threaded-stress) under the load that
+  showed the fault. Owner: CAM-PERF.
+
 ## Identical output
 
 Each was checked byte-identical (the reply's JSON and the posted programs) on all 14 machining
@@ -264,7 +284,7 @@ examples against the build before it.
 | Each posted path's read-back and certification run in parallel, applied to the ops in the paths' order; memo state (bypass, counts) carried to the threads | forge-cam-lang `post`, forge-memo `Context` | manifold cold 0.81 -> 0.65 s | CAM-PERF (b73025f9); forge-cam-lang tests with forge-math/force_helpers; `work_on_other_threads_counts_and_bypasses_as_the_callers` |
 | An engrave/slot sketch's frame answered from the part's own load (anchors and the cut sketches asked there), not two more runs of the part | forge-cam-lang `frame_of`, forge-lang query.rs `prepare`/`ask_prepared` | manifold rerun 53 -> 46 ms native, about 50 ms in the page | CAM-PERF (fcfea667); test `the_frames_are_the_asked_ones` (word for word against `ask`); debug builds re-ask every frame |
 | The built-in machine definitions parsed once per process | forge-machine library.rs | tens of ms per run in the page | CAM-PERF (34343dc8); test `the_kept_builtins_are_the_parsed_ones` |
-| The threaded page's allocator: heaps looked at quickly before any is flushed; a per-thread cache of small blocks | forge-alloc | page rerun 0.21 -> 0.12 s (manifold) | CAM-PERF (c0c6143f, 34d6cad8); parity.cjs 55/55 on 4 threads; tests `a_quick_look_neither_flushes_nor_grows`, `a_thread_cache_hands_out_each_block_once` |
+| The threaded page's allocator: heaps looked at quickly before any is flushed; a per-thread cache of small blocks | forge-alloc | page rerun 0.21 -> 0.12 s (manifold) | CAM-PERF (c0c6143f, 34d6cad8); parity.cjs 55/55 on 4 threads; tests `a_quick_look_neither_flushes_nor_grows`, `a_thread_cache_hands_out_each_block_once`. The per-thread caches are off for now: see Temporary safety exceptions |
 | adaptive's start candidates: each disk test's answer kept until a sweep's box comes within 2r + 3h; the stall scan's edge distance and allowed test kept per level | forge-cam adaptive.rs (2bf1ccaf) | deep_islands adaptive 40.4 -> 12.2 s | TOOLPATH-QUALITY; posted programs of all 28 harness parts and examples byte-identical |
 | adaptive's disk test answers "no material" from 8 x 8 block maxima over the cells its samples read (kept on adaptive's Field, not HeightMap: a field on HeightMap cost engage 1.7-2.1 % Ir) | adaptive.rs (51500301) | deep_islands 12.2 -> 11.4 s; flange (no adaptive) Ir unchanged | TOOLPATH-QUALITY; as above |
 
