@@ -676,7 +676,10 @@ const SECOND = vec4f(0.10, 0.62, 0.42, 0.45);
 const SELECTED_BIT = 0x80000000u;
 // Measure's second selection
 const SECOND_BIT = 0x40000000u;
-const PLACE_BITS = 0x3fffffffu;
+const WARN_BIT = 0x20000000u;
+// the border of a face the view could not draw: the shell's warning amber (E0A030)
+const WARN = vec4f(0.745, 0.353, 0.024, 1.0);
+const PLACE_BITS = 0x1fffffffu;
 // just nearer than the same triangles drawn before, so it wins without fighting
 const MARK_LIFT = 1e-5;
 const MARK_LIFT_MIN = 1.5e-7;
@@ -687,6 +690,9 @@ struct Mark {
 }
 
 fn mark_colour(at: u32) -> vec4f {
+    if (at & WARN_BIT) != 0u {
+        return WARN;
+    }
     if (at & SECOND_BIT) != 0u {
         return SECOND;
     }

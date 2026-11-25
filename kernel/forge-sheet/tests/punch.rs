@@ -1,6 +1,7 @@
 //! Cut punches: every tool shape's area exact against the folded and flat volumes, a hit on a
 //! flange carried to the flat and its DXF on the PUNCH layer, the shop checks (tool in the
 //! library, clear of bends, web between hits), typed refusals, a fuzz, timing.
+use forge_math::ipow::Powi as _;
 use forge_math::rng::Rng;
 use forge_math::{Frame, Point2, dmath};
 use forge_ops::{ProfileLoop, Segment};
@@ -297,7 +298,7 @@ fn cluster_counts_are_capped() {
     assert_eq!(s.cuts.len(), 1000);
     assert_eq!(
         cl(u32::MAX, u32::MAX).shape.area(),
-        0.25 * dmath::PI * 0.25 * (u32::MAX as f64).powi(2)
+        0.25 * dmath::PI * 0.25 * (u32::MAX as f64).ipow(2)
     );
     // sizes that are not finite
     for d in [f64::INFINITY, f64::NAN] {

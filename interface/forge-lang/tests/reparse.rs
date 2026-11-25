@@ -33,7 +33,13 @@ fn fg_files() -> Vec<std::path::PathBuf> {
 
 /// Whether `old` edited into `new` patches, and if so to `parse(new)`.
 fn check(old: &str, new: &str, patched: &mut usize, refused: &mut usize) {
-    let Ok(mut prog) = syntax::parse(old) else { return };
+    let Ok(prog) = syntax::parse(old) else { return };
+    check_parsed(old, &prog, new, patched, refused);
+}
+
+/// `check`, with `old` already parsed (every edit of one file starts from the same tree).
+fn check_parsed(old: &str, parsed: &[syntax::Stmt], new: &str, patched: &mut usize, refused: &mut usize) {
+    let mut prog = parsed.to_vec();
     let before = prog.clone();
     if syntax::reparse_number(old, &mut prog, new) {
         let p = old.bytes().zip(new.bytes()).take_while(|(a, b)| a == b).count();
@@ -70,15 +76,22 @@ fn check(old: &str, new: &str, patched: &mut usize, refused: &mut usize) {
 #[test]
 fn a_number_edited_patches_to_the_parse_of_the_edit() {
     let full = std::env::var_os("FG_REPARSE_FULL").is_some();
-    let (mut patched, mut refused) = (0, 0);
     let files = fg_files();
     assert!(files.len() > 20, "{} .fg files", files.len());
-    for path in &files {
-        let src = std::fs::read_to_string(path).expect("a .fg file");
-        let Ok(toks) = syntax::lex(&src) else { continue };
-        if syntax::parse(&src).is_err() {
-            continue;
-        }
+    // each file's edits checked on its own (files side by side; the same edits as one by one),
+    // its text parsed once and each edit patched from a copy of that tree
+    let counts = forge_math::par::map(files.len(), |i| {
+        let (mut patched, mut refused) = (0usize, 0usize);
+        let src = std::fs::read_to_string(&files[i]).expect("a .fg file");
+        let Ok(toks) = syntax::lex(&src) else {
+            return (0, 0);
+        };
+        let Ok(parsed) = syntax::parse(&src) else {
+            return (0, 0);
+        };
+        let check = |old: &str, new: &str, patched: &mut usize, refused: &mut usize| {
+            check_parsed(old, &parsed, new, patched, refused)
+        };
         for (k, t) in toks.iter().enumerate() {
             if !full && k % 13 != 0 {
                 continue;
@@ -136,7 +149,10 @@ fn a_number_edited_patches_to_the_parse_of_the_edit() {
             check(&src, &new, &mut patched, &mut refused);
         }
         check(&src, &src, &mut patched, &mut refused);
-    }
+        (patched, refused)
+    });
+    let patched: usize = counts.iter().map(|c| c.0).sum();
+    let refused: usize = counts.iter().map(|c| c.1).sum();
     assert!(
         patched > if full { 1000 } else { 100 },
         "{patched} patched, {refused} refused"

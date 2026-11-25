@@ -137,8 +137,12 @@ impl Proto {
             rounds += 1;
             for fi in 0..self.faces.len() {
                 for li in 0..self.faces[fi].loops.len() {
+                    // a slit is cut into a region: what is left of its loop still draws one (three
+                    // uses at least). A loop of fewer is a sliver face itself (EC-1600ZT #260555's
+                    // triangles 8 µm by 0.3 µm), not a slit in one: taking two of its sides out
+                    // left a loop that draws nothing, and the solid's integrals with it
                     let n = self.faces[fi].loops[li].len();
-                    if n < 3 {
+                    if n < 5 {
                         continue;
                     }
                     for i in 0..n {
@@ -1381,7 +1385,7 @@ fn kind(s: &Surface) -> &'static str {
     }
 }
 
-fn unwrap(uv: Point2, near: Point2, du: Domain1, dv: Domain1) -> Point2 {
+pub(crate) fn unwrap(uv: Point2, near: Point2, du: Domain1, dv: Domain1) -> Point2 {
     let fix = |x: f64, r: f64, p: Option<f64>| p.map_or(x, |p| x + p * ((r - x) / p).round());
     Point2::new(fix(uv.x, near.x, du.period), fix(uv.y, near.y, dv.period))
 }
@@ -1839,6 +1843,43 @@ mod tests {
         let (mut p, _, _) = slit(1e-3);
         p.cancel_slits(1e-5);
         assert_eq!(p.faces[0].loops[0].len(), 5);
+    }
+
+    /// A sliver face (a triangle 1 long and 5e-6 wide, its sides of 1 and 0.9 turning back on
+    /// each other within 1e-5) is a face, not a slit in one: left whole (EC-1600ZT #260555, whose
+    /// triangles of 8 µm by 0.3 µm lost two sides and left a loop that drew nothing).
+    #[test]
+    fn a_sliver_face_is_not_taken_for_a_slit() {
+        let mut p = Proto::default();
+        for (i, q) in [(0.0, 0.0), (1.0, 0.0), (0.1, 5e-6)].iter().enumerate() {
+            p.verts.push((Point3::new(q.0, q.1, 0.0), Name::feature(1 + i as u64)));
+        }
+        for (a, b) in [(0usize, 1usize), (1, 2), (2, 0)] {
+            let (pa, pb) = (p.verts[a].0, p.verts[b].0);
+            p.edges.push(PEdge {
+                curve: Curve::Line(Line {
+                    origin: pa,
+                    dir: (pb - pa).normalize().unwrap(),
+                }),
+                range: Interval::new(0.0, pa.distance(pb)),
+                start: a,
+                end: b,
+                name: Name::feature(100 + p.edges.len() as u64),
+            });
+        }
+        p.faces.push(PFace {
+            surface: Surface::Plane(Plane {
+                frame: Frame::from_z(Point3::ORIGIN, Vec3::Z.normalize().unwrap()),
+            }),
+            same_sense: true,
+            name: Name::feature(200),
+            shell: 0,
+            loops: vec![vec![(0, true), (1, true), (2, true)]],
+        });
+        p.shells = 1;
+        p.cancel_slits(1e-5);
+        assert_eq!(p.faces[0].loops[0], vec![(0, true), (1, true), (2, true)]);
+        assert_eq!(p.edges.len(), 3);
     }
 
     /// Two tetrahedra touching only at a corner: one vertex in the file, two fans of faces.

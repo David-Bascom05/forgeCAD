@@ -194,6 +194,7 @@ impl TtfFont {
 pub(crate) mod tests {
     use super::*;
     use forge_font::testing::{TestGlyph, build, square_ring};
+    use forge_math::ipow::Powi as _;
 
     /// Adds tables to a font's directory.
     pub fn with_tables(font: &[u8], extra: &[(&[u8; 4], Vec<u8>)]) -> Vec<u8> {
@@ -278,7 +279,7 @@ pub(crate) mod tests {
         // The arc from (300, 0) via (0, 0) to (0, 350) passes (75, 87.5) at t = 1/2.
         let near = o.fills[0]
             .iter()
-            .any(|p| ((p[0] - 75.0 / 700.0).powi(2) + (p[1] - 87.5 / 700.0).powi(2)).sqrt() < 1e-9);
+            .any(|p| ((p[0] - 75.0 / 700.0).ipow(2) + (p[1] - 87.5 / 700.0).ipow(2)).sqrt() < 1e-9);
         assert!(near);
     }
 

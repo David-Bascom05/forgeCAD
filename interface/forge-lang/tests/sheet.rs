@@ -5,6 +5,7 @@ use forge_lang::edit::apply;
 use forge_lang::error::{Error, Op, Warning};
 use forge_lang::{Options, Run};
 use forge_math::dmath::{self, PI};
+use forge_math::ipow::Powi as _;
 use forge_topo::Body;
 
 fn src(name: &str) -> String {
@@ -351,7 +352,7 @@ fn dxf_reads_back_as_the_flat() {
                 let (x0, y0, x1, y1) = (num(rest, 10), num(rest, 20), num(rest, 11), num(rest, 21));
                 area += 0.5 * (x0 * y1 - y0 * x1);
             }
-            ("CIRCLE", "CUT") => area -= PI * num(rest, 40).powi(2),
+            ("CIRCLE", "CUT") => area -= PI * num(rest, 40).ipow(2),
             _ => {}
         }
     }

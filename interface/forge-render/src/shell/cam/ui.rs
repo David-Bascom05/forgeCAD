@@ -577,7 +577,15 @@ impl Shell {
                 if let Some(s) = &w.said
                     && blocked.as_ref().is_none_or(|b| &b.sentence != s)
                 {
-                    note(ui, s, width, t.warn);
+                    // a file written is said by its name in the note's ink, the path on hover;
+                    // what went wrong in amber (UX-LEAD)
+                    let (short, done) = said_words(s);
+                    let r0 = ui.cursor().min.y;
+                    note(ui, &short, width, if done { t.ink2 } else { t.warn });
+                    if short != *s {
+                        let r = Rect::from_min_max(pos2(area.left(), r0), pos2(area.left() + width, ui.cursor().min.y));
+                        ui.interact(r, ui.scope_id().with("cam-said"), Sense::hover()).on_hover_text(s.as_str());
+                    }
                 }
             });
         if let Some(id) = sel {
@@ -3775,11 +3783,28 @@ fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
     r.map(|r| r.response.rect)
 }
 
+/// What the workspace said, as shown: a file it wrote or exported by its own name, not its
+/// folders ("Wrote /a/b/bracket_cam-sheet.html" → "Wrote bracket_cam-sheet.html"), and whether it
+/// is a thing done (shown in the note's ink) rather than one refused or failed (amber).
+pub fn said_words(s: &str) -> (String, bool) {
+    let name = |p: &str| p.trim_end_matches('/').rsplit(['/', '\\']).next().unwrap_or(p).to_string();
+    for done in ["Wrote ", "Exported ", "Downloaded "] {
+        if let Some(rest) = s.strip_prefix(done) {
+            // "Exported 3 files to /a/b": the folder by its name too
+            if let Some((what, dir)) = rest.split_once(" to ") {
+                return (format!("{done}{what} to {}", name(dir)), true);
+            }
+            return (format!("{done}{}", name(rest)), true);
+        }
+    }
+    (s.to_string(), s == "Export cancelled")
+}
+
 /// The status bar's words for the workspace.
 pub fn status_line(w: &CamWs) -> String {
-    // what was just refused (an export, a post) first, until the text or the run changes
+    // what was just said (refused, written, exported) first, until the text or the run changes
     if let Some(s) = &w.said {
-        return s.clone();
+        return said_words(s).0;
     }
     let n = w.stmts.iter().filter(|s| s.is_op() && !s.suppressed).count();
     let built = w
@@ -4253,6 +4278,18 @@ mod tests {
 
     /// The simulation's header says a certified run as the chip does: no raw certification
     /// string ("full except G4 (leftover not computed)"), the code on the hover's first line.
+    /// A file written or exported is said by its name, its folders on hover; a refusal stays whole.
+    #[test]
+    fn what_was_done_is_said_by_the_files_name() {
+        assert_eq!(super::said_words("Wrote /tmp/x/customer-acme/cam/bracket_cam-sheet.html"), ("Wrote bracket_cam-sheet.html".to_string(), true));
+        assert_eq!(super::said_words("Exported /home/u/out/prog.nc"), ("Exported prog.nc".to_string(), true));
+        assert_eq!(super::said_words("Exported 3 files to /home/u/nc"), ("Exported 3 files to nc".to_string(), true));
+        assert_eq!(super::said_words("Downloaded prog.nc"), ("Downloaded prog.nc".to_string(), true));
+        assert!(super::said_words("Export cancelled").1);
+        let r = "Program prog can't be released: setup op1 isn't placed on the machine.";
+        assert_eq!(super::said_words(r), (r.to_string(), false));
+    }
+
     /// A lathe tool reads in words from its record, never its key (UX-LEAD).
     #[test]
     fn lathe_tools_read_in_words() {

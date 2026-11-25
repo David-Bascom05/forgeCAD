@@ -181,7 +181,7 @@ pub fn read_noting(name: &str, bytes: &[u8]) -> Result<(Vec<Piece>, Vec<String>)
             );
             all.components()
         }
-        Format::Step | Format::Iges => {
+        f @ (Format::Step | Format::Iges | Format::Parasolid) => {
             // a display model: sixteen times the evaluations a part's check may spend, which
             // a machine maker's sheet-metal enclosure needs (Haas's VF-2: three solids more, no
             // longer to read)
@@ -190,8 +190,14 @@ pub fn read_noting(name: &str, bytes: &[u8]) -> Result<(Vec<Piece>, Vec<String>)
                 max_evals: d.max_evals * 16,
                 ..d
             };
-            let imp =
-                forge_step::import(bytes, &lim).map_err(|_| format!("{name}: not a model this reads"))?;
+            // the headline, then the reader's reason (a panel shows it on hover)
+            let kind = match f {
+                Format::Step => "STEP",
+                Format::Iges => "IGES",
+                _ => "Parasolid",
+            };
+            let imp = forge_step::import(bytes, &lim)
+                .map_err(|e| format!("{name} couldn't be read as a {kind} model\n{e}"))?;
             // each solid meshed once, then placed where the assembly uses it (a solid no use
             // names stands as the file has it)
             // (on all cores: `tessellate_tolerant` at `Solid::display_quality`, 5e-4 of the
@@ -204,11 +210,13 @@ pub fn read_noting(name: &str, bytes: &[u8]) -> Result<(Vec<Piece>, Vec<String>)
                     name: s.name.clone(),
                 })
             });
-            let mut meshed: std::collections::BTreeMap<u32, Option<Piece>> = Default::default();
+            // a list, not a map by entity: a Parasolid body placed twice is two solids of one
+            // entity, each kept (ordered by entity, stably, as a map would have them)
+            let mut meshed: Vec<(u32, Option<Piece>)> = Vec::new();
             let mut failed = 0;
             for (s, m) in imp.solids.iter().zip(pieces) {
                 failed += usize::from(m.is_none());
-                meshed.insert(s.entity, m);
+                meshed.push((s.entity, m));
             }
             // a solid refused for one face its file puts far from its edges is still drawn here,
             // less that face (never a checked solid: a viewer's model only)
@@ -226,21 +234,22 @@ pub fn read_noting(name: &str, bytes: &[u8]) -> Result<(Vec<Piece>, Vec<String>)
                     "{part} is drawn without {}",
                     s.why.replacen(" can't be read", ", which can't be read", 1)
                 ));
-                meshed.insert(
+                meshed.push((
                     s.entity,
                     Some(Piece {
                         pos: s.mesh.positions.iter().map(|p| [p.x, p.y, p.z]).collect(),
                         tri: s.mesh.triangles,
                         name: s.name,
                     }),
-                );
+                ));
             }
+            meshed.sort_by_key(|x| x.0);
             let mut v = Vec::new();
             let mut placed = std::collections::BTreeSet::new();
             let mut uses: Vec<&forge_step::Occurrence> = imp.occurrences.iter().collect();
             uses.sort_by(|a, b| a.path.cmp(&b.path).then(a.solid.cmp(&b.solid)));
             for u in uses {
-                let Some(Some(p)) = meshed.get(&u.solid) else {
+                let Some((_, Some(p))) = meshed.iter().find(|x| x.0 == u.solid) else {
                     continue;
                 };
                 placed.insert(u.solid);
@@ -737,5 +746,24 @@ mod tests {
             "{placed:?}"
         );
         let _ = forge_dirs::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn a_parasolid_body_placed_twice_is_two_pieces() {
+        // research/parasolid/fixtures.py's assembly: one block, two instances
+        let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../kernel/forge-step/tests/data/xt/assembly.x_t");
+        let pieces = read("assembly.x_t", &std::fs::read(p).unwrap()).unwrap();
+        assert_eq!(pieces.len(), 2);
+        let xmax = |q: &Piece| q.pos.iter().map(|p| p[0]).fold(f64::MIN, f64::max);
+        let mut x: Vec<f64> = pieces.iter().map(xmax).collect();
+        x.sort_by(f64::total_cmp);
+        assert!((x[0] - 20.0).abs() < 1e-6 && (x[1] - 100.0).abs() < 1e-6, "{x:?}");
+        // a file no reader knows, in the words a panel shows
+        let e = read("part.x_t", b"not a model").unwrap_err();
+        assert!(
+            e.starts_with("part.x_t couldn't be read as a Parasolid model\n"),
+            "{e}"
+        );
     }
 }

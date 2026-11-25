@@ -217,8 +217,9 @@ fn moved(b: &Body, d: forge_math::Vec3) -> Body {
 /// With the tori traced apart (fix/torus-tangent-branches, held) both check clean yet miss by
 /// -972 mm3 at 0.4137 and +126 at 0.417: wrong answers only the volume sees. So a change that
 /// makes main answer here must answer right.
-#[test]
-fn a_part_with_tori_with_copies_near_over_answers_right_or_refuses() {
+/// The union and intersection of `tori_167faces.step` with a copy moved `k` of its width along x,
+/// for each `k`: both refused, or together twice the solid.
+fn tori_with_copies_answer_right_or_refuse(offsets: [f64; 3]) {
     use forge_bool::{Op, boolean};
     let b = one("tori_167faces.step");
     let w = b.faces_box().x.width();
@@ -240,7 +241,6 @@ fn a_part_with_tori_with_copies_near_over_answers_right_or_refuses() {
             "offset {k}: union + intersection - 2V = {miss}"
         );
     };
-    let offsets = [0.40, 0.405, 0.41, 0.412, 0.4137, 0.415, 0.417, 0.42, 0.43];
     // (wasm has no threads: one after another there)
     if cfg!(target_family = "wasm") {
         offsets.into_iter().for_each(check);
@@ -252,4 +252,20 @@ fn a_part_with_tori_with_copies_near_over_answers_right_or_refuses() {
             t.join().unwrap();
         }
     });
+}
+
+// The nine offsets in three tests (all nine in one ran past the 2 s a test may take).
+#[test]
+fn a_part_with_tori_with_copies_near_over_answers_right_or_refuses() {
+    tori_with_copies_answer_right_or_refuse([0.4137, 0.415, 0.417]);
+}
+
+#[test]
+fn a_part_with_tori_with_copies_short_of_over_answers_right_or_refuses() {
+    tori_with_copies_answer_right_or_refuse([0.40, 0.405, 0.41]);
+}
+
+#[test]
+fn a_part_with_tori_with_copies_past_over_answers_right_or_refuses() {
+    tori_with_copies_answer_right_or_refuse([0.412, 0.42, 0.43]);
 }

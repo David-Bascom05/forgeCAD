@@ -492,6 +492,7 @@ impl Gui {
                 entity: *entity,
                 selected,
                 second,
+                warn: false,
             }),
             MPick::Whole(pl) => {
                 let faces = d
@@ -502,6 +503,7 @@ impl Gui {
                     entity: Entity::Face(f),
                     selected,
                     second,
+                    warn: false,
                 }));
             }
             MPick::Free(..) => {}

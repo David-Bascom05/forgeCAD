@@ -22,6 +22,7 @@
 use crate::engage::{HeightMap, Profile};
 use crate::ops::{PMove, Phase};
 use forge_math::dmath;
+use forge_math::ipow::Powi as _;
 
 /// The tip's clearance over the material it crosses (mm).
 pub const CLEAR: f64 = 0.5;
@@ -235,7 +236,7 @@ fn hop(
     if beside && down_from.is_none() {
         return None;
     }
-    let l = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+    let l = ((b[0] - a[0]).ipow(2) + (b[1] - a[1]).ipow(2)).sqrt();
     let n = (l / map.h).ceil().max(1.0) as usize;
     let p = |k: usize| {
         let t = k as f64 / n as f64;
@@ -339,7 +340,7 @@ fn sweep(map: &mut HeightMap, prof: &Profile, at: [f64; 3], m: &PMove) {
                     sw += tau;
                 }
             }
-            let rad = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
+            let rad = ((at[0] - c[0]).ipow(2) + (at[1] - c[1]).ipow(2)).sqrt();
             let k = ((sw.abs() * rad / map.h).ceil() as usize).max(1);
             let mut p = at;
             for i in 1..=k {
@@ -421,7 +422,7 @@ mod tests {
                 ..
             } = *mv
             {
-                let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
+                let l = ((to[0] - at[0]).ipow(2) + (to[1] - at[1]).ipow(2)).sqrt();
                 let n = (l / m.h).ceil().max(1.0) as usize;
                 for k in 0..=n {
                     let t = k as f64 / n as f64;
