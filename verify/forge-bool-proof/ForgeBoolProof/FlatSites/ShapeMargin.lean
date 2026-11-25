@@ -16,15 +16,23 @@ clear of the boundary by a margin; nearer, it is Near and the caller asks the B-
 What makes the first two screens sound:
 
 * `screen_same`: two regions that differ only within `ε` of a boundary `B` agree at every point
-  farther than `ε` from `B`. The profile taken with the arc whole differs from the true one only in
-  the arc's missing piece and the closing segments at its two ends, all within the chord of the gap;
-  a point the screen answers In or Out of is farther than the margin from the boundary.
-* `arc_chord`: two points of a circle of radius `r` at angles `a` and `b` are at most `r |a - b|`
-  apart, so the missing piece of an arc within `g` rad of whole lies within `r g` of its end.
-* `gap_within_margin`: for `r` up to the model's half size (`tol::MODEL_HALF_SIZE` = 5e5 mm),
-  `r · 1e-12 ≤ 5e-7 < LINEAR` = 1e-5 = `SHAPE_MARGIN`. (Under the input bound InputSize's 1.6e7
-  instead, `r · 1e-12 ≤ 1.6e-5`, past the margin: the screen needs the model half size, the bound
-  the kernel already holds parts to, research/decide-once ledger G.param.)
+  farther than `ε` from `B`: a screen that answers In or Out only clear of the boundary by the
+  margin answers the true region wherever the region it computes differs from it only within the
+  margin of the boundary.
+* What governs the whole-turn branch is not the model's size: no arc a shape holds is within
+  1e-12 rad of whole unless it is whole. Every `Seg2::Arc` of a shape comes from a profile
+  `normalized` by forge-ops (extrude, revolve, holes, coils; patterns and mirrors keep `|sweep|`),
+  and `Segment::degenerate` (forge-ops profile.rs) refuses an arc within `ANGULAR` = 1e-11 rad of
+  a whole turn, at any radius; a whole turn is a circle, sweep exactly `2π` and alone in its loop
+  (`CircleNotAlone`). So the branch fires only where `R = R'` (ε = 0 in `screen_same`). The
+  condition matters: with a closing segment, the branch would count the arc across its gap and
+  the segment both, and the disc's centre would read Out at any radius (1 mm as at 16 km); tests
+  kernel/forge-bool/tests/shape_whole_turn.rs and interface/forge-lang/tests/whole_turn_size.rs
+  hold the refusal at 1 mm, 5e5, 1.2e7 and `InputSize`'s 1.6e7, and the exact answer just past it.
+* `arc_chord` and `gap_within_margin` bound the boundary's move if an arc within `g` of whole
+  taken whole on its own (its gap closed by nothing): `r g`, under the margin for `r` up to the
+  model half size. Not needed by the code as it stands (above), kept as the bound a whole-turn
+  tolerance on a lone arc would owe.
 
 And of the third:
 
