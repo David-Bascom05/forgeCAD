@@ -1955,8 +1955,9 @@ impl Renderer {
 
     /// Other parts in other places: this renderer as `new` would make it of them, keeping its
     /// pipelines and targets (an assembly's restage: making those again took a frame of 150 ms
-    /// with a big import in it, research/big-render). The settings `new` starts from are put
-    /// back too, so the view is the one a new renderer gives; the host sets its look again.
+    /// with a big import in it, research/big-render). What the person chose for the view stays:
+    /// occlusion on or off (`O`), the background's picture; the rest `new` starts from is put
+    /// back, and the host sets its look again.
     pub fn restage(&mut self, parts: &[PartMesh], scene: &Scene, lineage: Option<(u64, usize)>) {
         let dq = (&self.device, &self.queue);
         self.placements = filled(
@@ -2000,17 +2001,20 @@ impl Renderer {
         self.section = None;
         self.section2 = None;
         self.section_end = false;
-        self.ao = true;
         self.style = VisualStyle::default();
         self.floor_z = None;
         self.lod_px = LOD_PX;
-        self.set_background_image(None);
         // the meshes (only the new ones, when they are more of the same assembly's), and every
         // binding of the buffers above
         if !self.grow_parts(parts, lineage) {
             self.set_parts(parts);
             self.set_lineage(lineage);
         }
+    }
+
+    /// The background picture's size: (0, 0) with none.
+    pub fn background_image_size(&self) -> (u32, u32) {
+        self.back_image.size
     }
 
     /// The background's picture: RGBA (sRGB), width and height; none, the scheme's colours.

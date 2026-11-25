@@ -108,9 +108,10 @@ selection and measure tests pass (53 in 8 files: `cargo test --release --test fg
 --test selection --test reselect --test headless --test asm_tools --test measure`). The kernel's
 speed gate does not build forge-render, so it cannot move.
 
-Two existing quirks were kept as they were, so the pixels stay the same: a restage puts the view's
-occlusion back on after `O` turned it off, and drops a background image until its setting
-changes. Each is a one-line fix in `Renderer::restage` if wanted.
+Two existing quirks were kept by that commit, so its pixels stay the same, and fixed in the next
+(own commit, `tests/restage.rs`): a restage put the view's occlusion back on after `O` turned it
+off, and dropped a background picture until its setting changed. Both now stay across an edit;
+the two tests fail with the old resets put back.
 
 ## Keeping it
 
