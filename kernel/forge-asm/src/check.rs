@@ -676,7 +676,14 @@ fn enclosed(a: &PartMesh, b: &PartMesh, rel: &Frame, depth: f64) -> Narrow {
             .iter()
             .map(|&t| other.tri(t).map(|p| map.point_to_world(p)))
             .collect();
-        let far: Vec<bool> = placed.iter().map(|tri| !near_surface(m, tri, depth)).collect();
+        let far: Vec<bool> = if two_walks() {
+            placed.iter().map(|tri| !near_surface(m, tri, depth)).collect()
+        } else {
+            near_all(m, other, &found, &placed, depth)
+                .into_iter()
+                .map(|n| !n)
+                .collect()
+        };
         // a triangle that comes near the surface may still reach deep through it (a coarse face
         // whose edge lies on the other's face): its own centre is a sample, as a piece of one
         let near = (0..found.len()).filter(|&k| !far[k]).map(|k| vec![k]);
@@ -817,6 +824,96 @@ fn narrow_near(a: &PartMesh, b: &PartMesh, rel: &Frame, depth: f64) -> (Narrow, 
         Narrow::Clear => (Narrow::Clear, near),
         r => (r, true),
     }
+}
+
+/// `near_surface(m, ts[k], depth)` for each k, where `ts[k]` is triangle `found[k]` of `other`
+/// placed in `m`'s frame: one walk of `m`'s tree against `other`'s tree with each node's box
+/// refitted to the boxes of the `ts` under it (the very boxes `near_surface` takes; nodes with
+/// none dropped). Bit for bit the same: either answers "some triangle i of `m` has box_gap(box
+/// i, box t) <= depth and tri_distance <= depth" (a node's box holds its items' boxes, and
+/// box_gap never grows as a box grows, so neither walk's pruning drops such an i), and the leaf
+/// test is the same expression.
+fn near_all(m: &PartMesh, other: &PartMesh, found: &[usize], ts: &[[Point3; 3]], depth: f64) -> Vec<bool> {
+    let mut near = vec![false; ts.len()];
+    let (bm, bo) = (m.bvh(), other.bvh());
+    if bm.nodes.is_empty() || ts.is_empty() {
+        return near;
+    }
+    let boxes: Vec<Box3> = ts.iter().map(|t| Box3::from_points(*t)).collect();
+    let mut at = vec![u32::MAX; other.triangles.len()];
+    for (k, &t) in found.iter().enumerate() {
+        at[t] = k as u32;
+    }
+    // children come after their parent, so one pass from the end refits bottom-up
+    let mut fit = vec![Box3::EMPTY; bo.nodes.len()];
+    let mut some = vec![false; bo.nodes.len()];
+    for n in (0..bo.nodes.len()).rev() {
+        let node = &bo.nodes[n];
+        let (mut b, mut any) = (Box3::EMPTY, false);
+        if node.leaf {
+            for &t in &bo.items[node.lo..node.hi] {
+                if at[t] != u32::MAX {
+                    b = b.hull(&boxes[at[t] as usize]);
+                    any = true;
+                }
+            }
+        } else {
+            for c in [node.lo, node.hi] {
+                if some[c] {
+                    b = b.hull(&fit[c]);
+                    any = true;
+                }
+            }
+        }
+        fit[n] = b;
+        some[n] = any;
+    }
+    let mut left = ts.len();
+    let mut stack = vec![(0usize, 0usize)];
+    while let Some((nm, no)) = stack.pop() {
+        let (x, y) = (&bm.nodes[nm], &bo.nodes[no]);
+        if !some[no] || box_gap(&x.bbox, &fit[no]) > depth {
+            continue;
+        }
+        match (x.leaf, y.leaf) {
+            (true, true) => {
+                for &t in &bo.items[y.lo..y.hi] {
+                    let k = at[t];
+                    if k == u32::MAX || near[k as usize] {
+                        continue;
+                    }
+                    let k = k as usize;
+                    for &i in &bm.items[x.lo..x.hi] {
+                        if box_gap(&m.tri_boxes()[i], &boxes[k]) <= depth
+                            && tri_distance(&m.tri(i), &ts[k]).0 <= depth
+                        {
+                            near[k] = true;
+                            left -= 1;
+                            if left == 0 {
+                                return near;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            (false, true) => {
+                stack.push((x.hi, no));
+                stack.push((x.lo, no));
+            }
+            (true, false) => {
+                stack.push((nm, y.hi));
+                stack.push((nm, y.lo));
+            }
+            (false, false) => {
+                stack.push((x.hi, y.hi));
+                stack.push((x.hi, y.lo));
+                stack.push((x.lo, y.hi));
+                stack.push((x.lo, y.lo));
+            }
+        }
+    }
+    near
 }
 
 /// True when some triangle of `m` comes within `depth` of `t` (in `m`'s frame).
@@ -2300,6 +2397,54 @@ mod one_walk_tests {
             same(a, b, &pose(0.25, 0.25, 0.25, 0.3), &mut seen);
         }
         assert!(seen.iter().all(|&n| n > 0), "every answer met: {seen:?}");
+    }
+
+    /// near_all answers near_surface triangle by triangle: another mesh's triangles (all, or
+    /// a subset) placed across, along and just inside and outside the depth of a comb's faces,
+    /// edges and corners.
+    #[test]
+    fn near_all_answers_as_near_surface() {
+        let tol = 2e-3;
+        let depth = 2.0 * tol + tol::LINEAR;
+        let others = [comb(3, tol), mesh(&[([0.0, 0.0, 0.0], [0.3, 0.2, 0.5], 4)], tol)];
+        let mut checked = (0, 0);
+        for m in [
+            comb(2, tol),
+            comb(5, tol),
+            mesh(&[([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 1)], tol),
+        ] {
+            for other in &others {
+                for i in 0..60 {
+                    let t = i as f64;
+                    let f = |k: f64| (t * k).fract();
+                    let z = match i % 4 {
+                        0 => 1.0 + depth,
+                        1 => 1.0 + depth * (1.0 + 1e-12),
+                        2 => 1.0 + depth * (1.0 - 1e-12),
+                        _ => 1.4 * f(0.271) - 0.2,
+                    };
+                    let rel = pose(
+                        4.4 * f(0.377) - 0.5,
+                        3.4 * f(0.513) - 0.5,
+                        z,
+                        if i % 2 == 0 { 0.0 } else { 6.0 * f(0.19) },
+                    );
+                    let all: Vec<usize> = (0..other.triangles.len()).collect();
+                    let some: Vec<usize> = all.iter().copied().filter(|t| (t * 7 + i) % 3 != 0).collect();
+                    for found in [all, some, vec![], vec![0]] {
+                        let ts: Vec<[Point3; 3]> = found
+                            .iter()
+                            .map(|&t| other.tri(t).map(|p| rel.point_to_world(p)))
+                            .collect();
+                        let want: Vec<bool> = ts.iter().map(|t| near_surface(&m, t, depth)).collect();
+                        assert_eq!(near_all(&m, other, &found, &ts, depth), want, "pose {i}");
+                        checked.0 += want.iter().filter(|&&n| n).count();
+                        checked.1 += want.iter().filter(|&&n| !n).count();
+                    }
+                }
+            }
+        }
+        assert!(checked.0 > 100 && checked.1 > 100, "{checked:?}");
     }
 
     #[test]
