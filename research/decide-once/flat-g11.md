@@ -199,3 +199,46 @@ above, or a typed refusal at that site, is brought back as a correctness excepti
 
 **Still owed.** Curves other than lines and circles (ellipses, traced, spline, conic): their
 curvature is not bounded cheaply, and the counter does not see them.
+
+## The T sites' budget: what the δ-accumulation lemma still asks (FLAT-SITES, 2026-11-25)
+
+`FlatSites/Accum.lean` proves that an entity merged through `n` steps, step `k` within `τ k`, ends
+within `ε + Σ τ k` of its exact meet, and so within `δ` when that sum is (`accum_within`). A T site
+cites it; what it owes is the sum. Measured on main ded2d224 (every gate part and fuzz 1–10, seq and
+nary1: 54 results):
+
+- **Recorded tolerances never grow.** Every vertex and edge of every result keeps the tolerance
+  `LINEAR` (0 of them above it): no accept at any T site measured a distance beyond `LINEAR`, so each
+  step's `τ` is at most `LINEAR`, the δ of the statement.
+- **Nothing is carried.** For the 7,304 result vertices whose faces are all planes, the distance
+  from the stored vertex to the exact meet of every independent triple of its planes (`meet3` in
+  dyadics) is at most **2.6e-13 mm** (patterns seq; 2.3e-13 fuzz6, 2.0e-13 coplanar): `ε + Σ τ`
+  as it occurs is under 3e-8 of δ. A chain of merges each allowed `LINEAR` moved no planar vertex
+  past rounding.
+
+So on the flat corpus the budget holds by six orders of magnitude, but as a measurement, not a
+theorem: the bound `accum` gives from the tolerances alone is `n · LINEAR`, which exceeds `δ` for
+any `n ≥ 2`. What would close it is a per-site statement that an accept's actual distance is
+rounding (each accepted point is computed from the same exact carriers it is accepted onto), not
+the tolerance. Owed, per site:
+- the measured distance each T site accepts (its `d` against its `τ`): measured below, which names
+  the one site whose accepts are not rounding-sized on curved input;
+- the same vertex measurement for curved faces (25,724 of these results' vertices, counted per
+  result, touch one), where no exact meet is at hand.
+
+**Per site** (the same 54 results; each accept's measured distance `d` against the tolerance `τ` it
+was accepted within; a scratch counter at each site, not shipped):
+
+| site | accepts | d = 0 | d/τ < 1e-7 | 1e-7 ≤ d/τ < 1e-2 | d/τ ≥ 1e-2 | max d | max d/τ |
+|---|---|---|---|---|---|---|---|
+| `on_edge` (boolean.rs:289) | 134,444 | 69,315 | 64,067 | 1,044 | 18 | 9.07e-7 | 0.091 |
+| a vertex on the curve (boolean.rs:2911) | 7,768 | 5,687 | 2,079 | 2 | 0 | 2.6e-12 | 2.6e-7 |
+| the n-ary vertex–cut merge (nary.rs:1514) | 7,540 | 7,239 | 301 | 0 | 0 | 5.1e-14 | 5.1e-9 |
+| `coincide` (boolean.rs:5019) | 288 | 288 | 0 | 0 | 0 | 0 | 0 |
+
+The merges of vertices are rounding. `on_edge` is rounding on planes; the 23 accepts with
+`d > 1e-8` are all on curved edges (circles in fuzz3 and fuzz9, traced intersection curves in mixed
+seq), a point computed on two curved surfaces' meet taken onto a stored circle or traced edge, up to
+9% of `LINEAR` each. So the budget on curved input is real, not rounding: an entity can take up to
+eleven such accepts before `ε + Σ τ` reaches δ, by the measured maximum. The proof of a T site on
+curved input owes the bound on that error (the closed-form meet's accuracy), not just the lemma.
