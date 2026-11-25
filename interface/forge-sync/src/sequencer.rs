@@ -50,7 +50,10 @@ impl Check for Direct {
 pub struct Limits {
     /// The head text's bytes (below the wire's `MAX_MESSAGE`, so a snapshot always fits).
     pub max_text: usize,
-    /// The log's bytes in memory (and in the store) before it is compacted to a snapshot.
+    /// The log's bytes (as stored) kept in memory before a snapshot: older ops stay in the
+    /// store's history and are read from it when an op made before them arrives (read_range).
+    /// In memory an entry takes ~4x its stored bytes, so this bounds each open document's log
+    /// at a few MB (HOSTED-DESIGN's load run: 4.1 KB per op until it was reached).
     pub max_log_bytes: usize,
     /// Texts kept for hash checks: at most this many, and at most `recent_bytes` in all.
     pub recent: usize,
@@ -68,7 +71,7 @@ impl Default for Limits {
     fn default() -> Limits {
         Limits {
             max_text: 4 << 20,
-            max_log_bytes: 16 << 20,
+            max_log_bytes: 1 << 20,
             recent: 64,
             recent_bytes: 16 << 20,
             seen: 1_000,
