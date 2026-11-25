@@ -128,6 +128,9 @@ impl Bvh {
     /// boxes only. Each split selects the median (`select_nth_unstable_by`) under that total
     /// order rather than sorting: the halves hold the same items either way, so the tree is the
     /// same; a leaf's items are then put in its parent's order, as the parent's sort left them.
+    /// The same tree up to the sign of zero in inner nodes' boxes: an inner box is the hull of its
+    /// items in another order, and min/max of 0.0 and -0.0 depend on the order. Equal values, so
+    /// no box test answers differently; leaf boxes are the same bits (same items, same order).
     fn new(boxes: &[Box3]) -> Bvh {
         if !SELECT_SPLIT {
             return Bvh::new_sorted(boxes);
@@ -1074,6 +1077,9 @@ fn fresh(f: impl FnOnce(&mut Learned)) {
 
 /// Mesh distances worked out in this process, by both meshes' content, the relative pose and
 /// the limit: what `distance` would answer, bit for bit.
+/// Since `narrow_near`, the interference check no longer fills this (nor `Learned::gaps`) for its
+/// Clear pairs: their near answer is kept in NARROWS (codes 3/4) instead, and a clearance asked
+/// later computes its gap on demand, the same answer as before.
 static GAPS: std::sync::Mutex<Option<std::collections::HashMap<GapKey, Gap>>> = std::sync::Mutex::new(None);
 
 fn gap_key(a: &PartMesh, b: &PartMesh, rel: &Frame, limit: f64) -> GapKey {
@@ -2491,12 +2497,17 @@ mod bvh_select_tests {
             seed
         };
         for n in (0..40).chain([63, 64, 65, 100, 257, 1000, 4099]) {
-            for grid in [1.0, 4.0, 1e9] {
+            // grid 0: every coordinate 0.0 or -0.0 (mixed signs of zero)
+            for grid in [0.0, 1.0, 4.0, 1e9] {
                 let boxes: Vec<Box3> = (0..n)
                     .map(|_| {
                         let mut c = [0.0; 3];
                         for v in &mut c {
-                            *v = ((next() % 1000) as f64 / 1000.0 * grid).floor() / grid;
+                            *v = if grid == 0.0 {
+                                if next() % 2 == 0 { 0.0 } else { -0.0 }
+                            } else {
+                                ((next() % 1000) as f64 / 1000.0 * grid).floor() / grid
+                            };
                         }
                         let r = (next() % 7) as f64 * 0.01;
                         Box3::from_points([
@@ -2510,7 +2521,14 @@ mod bvh_select_tests {
                 assert_eq!(x.nodes.len(), y.nodes.len());
                 for (p, q) in x.nodes.iter().zip(&y.nodes) {
                     assert_eq!((p.lo, p.hi, p.leaf), (q.lo, q.hi, q.leaf));
-                    assert_eq!(format!("{:?}", p.bbox), format!("{:?}", q.bbox));
+                    let ends = |b: &Box3| [b.x.lo, b.x.hi, b.y.lo, b.y.hi, b.z.lo, b.z.hi];
+                    if p.leaf {
+                        // same items in the same order: the same bits
+                        assert_eq!(ends(&p.bbox).map(f64::to_bits), ends(&q.bbox).map(f64::to_bits));
+                    } else {
+                        // equal values (the sign of a zero may differ)
+                        assert_eq!(ends(&p.bbox), ends(&q.bbox), "n {n} grid {grid}");
+                    }
                 }
             }
         }
