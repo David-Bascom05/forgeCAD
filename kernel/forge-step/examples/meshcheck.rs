@@ -1,5 +1,6 @@
 //! Each solid's display mesh checked against the exact body: every triangle's centroid and edge
-//! midpoints within the chord (plus the face's largest edge tolerance, for triangles on a file's
+//! midpoints (each distance the surface's own, or no more than a corner's way plus its distance)
+//! within the chord (plus the face's largest edge tolerance, for triangles on a file's
 //! tolerant boundary) of its face's surface; open edges and pinched vertices (a closed manifold has
 //! neither); the triangle count; and the solid's verdict. One line per solid, `meshcheck FILE...`.
 use forge_geom::SurfaceGeom;
@@ -45,8 +46,23 @@ fn main() {
                     c.lerp(a, 0.5),
                 ];
                 let allow = q.chord + face_tol[f.index()];
+                // the corners' own distances: a point's distance is at most its way to a corner
+                // and that corner's, so where a projection finds a far sheet of the surface
+                // (a NURBS search's local answer) the bound stands: never less than the truth
+                let corners = [a, bb, c].map(|k| (k, surf.distance(k), surf.project(k)));
                 for x in pts {
-                    let d = surf.distance(x);
+                    let bound = corners
+                        .iter()
+                        .map(|&(k, dk, uv)| {
+                            // a surface point near this corner's: its distance is an upper bound too
+                            let near = surf.eval(surf.project_near(x, uv)).distance(x);
+                            near.min(x.distance(k) + dk)
+                        })
+                        .fold(f64::INFINITY, f64::min);
+                    let d = surf.distance(x).min(bound);
+                    if d / allow > worst && std::env::var_os("MESHCHECK_WHERE").is_some() {
+                        eprintln!("  worse: face {} ratio {:.3} d {:.4} chord {:.4} tol {:.2e} surface {}", f.0, d / allow, d, q.chord, face_tol[f.index()], format!("{:?}", surf).chars().take(120).collect::<String>());
+                    }
                     worst = worst.max(d / allow);
                 }
             }
