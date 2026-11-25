@@ -612,6 +612,277 @@ impl Wire for std::sync::Arc<str> {
     }
 }
 
+record!(crate::scene::Placement { part, rows, tint });
+record!(forge_lang::harness::ConnOut {
+    name,
+    face,
+    pins,
+    pin_at,
+    exit
+});
+record!(forge_lang::harness::NodeOut {
+    name,
+    at,
+    directed,
+    degree
+});
+record!(forge_lang::harness::SegOut {
+    name,
+    a,
+    b,
+    length,
+    d,
+    r_min,
+    r_least,
+    wires,
+    covering,
+    d_pack
+});
+record!(forge_lang::harness::WireOut {
+    name,
+    from,
+    to,
+    ty,
+    colour,
+    od,
+    given,
+    path,
+    routed,
+    ohms,
+    current,
+    vdrop
+});
+record!(forge_lang::harness::BomRow {
+    item,
+    qty,
+    unit,
+    maker,
+    mpn,
+    part_number
+});
+record!(forge_lang::harness::TypeOut {
+    name,
+    spec,
+    ohm_km,
+    ohm_worked
+});
+record!(forge_harness::WireOut {
+    path,
+    stubs,
+    route,
+    loops,
+    slack,
+    insertion,
+    exact,
+    length
+});
+record!(forge_harness::wires::Tie { at, axis, d });
+record!(forge_harness::ClipOut {
+    node,
+    at,
+    axis,
+    seat,
+    d,
+    base
+});
+record!(crate::origin::WorldVert { at, colour });
+record!(forge_mesh::TriMesh {
+    positions,
+    triangles,
+    face_of,
+    edges,
+    unsettled
+});
+record!(crate::thermo_view::Span { faces, edges });
+
+record!(forge_agent::measure::Reading { values, shown });
+choice!(forge_agent::measure::Quantity {
+    0 => Distance,
+    1 => Dx,
+    2 => Dy,
+    3 => Dz,
+    4 => CentreDistance,
+    5 => AxisDistance,
+    6 => Angle,
+    7 => Length,
+    8 => LoopLength,
+    9 => Radius,
+    10 => Diameter,
+    11 => Area,
+    12 => Perimeter,
+    13 => X,
+    14 => Y,
+    15 => Z,
+    16 => MaxDistance,
+    17 => Volume,
+    18 => Mass,
+    19 => SizeX,
+    20 => SizeY,
+    21 => SizeZ,
+    22 => AxisX,
+    23 => AxisY,
+    24 => AxisZ,
+});
+choice!(forge_agent::measure::Shown {
+    0 => Line(a0, a1, a2),
+    1 => Point(a0),
+    2 => Circle(a0, a1, a2),
+    3 => Angle(a0, a1, a2, a3),
+    4 => Face(a0, a1),
+    5 => Curve(a0, a1),
+    6 => Box(a0, a1),
+});
+choice!(forge_agent::measure::Free {
+    0 => Point(a0),
+    1 => Axis(a0, a1),
+    2 => Plane(a0, a1),
+    3 => Segment(a0, a1),
+    4 => Circle(a0, a1, a2),
+    5 => Arc(a0, a1, a2, a3),
+    6 => Curve(a0),
+    7 => Loop { loops, area, perimeter, inside },
+});
+choice!(forge_agent::select::Ent {
+    0 => Face(a0),
+    1 => Edge(a0),
+    2 => Vert(a0),
+});
+choice!(crate::shell::inspect::Filter {
+    0 => Any,
+    1 => Faces,
+    2 => Edges,
+    3 => Points,
+    4 => Bodies,
+});
+choice!(crate::shell::inspect::MPick {
+    0 => Ent(a0, a1),
+    1 => Whole(a0),
+    2 => Free(a0, a1),
+});
+choice!(crate::render::Entity {
+    0 => Face(a0),
+    1 => Edge(a0),
+    2 => Vertex(a0),
+});
+record_tuple!(forge_topo::body::EdgeId { 0 });
+record_tuple!(forge_topo::body::VertexId { 0 });
+
+record!(forge_math::Interval { lo, hi });
+record!(forge_geom::curve::Line { origin, dir });
+record!(forge_geom::curve::Circle { frame, radius });
+// (made only by their constructors outside forge-geom: `#[non_exhaustive]`)
+impl Wire for forge_geom::curve::Ellipse {
+    fn put(&self, o: &mut W) {
+        self.frame.put(o);
+        self.major.put(o);
+        self.minor.put(o);
+    }
+    fn take(i: &mut R) -> Option<Self> {
+        Some(forge_geom::curve::Ellipse::new(
+            Wire::take(i)?,
+            Wire::take(i)?,
+            Wire::take(i)?,
+        ))
+    }
+}
+impl Wire for forge_geom::curve::Parabola {
+    fn put(&self, o: &mut W) {
+        self.frame.put(o);
+        self.focal.put(o);
+    }
+    fn take(i: &mut R) -> Option<Self> {
+        Some(forge_geom::curve::Parabola::new(Wire::take(i)?, Wire::take(i)?))
+    }
+}
+record!(forge_geom::curve::Hyperbola { frame, a, b });
+choice!(forge_sketch::project::Source {
+    0 => Point(a0),
+    1 => Axis(a0),
+    2 => Edge { curve, range, start, end, closed },
+});
+choice!(forge_sketch::project::Flat {
+    0 => Point(a0),
+    1 => Line(a0, a1),
+    2 => Circle(a0, a1),
+    3 => Arc { center, start, end, ccw },
+    4 => Ellipse { center, major, b, ends },
+    5 => Spline(a0, a1),
+});
+record!(crate::shell::sketching::rows::Refd { sources, one });
+choice!(crate::shell::sketching::rows::Src {
+    0 => Model(a0),
+    1 => Laid(a0),
+});
+record!(crate::shell::fgasm::Located {
+    a,
+    b,
+    volume,
+    centre,
+    lo,
+    hi,
+    faces_a,
+    faces_b,
+    marks
+});
+record!(crate::shell::inspect::Outline {
+    outlines,
+    holes,
+    area,
+    lo,
+    hi
+});
+
+/// A curve as it crosses: the analytic kinds. An intersection's or a procedural curve is the
+/// kernel's own (behind a trait object): never sent (the build worker refuses what holds one,
+/// `crossable`), and refused if read.
+impl Wire for forge_geom::Curve {
+    fn put(&self, o: &mut W) {
+        use forge_geom::Curve as C;
+        match self {
+            C::Line(x) => {
+                o.u8(0);
+                x.put(o);
+            }
+            C::Circle(x) => {
+                o.u8(1);
+                x.put(o);
+            }
+            C::Ellipse(x) => {
+                o.u8(2);
+                x.put(o);
+            }
+            C::Parabola(x) => {
+                o.u8(3);
+                x.put(o);
+            }
+            C::Hyperbola(x) => {
+                o.u8(4);
+                x.put(o);
+            }
+            C::Intersection(_) | C::Procedural(_) => o.u8(255),
+        }
+    }
+    fn take(i: &mut R) -> Option<Self> {
+        use forge_geom::Curve as C;
+        Some(match i.u8()? {
+            0 => C::Line(Wire::take(i)?),
+            1 => C::Circle(Wire::take(i)?),
+            2 => C::Ellipse(Wire::take(i)?),
+            3 => C::Parabola(Wire::take(i)?),
+            4 => C::Hyperbola(Wire::take(i)?),
+            _ => return None,
+        })
+    }
+}
+
+/// Whether a curve crosses (`Wire for Curve`).
+pub fn crossable(c: &forge_geom::Curve) -> bool {
+    !matches!(
+        c,
+        forge_geom::Curve::Intersection(_) | forge_geom::Curve::Procedural(_)
+    )
+}
+
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use super::super::tests::round;

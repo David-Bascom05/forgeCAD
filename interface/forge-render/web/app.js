@@ -11,6 +11,8 @@
 //   ?offscreen=WxH  frames drawn to a texture, not the canvas (a headless browser's software
 //                    WebGPU can't show a canvas); forgecad.pixels() reads them
 //   ?threads=0       the single-threaded build even where the page is cross-origin isolated
+//   ?worker=0|1      the single-threaded build's builds on the page's own thread (0), or on the
+//                    build worker (1: a Web Worker with its own memory, build.js)
 //   ?noapp           no canvas: the kernel and files only (the parity test)
 
 import { Mirror, ServerBackend, localBackend, cleanPath } from "./storage.js";
@@ -134,9 +136,42 @@ async function threadedBuild() {
 }
 const threaded = await threadedBuild();
 const fc = await import(threaded ? "./threads/forge_render.js" : "./forge_render.js");
-await fc.default();
+// the single-threaded build's builds: on the build worker (build.js) when asked
+const BUILD_WORKER_DEFAULT = false;
+const buildWorker = !threaded && (q.has("worker") ? q.get("worker") !== "0" : BUILD_WORKER_DEFAULT);
+/// The app's wasm compiled once: the page's instance and the build worker's are made of it.
+async function compiled() {
+  const url = new URL("./forge_render_bg.wasm", import.meta.url);
+  try {
+    return await WebAssembly.compileStreaming(fetch(url));
+  } catch {
+    // served without the wasm type: from its bytes
+    return await WebAssembly.compile(await (await fetch(url)).arrayBuffer());
+  }
+}
+const module = buildWorker ? await compiled() : undefined;
+await fc.default(module ? { module_or_path: module } : undefined);
 if (threaded) (await import("./threads/threads.js")).threadsOn(() => fc.app_wake());
-say(threaded ? "the threaded build: builds on a Web Worker" : "the single-threaded build");
+if (buildWorker) {
+  // before any file is put in the app's filesystem: the worker's copy is sent every one
+  const w = new Worker(new URL("./build.js", import.meta.url), { type: "module" });
+  w.onmessage = (e) => fc.app_build_msg(new Uint8Array(e.data));
+  w.onerror = (e) => console.error(`forge build worker error: ${e.message ?? e}`);
+  w.onmessageerror = () => console.error("forge build worker: a message the page could not read");
+  w.postMessage(module);
+  globalThis.forge_build_post = (bytes) => {
+    const b = bytes.slice();
+    w.postMessage(b.buffer, [b.buffer]);
+  };
+  fc.app_build_worker();
+}
+say(
+  threaded
+    ? "the threaded build: builds on a Web Worker"
+    : buildWorker
+      ? "the single-threaded build: builds on the build worker"
+      : "the single-threaded build: builds on the page",
+);
 fc.app_init();
 const store = await backend();
 let mirror = null;
@@ -384,6 +419,9 @@ window.forge_agent_adopt = (rel, etag) => mirror?.versions.set(rel, etag);
 window.forgecad = {
   fc,
   threaded,
+  buildWorker,
+  /// What crossed to and from the build worker (messages, bytes, the page's ms reading them).
+  buildCost: () => JSON.parse(fc.app_build_cost?.() ?? "null"),
   mirror,
   problems,
   loaded,

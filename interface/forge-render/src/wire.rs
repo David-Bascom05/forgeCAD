@@ -389,7 +389,10 @@ macro_rules! record_tuple {
     };
 }
 
+pub(crate) use {choice, record};
+
 mod types;
+pub use types::crossable;
 
 #[cfg(test)]
 mod tests {

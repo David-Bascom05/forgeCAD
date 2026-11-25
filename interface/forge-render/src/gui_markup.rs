@@ -132,19 +132,21 @@ impl<'a> Names<'a> {
                 return Some(format!("{} `{n}`", kind(e)));
             }
             let (body, an) = self.occ.and_then(|m| m.get(&o.path))?;
-            // the body drawn, if the inspector has it; else the one the names were found on
+            // the body drawn (its brief), if the inspector has it; else the one the names were
+            // found on
             let drawn = g
                 .inspector
                 .data
                 .as_ref()
-                .and_then(|d| d.bodies.get(d.placed.get(pl as usize)?.0).cloned());
-            let b = drawn.as_ref().unwrap_or(body);
-            let name = match e {
-                Entity::Face(k) if (k as usize) < b.faces.len() => {
-                    an.faces.get(&b.face(forge_topo::FaceId(k)).name)
+                .and_then(|d| d.brief_at(pl).map(|x| x.0.clone()));
+            let name = match (&drawn, e) {
+                (Some(b), Entity::Face(k)) => b.faces.get(k as usize).and_then(|f| an.faces.get(&f.0)),
+                (Some(b), Entity::Edge(k)) => b.edges.get(k as usize).and_then(|x| an.edges.get(&x.0)),
+                (None, Entity::Face(k)) if (k as usize) < body.faces.len() => {
+                    an.faces.get(&body.face(forge_topo::FaceId(k)).name)
                 }
-                Entity::Edge(k) if (k as usize) < b.edges.len() => {
-                    an.edges.get(&b.edge(forge_topo::EdgeId(k)).name)
+                (None, Entity::Edge(k)) if (k as usize) < body.edges.len() => {
+                    an.edges.get(&body.edge(forge_topo::EdgeId(k)).name)
                 }
                 _ => None,
             };

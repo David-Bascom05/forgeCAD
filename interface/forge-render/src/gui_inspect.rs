@@ -17,6 +17,10 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 
 /// What a build gives the Inspect tools: each part mesh's exact body, each placement's mesh and
 /// pose, the document's iProperties, a part's physical properties, an assembly's occurrences.
+///
+/// The bodies (and an assembly's solve) are where the build ran: on the page natively and in the
+/// browser's in-page build; in the default browser build they stay in the build worker, and the
+/// page has each body's `Brief` and asks the rest of the worker (`Ask`).
 #[derive(Default)]
 pub struct InspectData {
     pub bodies: Vec<Arc<Body>>,
@@ -25,6 +29,77 @@ pub struct InspectData {
     pub props: Props,
     pub physical: Option<Physical>,
     pub asm: Option<Arc<forge_lang::asm::AsmOut>>,
+    /// What the page reads of each body as it draws, by body.
+    pub briefs: Vec<Brief>,
+    /// It's an assembly's (its solve is `asm`, where the bodies are).
+    pub assembly: bool,
+    /// Which build's this is: what the page names it by when it asks the worker.
+    pub number: u64,
+}
+
+/// What the page reads of a body each frame, made where the body is: each face's and edge's own
+/// name (the kernel's) and kind, and how many vertices.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Brief {
+    pub faces: Vec<(forge_topo::Name, &'static str)>,
+    pub edges: Vec<(forge_topo::Name, &'static str)>,
+    pub vertices: usize,
+}
+
+impl Brief {
+    pub fn of(b: &Body) -> Brief {
+        Brief {
+            faces: b
+                .faces
+                .iter()
+                .map(|f| (f.name, select::surface_kind(&f.surface)))
+                .collect(),
+            edges: b
+                .edges
+                .iter()
+                .map(|e| (e.name, select::curve_kind(&e.curve)))
+                .collect(),
+            vertices: b.vertices.len(),
+        }
+    }
+
+    /// Whether the body has this entity.
+    pub fn has(&self, e: Entity) -> bool {
+        match e {
+            Entity::Face(i) => (i as usize) < self.faces.len(),
+            Entity::Edge(i) => (i as usize) < self.edges.len(),
+            Entity::Vertex(i) => (i as usize) < self.vertices,
+        }
+    }
+}
+
+/// Each build's inspect data its own number, where it's made.
+static GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+impl InspectData {
+    /// These bodies placed so, with their briefs and a number of their own.
+    pub fn new(bodies: Vec<Arc<Body>>, placed: Vec<(usize, Frame)>, names: Vec<String>) -> InspectData {
+        InspectData {
+            briefs: bodies.iter().map(|b| Brief::of(b)).collect(),
+            bodies,
+            placed,
+            names,
+            number: GEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            ..Default::default()
+        }
+    }
+
+    /// The brief of the body at placement `pl`, and its pose.
+    pub fn brief_at(&self, pl: u32) -> Option<(&Brief, Frame)> {
+        let &(mesh, at) = self.placed.get(pl as usize)?;
+        Some((self.briefs.get(mesh)?, at))
+    }
+
+    /// The body at placement `pl`, and its pose, where the bodies are.
+    pub fn body_at(&self, pl: u32) -> Option<(&Arc<Body>, Frame)> {
+        let &(mesh, at) = self.placed.get(pl as usize)?;
+        Some((self.bodies.get(mesh)?, at))
+    }
 }
 
 impl std::fmt::Debug for InspectData {
@@ -38,46 +113,53 @@ impl std::fmt::Debug for InspectData {
     }
 }
 
-type Picked = (Arc<Body>, Frame, Ent);
-
-/// A pick as the worker takes it: what it is, with the body it's of.
-#[derive(Clone)]
-enum Tgt {
-    Ent(Picked),
+/// A pick as the worker takes it: what it is, by its placement (the body there is found where
+/// the bodies are).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Tgt {
+    Ent(u32, Ent),
     /// A whole body where it stands, and its density (kg/mm³) where its material says.
-    Whole(Arc<Body>, Frame, Option<f64>),
+    Whole(u32, Option<f64>),
     Free(Free),
 }
 
-enum Job {
+/// What the tools ask of the bodies, of the build `InspectData` they were given with.
+pub(crate) enum Job {
     Measure(u64, Vec<Tgt>),
-    /// Bodies meshed ahead, as Measure opens: the first pick's answer doesn't wait for them.
-    Warm(Vec<Arc<Body>>),
-    Wall(u64, Arc<Body>, Frame, Arc<WallCtl>),
-    Physical(Arc<forge_lang::asm::AsmOut>),
+    /// Bodies meshed ahead, as Measure opens (a part's, an assembly's first few): the first pick's
+    /// answer doesn't wait for them.
+    Warm,
+    /// The thinnest wall of the body at a placement; the worker stops when `WallCtl` says.
+    Wall(u64, u32, Arc<WallCtl>),
+    /// An assembly's physical properties, from its solve.
+    Physical,
 }
 
 /// A wall's search on the worker, as the panel follows it: the measurement still wanted (its id;
 /// another, or none, and the worker stops), and how far it is (in thousandths).
 #[derive(Default)]
-struct WallCtl {
-    wanted: std::sync::atomic::AtomicU64,
-    done: std::sync::atomic::AtomicU32,
+pub(crate) struct WallCtl {
+    pub(crate) wanted: std::sync::atomic::AtomicU64,
+    pub(crate) done: std::sync::atomic::AtomicU32,
 }
 
 /// A wall's search stopped before its end: no answer.
-const STOPPED: &str = "stopped";
+pub(crate) const STOPPED: &str = "stopped";
 
-enum Answer {
+#[derive(Debug)]
+pub(crate) enum Answer {
     Measure(u64, Result<Reading, String>),
     Wall(u64, Result<(f64, Point3), String>),
     Physical(Box<Result<Physical, String>>),
+    /// The build worker's answer to an `Ask` of the build with this number.
+    Told(u64, Ask, Told),
 }
 
 /// The host's state for the tools.
 #[derive(Default)]
 pub struct Inspector {
-    to: Option<crate::plat::Server<Job>>,
+    to: Option<crate::plat::Server<(Arc<InspectData>, Job)>>,
+    answers: Option<Sender<Answer>>,
     from: Option<Receiver<Answer>>,
     seq: u64,
     pub(crate) data: Option<Arc<InspectData>>,
@@ -97,6 +179,9 @@ pub struct Inspector {
     outline: Option<Receiver<Result<(String, crate::shell::inspect::Outline), String>>>,
     /// The worker's wall search, as the panel follows and stops it.
     wall: Arc<WallCtl>,
+    /// The build worker's answers to `Ask`s (by the question's bytes), none while asked.
+    #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
+    told: std::cell::RefCell<HashMap<Vec<u8>, Option<Told>>>,
     /// Where jobs run on the page's one thread: the wall's search, stepped a few milliseconds a
     /// frame (its measurement, the search, where its part stands).
     walking: Option<(u64, forge_wall::WallSearch<Arc<TriMesh>>, Frame)>,
@@ -110,142 +195,196 @@ fn ent(e: Entity) -> Ent {
     }
 }
 
-fn kind_word(b: &Body, e: Ent) -> String {
+fn kind_word(b: &Brief, e: Ent) -> String {
     match e {
         Ent::Vert(_) => "Vertex".into(),
-        Ent::Edge(x) => format!("Edge ({})", forge_agent::select::curve_kind(&b.edge(x).curve)),
-        Ent::Face(x) => format!("Face ({})", forge_agent::select::surface_kind(&b.face(x).surface)),
+        Ent::Edge(x) => format!("Edge ({})", b.edges[x.0 as usize].1),
+        Ent::Face(x) => format!("Face ({})", b.faces[x.0 as usize].1),
     }
 }
 
-fn work(out: Sender<Answer>, wake: super::Waker) -> crate::plat::Server<Job> {
-    let mut meshes: HashMap<usize, Arc<TriMesh>> = HashMap::new();
-    let mut mesh = move |b: &Arc<Body>| -> Result<Arc<TriMesh>, String> {
+/// The tools' worker where the bodies are on the page: a thread natively, run at once in the
+/// browser's in-page build (`plat::serve`).
+fn work(out: Sender<Answer>, wake: super::Waker) -> crate::plat::Server<(Arc<InspectData>, Job)> {
+    let mut meshes = Meshes::default();
+    crate::plat::serve(
+        "forge-inspect",
+        move |mut job, jobs: &Receiver<(Arc<InspectData>, Job)>| {
+            // a newer job of the same kind replaces one not yet started
+            while let Ok(j) = jobs.try_recv() {
+                if std::mem::discriminant(&j.1) != std::mem::discriminant(&job.1) {
+                    let _ = out.send_some(handle(&job.0, job.1, &mut meshes));
+                }
+                job = j;
+            }
+            // the meshes of this build's bodies only (each holds its body)
+            meshes.keep(&[&job.0]);
+            if out.send_some(handle(&job.0, job.1, &mut meshes)).is_err() {
+                return false;
+            }
+            wake();
+            true
+        },
+    )
+}
+
+trait SendSome {
+    fn send_some(&self, a: Option<Answer>) -> Result<(), ()>;
+}
+
+impl SendSome for Sender<Answer> {
+    fn send_some(&self, a: Option<Answer>) -> Result<(), ()> {
+        match a {
+            Some(a) => self.send(a).map_err(|_| ()),
+            None => Ok(()),
+        }
+    }
+}
+
+/// Each body's mesh for the tools, made once (by the body: the same body, the same mesh).
+#[derive(Default)]
+pub(crate) struct Meshes(HashMap<usize, (Arc<Body>, Arc<TriMesh>)>);
+
+impl Meshes {
+    pub(crate) fn of(&mut self, b: &Arc<Body>) -> Result<Arc<TriMesh>, String> {
         let key = Arc::as_ptr(b) as usize;
-        if let Some(m) = meshes.get(&key) {
+        if let Some((_, m)) = self.0.get(&key) {
             return Ok(m.clone());
         }
         let m = forge_mesh::tessellate::tessellate_tolerant(b, &forge_mesh::Quality::default())
             .map_err(|e| forge_lang::error::words(&e))?;
         let m = Arc::new(m);
-        meshes.insert(key, m.clone());
+        // the body kept with it: its address is never another body's while it's here
+        self.0.insert(key, (b.clone(), m.clone()));
         Ok(m)
-    };
-    crate::plat::serve("forge-inspect", move |mut job, jobs: &Receiver<Job>| {
-        // a newer job of the same kind replaces one not yet started
-        while let Ok(j) = jobs.try_recv() {
-            if std::mem::discriminant(&j) != std::mem::discriminant(&job) {
-                let _ = handle(job, &mut mesh, &out);
+    }
+
+    /// Only these builds' bodies' meshes kept.
+    pub(crate) fn keep(&mut self, data: &[&InspectData]) {
+        let live: std::collections::HashSet<usize> = data
+            .iter()
+            .flat_map(|d| d.bodies.iter().map(|b| Arc::as_ptr(b) as usize))
+            .collect();
+        self.0.retain(|k, _| live.contains(k));
+    }
+}
+
+/// A job's answer, worked out of `d`'s bodies (none for a warm-up). The wall's search stops when
+/// its `WallCtl` no longer wants it.
+pub(crate) fn handle(d: &InspectData, job: Job, meshes: &mut Meshes) -> Option<Answer> {
+    Some(match job {
+        Job::Warm => {
+            for b in d.bodies.iter().take(8) {
+                let _ = meshes.of(b);
             }
-            job = j;
+            return None;
         }
-        if handle(job, &mut mesh, &out).is_err() {
-            return false;
+        Job::Measure(id, picks) => Answer::Measure(id, measure_of(d, &picks, meshes)),
+        Job::Wall(id, pl, ctl) => {
+            use std::sync::atomic::Ordering::Relaxed;
+            let r = d
+                .body_at(pl)
+                .ok_or("the part isn't there".to_string())
+                .and_then(|(b, at)| {
+                    let m = meshes.of(b)?;
+                    let mut w = forge_wall::WallSearch::new(b, &*m);
+                    // a few thousand rays at a time: how far, and whether it's still wanted
+                    while !w.step(4096) {
+                        if ctl.wanted.load(Relaxed) != id {
+                            return Err(STOPPED.to_string());
+                        }
+                        ctl.done.store((w.done() * 1000.0) as u32, Relaxed);
+                    }
+                    wall_found(w.found(), at)
+                });
+            Answer::Wall(id, r)
         }
-        wake();
-        true
+        Job::Physical => Answer::Physical(Box::new(match &d.asm {
+            Some(asm) => forge_lang::props::asm_physical(asm, None),
+            None => Err("the assembly isn't solved".into()),
+        })),
     })
 }
 
-fn handle(
-    job: Job,
-    mesh: &mut impl FnMut(&Arc<Body>) -> Result<Arc<TriMesh>, String>,
-    out: &Sender<Answer>,
-) -> Result<(), ()> {
-    let a = match job {
-        Job::Warm(bodies) => {
-            for b in &bodies {
-                let _ = mesh(b);
-            }
-            return Ok(());
-        }
-        Job::Measure(id, picks) => {
-            let mut meshes = vec![];
-            let mut err = None;
-            // one edge or point reads off the body alone; faces, bodies and pairs want the mesh
-            let wants = picks.len() > 1
-                || picks
-                    .iter()
-                    .any(|p| matches!(p, Tgt::Whole(..) | Tgt::Ent((_, _, Ent::Face(_)))));
-            let bare = Arc::new(TriMesh::default());
-            for p in &picks {
-                let m = match p {
-                    Tgt::Ent(..) | Tgt::Whole(..) if !wants => Some(bare.clone()),
-                    Tgt::Ent((b, _, _)) | Tgt::Whole(b, _, _) => match mesh(b) {
-                        Ok(m) => Some(m),
-                        Err(e) => {
-                            err = Some(e);
-                            None
-                        }
-                    },
-                    Tgt::Free(_) => None,
-                };
-                meshes.push(m);
-            }
-            let r = match err {
-                Some(e) => Err(e),
-                None => {
-                    let ts: Vec<Target> = picks
-                        .iter()
-                        .zip(&meshes)
-                        .map(|(p, m)| match (p, m) {
-                            (Tgt::Ent((b, at, e)), Some(m)) => Target::Ent(Pick {
-                                body: b,
-                                mesh: m,
-                                at: *at,
-                                ent: *e,
-                            }),
-                            (Tgt::Whole(b, at, density), Some(m)) => Target::Whole(Whole {
-                                body: b,
-                                mesh: m,
-                                at: *at,
-                                density: *density,
-                            }),
-                            (Tgt::Free(f), _) => Target::Free(f.clone()),
-                            _ => unreachable!("a body's mesh is made above"),
-                        })
-                        .collect();
-                    Ok(match &ts[..] {
-                        [a] => read(a),
-                        [a, b] => read_pair(a, b),
-                        [a, b, c] => forge_agent::measure::read_three(a, b, c),
-                        _ => Reading::default(),
-                    })
-                }
-            };
-            Answer::Measure(id, r)
-        }
-        Job::Wall(id, b, at, ctl) => {
-            use std::sync::atomic::Ordering::Relaxed;
-            let r = mesh(&b).and_then(|m| {
-                let mut w = forge_wall::WallSearch::new(&b, &*m);
-                // a few thousand rays at a time: how far, and whether it's still wanted
-                while !w.step(4096) {
-                    if ctl.wanted.load(Relaxed) != id {
-                        return Err(STOPPED.to_string());
-                    }
-                    ctl.done.store((w.done() * 1000.0) as u32, Relaxed);
-                }
-                wall_found(w.found(), at)
-            });
-            Answer::Wall(id, r)
-        }
-        Job::Physical(asm) => Answer::Physical(Box::new(forge_lang::props::asm_physical(&asm, None))),
-    };
-    out.send(a).map_err(|_| ())
+/// Picks measured on `d`'s bodies.
+pub(crate) fn measure_of(d: &InspectData, picks: &[Tgt], meshes: &mut Meshes) -> Result<Reading, String> {
+    let gone = || "a pick isn't there to measure".to_string();
+    // the body at each pick's placement, its pose
+    let mut at: Vec<Option<(&Arc<Body>, Frame)>> = vec![];
+    for p in picks {
+        at.push(match p {
+            Tgt::Ent(pl, _) | Tgt::Whole(pl, _) => Some(d.body_at(*pl).ok_or_else(gone)?),
+            Tgt::Free(_) => None,
+        });
+    }
+    // one edge or point reads off the body alone; faces, bodies and pairs want the mesh
+    let wants = picks.len() > 1
+        || picks
+            .iter()
+            .any(|p| matches!(p, Tgt::Whole(..) | Tgt::Ent(_, Ent::Face(_))));
+    let bare = Arc::new(TriMesh::default());
+    let mut ms: Vec<Option<Arc<TriMesh>>> = vec![];
+    for b in &at {
+        ms.push(match b {
+            Some(_) if !wants => Some(bare.clone()),
+            Some((b, _)) => Some(meshes.of(b)?),
+            None => None,
+        });
+    }
+    let ts: Vec<Target> = picks
+        .iter()
+        .zip(at.iter().zip(&ms))
+        .map(|(p, (b, m))| match (p, b, m) {
+            (Tgt::Ent(_, e), Some((b, at)), Some(m)) => Target::Ent(Pick {
+                body: b,
+                mesh: m,
+                at: *at,
+                ent: *e,
+            }),
+            (Tgt::Whole(_, density), Some((b, at)), Some(m)) => Target::Whole(Whole {
+                body: b,
+                mesh: m,
+                at: *at,
+                density: *density,
+            }),
+            (Tgt::Free(f), _, _) => Target::Free(f.clone()),
+            _ => unreachable!("a body's mesh is made above"),
+        })
+        .collect();
+    Ok(match &ts[..] {
+        [a] => read(a),
+        [a, b] => read_pair(a, b),
+        [a, b, c] => forge_agent::measure::read_three(a, b, c),
+        _ => Reading::default(),
+    })
 }
 
 impl Gui {
+    /// A job on the current build's bodies: to the worker where they are (a thread natively;
+    /// the build worker in the default browser build).
     fn inspect_send(&mut self, job: Job) {
+        let Some(d) = self.inspector.data.clone() else {
+            return;
+        };
         let i = &mut self.inspector;
-        if i.to.is_none() {
+        if i.from.is_none() {
             let (answers, from) = channel();
-            let wake = self.waker.clone();
-            i.to = Some(work(answers, wake));
+            i.answers = Some(answers);
             i.from = Some(from);
         }
+        #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
+        if crate::fg::remote::page::on() {
+            crate::fg::remote::page::answers_to(i.answers.clone().expect("made above"), self.waker.clone());
+            crate::fg::remote::page::inspect(d.number, job);
+            return;
+        }
+        if i.to.is_none()
+            && let Some(a) = &i.answers
+        {
+            i.to = Some(work(a.clone(), self.waker.clone()));
+        }
         if let Some(to) = &i.to {
-            to.send(job);
+            to.send((d, job));
         }
     }
 
@@ -254,8 +393,8 @@ impl Gui {
         let Some(d) = d else { return };
         let s = &mut self.shell.inspect;
         s.doc = d.props.clone();
-        s.assembly = d.asm.is_some();
-        if d.asm.is_none() {
+        s.assembly = d.assembly;
+        if !d.assembly {
             s.physical = d.physical.clone().map(Ok);
         } else {
             if s.props.as_ref().is_some_and(|p| p.tab == 5) || s.cg {
@@ -267,15 +406,9 @@ impl Gui {
         let was = self.inspector.data.take();
         let kept = |p: &MPick| {
             let shape = |d: &InspectData, pl: u32, e: Option<Entity>| {
-                let &(mesh, _) = d.placed.get(pl as usize)?;
-                let b = d.bodies.get(mesh)?;
-                let n = match e {
-                    Some(Entity::Face(i)) => (i as usize) < b.faces.len(),
-                    Some(Entity::Edge(i)) => (i as usize) < b.edges.len(),
-                    Some(Entity::Vertex(i)) => (i as usize) < b.vertices.len(),
-                    None => true,
-                };
-                n.then_some((b.faces.len(), b.edges.len(), b.vertices.len()))
+                let (b, _) = d.brief_at(pl)?;
+                let n = e.is_none_or(|e| b.has(e));
+                n.then_some((b.faces.len(), b.edges.len(), b.vertices))
             };
             let (pl, e) = match p {
                 MPick::Ent(pl, e) => (*pl, Some(*e)),
@@ -294,40 +427,43 @@ impl Gui {
         self.inspector.data = Some(d);
         self.inspector.measured = None;
         self.inspector.warmed = false;
+        // where answers come back: made now, so a question asked as it draws has one
+        if self.inspector.from.is_none() {
+            let (answers, from) = channel();
+            #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
+            crate::fg::remote::page::answers_to(answers.clone(), self.waker.clone());
+            self.inspector.answers = Some(answers);
+            self.inspector.from = Some(from);
+        }
+        #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
+        self.inspector.told.borrow_mut().clear();
     }
 
-    /// A pick on placement `pl`: its body, pose and name.
-    fn picked(&self, pl: u32, e: Entity) -> Option<(Picked, String)> {
+    /// A pick on placement `pl`, if its body has it: the entity and its name.
+    fn picked(&self, pl: u32, e: Entity) -> Option<(Ent, String)> {
         let d = self.inspector.data.as_ref()?;
-        let &(mesh, at) = d.placed.get(pl as usize)?;
-        let b = d.bodies.get(mesh)?.clone();
-        let e = ent(e);
-        let ok = match e {
-            Ent::Face(f) => (f.0 as usize) < b.faces.len(),
-            Ent::Edge(x) => (x.0 as usize) < b.edges.len(),
-            Ent::Vert(v) => (v.0 as usize) < b.vertices.len(),
-        };
-        if !ok {
+        let (b, _) = d.brief_at(pl)?;
+        if !b.has(e) {
             return None;
         }
+        let e = ent(e);
         let name = match d.names.get(pl as usize) {
-            Some(n) if !n.is_empty() => format!("{} · {n}", kind_word(&b, e)),
-            _ => kind_word(&b, e),
+            Some(n) if !n.is_empty() => format!("{} · {n}", kind_word(b, e)),
+            _ => kind_word(b, e),
         };
-        Some(((b, at, e), name))
+        Some((e, name))
     }
 
     /// A Measure pick as the worker takes it, and its words.
     fn target_of(&self, p: &MPick) -> Option<(Tgt, String)> {
         match p {
-            MPick::Ent(pl, e) => self.picked(*pl, *e).map(|(t, w)| (Tgt::Ent(t), w)),
+            MPick::Ent(pl, e) => self.picked(*pl, *e).map(|(e, w)| (Tgt::Ent(*pl, e), w)),
             MPick::Whole(pl) => {
                 let d = self.inspector.data.as_ref()?;
-                let &(mesh, at) = d.placed.get(*pl as usize)?;
-                let b = d.bodies.get(mesh)?.clone();
+                d.brief_at(*pl)?;
                 let name = d.names.get(*pl as usize).filter(|n| !n.is_empty());
                 Some((
-                    Tgt::Whole(b, at, self.density_of(*pl)),
+                    Tgt::Whole(*pl, self.density_of(*pl)),
                     name.map_or("Body".into(), |n| format!("Body · {n}")),
                 ))
             }
@@ -358,7 +494,7 @@ impl Gui {
         match solid {
             // kg/m³ to kg/mm³
             Some(s) => s.density.map(|k| k * 1e-9),
-            None if d.asm.is_none() => phys.mass.map(|m| m / phys.volume.max(1e-12)),
+            None if !d.assembly => phys.mass.map(|m| m / phys.volume.max(1e-12)),
             None => None,
         }
     }
@@ -366,118 +502,49 @@ impl Gui {
     /// What a click (or the pointer) at a placement's entity picks under the selection priority:
     /// the face of an edge facing the eye, the nearest edge of a face, the nearest point, the
     /// whole body.
-    fn filtered(&self, filter: Filter, pl: u32, e: Entity, at: Option<[f32; 3]>) -> Option<MPick> {
+    fn filtered(
+        &self,
+        filter: Filter,
+        pl: u32,
+        e: Entity,
+        at: Option<[f32; 3]>,
+    ) -> Result<Option<MPick>, Waiting> {
         if filter == Filter::Bodies {
-            return Some(MPick::Whole(pl));
+            return Ok(Some(MPick::Whole(pl)));
         }
         if filter == Filter::Any {
-            return Some(MPick::Ent(pl, e));
+            return Ok(Some(MPick::Ent(pl, e)));
         }
-        let d = self.inspector.data.as_ref()?;
-        let &(mesh, frame) = d.placed.get(pl as usize)?;
-        let b = d.bodies.get(mesh)?;
-        let near = at.map(|p| frame.point_to_local(Point3::new(p[0] as f64, p[1] as f64, p[2] as f64)));
-        let near = near.unwrap_or_else(|| select::centre(b, ent(e)));
-        let eye = self
-            .view
-            .as_ref()
-            .map(|v| v.nav.camera.eye())
-            .map(|q| frame.point_to_local(Point3::new(q[0] as f64, q[1] as f64, q[2] as f64)));
-        let edge_gap = |x: EdgeId| {
-            b.edge_points(x, 48)
-                .into_iter()
-                .map(|q| q.distance(near))
-                .fold(f64::INFINITY, f64::min)
-        };
-        let ends = |x: EdgeId| [b.edge(x).start, b.edge(x).end];
-        let edges_at = |v: VertexId| b.edge_ids().filter(|&x| ends(x).contains(&v)).collect::<Vec<_>>();
-        let nearest_vertex = |vs: Vec<VertexId>| {
-            vs.into_iter().min_by(|a, c| {
-                b.vertex(*a)
-                    .point
-                    .distance(near)
-                    .total_cmp(&b.vertex(*c).point.distance(near))
-            })
-        };
-        let picked = match (filter, ent(e)) {
-            (Filter::Faces, Ent::Face(_))
-            | (Filter::Edges, Ent::Edge(_))
-            | (Filter::Points, Ent::Vert(_)) => ent(e),
-            (Filter::Faces, Ent::Edge(x)) => {
-                Ent::Face(self.facing(b, &select::faces_of_edge(b, x), near, eye)?)
-            }
-            (Filter::Faces, Ent::Vert(v)) => {
-                let mut fs: Vec<FaceId> = edges_at(v)
-                    .into_iter()
-                    .flat_map(|x| select::faces_of_edge(b, x))
-                    .collect();
-                fs.sort_by_key(|f| f.0);
-                fs.dedup();
-                Ent::Face(self.facing(b, &fs, near, eye)?)
-            }
-            (Filter::Edges, Ent::Face(f)) => Ent::Edge(
-                select::edges_of_face(b, f)
-                    .into_iter()
-                    .min_by(|a, c| edge_gap(*a).total_cmp(&edge_gap(*c)))?,
-            ),
-            (Filter::Edges, Ent::Vert(v)) => Ent::Edge(*edges_at(v).first()?),
-            (Filter::Points, Ent::Edge(x)) => Ent::Vert(nearest_vertex(ends(x).to_vec())?),
-            (Filter::Points, Ent::Face(f)) => Ent::Vert(nearest_vertex(
-                select::edges_of_face(b, f).into_iter().flat_map(ends).collect(),
-            )?),
-            _ => return None,
-        };
-        Some(MPick::Ent(
-            pl,
-            match picked {
-                Ent::Face(f) => Entity::Face(f.0),
-                Ent::Edge(x) => Entity::Edge(x.0),
-                Ent::Vert(v) => Entity::Vertex(v.0),
-            },
-        ))
+        let eye = self.view.as_ref().map(|v| v.nav.camera.eye());
+        match self.inspector.ask(Ask::Filtered(filter, pl, e, at, eye))? {
+            Told::Pick(p) => Ok(p),
+            _ => Ok(None),
+        }
     }
 
     /// The face a click on an edge or a corner meant, of those `ok` takes (a sketch: the planar
-    /// ones): of the faces meeting there, the one turned most to the eye.
+    /// ones): of the faces meeting there, the one turned most to the eye. `Err` while the build
+    /// worker works it out.
     pub(crate) fn face_at(
         &self,
         pl: u32,
         e: Entity,
         at: Option<[f32; 3]>,
         ok: impl Fn(u32) -> bool,
-    ) -> Option<Entity> {
-        let d = self.inspector.data.as_ref()?;
-        let &(mesh, frame) = d.placed.get(pl as usize)?;
-        let b = d.bodies.get(mesh)?;
-        let near = at.map(|p| frame.point_to_local(Point3::new(p[0] as f64, p[1] as f64, p[2] as f64)));
-        let near = near.unwrap_or_else(|| select::centre(b, ent(e)));
-        let eye = self
-            .view
-            .as_ref()
-            .map(|v| v.nav.camera.eye())
-            .map(|q| frame.point_to_local(Point3::new(q[0] as f64, q[1] as f64, q[2] as f64)));
-        let mut faces: Vec<FaceId> = match ent(e) {
-            Ent::Face(_) => return Some(e),
-            Ent::Edge(x) => select::faces_of_edge(b, x),
-            Ent::Vert(v) => b
-                .edge_ids()
-                .filter(|&x| [b.edge(x).start, b.edge(x).end].contains(&v))
-                .flat_map(|x| select::faces_of_edge(b, x))
-                .collect(),
+    ) -> Result<Option<Entity>, Waiting> {
+        let Some((b, _)) = self.inspector.data.as_ref().and_then(|d| d.brief_at(pl)) else {
+            return Ok(None);
         };
-        faces.sort_by_key(|f| f.0);
-        faces.dedup();
-        faces.retain(|f| ok(f.0));
-        Some(Entity::Face(self.facing(b, &faces, near, eye)?.0))
-    }
-
-    /// Of faces meeting at a point, the one turned most to the eye there.
-    fn facing(&self, b: &Body, faces: &[FaceId], near: Point3, eye: Option<Point3>) -> Option<FaceId> {
-        let to_eye = eye.map_or(Vec3::Z, |e| e - near);
-        faces.iter().copied().max_by(|a, c| {
-            let n = |f: FaceId| forge_agent::measure::normal_near(b, f, near).map_or(-1.0, |n| n.dot(to_eye));
-            n(*a).total_cmp(&n(*c))
-        })
+        if matches!(e, Entity::Face(_)) {
+            return Ok(Some(e));
+        }
+        // the faces `ok` takes, as a list (the question crosses as data)
+        let allowed: Vec<u32> = (0..b.faces.len() as u32).filter(|&f| ok(f)).collect();
+        let eye = self.view.as_ref().map(|v| v.nav.camera.eye());
+        match self.inspector.ask(Ask::FaceAt(pl, e, at, eye, allowed))? {
+            Told::Face(f) => Ok(f),
+            _ => Ok(None),
+        }
     }
 
     /// What the view marks for Measure: what's picked, and what a click would pick now (a whole
@@ -494,9 +561,7 @@ impl Gui {
                 second,
             }),
             MPick::Whole(pl) => {
-                let faces = d
-                    .and_then(|d| d.placed.get(*pl as usize).and_then(|(k, _)| d.bodies.get(*k)))
-                    .map_or(0, |b| b.faces.len());
+                let faces = d.and_then(|d| d.brief_at(*pl)).map_or(0, |(b, _)| b.faces.len());
                 out.extend((0..faces as u32).map(|f| Mark {
                     placement: *pl,
                     entity: Entity::Face(f),
@@ -521,6 +586,9 @@ impl Gui {
     /// Once a frame: the view's clicks taken as picks, jobs sent and answers taken, the section
     /// put on the renderer.
     pub(crate) fn inspect_tick(&mut self) {
+        // the build worker's wall search: stopped when no longer wanted
+        #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
+        crate::fg::remote::page::tick();
         if let Some(v) = &self.view {
             self.shell.inspect.bounds = v.scene.bounds();
         }
@@ -546,6 +614,8 @@ impl Gui {
                     // a body measured before its material was known: read again, with its mass
                     self.inspector.measured = None;
                 }
+                #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
+                Answer::Told(n, a, t) => self.inspector.told(n, &a, t),
                 _ => {}
             }
             if let Some(v) = &mut self.view {
@@ -595,13 +665,13 @@ impl Gui {
             }));
         }
         if std::mem::take(&mut self.shell.inspect.want_physical) {
-            let asm = self.inspector.data.as_ref().and_then(|d| d.asm.clone());
-            match asm {
-                Some(a) => {
+            let assembly = self.inspector.data.as_ref().is_some_and(|d| d.assembly);
+            match assembly {
+                true => {
                     self.shell.inspect.physical_busy = true;
-                    self.inspect_send(Job::Physical(a));
+                    self.inspect_send(Job::Physical);
                 }
-                None => {
+                false => {
                     let p = self.inspector.data.as_ref().and_then(|d| d.physical.clone());
                     self.shell.inspect.physical = Some(p.ok_or("the part isn't built".into()));
                 }
@@ -649,14 +719,22 @@ impl Gui {
         if clicks == self.inspector.clicks {
             return;
         }
+        let was = self.inspector.clicks;
         self.inspector.clicks = clicks;
         if let Some(k) = self.shell.inspect.pick_plane {
-            if let Some((pl, e @ Entity::Face(_))) = hit
-                && let Some(((b, at, Ent::Face(f)), name)) = self.picked(pl, e)
-                && let Some(n) = forge_agent::select::plane_normal(&b, f)
+            if let Some((pl, e @ Entity::Face(f))) = hit
+                && let Some((_, name)) = self.picked(pl, e)
             {
-                let o = at.point_to_world(forge_agent::select::centre(&b, Ent::Face(f)));
-                let n = at.vec_to_world(n);
+                let plane = match self.inspector.ask(Ask::Plane(pl, f)) {
+                    Ok(Told::Plane(p)) => p,
+                    Ok(_) => None,
+                    // the click again next frame, once the build worker has said
+                    Err(Waiting) => {
+                        self.inspector.clicks = was;
+                        return;
+                    }
+                };
+                let Some((o, n)) = plane else { return };
                 if let Some(s) = &mut self.shell.inspect.cut {
                     s.planes[k] = CutPlane {
                         name,
@@ -680,7 +758,14 @@ impl Gui {
         }
         let at = self.view.as_ref().and_then(|v| v.nav.last_click_at);
         let pick = match hit {
-            Some((pl, e)) => self.filtered(filter, pl, e, at),
+            Some((pl, e)) => match self.filtered(filter, pl, e, at) {
+                Ok(p) => p,
+                // the click again next frame, once the build worker has said
+                Err(Waiting) => {
+                    self.inspector.clicks = was;
+                    return;
+                }
+            },
             // an origin plane, axis or point under the pointer
             None => self.shell.origin_hover.map(origin_free),
         };
@@ -706,7 +791,11 @@ impl Gui {
         let hover = v.nav.hover_hit();
         let at = v.nav.hit_point();
         let pick = match hover {
-            Some((pl, e)) => self.filtered(filter, pl, e, at),
+            Some((pl, e)) => match self.filtered(filter, pl, e, at) {
+                Ok(p) => p,
+                // what was under the pointer stays marked till the build worker says
+                Err(Waiting) => return,
+            },
             None => self.shell.origin_hover.map(origin_free),
         };
         if let Some(m) = &mut self.shell.inspect.measure
@@ -768,8 +857,8 @@ impl Gui {
         {
             self.inspector.warmed = true;
             // a part's body, or an assembly's first few: the rest as they're picked
-            let bodies: Vec<Arc<Body>> = d.bodies.iter().take(8).cloned().collect();
-            self.inspect_send(Job::Warm(bodies));
+            let _ = d;
+            self.inspect_send(Job::Warm);
         }
         if let Some(v) = &mut self.view
             && v.nav.selected != marked
@@ -784,7 +873,7 @@ impl Gui {
         // an occurrence's mass is from the assembly's materials: worked out once, when asked
         let s = &mut self.shell.inspect;
         if picks.iter().any(|p| matches!(p, MPick::Whole(_)))
-            && self.inspector.data.as_ref().is_some_and(|d| d.asm.is_some())
+            && self.inspector.data.as_ref().is_some_and(|d| d.assembly)
             && s.physical.is_none()
             && !s.physical_busy
         {
@@ -805,24 +894,26 @@ impl Gui {
         } else if wall {
             // the part picked, or the part (an assembly's first)
             let first = got.first().and_then(|g| match &g.0 {
-                Tgt::Ent((b, at, _)) | Tgt::Whole(b, at, _) => Some((b.clone(), *at)),
+                Tgt::Ent(pl, _) | Tgt::Whole(pl, _) => Some(*pl),
                 Tgt::Free(_) => None,
             });
-            let target = first.or_else(|| {
-                let d = self.inspector.data.as_ref()?;
-                let &(mesh, at) = d.placed.first()?;
-                Some((d.bodies.get(mesh)?.clone(), at))
-            });
+            let target = first.or_else(|| self.inspector.data.as_ref()?.brief_at(0).map(|_| 0));
+            // stepped here when the bodies are here (not the build worker's)
+            let here = self
+                .inspector
+                .data
+                .clone()
+                .filter(|d| !d.bodies.is_empty() && crate::plat::INLINE_JOBS);
             self.inspector.wall.wanted.store(id, Relaxed);
             self.inspector.wall.done.store(0, Relaxed);
             match target {
                 // stepped here, frame by frame (`inspect_walk`): a job would run to its end first
-                Some((b, at)) if crate::plat::INLINE_JOBS => {
-                    let r = forge_mesh::tessellate::tessellate_tolerant(&b, &forge_mesh::Quality::default())
+                Some(pl) if let Some((b, at)) = here.as_ref().and_then(|d| d.body_at(pl)) => {
+                    let r = forge_mesh::tessellate::tessellate_tolerant(b, &forge_mesh::Quality::default())
                         .map_err(|e| forge_lang::error::words(&e));
                     match r {
                         Ok(mesh) => {
-                            let w = forge_wall::WallSearch::new(&b, Arc::new(mesh));
+                            let w = forge_wall::WallSearch::new(b, Arc::new(mesh));
                             self.inspector.walking = Some((id, w, at));
                             walking = true;
                         }
@@ -834,7 +925,7 @@ impl Gui {
                     }
                     None
                 }
-                Some((b, at)) => Some(Job::Wall(id, b, at, self.inspector.wall.clone())),
+                Some(pl) => Some(Job::Wall(id, pl, self.inspector.wall.clone())),
                 None => None,
             }
         } else if got.is_empty() {
@@ -856,6 +947,201 @@ impl Gui {
         if let Some(j) = job {
             self.inspect_send(j);
         }
+    }
+}
+
+/// What a click (or the pointer) at a placement's entity picks under the selection priority, on
+/// the bodies: the face of an edge facing the eye, the nearest edge of a face, the nearest point.
+/// `at` and `eye` in the world.
+fn filtered_on(
+    d: &InspectData,
+    filter: Filter,
+    pl: u32,
+    e: Entity,
+    at: Option<[f32; 3]>,
+    eye: Option<[f32; 3]>,
+) -> Option<MPick> {
+    let (b, frame) = d.body_at(pl)?;
+    let near = at.map(|p| frame.point_to_local(Point3::new(p[0] as f64, p[1] as f64, p[2] as f64)));
+    let near = near.unwrap_or_else(|| select::centre(b, ent(e)));
+    let eye = eye.map(|q| frame.point_to_local(Point3::new(q[0] as f64, q[1] as f64, q[2] as f64)));
+    let edge_gap = |x: EdgeId| {
+        b.edge_points(x, 48)
+            .into_iter()
+            .map(|q| q.distance(near))
+            .fold(f64::INFINITY, f64::min)
+    };
+    let ends = |x: EdgeId| [b.edge(x).start, b.edge(x).end];
+    let edges_at = |v: VertexId| b.edge_ids().filter(|&x| ends(x).contains(&v)).collect::<Vec<_>>();
+    let nearest_vertex = |vs: Vec<VertexId>| {
+        vs.into_iter().min_by(|a, c| {
+            b.vertex(*a)
+                .point
+                .distance(near)
+                .total_cmp(&b.vertex(*c).point.distance(near))
+        })
+    };
+    let picked = match (filter, ent(e)) {
+        (Filter::Faces, Ent::Face(_)) | (Filter::Edges, Ent::Edge(_)) | (Filter::Points, Ent::Vert(_)) => {
+            ent(e)
+        }
+        (Filter::Faces, Ent::Edge(x)) => Ent::Face(facing(b, &select::faces_of_edge(b, x), near, eye)?),
+        (Filter::Faces, Ent::Vert(v)) => {
+            let mut fs: Vec<FaceId> = edges_at(v)
+                .into_iter()
+                .flat_map(|x| select::faces_of_edge(b, x))
+                .collect();
+            fs.sort_by_key(|f| f.0);
+            fs.dedup();
+            Ent::Face(facing(b, &fs, near, eye)?)
+        }
+        (Filter::Edges, Ent::Face(f)) => Ent::Edge(
+            select::edges_of_face(b, f)
+                .into_iter()
+                .min_by(|a, c| edge_gap(*a).total_cmp(&edge_gap(*c)))?,
+        ),
+        (Filter::Edges, Ent::Vert(v)) => Ent::Edge(*edges_at(v).first()?),
+        (Filter::Points, Ent::Edge(x)) => Ent::Vert(nearest_vertex(ends(x).to_vec())?),
+        (Filter::Points, Ent::Face(f)) => Ent::Vert(nearest_vertex(
+            select::edges_of_face(b, f).into_iter().flat_map(ends).collect(),
+        )?),
+        _ => return None,
+    };
+    Some(MPick::Ent(
+        pl,
+        match picked {
+            Ent::Face(f) => Entity::Face(f.0),
+            Ent::Edge(x) => Entity::Edge(x.0),
+            Ent::Vert(v) => Entity::Vertex(v.0),
+        },
+    ))
+}
+
+/// The face a click on an edge or a corner meant, of those `ok` takes, on the bodies.
+fn face_at_on(
+    d: &InspectData,
+    pl: u32,
+    e: Entity,
+    at: Option<[f32; 3]>,
+    eye: Option<[f32; 3]>,
+    ok: impl Fn(u32) -> bool,
+) -> Option<Entity> {
+    let (b, frame) = d.body_at(pl)?;
+    let near = at.map(|p| frame.point_to_local(Point3::new(p[0] as f64, p[1] as f64, p[2] as f64)));
+    let near = near.unwrap_or_else(|| select::centre(b, ent(e)));
+    let eye = eye.map(|q| frame.point_to_local(Point3::new(q[0] as f64, q[1] as f64, q[2] as f64)));
+    let mut faces: Vec<FaceId> = match ent(e) {
+        Ent::Face(_) => return Some(e),
+        Ent::Edge(x) => select::faces_of_edge(b, x),
+        Ent::Vert(v) => b
+            .edge_ids()
+            .filter(|&x| [b.edge(x).start, b.edge(x).end].contains(&v))
+            .flat_map(|x| select::faces_of_edge(b, x))
+            .collect(),
+    };
+    faces.sort_by_key(|f| f.0);
+    faces.dedup();
+    faces.retain(|f| ok(f.0));
+    Some(Entity::Face(facing(b, &faces, near, eye)?.0))
+}
+
+/// Of faces meeting at a point, the one turned most to the eye there.
+fn facing(b: &Body, faces: &[FaceId], near: Point3, eye: Option<Point3>) -> Option<FaceId> {
+    let to_eye = eye.map_or(Vec3::Z, |e| e - near);
+    faces.iter().copied().max_by(|a, c| {
+        let n = |f: FaceId| forge_agent::measure::normal_near(b, f, near).map_or(-1.0, |n| n.dot(to_eye));
+        n(*a).total_cmp(&n(*c))
+    })
+}
+
+/// A question of the bodies the page asks as it draws (a pick refined, a plane picked): answered
+/// at once where the bodies are on the page, else by the build worker (`Told` comes back a frame
+/// or so later; the page asks again till then).
+#[derive(Clone, Debug)]
+pub(crate) enum Ask {
+    /// `filtered_on`: the filter, the placement, the entity hit, the point hit and the eye (world).
+    Filtered(Filter, u32, Entity, Option<[f32; 3]>, Option<[f32; 3]>),
+    /// `face_at_on`: the placement, the entity hit, the point and the eye, the faces it may be.
+    FaceAt(u32, Entity, Option<[f32; 3]>, Option<[f32; 3]>, Vec<u32>),
+    /// A planar face's plane in the world: its centre and normal.
+    Plane(u32, u32),
+    /// Project Geometry's picks on the part (`sketching::project_picks`), by these anchors.
+    Project(Option<Box<crate::fg::AnchorView>>, Vec<Entity>),
+    /// Each interference's place and faces (`gui::locate`): the document's text and folder.
+    Locate(String, Option<std::path::PathBuf>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Told {
+    Pick(Option<MPick>),
+    Face(Option<Entity>),
+    Plane(Option<(Point3, Vec3)>),
+    Project(Result<Vec<(String, crate::shell::sketching::rows::Refd)>, String>),
+    Located(Result<Vec<crate::shell::fgasm::Located>, String>),
+}
+
+/// Asked of the build worker, not answered yet.
+#[derive(Debug)]
+pub(crate) struct Waiting;
+
+/// The answer, on `d`'s bodies.
+pub(crate) fn tell(d: &InspectData, a: &Ask) -> Told {
+    match a {
+        Ask::Filtered(filter, pl, e, at, eye) => Told::Pick(filtered_on(d, *filter, *pl, *e, *at, *eye)),
+        Ask::FaceAt(pl, e, at, eye, allowed) => {
+            Told::Face(face_at_on(d, *pl, *e, *at, *eye, |f| allowed.contains(&f)))
+        }
+        Ask::Plane(pl, f) => Told::Plane((|| {
+            let (b, at) = d.body_at(*pl)?;
+            let f = FaceId(*f);
+            if f.0 as usize >= b.faces.len() {
+                return None;
+            }
+            let n = forge_agent::select::plane_normal(b, f)?;
+            Some((
+                at.point_to_world(select::centre(b, Ent::Face(f))),
+                at.vec_to_world(n),
+            ))
+        })()),
+        Ask::Project(anchors, picked) => Told::Project(crate::shell::sketching::project_picks(
+            anchors.as_deref(),
+            d.bodies.first().map(|b| &**b),
+            picked,
+        )),
+        Ask::Locate(src, dir) => Told::Located(super::locate(src, dir.clone(), Some(d))),
+    }
+}
+
+impl Inspector {
+    /// A question of the current build's bodies: answered now where they're on the page; else
+    /// the build worker's answer once it's come (`Err` till then: asked once).
+    pub(crate) fn ask(&self, a: Ask) -> Result<Told, Waiting> {
+        let Some(d) = &self.data else {
+            return Ok(tell(&InspectData::default(), &a));
+        };
+        #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
+        if crate::fg::remote::page::on() {
+            let key = [crate::wire::to_bytes(&d.number), crate::wire::to_bytes(&a)].concat();
+            let mut told = self.told.borrow_mut();
+            if let Some(t) = told.get(&key) {
+                return t.clone().ok_or(Waiting);
+            }
+            // asked: none till it's told
+            if told.len() > 512 {
+                told.clear();
+            }
+            told.insert(key, None);
+            crate::fg::remote::page::ask(d.number, a);
+            return Err(Waiting);
+        }
+        Ok(tell(d, &a))
+    }
+
+    /// The build worker's answer to an `Ask` of the build `number`.
+    #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
+    pub(crate) fn told(&self, number: u64, a: &Ask, t: Told) {
+        let key = [crate::wire::to_bytes(&number), crate::wire::to_bytes(a)].concat();
+        self.told.borrow_mut().insert(key, Some(t));
     }
 }
 
@@ -885,7 +1171,7 @@ impl Gui {
 }
 
 /// A wall search's answer, in the world.
-fn wall_found(found: Option<(f64, Point3)>, at: Frame) -> Result<(f64, Point3), String> {
+pub(crate) fn wall_found(found: Option<(f64, Point3)>, at: Frame) -> Result<(f64, Point3), String> {
     found
         .map(|(t, p)| (t, at.point_to_world(p)))
         .ok_or("no wall: nothing opposite any face".to_string())
@@ -1029,41 +1315,17 @@ impl Gui {
             .iter()
             .map(|p| self.target_of(p).ok_or(format!("{p:?} isn't there to measure")))
             .collect::<Result<_, _>>()?;
-        let mut meshes: Vec<Option<Arc<TriMesh>>> = vec![];
-        for (t, _) in &targets {
-            meshes.push(match t {
-                Tgt::Ent((b, _, _)) | Tgt::Whole(b, _, _) => Some(Arc::new(
-                    forge_mesh::tessellate::tessellate_tolerant(b, &forge_mesh::Quality::default())
-                        .map_err(|e| forge_lang::error::words(&e))?,
-                )),
-                Tgt::Free(_) => None,
-            });
+        // here and now, on the bodies where they are (none on the page with the build worker)
+        let d = self
+            .inspector
+            .data
+            .clone()
+            .ok_or("nothing is built to measure yet")?;
+        if d.bodies.is_empty() && !d.briefs.is_empty() {
+            return Err("measure: the bodies are the build worker's; measure in the Measure panel".into());
         }
-        let ts: Vec<Target> = targets
-            .iter()
-            .zip(&meshes)
-            .map(|((t, _), m)| match (t, m) {
-                (Tgt::Ent((b, at, e)), Some(m)) => Target::Ent(Pick {
-                    body: b,
-                    mesh: m,
-                    at: *at,
-                    ent: *e,
-                }),
-                (Tgt::Whole(b, at, density), Some(m)) => Target::Whole(Whole {
-                    body: b,
-                    mesh: m,
-                    at: *at,
-                    density: *density,
-                }),
-                (Tgt::Free(f), _) => Target::Free(f.clone()),
-                _ => unreachable!("a body's mesh is made above"),
-            })
-            .collect();
-        let r = match &ts[..] {
-            [x] => read(x),
-            [x, y] => read_pair(x, y),
-            _ => Reading::default(),
-        };
+        let tgts: Vec<Tgt> = targets.iter().map(|t| t.0.clone()).collect();
+        let r = measure_of(&d, &tgts, &mut Meshes::default())?;
         let (unit, angle, n) = match &self.shell.inspect.measure {
             Some(m) => (m.unit, m.angle, m.precision),
             None => (

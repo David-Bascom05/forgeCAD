@@ -21,39 +21,66 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 
-/// What the worker makes a part's view with: natively, and in the single-threaded browser build,
-/// the GPU itself. In the threaded browser build the worker runs on another thread, where the
-/// page's WebGPU objects can't go: there it is a mark that a view is wanted, and the worker hands
-/// back the view's parts and scene for the host to put on the GPU (`view_on`).
-#[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
+/// What the worker makes a part's view with: natively, the GPU itself. In the browser the worker
+/// runs off the page's thread (a Web Worker: on the page's memory in the threaded build, with its
+/// own in the default one), where the page's WebGPU objects can't go: there it is a mark that a
+/// view is wanted, and the worker hands back the view's parts and placements for the host to put
+/// on the GPU (`view_on`).
+#[cfg(not(target_arch = "wasm32"))]
 pub type Gpu = (wgpu::Device, wgpu::Queue, wgpu::AdapterInfo);
-#[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+#[cfg(target_arch = "wasm32")]
 #[derive(Clone, Copy)]
 pub struct Gpu;
 
-/// A view as the worker makes it: a renderer, or (threaded browser build) what to make one of.
-#[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
+/// A view as the worker makes it: a renderer, or (in the browser) what to make one of: the
+/// parts, their placements, and the parts' boxes when known (an assembly's).
+#[cfg(not(target_arch = "wasm32"))]
 pub type ViewMade = (Renderer, Scene);
-#[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
-pub struct ViewMade(Vec<PartMesh>, Scene);
+#[cfg(target_arch = "wasm32")]
+pub struct ViewMade(
+    pub Vec<PartMesh>,
+    pub Vec<Placement>,
+    pub Option<Vec<crate::explode::Aabb>>,
+);
 
 /// The GPU as the host hands it to a session.
 pub fn gpu_of(device: &wgpu::Device, queue: &wgpu::Queue, adapter: &wgpu::AdapterInfo) -> Gpu {
-    #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
+    #[cfg(not(target_arch = "wasm32"))]
     {
         (device.clone(), queue.clone(), adapter.clone())
     }
-    #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+    #[cfg(target_arch = "wasm32")]
     {
         let _ = (device, queue, adapter);
         Gpu
     }
 }
 
-/// A view of these parts in this scene, on the GPU the session was given.
-fn make_view(gpu: Gpu, parts: Vec<PartMesh>, scene: Scene) -> ViewMade {
-    #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
+/// The view's scene: these placements of these parts, not exploded, with the parts' boxes when
+/// known.
+fn scene_of(
+    parts: &[PartMesh],
+    placements: Vec<Placement>,
+    boxes: Option<Vec<crate::explode::Aabb>>,
+) -> Scene {
+    let mut scene = Scene::new(&part_info(parts), placements);
+    scene.set_explode(0.0);
+    if let Some(b) = boxes {
+        scene.set_part_boxes(b);
+    }
+    scene
+}
+
+/// A view of these parts at these placements, on the GPU the session was given.
+fn make_view(
+    gpu: Gpu,
+    parts: Vec<PartMesh>,
+    placements: Vec<Placement>,
+    boxes: Option<Vec<crate::explode::Aabb>>,
+) -> ViewMade {
+    #[cfg(not(target_arch = "wasm32"))]
     {
+        let scene = scene_of(&parts, placements, boxes);
         let (device, queue, adapter) = gpu;
         let r = Renderer::new(
             device,
@@ -66,10 +93,10 @@ fn make_view(gpu: Gpu, parts: Vec<PartMesh>, scene: Scene) -> ViewMade {
         );
         (r, scene)
     }
-    #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+    #[cfg(target_arch = "wasm32")]
     {
         let _ = gpu;
-        ViewMade(parts, scene)
+        ViewMade(parts, placements, boxes)
     }
 }
 
@@ -80,14 +107,15 @@ pub fn view_on(
     queue: &wgpu::Queue,
     adapter: &wgpu::AdapterInfo,
 ) -> (Renderer, Scene) {
-    #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
+    #[cfg(not(target_arch = "wasm32"))]
     {
         let _ = (device, queue, adapter);
         v
     }
-    #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+    #[cfg(target_arch = "wasm32")]
     {
-        let ViewMade(parts, scene) = v;
+        let ViewMade(parts, placements, boxes) = v;
+        let scene = scene_of(&parts, placements, boxes);
         let r = Renderer::new(
             device.clone(),
             queue.clone(),
@@ -108,9 +136,12 @@ pub type Job = (u64, String, bool);
 // plain data, so the shell has it for the browser too
 pub use crate::shell::asmdrag::Drive;
 
+/// The default browser build's build worker in a Web Worker of its own: what crosses to it.
+pub mod remote;
+
 /// What the worker is given: a text to build, or drives set straight in the kept solve.
 #[derive(Clone)]
-enum Work {
+pub(crate) enum Work {
     Text(Job),
     Drive(u64, Vec<Drive>),
 }
@@ -225,6 +256,9 @@ pub struct Built {
     pub preview: bool,
     /// The checks ran (measures, expects, a thermoform's walls); else they follow in another.
     pub checked: bool,
+    /// The build's hash (a part's body, or an assembly's placed parts), for a served session's
+    /// report: made where the bodies are (`build_hash`).
+    pub hash: Option<u64>,
 }
 
 impl Built {
@@ -912,6 +946,14 @@ fn note_deps(deps: &Reads, read: &forge_lang::deps::Deps) {
     }
 }
 
+/// A build's hash for a served session (`forge_sync::hash_body` of a part's body,
+/// `forge_sync::hash_placed` of an assembly's placed parts), made where the bodies are. None until
+/// the hosted client brings forge-sync.
+fn build_hash(d: &crate::gui::gui_inspect::InspectData) -> Option<u64> {
+    let _ = d;
+    None
+}
+
 /// The files a session's last build read: its parts, subassemblies, libraries, fonts, imports.
 pub type Reads = Arc<std::sync::Mutex<Vec<std::path::PathBuf>>>;
 
@@ -992,7 +1034,10 @@ impl Worker {
         }
     }
 
-    fn send(&self, m: Msg) -> bool {
+    fn send(&self, mut m: Msg) -> bool {
+        if let Msg::Built(b) = &mut m {
+            b.hash = b.inspect.as_deref().and_then(build_hash);
+        }
         let ok = self.out.send(m).is_ok();
         (self.waker)();
         ok
@@ -1144,6 +1189,7 @@ impl Worker {
                 preview: false,
                 checked: checks || !job.2,
                 cutlist: None,
+                hash: None,
                 asm,
                 build_ms,
                 mesh_ms,
@@ -1209,9 +1255,7 @@ impl Worker {
             let (feats, params, issues) = rows(&checked, &job.1);
             let view = self.gpu.take().map(|gpu| {
                 let parts = vec![mesh.clone()];
-                let mut scene = Scene::new(&part_info(&parts), vec![Placement::at(0, [0.0; 3])]);
-                scene.set_explode(0.0);
-                make_view(gpu, parts, scene)
+                make_view(gpu, parts, vec![Placement::at(0, [0.0; 3])], None)
             });
             let shown = Built {
                 seq: job.0,
@@ -1237,6 +1281,7 @@ impl Worker {
                 preview: true,
                 checked: false,
                 cutlist: None,
+                hash: None,
             };
             if !self.send(Msg::Built(Box::new(shown))) {
                 return false;
@@ -1344,9 +1389,7 @@ impl Worker {
             let mesh_ms = t.elapsed().as_secs_f64() * 1e3;
             let view = self.gpu.take().map(|gpu| {
                 let parts = vec![mesh.clone().unwrap_or_else(PartMesh::empty)];
-                let mut scene = Scene::new(&part_info(&parts), vec![Placement::at(0, [0.0; 3])]);
-                scene.set_explode(0.0);
-                make_view(gpu, parts, scene)
+                make_view(gpu, parts, vec![Placement::at(0, [0.0; 3])], None)
             });
             let (feats, params, issues) = rows(&run, &job.1);
             let built = Built {
@@ -1370,16 +1413,18 @@ impl Worker {
                 build_ms,
                 mesh_ms,
                 inspect: Some(Arc::new(crate::gui::gui_inspect::InspectData {
-                    bodies: self.last_body.iter().cloned().collect(),
-                    placed: vec![(0, forge_math::Frame::WORLD)],
-                    names: vec![],
                     props: run.props.clone(),
                     physical: run.physical.clone(),
-                    asm: None,
+                    ..crate::gui::gui_inspect::InspectData::new(
+                        self.last_body.iter().cloned().collect(),
+                        vec![(0, forge_math::Frame::WORLD)],
+                        vec![],
+                    )
                 })),
                 preview: false,
                 checked: checks,
                 cutlist: Some(crate::shell::weld_ui::CutList::of(&run.welds)),
+                hash: None,
             };
             if !self.send(Msg::Built(Box::new(built))) {
                 return false;
@@ -1724,10 +1769,7 @@ fn asm_view(
                 })
                 .collect()
         };
-        let mut scene = Scene::new(&part_info(&parts), placements);
-        scene.set_explode(0.0);
-        scene.set_part_boxes(meshes.boxes.clone());
-        Some(make_view(gpu, parts, scene))
+        Some(make_view(gpu, parts, placements, Some(meshes.boxes.clone())))
     } else {
         if restage {
             *shape = Some(now);
@@ -1765,17 +1807,20 @@ fn asm_view(
             .map(|d| d.0.clone())
             .collect(),
         inspect: Arc::new(crate::gui::gui_inspect::InspectData {
-            bodies: meshes.bodies.clone(),
-            placed: exact.iter().map(|e| (e.0, e.1)).collect(),
-            names: exact.into_iter().map(|e| e.2).collect(),
             props: run.props.clone(),
             physical: None,
+            assembly: true,
             asm: Some(Arc::new(forge_lang::asm::AsmOut {
                 occurrences: out.occurrences.clone(),
                 occ_body: out.occ_body.clone(),
                 part_docs: out.part_docs.clone(),
                 ..Default::default()
             })),
+            ..crate::gui::gui_inspect::InspectData::new(
+                meshes.bodies.clone(),
+                exact.iter().map(|e| (e.0, e.1)).collect(),
+                exact.into_iter().map(|e| e.2).collect(),
+            )
         }),
     };
     (Some(asm), view)
@@ -1835,15 +1880,28 @@ pub struct Session {
     stop: Arc<AtomicBool>,
     /// The browser's end of part: the statement builds stop after (None: the whole part).
     until: Until,
-    /// In the single-threaded browser build, the worker itself and its queue: stepped by `poll`.
+    /// In the single-threaded browser build, where its worker is: the build worker's (a Web
+    /// Worker of its own), or here, stepped by `poll` (`?worker=0`).
     #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
-    worker: Box<(Worker, Receiver<Work>)>,
+    build: Build,
+}
+
+/// The default browser build's worker for a session: in the build worker (`remote`), by its
+/// number there, or on the page itself with its queue, stepped by `poll`.
+#[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
+enum Build {
+    There(u32),
+    Here(Box<(Worker, Receiver<Work>)>),
 }
 
 impl Drop for Session {
     fn drop(&mut self) {
         // its thread finishes the build it's in, does no GPU work after, and ends
         self.stop.store(true, Ordering::SeqCst);
+        #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
+        if let Build::There(id) = self.build {
+            remote::page::close(id);
+        }
     }
 }
 
@@ -1889,18 +1947,30 @@ impl Session {
                 work_threaded((dir, file, deps), (rx, gpu_rx), tx, gpu, (waker, flag, upto))
             });
         }
-        // the browser's one thread: the worker steps when the host polls (see `poll`)
+        // the default browser build: the worker in the build worker, a Web Worker of its own;
+        // else (`?worker=0`) on the page's one thread, stepped when the host polls (see `poll`)
         #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
-        let worker = Box::new((
-            Worker::new(
-                (dir, path.clone(), deps.clone()),
-                gpu_rx,
+        let build = if remote::page::on() {
+            let _ = (gpu_rx, rx, flag, upto);
+            Build::There(remote::page::open(
+                (dir, path.clone()),
+                gpu.is_some(),
                 tx,
-                gpu,
-                (waker, flag, upto),
-            ),
-            rx,
-        ));
+                deps.clone(),
+                waker,
+            ))
+        } else {
+            Build::Here(Box::new((
+                Worker::new(
+                    (dir, path.clone(), deps.clone()),
+                    gpu_rx,
+                    tx,
+                    gpu,
+                    (waker, flag, upto),
+                ),
+                rx,
+            )))
+        };
         // the undo depth kept with the file, when its log ends on what the file holds
         let (undo, redo) = path
             .as_deref()
@@ -1933,7 +2003,7 @@ impl Session {
             stop,
             until,
             #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
-            worker,
+            build,
         };
         s.rebuild();
         s
@@ -1946,8 +2016,22 @@ impl Session {
 
     /// Its view made again from scratch, on this GPU: after it was let go while the tab was idle.
     pub fn regpu(&mut self, gpu: Gpu) -> u64 {
+        #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
+        if let Build::There(id) = self.build {
+            remote::page::gpu(id);
+        }
         let _ = self.gpus.send(gpu);
         self.rebuild()
+    }
+
+    /// Work for its worker: on its queue, or (the build worker's) posted to it.
+    fn send_work(&self, w: Work) {
+        #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
+        if let Build::There(id) = self.build {
+            remote::page::work(id, w);
+            return;
+        }
+        let _ = self.jobs.send(w);
     }
 
     /// An assembly's overlap check, from now on.
@@ -1960,9 +2044,7 @@ impl Session {
     pub fn rebuild(&mut self) -> u64 {
         self.seq += 1;
         self.sent_at.push((self.seq, Instant::now()));
-        let _ = self
-            .jobs
-            .send(Work::Text((self.seq, self.src.clone(), self.overlap)));
+        self.send_work(Work::Text((self.seq, self.src.clone(), self.overlap)));
         self.seq
     }
 
@@ -1973,15 +2055,15 @@ impl Session {
         self.sent_at.push((self.seq, Instant::now()));
         // what's on screen is no longer the file's
         self.previewing = true;
-        let _ = self.jobs.send(Work::Drive(self.seq, drives));
+        self.send_work(Work::Drive(self.seq, drives));
         self.seq
     }
 
     /// What the worker has finished.
     pub fn poll(&mut self) -> Vec<Msg> {
         #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
-        {
-            let (w, jobs) = &mut *self.worker;
+        if let Build::Here(b) = &mut self.build {
+            let (w, jobs) = &mut **b;
             if let Some(first) = w.next.take().or_else(|| jobs.try_recv().ok()) {
                 w.step(first, jobs);
             }
@@ -2070,7 +2152,7 @@ impl Session {
         self.previewing = text.is_some();
         self.seq += 1;
         self.sent_at.push((self.seq, Instant::now()));
-        let _ = self.jobs.send(Work::Text((
+        self.send_work(Work::Text((
             self.seq,
             text.unwrap_or_else(|| self.src.clone()),
             self.overlap,
@@ -2179,6 +2261,10 @@ impl Session {
 
     /// The end of part: builds stop after the statement binding `id` (None: the whole part).
     pub fn set_until(&mut self, id: Option<String>) -> u64 {
+        #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
+        if let Build::There(n) = self.build {
+            remote::page::until(n, id.clone());
+        }
         *crate::plat::lock(&self.until) = id;
         self.rebuild()
     }

@@ -22,7 +22,7 @@ if [ "$THREADS" != only ]; then
   cargo build --lib --release --target wasm32-unknown-unknown
   wasm-bindgen --target web --no-typescript --out-dir "$out" "$target/wasm32-unknown-unknown/release/forge_render.wasm"
 fi
-cp web/index.html web/boot.js web/app.js web/storage.js web/zip.js "$out/"
+cp web/index.html web/boot.js web/app.js web/build.js web/storage.js web/zip.js "$out/"
 # the examples, for a new browser project: the files a part reads, not the pictures and notes
 rm -rf "$out/examples"
 mkdir -p "$out/examples"

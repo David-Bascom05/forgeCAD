@@ -1228,6 +1228,9 @@ fn tell_page(path: &std::path::Path, c: forge_dirs::fs::mem::Change<'_>) {
         forge_dirs::fs::mem::Change::Wrote(b) => Some(b),
         forge_dirs::fs::mem::Change::Removed => None,
     };
+    // the build worker's copy of the files, changed before any work that may read them is sent
+    #[cfg(not(target_feature = "atomics"))]
+    crate::fg::remote::page::file_changed(&p, bytes);
     if on_page() {
         pass_on();
         page_changed(&p, bytes.map(Uint8Array::from));
@@ -1430,11 +1433,15 @@ pub fn fs_load(path: &str, bytes: &[u8]) {
     LOADING.with(|l| *l.borrow_mut() = true);
     forge_dirs::fs::mem::load(path, bytes.to_vec());
     LOADING.with(|l| *l.borrow_mut() = false);
+    #[cfg(not(target_feature = "atomics"))]
+    crate::fg::remote::page::file_loaded(path, bytes);
 }
 
 #[wasm_bindgen]
 pub fn fs_unload(prefix: &str) {
     forge_dirs::fs::mem::unload(prefix);
+    #[cfg(not(target_feature = "atomics"))]
+    crate::fg::remote::page::files_unloaded(prefix);
 }
 
 #[wasm_bindgen]

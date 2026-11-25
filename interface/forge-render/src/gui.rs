@@ -1826,16 +1826,11 @@ fn posed_name(
     // its faces are the model's: named by the model's anchors, by name
     let name = (|| {
         let d = data?;
-        let &(mesh, _) = d.placed.get(pl)?;
-        let b = d.bodies.get(mesh)?;
+        let (b, _) = d.brief_at(pl as u32)?;
         let a = anchors?;
         match e {
-            Entity::Face(f) if (f as usize) < b.faces.len() => {
-                a.by_face.get(&b.face(forge_topo::FaceId(f)).name)
-            }
-            Entity::Edge(x) if (x as usize) < b.edges.len() => {
-                a.by_edge.get(&b.edge(forge_topo::EdgeId(x)).name)
-            }
+            Entity::Face(f) => a.by_face.get(&b.faces.get(f as usize)?.0),
+            Entity::Edge(x) => a.by_edge.get(&b.edges.get(x as usize)?.0),
             _ => None,
         }
         .cloned()
@@ -2950,6 +2945,24 @@ impl Gui {
         let (send, recv) = channel();
         self.fg_asm_located = Some(recv);
         let waker = self.waker.clone();
+        // the default browser build: the bodies are the build worker's, which works it out
+        #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
+        if crate::fg::remote::page::on() {
+            use crate::gui::gui_inspect::{Ask, Told};
+            let number = data.as_ref().map_or(0, |d| d.number);
+            crate::fg::remote::page::ask_then(
+                number,
+                Ask::Locate(src, dir),
+                Box::new(move |t| {
+                    let _ = send.send(match t {
+                        Told::Located(r) => r,
+                        _ => Err("the build worker answered something else".into()),
+                    });
+                    waker();
+                }),
+            );
+            return;
+        }
         crate::plat::spawn("forge-job", move || {
             let _ = send.send(locate(&src, dir, data.as_deref()));
             waker();
@@ -3211,25 +3224,31 @@ impl Gui {
     /// Clicks on the part with Project Geometry on: each edge or face picked (a click's one, or all
     /// a window took) becomes a `project` row, by the anchor Forge names it by.
     fn sketch_project_picks(&mut self) {
-        let Some(v) = &mut self.view else { return };
+        use crate::gui::gui_inspect::{Ask, Told, Waiting};
+        let Some(v) = &self.view else { return };
         if v.nav.clicks == v.clicks && v.nav.selected == v.clicked {
             return;
         }
-        v.clicks = v.nav.clicks;
         let picked: Vec<Entity> = v.nav.selected.iter().map(|x| x.1).collect();
+        let got = if picked.is_empty() {
+            None
+        } else {
+            match self.inspector.ask(Ask::Project(
+                self.fg_anchors.as_deref().cloned().map(Box::new),
+                picked,
+            )) {
+                Ok(Told::Project(r)) => Some(r),
+                Ok(_) => Some(Err("the build worker answered something else".into())),
+                // the picks taken next frame, once the build worker has said
+                Err(Waiting) => return,
+            }
+        };
+        let Some(v) = &mut self.view else { return };
+        v.clicks = v.nav.clicks;
         v.nav.selected.clear();
         v.clicked.clear();
         v.dirty = true;
-        if picked.is_empty() {
-            return;
-        }
-        let body = self
-            .inspector
-            .data
-            .as_ref()
-            .and_then(|d| d.bodies.first().cloned());
-        let got =
-            crate::shell::sketching::project_picks(self.fg_anchors.as_deref(), body.as_deref(), &picked);
+        let Some(got) = got else { return };
         if let Some(m) = &mut self.shell.sketch
             && !m.project(got)
             && let Some(e) = &m.error
@@ -3251,23 +3270,34 @@ impl Gui {
         }
         // a sketch goes on a planar face: a click that caught one of its edges or corners (a slot's
         // rim, an emboss's letters) means the planar face it was on, the one turned to the eye
-        if self.shell.sketch_pick
+        let face = if self.shell.sketch_pick
             && self.fg_asm.is_none()
             && let Some(v) = &self.view
             && v.nav.clicks != v.clicks
             && let Some(&(pl, e)) = v.nav.selected.last()
             && !matches!(e, Entity::Face(_))
             && let Some(a) = self.fg_anchors.as_deref()
-            && let Some(f) = self.face_at(pl, e, v.nav.last_click_at, |f| {
+        {
+            self.face_at(pl, e, v.nav.last_click_at, |f| {
                 a.faces
                     .get(f as usize)
                     .and_then(|n| n.as_ref())
                     .is_some_and(|n| a.planes.contains_key(&format!("{n}.plane")))
             })
-            && let Some(v) = &mut self.view
-            && let Some(s) = v.nav.selected.last_mut()
-        {
-            s.1 = f;
+        } else {
+            Ok(None)
+        };
+        match face {
+            // the build worker still working it out: the click is taken next frame
+            Err(_) => return,
+            Ok(Some(f)) => {
+                if let Some(v) = &mut self.view
+                    && let Some(s) = v.nav.selected.last_mut()
+                {
+                    s.1 = f;
+                }
+            }
+            Ok(None) => {}
         }
         let Some(v) = &mut self.view else { return };
         if v.nav.clicks == v.clicks {
@@ -3672,7 +3702,7 @@ fn statement_names(prog: &[forge_lang::syntax::Stmt], out: &mut Vec<String>) {
 
 /// Each interference's place and faces by the query the CLI and the agent ask, and its faces in
 /// the view's own bodies (`data`'s placements, named by occurrence) for marking.
-fn locate(
+pub(crate) fn locate(
     src: &str,
     dir: Option<std::path::PathBuf>,
     data: Option<&crate::gui::gui_inspect::InspectData>,
