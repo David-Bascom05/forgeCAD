@@ -116,5 +116,5 @@ done.
 | MM | 171 | 49 / 49 | 1.94e-4 | boxes differ by 4%: possibly not the same solid |
 | ST-10Y/15Y | 11 | 62 / 71 | 2.52e-4 | not examined |
 
-Archives still to run: bad_archives.txt was the list of archives whose first-run line had
+Archives still to run: research/parasolid/disagreeing_archives.txt is the list (56), of archives whose first-run line had
 paired − volume_ok − volume_unknown > 0. `summarize.py` can rebuild it from a first-run JSONL.
