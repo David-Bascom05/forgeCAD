@@ -104,7 +104,7 @@ selection, the last frame) are byte-identical between c944e6b8 and d77538d9 on b
 and the steps do change the picture: each first edit moves 729-921 pixels, the click on the
 UMC-500 selects a body (29,660), the edit with it selected 226-40,423 (the `T` edit and the
 VF-2's click change nothing seen from there). The assembly, pick,
-selection and measure tests (result pending) (`cargo test --release --test fg_asm --test asm_drag --test pick
+selection and measure tests pass (53 in 8 files: `cargo test --release --test fg_asm --test asm_drag --test pick
 --test selection --test reselect --test headless --test asm_tools --test measure`). The kernel's
 speed gate does not build forge-render, so it cannot move.
 
