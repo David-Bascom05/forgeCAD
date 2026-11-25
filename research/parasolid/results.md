@@ -90,3 +90,31 @@ What the Onshape files needed:
   has a colour.
 - **Placed comparison against CAM-HAAS's STEP placement** (machines/haas-model-import
   @29bd8a32). This run compares unplaced, as each body stands in its own part.
+
+## The wrong-Ok re-run (2026-11-25, on 89cf7e2f and later)
+
+This checked the 56 archives with any volume disagreement again, with `xtcompare` pairing every
+solid best first and `XT_BAD=1` naming each disagreeing pair with the XT solid's own verdict.
+It was run as `XT_UNPLACED=1 XT_NOCHECK=1 XT_BAD=1 corpus.sh -s SKIP xtcompare` over the
+archives listed below. It finished 23 of the 56 files before wind-down; the other 33 are not
+done.
+
+- **Fixed:** ST-20/25 #72 was 1.45% under its STEP while verified. SP-curves on a cone had NaN
+  boxes, so one face integrated 421 mm² short, and `finish`'s 1% mass-against-mesh check let it
+  through. It now matches STEP to 2.5e-7 (fixture haas_cone_sp.x_t). RPL-25KG #20 (1.7e-3) is
+  gone too.
+- **Refused:** GM2-5AX #70 measured −18.9e6 mm³. Inside out is refused now. The rest of
+  GM2-5AX's big disagreement in the first run was this solid, not pairing.
+- **Unverified (flagged, not called right):** the other 5 disagreeing pairs, from 4.6e-3 to
+  6e-2.
+- **Verified and disagreeing:** 4 pairs, all near misses.
+
+| file | solid | XT / STEP faces | relative volume | what is known |
+|---|---|---|---|---|
+| HRTA5 | 45 | 68 / 86 | 1.95e-4 | the file's body has 68 faces and all 68 are read. Areas by kind match the STEP except plane, 46,508 against 46,605 mm². Volume is 28 mm³ less, about 0.29 mm over that area: most likely a thin feature one export has and the other doesn't. Not proven |
+| DS-40Y | 25 | 105 / 138 | 1.81e-4 | not examined |
+| MM | 171 | 49 / 49 | 1.94e-4 | boxes differ by 4%: possibly not the same solid |
+| ST-10Y/15Y | 11 | 62 / 71 | 2.52e-4 | not examined |
+
+Archives still to run: bad_archives.txt was the list of archives whose first-run line had
+paired − volume_ok − volume_unknown > 0. `summarize.py` can rebuild it from a first-run JSONL.

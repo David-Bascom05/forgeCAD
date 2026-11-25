@@ -49,6 +49,17 @@ What's on the branch:
 - The 1% tolerance in shared `finish` (read.rs `mesh_agrees`) is what let a 1.45% error through.
   Tightening it for STEP too is for whoever owns `finish` (IMPORT-SPEED).
 
+## The wrong-Ok re-run: unfinished
+
+23 of 56 archives were done at wind-down (results.md, last section).
+- 4 pairs are verified but disagree with STEP, all near misses at 1.8–2.5e-4. HRTA5 #45 was
+  examined: every file face is read, and the plane-only area gap points to an export difference.
+  The other 3 are not examined.
+- Every larger disagreement is unverified or refused.
+- Next: finish the remaining 33 archives with the same command. For each verified pair that
+  disagrees, cut the body (extract.py --bare) and compare kind areas with XT_DETAIL against the
+  STEP, as for ST-20 (that is how the cone SP-curve bug was found).
+
 ## Speed (not finished: the coordinator stopped speed work at wind-down)
 
 XT reads ran 3.1× slower than STEP over the corpus. Callgrind on CM-1 (`forge_step::import`,
