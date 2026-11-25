@@ -17,7 +17,11 @@ struct Followup {
     document: Option<String>,
     text: String,
     refs: Vec<String>,
-    picture: Option<Vec<u8>>,
+    pictures: Vec<crate::agent::Picture>,
+    /// Its message in the chat (sent, shown, waiting): taken out if it's dropped.
+    entry: Option<usize>,
+    /// Its card, not in the chat while it waits: added when it goes.
+    card: Option<Entry>,
     project: Option<PathBuf>,
     model: String,
 }
@@ -29,6 +33,8 @@ pub struct AgentHost {
     backend: Option<Box<dyn Backend>>,
     turn_active: bool,
     followups: std::collections::VecDeque<Followup>,
+    /// The card of the message being sent, when the chat hasn't it yet: added when it goes.
+    card: Option<Entry>,
     rx: Option<Receiver<Event>>,
     /// What the backend was made for: the folder, the settings.
     made_for: Option<(String, AgentSettings)>,
@@ -232,8 +238,68 @@ impl Gui {
         self.take_bridge_requests();
     }
 
-    fn take_followups(&mut self) {
+    /// The tab's view of the queue: how many, and each one's words.
+    fn sync_queue(&mut self) {
         self.shell.agent.queued = self.agent.followups.len();
+        self.shell.agent.queue = self
+            .agent
+            .followups
+            .iter()
+            .map(|f| {
+                match f
+                    .card
+                    .as_ref()
+                    .or(f.entry.and_then(|k| self.shell.agent.entries.get(k)))
+                {
+                    Some(Entry::User { text, .. }) => text.clone(),
+                    _ => f.text.clone(),
+                }
+            })
+            .collect();
+    }
+
+    /// A queued message dropped, or taken back into the box to change and send again.
+    fn unqueue(&mut self, index: usize, edit: bool) {
+        let Some(f) = self.agent.followups.remove(index) else {
+            return;
+        };
+        let mut text = f.text.clone();
+        let mut refs = f.refs.clone();
+        if let Some(Entry::User { text: t, refs: r, .. }) = &f.card {
+            (text, refs) = (t.clone(), r.clone());
+        } else if let Some(k) = f.entry
+            && let Some(Entry::User { text: t, refs: r, .. }) = self.shell.agent.entries.get(k)
+        {
+            (text, refs) = (t.clone(), r.clone());
+            self.shell.agent.entries.remove(k);
+            for g in &mut self.agent.followups {
+                if let Some(j) = &mut g.entry
+                    && *j > k
+                {
+                    *j -= 1;
+                }
+            }
+        }
+        if edit {
+            let a = &mut self.shell.agent;
+            a.input = if a.input.trim().is_empty() {
+                text
+            } else {
+                format!("{text}\n{}", a.input)
+            };
+            for r in refs {
+                if !a.refs.contains(&r) {
+                    a.refs.push(r);
+                }
+            }
+            a.pictures.extend(f.pictures);
+            a.focus_input = true;
+        }
+        self.sync_queue();
+    }
+
+    fn take_followups(&mut self) {
+        self.sync_queue();
         if self.agent.turn_active
             || self.shell.agent.running
             || self.shell.agent.voice.busy()
@@ -245,7 +311,7 @@ impl Gui {
         let Some(next) = self.agent.followups.pop_front() else {
             return;
         };
-        self.shell.agent.queued = self.agent.followups.len();
+        self.sync_queue();
         if next.project != self.agent_root()
             || next.model != self.shell.agent.settings.label()
             || (next.document.is_some() && next.document != self.agent_path())
@@ -257,7 +323,8 @@ impl Gui {
             return;
         }
         self.shell.agent.running = true;
-        self.agent_send(&next.text, &next.refs, next.picture);
+        self.agent.card = next.card;
+        self.agent_send(&next.text, &next.refs, next.pictures);
     }
 
     fn cancel_followups(&mut self) {
@@ -266,7 +333,7 @@ impl Gui {
         self.shell.agent.markup.sending = false;
         let count = self.agent.followups.len();
         self.agent.followups.clear();
-        self.shell.agent.queued = 0;
+        self.sync_queue();
         if count > 0 {
             self.shell.agent.take(Event::Note {
                 text: format!("Cancelled {count} queued message(s)."),
@@ -343,10 +410,11 @@ impl Gui {
             text: text.clone(),
             refs: vec![],
             markup: None,
+            pictures: 0,
         });
         self.shell.agent.problem = None;
         self.shell.agent.running = true;
-        self.agent_send(&text, &[], None);
+        self.agent_send(&text, &[], vec![]);
         self.agent.bridge_active = Some((request.id, self.shell.agent.entries.len()));
         if !self.shell.agent.running {
             self.finish_bridge_request(Some(
@@ -424,6 +492,12 @@ impl Gui {
         if let Some(b) = &mut self.agent.backend {
             b.set_file(Path::new(path));
         }
+    }
+
+    /// A picture pasted or dropped on the window: the Agent tab's, for its next message, when the
+    /// tab is the one showing. False when it isn't (or it's not a picture the models read).
+    pub fn agent_picture(&mut self, bytes: Vec<u8>) -> bool {
+        self.shell.agent.tab == crate::shell::agent::SideTab::Agent && self.shell.agent.add_picture(bytes)
     }
 
     /// An edit the agent asks to make, as its card shows it: the file as it is with the change
@@ -644,15 +718,16 @@ impl Gui {
         self.agent.session = Some(std::sync::Arc::new(std::sync::Mutex::new(chat.session.clone())));
         self.agent.endpoint_history = Some(std::sync::Arc::new(std::sync::Mutex::new(chat.history.clone())));
         self.agent.resumed = true;
-        self.shell.agent.take(Event::Note {
-            text: if interrupted {
-                "Resumed an interrupted conversation. Project files are unchanged by resuming."
+        // a divider, not a note: said once, wherever it was resumed, and not saved with the chat
+        let when = crate::shell::agent::ago(chat.updated);
+        self.shell.agent.resumed = Some((
+            self.shell.agent.entries.len(),
+            if interrupted {
+                format!("Resumed · {when} · it stopped mid-turn")
             } else {
-                "Resumed conversation. Its changes still undo while their files are as it left them; + starts a new conversation."
-            }
-            .into(),
-            error: false,
-        });
+                format!("Resumed · {when}")
+            },
+        ));
         self.agent.chat = Some(chat);
         self.agent_capture_conversation(true);
     }
@@ -834,8 +909,24 @@ impl Gui {
                     text,
                     refs,
                     markup: true,
-                } => self.markup_job = Some((text, refs)),
-                AgentAct::Send { text, refs, .. } => self.agent_send(&text, &refs, None),
+                    pictures,
+                    ..
+                } => self.markup_job = Some((text, refs, pictures)),
+                AgentAct::Send {
+                    text,
+                    refs,
+                    pictures,
+                    shown,
+                    ..
+                } => {
+                    self.agent.card = (!shown).then(|| Entry::User {
+                        text: text.clone(),
+                        refs: refs.clone(),
+                        markup: None,
+                        pictures: pictures.len(),
+                    });
+                    self.agent_send(&text, &refs, pictures)
+                }
                 AgentAct::ShowMarkup(k) => self.markup_show(k),
                 AgentAct::Trust { dir, yes } => {
                     self.shell.agent.trust_ask = None;
@@ -851,8 +942,8 @@ impl Gui {
                     } else if yes {
                         self.shell.agent.settings.trusted.push(dir);
                         self.agent_save_settings();
-                        if let Some((text, refs, picture)) = pending {
-                            self.agent_send(&text, &refs, picture);
+                        if let Some((text, refs, pictures)) = pending {
+                            self.agent_send(&text, &refs, pictures);
                         }
                     } else {
                         self.shell.agent.take(Event::Done {
@@ -897,6 +988,7 @@ impl Gui {
                         b.set_own_mode(&m);
                     }
                 }
+                AgentAct::Unqueue { index, edit } => self.unqueue(index, edit),
                 AgentAct::ListConversations => self.agent_list_conversations(),
                 AgentAct::ResumeConversation(id) => self.agent_resume_conversation(&id),
                 AgentAct::NewChat => {
@@ -943,18 +1035,36 @@ impl Gui {
         }
     }
 
-    pub(crate) fn agent_send(&mut self, text: &str, refs: &[String], picture: Option<Vec<u8>>) {
+    pub(crate) fn agent_send(&mut self, text: &str, refs: &[String], pictures: Vec<crate::agent::Picture>) {
         if self.agent.turn_active {
             self.agent.followups.push_back(Followup {
                 document: self.agent_path(),
                 text: text.into(),
                 refs: refs.to_vec(),
-                picture,
+                pictures,
+                // its card in the chat already (markup's), else kept to add when it goes
+                entry: self
+                    .agent
+                    .card
+                    .is_none()
+                    .then(|| {
+                        self.shell
+                            .agent
+                            .entries
+                            .iter()
+                            .rposition(|e| matches!(e, Entry::User { .. }))
+                    })
+                    .flatten(),
+                card: self.agent.card.take(),
                 project: self.agent_root(),
                 model: self.shell.agent.settings.label(),
             });
-            self.shell.agent.queued = self.agent.followups.len();
+            self.sync_queue();
             return;
+        }
+        // it goes now: its card, if the chat hasn't it yet
+        if let Some(c) = self.agent.card.take() {
+            self.shell.agent.entries.push(c);
         }
         let fail = |g: &mut Gui, text: String, fix: Option<String>| {
             g.shell.agent.take(Event::Problem { text, fix });
@@ -970,7 +1080,7 @@ impl Gui {
             && !trusted(&dir, &self.shell.agent.settings.trusted)
         {
             self.shell.agent.trust_ask = Some(dir);
-            self.shell.agent.pending = Some((text.to_string(), refs.to_vec(), picture));
+            self.shell.agent.pending = Some((text.to_string(), refs.to_vec(), pictures));
             return;
         }
         // the agent reads the file: what's on screen is what it gets
@@ -1098,7 +1208,7 @@ impl Gui {
         self.agent.turn_active = true;
         self.shell.agent.running = true;
         if let Some(b) = &mut self.agent.backend {
-            b.send(msg, picture);
+            b.send(msg, pictures);
         }
         self.agent_capture_conversation(true);
     }
