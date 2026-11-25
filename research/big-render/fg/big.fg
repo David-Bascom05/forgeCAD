@@ -1,0 +1,2 @@
+# the model under test: link or copy its STEP file here as big.step
+solid = import("big.step", op: "new")
