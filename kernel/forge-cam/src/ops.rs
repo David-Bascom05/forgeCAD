@@ -1596,7 +1596,16 @@ pub fn pocket_in(
         for &(li, lj, link) in &order {
             let l = &passes[li][lj];
             let s = l.segs[0].start();
-            if let Some(p) = carried.take().filter(|p| *p == s) {
+            // (a carried point that is not this pass's start — impossible while the passes are
+            // the same at every level — goes up first, as without staying down)
+            let held = carried.take();
+            if let Some(p) = held.filter(|p| *p != s) {
+                mv.push(PMove::Line {
+                    to: [p.x, p.y, h.retract],
+                    f: feed.0,
+                    phase: Phase::Link,
+                });
+            } else if let Some(p) = held {
                 mv.push(PMove::Line {
                     to: [p.x, p.y, z],
                     f: feed.1,
