@@ -1,6 +1,6 @@
 //! SINUMERIK TRAORI with the rotary axes held (3+2), as the RPTU/Spinner dataset's
 //! Coordinate_system_representation_Achskreuz program uses it (tests/data/spinner-u5, CC BY 4.0),
-//! on the spinner-u5-620 kinematics fitted from the same dataset's log. The simulated machine
+//! on the spinner-u5-620 record (B and C fitted from the same dataset's log). The simulated machine
 //! positions are checked against the log (Zenodo 15735480, data_v1_0_1.csv, CC BY 4.0) on two
 //! operations of one run (2024-03-12): one the fit used (B90 C0) and one it did not need (B90 C90,
 //! a different frame chain).
@@ -9,7 +9,6 @@ use forge_machine::gcode::{self, Control, Ev};
 use forge_machine::sim::{self, Cut, Setup, SimTool};
 
 const ACHSKREUZ: &str = include_str!("data/spinner-u5/Coordinate_system_representation_Achskreuz.mpf");
-const U5_620: &str = include_str!("data/spinner-u5/u5-620-kinematics.toml");
 
 /// The tools and their gauge lengths (mm): from the fit for the two the log rows use; the others
 /// only need to be plausible here.
@@ -21,7 +20,7 @@ const TOOLS: [(&str, f64); 4] = [
 ];
 
 fn machine() -> MachineDef {
-    MachineDef::parse_all(U5_620).unwrap().remove(0)
+    forge_machine::library::builtin_named("spinner-u5-620").unwrap()
 }
 
 fn setup(m: &MachineDef) -> Setup<'_> {

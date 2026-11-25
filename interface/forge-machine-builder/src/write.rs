@@ -285,6 +285,13 @@ pub fn machine(m: &MachineDef) -> Result<String, String> {
         if !b.ignore.is_empty() {
             writeln!(o.s, "ignore = {}", strings(&b.ignore)?).unwrap();
         }
+        o.opt("clearance", b.clearance);
+        if b.passes_stock {
+            o.text("passes", "stock")?;
+        }
+        if !b.check {
+            o.line("check = false");
+        }
         // the reader keeps boxes before cylinders
         for p in &b.prims {
             if let Prim::Box { min, max } = p {

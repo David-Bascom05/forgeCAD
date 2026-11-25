@@ -146,6 +146,10 @@ Don't:
   you say "converted"), right-aligned in a fixed column, never truncated. Fields size to their
   content or the panel widens; text that doesn't fit wraps or ellipsises *with* a hover showing
   all of it. `carbic`, `gener`, `forgec`, `2026-` are defects.
+- Capitalisation: ribbon commands and window titles in Title Case ("Tool Library", "Finish Bend
+  Simulation"); everything else (buttons that are phrases, menu items in panels, labels, status
+  text) in sentence case ("Measure thinnest wall", "Derive from this tool…"). "…" (one character)
+  only when a dialog or further input follows.
 - Booleans are checkboxes with a label (`Real product`), enums are dropdowns with human names
   (`Linear`, `Table side`), lists (die segments) are a small table with a header row
   (`Length · mm`, `Count`) and a `+ Add segment` button.

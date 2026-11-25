@@ -75,6 +75,7 @@ impl Profile {
 }
 
 /// The stock as heights over a grid of cells (the cell's centre).
+#[derive(Clone, Debug)]
 pub struct HeightMap {
     pub x0: f64,
     pub y0: f64,
@@ -150,10 +151,17 @@ impl HeightMap {
     /// its centre is inside the void's region, even–odd over its loops).
     pub fn of_stock(ip: &InProcess, h: f64) -> HeightMap {
         let mut m = HeightMap::new(ip.min, ip.max, h);
-        for (rg, floor) in &ip.voids {
-            m.lower_region(rg, *floor);
-        }
+        m.lower_voids(ip);
         m
+    }
+
+    /// Every cell lowered to the in-process stock's voids (the floor of each void whose region
+    /// holds the cell's centre), where it is higher: a map of the stock as earlier moves left it
+    /// brought down to voids recorded since.
+    pub fn lower_voids(&mut self, ip: &InProcess) {
+        for (rg, floor) in &ip.voids {
+            self.lower_region(rg, *floor);
+        }
     }
 
     fn lower_region(&mut self, rg: &Region, floor: f64) {

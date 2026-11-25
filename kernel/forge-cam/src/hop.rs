@@ -88,11 +88,20 @@ pub fn hops(
                 && p[1] == b[1]
                 && p[2] < b[2]
             {
-                let zt = (top_near(map, b[0], b[1], rr) + CLEAR).max(p[2]);
+                // the lowest the tip may come down to over b before its profile can meet the
+                // material the map holds (`entry_top`), CLEAR above that; no lower than the
+                // plunge's end, nor than the bodies above the cutter (shank, holder) allow there
+                let bodies_at = bodies
+                    .iter()
+                    .map(|&(z0, rb)| top_near(map, b[0], b[1], rb + 2.0 * map.h) + CLEAR - z0)
+                    .fold(f64::NEG_INFINITY, f64::max);
+                let zt = (entry_top(map, b[0], b[1], rr, prof) + CLEAR)
+                    .max(p[2])
+                    .max(bodies_at);
                 let land = [b[0], b[1], zt];
                 if zt < b[2] - 1e-9
                     && top > at[2] + 1e-9
-                    && let Some(h) = hop(map, rr, bodies, at, land, top, None, feed)
+                    && let Some(h) = hop(map, rr, bodies, at, land, top, None, Some(prof), feed)
                 {
                     let plunge = PMove::Line {
                         to: p,
@@ -116,7 +125,7 @@ pub fn hops(
                 (before_b[0] == b[0] && before_b[1] == b[1] && before_b[2] > b[2]).then_some(before_b[2]);
             if j < moves.len()
                 && top > at[2].max(b[2]) + 1e-9
-                && let Some(h) = hop(map, rr, bodies, at, b, top, down_from, feed)
+                && let Some(h) = hop(map, rr, bodies, at, b, top, down_from, None, feed)
             {
                 for m in &h {
                     sweep(map, prof, at, m);
@@ -157,6 +166,30 @@ fn box_top(map: &HeightMap, lo: [f64; 2], hi: [f64; 2]) -> f64 {
 }
 
 /// The highest material within rr of (x, y) on the map (−∞: none).
+/// The lowest tip height at (x, y) from which the tool's profile meets no material the map holds
+/// within rr: the most, over the cells sampled as `top_near` samples them, of the cell's height
+/// less the profile's height at its distance d. The distance is taken as d − 2h (at least 0, at
+/// most r): a sample stands for its cell to within h/√2 and the samples are h apart, so a
+/// point of material is at least d − 2h from the axis wherever the cell's height is read off.
+/// A flat end (profile 0 across) gives `top_near`.
+fn entry_top(map: &HeightMap, x: f64, y: f64, rr: f64, prof: &Profile) -> f64 {
+    let h = map.h;
+    let r = prof.r();
+    let n = (rr / h).ceil() as i64;
+    let mut t = f64::NEG_INFINITY;
+    for j in -n..=n {
+        for i in -n..=n {
+            let (dx, dy) = (i as f64 * h, j as f64 * h);
+            let d2 = dx * dx + dy * dy;
+            if d2 <= rr * rr {
+                let d = (d2.sqrt() - 2.0 * h).clamp(0.0, r);
+                t = t.max(map.top(x + dx, y + dy) - prof.at(d));
+            }
+        }
+    }
+    t
+}
+
 fn top_near(map: &HeightMap, x: f64, y: f64, rr: f64) -> f64 {
     let h = map.h;
     let n = (rr / h).ceil() as i64;
@@ -183,15 +216,22 @@ fn hop(
     b: [f64; 3],
     ceiling: f64,
     down_from: Option<f64>,
+    land_prof: Option<&Profile>,
     feed: f64,
 ) -> Option<Vec<PMove>> {
     // material beside the landing (within rr, above its level): the hop comes straight down onto
     // it, and only where the run it replaces came down that same column from at least as high
-    // (the tool's own column, within r + h, the test a link at depth passes: never)
-    if top_near(map, b[0], b[1], rr - map.h) > b[2] + 1e-9 {
+    // (the tool's own column, within r + h, the test a link at depth passes: never). A landing
+    // over an entry (`land_prof`) is judged by the tool's profile, as its height was chosen
+    // (`entry_top`): material within reach but under the profile is not beside it
+    let near = |rad: f64| match land_prof {
+        Some(prof) => entry_top(map, b[0], b[1], rad, prof),
+        None => top_near(map, b[0], b[1], rad),
+    };
+    if near(rr - map.h) > b[2] + 1e-9 {
         return None;
     }
-    let beside = top_near(map, b[0], b[1], rr) > b[2] + 1e-9;
+    let beside = near(rr) > b[2] + 1e-9;
     if beside && down_from.is_none() {
         return None;
     }
@@ -542,6 +582,139 @@ mod tests {
             }
         )));
         assert_eq!(check(&out, start, 5.0), 1);
+    }
+
+    /// A map rising along x from x = 30 (1 in 2), flat at −5 before it; a cut on the flat, a
+    /// link up, across and a plunge onto the slope at x = 32.
+    fn slope_entry() -> (HeightMap, Vec<PMove>, [f64; 3], [f64; 3]) {
+        let mut m = HeightMap::new([0.0, 0.0, -10.0], [60.0, 20.0, 5.0], 0.25);
+        for j in 0..m.ny {
+            for i in 0..m.nx {
+                let x = m.x0 + (i as f64 + 0.5) * m.h;
+                m.z[j * m.nx + i] = -5.0 + 0.5 * (x - 30.0).max(0.0);
+            }
+        }
+        let start = [6.0, 10.0, -5.0];
+        let b = [32.0, 10.0, -4.0];
+        let mv = vec![
+            line([14.0, 10.0, -5.0], Phase::Cut),
+            line([14.0, 10.0, 5.0], Phase::Link),
+            line([32.0, 10.0, 5.0], Phase::Link),
+            line(b, Phase::Plunge),
+            line([36.0, 10.0, -2.0], Phase::Cut),
+        ];
+        (m, mv, start, b)
+    }
+
+    /// The hop's landing over the plunge (the move before it).
+    fn landing(out: &[PMove]) -> [f64; 3] {
+        let k = out
+            .iter()
+            .position(|m| {
+                matches!(
+                    m,
+                    PMove::Line {
+                        phase: Phase::Plunge,
+                        ..
+                    }
+                )
+            })
+            .expect("the plunge");
+        end(&out[k - 1])
+    }
+
+    #[test]
+    fn a_ball_lands_over_a_slope_by_its_profile_and_into_no_cell() {
+        let (mut m, mv, start, b) = slope_entry();
+        let prof = Profile::Ball { r: R };
+        let disk = top_near(&m, b[0], b[1], R + 2.0 * m.h) + CLEAR;
+        let (out, n) = hops(&mv, start, &mut m.clone(), &prof, &[], 9000.0);
+        assert_eq!(n, 1, "{out:?}");
+        let land = landing(&out);
+        assert_eq!([land[0], land[1]], [b[0], b[1]]);
+        // lower than the disk's landing, no lower than the plunge's end
+        assert!(
+            land[2] < disk - 0.5 && land[2] >= b[2],
+            "landing {} disk {disk}",
+            land[2]
+        );
+        // exact against the cells: each cell any point of which is within r of the axis lies
+        // under the ball standing at the landing, CLEAR below it at the cell's nearest point
+        m = slope_entry().0;
+        for j in 0..m.ny {
+            for i in 0..m.nx {
+                let (x0, y0) = (m.x0 + i as f64 * m.h, m.y0 + j as f64 * m.h);
+                let dx = (x0 - land[0]).max(land[0] - (x0 + m.h)).max(0.0);
+                let dy = (y0 - land[1]).max(land[1] - (y0 + m.h)).max(0.0);
+                let d = (dx * dx + dy * dy).sqrt();
+                if d < R {
+                    let z = m.z[j * m.nx + i];
+                    assert!(
+                        z <= land[2] + prof.at(d) - CLEAR + 1e-9,
+                        "cell ({i}, {j}) at {z} into the ball at {land:?} (d {d})"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_spike_by_the_rim_is_kept_off_by_the_sampling_margin() {
+        // one tall cell, [35, 35.25] in x, under the ball's rim: the landing's samples read it at
+        // 3.0 from the axis (the profile's full height there), its nearest point is 2.9 away
+        let mut m = HeightMap::new([0.0, 0.0, -10.0], [60.0, 20.0, 5.0], 0.25);
+        m.z.iter_mut().for_each(|z| *z = -5.0);
+        let spike = (40 * m.nx) + 140;
+        m.z[spike] = 2.0;
+        let b = [32.1, 10.1, 5.0];
+        let mv = vec![
+            line([14.0, 10.1, -5.0], Phase::Cut),
+            line([14.0, 10.1, 5.0], Phase::Link),
+            line(b, Phase::Link),
+            line([32.1, 10.1, -5.0], Phase::Plunge),
+            line([32.1, 12.0, -5.0], Phase::Cut),
+        ];
+        let prof = Profile::Ball { r: R };
+        let (out, n) = hops(&mv, [6.0, 10.1, -5.0], &mut m.clone(), &prof, &[], 9000.0);
+        assert_eq!(n, 1, "{out:?}");
+        let land = landing(&out);
+        let (x0, y0) = (140.0 * m.h, 40.0 * m.h);
+        let dx = (x0 - land[0]).max(land[0] - (x0 + m.h)).max(0.0);
+        let dy = (y0 - land[1]).max(land[1] - (y0 + m.h)).max(0.0);
+        let d = (dx * dx + dy * dy).sqrt();
+        assert!(d < R, "the spike within the ball's reach: {d}");
+        assert!(
+            2.0 <= land[2] + prof.at(d) - CLEAR + 1e-9,
+            "the spike into the ball at {land:?} (d {d})"
+        );
+    }
+
+    #[test]
+    fn a_flat_end_lands_where_the_disk_does() {
+        // a flat end's profile is 0 across: its landing is the disk's (the map's top within
+        // r + 2h, CLEAR above), as before the profile
+        let (m, mv, start, b) = slope_entry();
+        let (prof, rr) = (Profile::Bull { r: R, re: 0.0 }, R + 2.0 * m.h);
+        let disk = (top_near(&m, b[0], b[1], rr) + CLEAR).max(b[2]);
+        assert_eq!(entry_top(&m, b[0], b[1], rr, &prof), top_near(&m, b[0], b[1], rr));
+        let (out, n) = hops(&mv, start, &mut m.clone(), &prof, &[], 9000.0);
+        assert_eq!(n, 1, "{out:?}");
+        assert_eq!(landing(&out)[2], disk);
+        // and the pockets' entry, as before
+        let (mut m2, prof2) = stock();
+        let mv2 = vec![
+            line([14.0, 10.0, -5.0], Phase::Cut),
+            PMove::Rapid {
+                to: [14.0, 10.0, 5.0],
+            },
+            PMove::Rapid {
+                to: [30.0, 10.0, 5.0],
+            },
+            line([30.0, 10.0, -5.0], Phase::Plunge),
+            line([34.0, 10.0, -5.0], Phase::Cut),
+        ];
+        let (out2, _) = hops(&mv2, [6.0, 10.0, -5.0], &mut m2, &prof2, &[], 9000.0);
+        assert_eq!(landing(&out2), [30.0, 10.0, CLEAR]);
     }
 
     #[test]

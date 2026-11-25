@@ -163,7 +163,7 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
                 (
                     "Post Process",
                     "cam_post",
-                    a(Ask::PostProcess),
+                    release_block(w).is_none().then_some(Action::Cam(Ask::PostProcess)),
                     w.post_dlg.is_some(),
                 ),
                 ("NC Programs", "cam_sheet", a(Ask::Programs), w.programs_open),
@@ -181,13 +181,13 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
                 (
                     "Setup Sheet",
                     "cam_sheet",
-                    w.run.is_some().then_some(Action::Cam(Ask::SetupSheet)),
+                    release_block(w).is_none().then_some(Action::Cam(Ask::SetupSheet)),
                     false,
                 ),
                 (
                     "Export NC",
                     "cam_post",
-                    w.run.is_some().then_some(Action::Cam(Ask::ExportNc)),
+                    release_block(w).is_none().then_some(Action::Cam(Ask::ExportNc)),
                     false,
                 ),
                 ("Checks", "cam_check", a(Ask::Checks), w.checks_open),
@@ -227,6 +227,13 @@ pub fn cycle_words((lo, est): (f64, f64)) -> String {
 }
 
 /// As `cycle_words`, short (m:ss), for the browser's rows.
+/// What clear would take, beside an adaptive op's own time: "≥ 2:08 · est. 2:17 · 55% less
+/// time" (whose time and of what, said: UX-LEAD).
+pub fn alt_clear_words(clear: (f64, f64), own: (f64, f64)) -> String {
+    let pct = (clear.1 / own.1 - 1.0) * 100.0;
+    format!("{} \u{b7} {:.0}% {} time", cycle_short(clear), pct.abs(), if pct < 0.0 { "less" } else { "more" })
+}
+
 fn cycle_short((lo, est): (f64, f64)) -> String {
     format!("\u{2265} {} \u{b7} est. {}", short_time(lo), short_time(est))
 }
@@ -325,6 +332,10 @@ impl Shell {
                         Cert::Certified => ("certified".into(), t.success),
                         // not a failure: a rule this run does not decide (G4's leftover not
                         // computed; G5's travel by span only until a setup is placed)
+                        // G5 unchecked on a mill: no program is releasable, so the header says so
+                        Cert::Unchecked(g) if g.contains("G5") && !w.turning() => {
+                            ("certified · not releasable: setup not placed".into(), t.warn)
+                        }
                         Cert::Unchecked(g) => (format!("certified · {}", unchecked_chip(g)), t.ink2),
                         Cert::Refused => ("refused".into(), t.error),
                     },
@@ -336,17 +347,22 @@ impl Shell {
                     ui.interact(r, ui.scope_id().with("cam-cert"), Sense::hover())
                         .on_hover_text(unchecked_words(g));
                 }
-                ui.painter().text(
+                let head = ui.painter().text(
                     pos2(r.left() + 32.0, r.center().y),
                     Align2::LEFT_CENTER,
                     "Setups",
                     medium(13.0),
                     t.ink,
                 );
+                // the words in the room beside "Setups": where they do not fit, the short form
+                // (what follows the colon is the hover's)
+                let room = r.right() - 10.0 - head.right() - 12.0;
+                let fits = |s: &str| ui.fonts_mut(|f| f.layout_no_wrap(s.to_string(), sans(12.0), cert.1)).size().x <= room;
+                let words = if fits(&cert.0) { cert.0.clone() } else { cert.0.split(':').next().unwrap_or("").to_string() };
                 ui.painter().text(
                     pos2(r.right() - 10.0, r.center().y),
                     Align2::RIGHT_CENTER,
-                    &cert.0,
+                    &words,
                     sans(12.0),
                     cert.1,
                 );
@@ -536,6 +552,8 @@ impl Shell {
                         &format!("cam:tool:{}", s.name),
                         &mut places,
                     );
+                    // the library's key on hover (§5: words on the row, the id behind them)
+                    let resp = (resp.0, resp.1.on_hover_text(tool_key(s)));
                     if resp.1.double_clicked() {
                         cmds.push(Cmd::ToolLibrary);
                     }
@@ -545,7 +563,20 @@ impl Shell {
                         note(ui, e, width, t.error);
                     }
                 }
-                if let Some(s) = &w.said {
+                // why a program can't be released: one sentence, the next step; the code and the
+                // syntax on hover (UX-LEAD)
+                let blocked = release_words(&w);
+                if let Some(b) = &blocked {
+                    let r0 = ui.cursor().min.y;
+                    note(ui, &b.sentence, width, t.warn);
+                    note(ui, &b.next, width, t.ink2);
+                    let r = Rect::from_min_max(pos2(area.left(), r0), pos2(area.left() + width, ui.cursor().min.y));
+                    ui.interact(r, ui.scope_id().with("cam-blocked"), Sense::hover()).on_hover_text(&b.detail);
+                    places.push(("cam:blocked".into(), r));
+                }
+                if let Some(s) = &w.said
+                    && blocked.as_ref().is_none_or(|b| &b.sentence != s)
+                {
                     note(ui, s, width, t.warn);
                 }
             });
@@ -622,8 +653,11 @@ impl Shell {
         if w.text_open {
             blocks.extend(text_window(ctx, &t, v, &mut w, &mut places));
         }
+        // the Section window's rect, for the view framed around it (Gui::cam_reframe)
+        w.section_at = None;
         if w.turning() && w.turnview.open {
-            blocks.extend(section_window(ctx, &t, v, &mut w, &mut places));
+            w.section_at = section_window(ctx, &t, v, &mut w, &mut places);
+            blocks.extend(w.section_at);
         }
         // docked only in a frame whose properties column set it (it draws before this)
         w.dock = None;
@@ -1018,13 +1052,12 @@ fn details(
                     let ready = w.alt.as_ref().filter(|a| a.0 == o.name && run.is_some_and(|r| r.text == a.1));
                     match (ready, own) {
                         (Some((_, _, Some(c))), Some(me)) => {
-                            let pct = (c.1 / me.1 - 1.0) * 100.0;
-                            let words = format!("{} ({}{:.0}%)", cycle_short(*c), if pct >= 0.0 { "+" } else { "\u{2212}" }, pct.abs());
-                            fact_tip(ui, t, "Clear (its defaults)", &words, tip, width, if c.1 < me.1 { t.warn } else { t.ink2 });
+                            let words = alt_clear_words(*c, me);
+                            fact_tip(ui, t, "With clear instead", &words, tip, width, if c.1 < me.1 { t.warn } else { t.ink2 });
                         }
-                        (Some((_, _, Some(c))), None) => fact_tip(ui, t, "Clear (its defaults)", &cycle_short(*c), tip, width, t.ink2),
-                        (Some((_, _, None)), _) => fact_tip(ui, t, "Clear (its defaults)", "does not build here", tip, width, t.ink2),
-                        (None, _) => fact_tip(ui, t, "Clear (its defaults)", "measuring\u{2026}", tip, width, t.ink2),
+                        (Some((_, _, Some(c))), None) => fact_tip(ui, t, "With clear instead", &cycle_short(*c), tip, width, t.ink2),
+                        (Some((_, _, None)), _) => fact_tip(ui, t, "With clear instead", "does not build here", tip, width, t.ink2),
+                        (None, _) => fact_tip(ui, t, "With clear instead", "measuring\u{2026}", tip, width, t.ink2),
                     }
                 }
             }
@@ -3721,6 +3754,10 @@ fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
 
 /// The status bar's words for the workspace.
 pub fn status_line(w: &CamWs) -> String {
+    // what was just refused (an export, a post) first, until the text or the run changes
+    if let Some(s) = &w.said {
+        return s.clone();
+    }
     let n = w.stmts.iter().filter(|s| s.is_op() && !s.suppressed).count();
     let built = w
         .stmts
@@ -3739,11 +3776,117 @@ pub fn status_line(w: &CamWs) -> String {
     } else {
         String::new()
     };
+    // certified only as far as it is: a program that cannot be released says so
+    let cert = match (release_block(w), w.run.as_ref().map(|r| cert_of(r.ok, &r.certification))) {
+        (Some(_), _) => format!("{built}/{n} ops built \u{b7} not releasable: {}", release_short(w)),
+        (None, Some(Cert::Unchecked(g))) => format!("{built}/{n} ops certified \u{b7} {}", unchecked_chip(g)),
+        _ => format!("{built}/{n} ops certified"),
+    };
     format!(
-        "{} · {built}/{n} ops certified{machining}{}",
+        "{} \u{b7} {cert}{machining}{}",
         w.path.rsplit('/').next().unwrap_or(""),
-        if w.dirty() { " · unsaved" } else { "" }
+        if w.dirty() { " \u{b7} unsaved" } else { "" }
     )
+}
+
+/// Why the programs cannot be released (Export NC, the setup sheet, Post Process are off): a
+/// program not certified in full, unless uncertified output is allowed (NC Programs). None
+/// while they can, or there is no run to say.
+pub fn release_block(w: &CamWs) -> Option<String> {
+    let r = w.run.as_ref()?;
+    if w.allow_uncertified || w.turning() {
+        return None;
+    }
+    let bad: Vec<&super::run::ProgRes> = r.programs.iter().filter(|p| p.certified != "full").collect();
+    if bad.is_empty() {
+        return None;
+    }
+    let names: Vec<&str> = bad.iter().map(|p| p.name.as_str()).collect();
+    let why = if bad.iter().any(|p| p.certified.contains("G5")) {
+        "a setup is not placed on the machine, so travel (G5) is checked by span only: give the setup its position (at:, the work offset in machine coordinates)"
+    } else if bad.iter().any(|p| p.certified.contains("G4")) {
+        "the stock left (G4) is not checked in this run"
+    } else {
+        "it is not certified"
+    };
+    Some(format!(
+        "{} cannot be released: {why}. Or allow uncertified output in NC Programs.",
+        names.join(", ")
+    ))
+}
+
+/// Why a program can't be released, for a person (UX-LEAD): one sentence, what to do next, and
+/// the detail (the rule's code, the `at:` syntax) for the hover only.
+pub struct Blocked {
+    pub sentence: String,
+    pub next: String,
+    pub detail: String,
+}
+
+/// `release_block` in plain words, from the run's programs and the document's setups.
+pub fn release_words(w: &CamWs) -> Option<Blocked> {
+    let detail = release_block(w)?;
+    let r = w.run.as_ref()?;
+    let bad: Vec<&str> = r.programs.iter().filter(|p| p.certified != "full").map(|p| p.name.as_str()).collect();
+    let progs = if bad.len() == 1 { format!("Program {}", bad[0]) } else { format!("Programs {}", bad.join(", ")) };
+    let g5 = r.programs.iter().any(|p| p.certified.contains("G5"));
+    let unplaced: Vec<String> = w.setups().iter().filter(|s| s.arg("at").is_none()).map(|s| s.name.clone()).collect();
+    let (sentence, next) = if g5 && !unplaced.is_empty() {
+        let who = if unplaced.len() == 1 {
+            format!("setup {} isn't", unplaced[0])
+        } else {
+            format!("setups {} aren't", unplaced.join(", "))
+        };
+        (
+            format!("{progs} can't be released: {who} placed on the machine."),
+            format!(
+                "Place {} to check machine travel, or allow uncertified output in NC Programs.",
+                if unplaced.len() == 1 { "it" } else { "them" }
+            ),
+        )
+    } else if g5 {
+        (
+            format!("{progs} can't be released: machine travel isn't checked in full."),
+            "Choose a machine and place the setup, or allow uncertified output in NC Programs.".to_string(),
+        )
+    } else {
+        (
+            format!("{progs} can't be released: {} isn't certified.", if bad.len() == 1 { "it" } else { "each" }),
+            "See Checks for why, or allow uncertified output in NC Programs.".to_string(),
+        )
+    };
+    Some(Blocked { sentence, next, detail })
+}
+
+/// `release_block` in a few words, for the status line.
+fn release_short(w: &CamWs) -> &'static str {
+    match w.run.as_ref() {
+        Some(r) if r.programs.iter().any(|p| p.certified.contains("G5")) => "setup not placed",
+        Some(r) if r.programs.iter().any(|p| p.certified.contains("G4")) => "leftover not checked",
+        _ => "not certified",
+    }
+}
+
+/// The status bar's fix for what blocks release, where one click gets there: a setup with no
+/// `at:` opens its dialog.
+pub fn status_fix(w: &CamWs) -> Option<(&'static str, Action)> {
+    let r = w.run.as_ref()?;
+    (release_block(w).is_some() && r.programs.iter().any(|p| p.certified.contains("G5")))
+        .then_some(("Place the setup\u{2026}", Action::Cam(Ask::PlaceSetup)))
+}
+
+/// Why a Manufacture tool is off, for its tooltip.
+pub fn disabled_why(w: &CamWs, tool: &str) -> Option<String> {
+    match tool {
+        "Export NC" | "Setup Sheet" | "Post Process" => {
+            if w.run.is_none() {
+                Some("Generate first.".into())
+            } else {
+                release_block(w)
+            }
+        }
+        _ => None,
+    }
 }
 
 /// A tool kind in words.
@@ -3824,7 +3967,45 @@ fn tool_words(w: &CamWs, s: &super::doc::Stmt) -> String {
     let t = s.arg("t").unwrap_or("?");
     match w.lib.tools.iter().find(|x| x.id == id) {
         Some(x) => format!("T{t} · {} Ø{}", kind_words(x.kind), num(x.dc)),
-        None => format!("T{t} · {id}"),
+        // a lathe tool: from the built-in turning library's record
+        None => match forge_turn::insert::builtin(&id) {
+            Ok(x) => format!("T{t} · {}", lathe_tool_words(&x)),
+            Err(_) => format!("T{t} · {id}"),
+        },
+    }
+}
+
+/// A tool statement's library key, for the row's hover: `od-rough-cnmg`.
+fn tool_key(s: &super::doc::Stmt) -> String {
+    s.pos(0).map(super::doc::unquote).unwrap_or_else(|| s.name.clone())
+}
+
+/// A lathe tool in words, from its record's fields: "OD turning · CNMG 12", "Thread 60°",
+/// "Part-off 3 mm", "Drill Ø8". (Rough or finish is how an op uses a tool, not the tool's.)
+pub fn lathe_tool_words(x: &forge_turn::insert::TurnTool) -> String {
+    use forge_turn::insert::Kind;
+    match x.kind {
+        Kind::Turn => format!("OD turning \u{b7} {}", insert_short(&x.code)),
+        Kind::Bore => format!("Boring bar \u{b7} {}", insert_short(&x.code)),
+        Kind::Groove => format!("Groove {} mm", num(x.width)),
+        Kind::Part => format!("Part-off {} mm", num(x.width)),
+        Kind::IdGroove => format!("ID groove {} mm", num(x.width)),
+        // the kinds' profile (forge-turn: a 60° thread insert)
+        Kind::Thread => "Thread 60\u{b0}".to_string(),
+        Kind::IdThread => "ID thread 60\u{b0}".to_string(),
+        // a drill keeps its diameter as its width (forge-turn drill_tool)
+        Kind::Drill => format!("Drill \u{d8}{}", num(x.width)),
+    }
+}
+
+/// An ISO 1832 insert code as a machinist says it: its shape, clearance, tolerance and type,
+/// then its size ("CNMG120408" → "CNMG 12"); a code of another form whole.
+fn insert_short(code: &str) -> String {
+    let b = code.as_bytes();
+    if b.len() >= 6 && b[..4].iter().all(u8::is_ascii_alphabetic) && b[4..6].iter().all(u8::is_ascii_digit) {
+        format!("{} {}", &code[..4], &code[4..6])
+    } else {
+        code.to_string()
     }
 }
 
@@ -3977,10 +4158,14 @@ pub(crate) fn cert_of(ok: bool, certification: &str) -> Cert {
 
 /// A certified run's words as the simulation's header says them ("Certified", or "Certified ·
 /// leftover not checked" with the hover's explanation), the same as the Setups chip.
-pub fn certified_words(certification: &str) -> (String, Option<String>) {
+pub fn certified_words(certification: &str) -> (String, Option<String>, bool) {
     match cert_of(true, certification) {
-        Cert::Unchecked(g) => (format!("Certified \u{b7} {}", unchecked_chip(g)), Some(unchecked_words(g))),
-        _ => ("Certified".to_string(), None),
+        // G5 unchecked: certified, but no program is releasable until the setup is placed (amber)
+        Cert::Unchecked(g) if g.contains("G5") => {
+            ("Certified \u{b7} not releasable: setup not placed".to_string(), Some(unchecked_words(g)), true)
+        }
+        Cert::Unchecked(g) => (format!("Certified \u{b7} {}", unchecked_chip(g)), Some(unchecked_words(g)), false),
+        _ => ("Certified".to_string(), None, false),
     }
 }
 
@@ -4001,7 +4186,7 @@ fn unchecked_words(g: &str) -> String {
               placed on the machine. Set its position (at:) in the setup dialog to check positions too.";
     match g {
         "G4" => format!("{g4}\nEvery op is certified and every program released."),
-        "G5" => format!("{g5}\nEvery op is certified."),
+        "G5" => format!("{g5}\nEvery op is certified; no program is releasable until the setup is placed."),
         "G4 and G5" => format!("{g4}\n{g5}\nEvery op is certified."),
         _ => "A check is not decided in this run. Every op is certified.".into(),
     }
@@ -4036,12 +4221,27 @@ mod tests {
 
     /// The simulation's header says a certified run as the chip does: no raw certification
     /// string ("full except G4 (leftover not computed)"), the code on the hover's first line.
+    /// A lathe tool reads in words from its record, never its key (UX-LEAD).
+    #[test]
+    fn lathe_tools_read_in_words() {
+        let w = |id: &str| super::lathe_tool_words(&forge_turn::insert::builtin(id).unwrap());
+        assert_eq!(w("od-rough-cnmg"), "OD turning \u{b7} CNMG 12");
+        assert_eq!(w("thread-60"), "Thread 60\u{b0}");
+        assert_eq!(w("part-3"), "Part-off 3 mm");
+        assert_eq!(w("drill-8"), "Drill \u{d8}8");
+        assert_eq!(super::insert_short("not-iso"), "not-iso");
+    }
+
     #[test]
     fn the_simulations_header_reads_as_the_chip() {
-        assert_eq!(super::certified_words("full"), ("Certified".to_string(), None));
-        let (w, h) = super::certified_words("full except G4 (leftover not computed)");
+        assert_eq!(super::certified_words("full"), ("Certified".to_string(), None, false));
+        let (w, h, amber) = super::certified_words("full except G4 (leftover not computed)");
         assert_eq!(w, "Certified \u{b7} leftover not checked");
-        assert!(h.is_some_and(|h| h.starts_with("G4:")));
+        assert!(h.is_some_and(|h| h.starts_with("G4:")) && !amber);
+        // G5 unchecked: not releasable, in amber, the span-only check on hover
+        let (w, h, amber) = super::certified_words("except G5");
+        assert_eq!(w, "Certified \u{b7} not releasable: setup not placed");
+        assert!(h.is_some_and(|h| h.contains("span only")) && amber);
     }
 
     /// mold_core_cam end to end: its five ops and its program certify, G4 is not computed: the
