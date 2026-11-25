@@ -787,19 +787,27 @@ dependencies = [
  "forge-cam",
  "forge-cam-geom",
  "forge-dirs",
+ "forge-git",
  "forge-lang",
  "forge-math",
  "forge-mesh",
  "forge-post",
  "forge-tooling",
+ "forge-workholding-builder",
 ]
 
 [[package]]
 name = "forge-workholding-builder"
 version = "0.1.0"
 dependencies = [
+ "forge-cam",
+ "forge-cam-geom",
  "forge-dirs",
  "forge-library",
+ "forge-math",
+ "forge-mesh",
+ "forge-step",
+ "forge-topo",
  "forge-workholding",
 ]
 

@@ -204,6 +204,28 @@ pub fn vise_with(
             vec![bx(a, (s1 + tb, m1), acr(jwe), (bed, htop))],
         ),
     ];
+    // a maker's model: its own bodies (compiled faces) in place of the boxes, and its own
+    // underside for the table plane (the record's height is the published one, rounded)
+    let mut table = table;
+    let model = match rec.words.get("model") {
+        Some(mname) => {
+            let m = crate::model::get(mname).ok_or_else(|| {
+                refuse(
+                    &rec.name,
+                    format!("its model `{mname}` is not built in"),
+                    "compile it (forge-workholding-builder's wh_compile)",
+                )
+            })?;
+            bodies = model_bodies(m, a, s0 - tb, s1 + tb, mid_o, bed);
+            table = bed
+                + m.groups
+                    .iter()
+                    .map(|g| g.tight_min[2])
+                    .fold(f64::INFINITY, f64::min);
+            Some(m)
+        }
+        None => None,
+    };
     let mut envelope = Vec::new();
     if t.is_none() {
         envelope.push("jaw thickness");
@@ -218,6 +240,18 @@ pub fn vise_with(
         ["x", "y"][a],
         size[a]
     )];
+    if let Some(m) = model {
+        notes.push(format!(
+            "its bodies are the maker's model {} ({}): the checker's faces compiled from it, and its own underside on the table at z = {table:.3}",
+            m.name, m.step
+        ));
+        if m.groups.iter().any(|g| g.moves == crate::model::Moves::Unknown) {
+            notes.push(
+                "parts whose motion the model does not say (the drive) are placed both ways, fixed and with the jaw, and both are checked"
+                    .into(),
+            );
+        }
+    }
     if !envelope.is_empty() {
         notes.push(format!(
             "a conservative envelope: the maker does not publish its {} (measure them and give them with the vise for its exact bodies){}",
@@ -318,7 +352,7 @@ pub fn vise_with(
     // clamp axis along +x), posed onto the body's box; only when the box is the exact body (a
     // conservative envelope is not the part's shape)
     if t.is_some() && !deep {
-        for b in &mut bodies {
+        for b in bodies.iter_mut().filter(|b| b.exact.is_none()) {
             b.part = rec.parts.get(&b.name).cloned();
             if b.part.is_some() {
                 let (lo, hi) = b.bounds();
@@ -339,6 +373,75 @@ pub fn vise_with(
         held: vec![(stock.min, [stock.max[0], stock.max[1], top])],
         notes,
     })
+}
+
+/// A model's bodies placed: the device's frame (x along the clamp axis from the fixed jaw's face,
+/// y across centred, z up from the bed) turned onto the clamp axis `a` (x, or y by a quarter
+/// turn about z), its fixed jaw's face at `fx` along it, the moving jaw's at `mx`, centred at
+/// `mid` across, the bed at z `bed`. Each body's prims are its own box (an envelope, for drawing
+/// and quick looks); `exact` points the checker at its compiled faces.
+fn model_bodies(m: &crate::model::Model, a: usize, fx: f64, mx: f64, mid: f64, bed: f64) -> Vec<Body> {
+    use crate::model::Moves;
+    let pose = |along: f64| {
+        if a == 0 {
+            Pose::shift([along, mid, bed])
+        } else {
+            // (x, y, z) to (−y, x, z): the device's x along +y
+            Pose::quarter_z(1, [mid, along, bed])
+        }
+    };
+    let travel = mx - fx - m.opening;
+    let mut out = Vec::new();
+    for g in &m.groups {
+        let ways: Vec<(String, f64)> = match g.moves {
+            Moves::Fixed => vec![(g.name.clone(), 0.0)],
+            Moves::WithJaw => vec![(g.name.clone(), travel)],
+            Moves::Unknown => vec![
+                (format!("{} (fixed)", g.name), 0.0),
+                (format!("{} (with the jaw)", g.name), travel),
+            ],
+        };
+        for (name, d) in ways {
+            let p = pose(fx + d);
+            let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+            for i in 0..8 {
+                let c = [
+                    if i & 1 == 0 {
+                        g.tight_min[0]
+                    } else {
+                        g.tight_max[0]
+                    },
+                    if i & 2 == 0 {
+                        g.tight_min[1]
+                    } else {
+                        g.tight_max[1]
+                    },
+                    if i & 4 == 0 {
+                        g.tight_min[2]
+                    } else {
+                        g.tight_max[2]
+                    },
+                ];
+                let w = p.point(c);
+                for k in 0..3 {
+                    lo[k] = lo[k].min(w[k]);
+                    hi[k] = hi[k].max(w[k]);
+                }
+            }
+            let mut b = Body::new(name, g.role, vec![Prim::aabb(lo, hi)]);
+            if !g.mesh.is_empty() {
+                b.part = Some(g.mesh.clone());
+                b.part_pose = Some(p);
+            }
+            b.exact = Some(crate::Exact {
+                model: m.name.clone(),
+                group: g.name.clone(),
+                pose: p,
+            });
+            out.push(b);
+        }
+    }
+    out
 }
 
 /// A dovetail fixture (5-axis): the stock's underside carries a dovetail tenon `tenon` wide
@@ -885,6 +988,7 @@ pub fn custom(name: &str, rec: &Record, pose: &Pose, held: Vec<(V3, V3)>) -> Res
             part: b.part.clone(),
             // the part is drawn in the fixture's own frame, as its bodies are
             part_pose: b.part.as_ref().map(|_| *pose),
+            exact: None,
         })
         .collect();
     let mut p = Placed {
@@ -916,6 +1020,10 @@ pub fn pattern(p: &Placed, poses: &[Pose]) -> Vec<Placed> {
                     .map(|b| Body {
                         prims: b.prims.iter().map(|x| x.posed(q)).collect(),
                         part_pose: b.part_pose.map(|pp| pp.then(q)),
+                        exact: b.exact.as_ref().map(|e| crate::Exact {
+                            pose: e.pose.then(q),
+                            ..e.clone()
+                        }),
                         ..b.clone()
                     })
                     .collect(),

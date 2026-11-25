@@ -2,9 +2,11 @@
 //! (`lower`); setups, stock, operations and the checks build on it.
 pub mod adaptive;
 pub mod bore;
+pub mod enclose;
 pub mod engage;
 pub mod fit;
 pub mod fixture;
+pub mod fixture_model;
 pub mod hop;
 pub mod leads;
 pub mod life;

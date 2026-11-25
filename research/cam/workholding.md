@@ -98,6 +98,31 @@ clearance (closed form over boxes and cylinders), and the body that sets it.
   table, the body's length and width, where before there was a 20 mm slab between the jaws.
   The soft-jaw setups' bed slab is 50 deep, where it was 20. bracket_cam.fg and manifold_cam.fg
   certify with byte-identical NC.
+- Real models, not boxes (branch cam/workholding-haas; David: "does collision check use the exact
+  real models?"). Once a maker's model of a device exists, every clearance and collision check in
+  the certified path uses that body:
+  - `forge_cam::enclose` gives a face `lower` cannot take exactly its own surface over a
+    parameter box that encloses it, proven from the face's box (a plane's and a ruled face's
+    boundary hull; the kernel's own extent for spheres and tori). A superset of the face, so a
+    proven clearance holds and only an unproven hit can be added.
+  - A procedural or NURBS face is forge-mesh's triangles, each certified within the chord, as
+    planar faces of mu = the chord. A face the mesh cannot settle is refused: nothing falls back
+    to a box.
+  - `forge-workholding-builder::compile` does this once per model and writes the faces as text
+    (`forge_cam::fixture_model`, every number f64's shortest round-trip form). CAM reads that
+    text, so importing a STEP (0.3 s for the Haas vise, as long as a whole document's CAM) never
+    happens in a run, and a clone without the LFS objects still checks against the real device.
+    `model_bodies` poses each body by a turn that permutes the axes (exact in f64) and a shift.
+  - A body whose motion the model does not state (a vise's screw and nut) is placed both ways,
+    fixed and with the moving jaw, and both are checked.
+  - haas-05-0404 (Haas Tooling's 6 in CrossOver vise): 707 faces exact, 219 enclosed, 34 meshed
+    as 1812 triangles; 3522 checker faces placed, 988 kB of text (172 kB packed); a document
+    certifies with it in 0.16 s.
+  - What still uses boxes, with whose area it is: the leftover reason "held by the fixture"
+    (forge-cam-lang, CAM-CORE: a box there excuses more leftover than the body would, so it
+    wants the faces); the in-machine collision display and its checks (CAM-SIM, rebuilding on
+    `Fixture.placed` and `table_z`); the JSON reply's `pieces` and the UI's drawing (display).
+    Nothing in the certified path (G2) does: `certify_fixtured` takes the faces.
 - Every body an obstacle in the certified checker (G2, today's path) and in the machine
   simulation [CAM-MACHINE: SetupSpec.fixture gets cylinders and a body name per prim; posing
   with the table is theirs].

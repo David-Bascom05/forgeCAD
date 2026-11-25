@@ -15,6 +15,8 @@ forge-tooling = { path = "../forge-tooling" }
 forge-dirs = { path = "../forge-dirs" }
 forge-lang = { path = "../../interface/forge-lang" }
 forge-mesh = { path = "../forge-mesh" }
+forge-git = { path = "../forge-git" }
+forge-workholding-builder = { path = "../../interface/forge-workholding-builder" }
 forge-cam = { path = "../forge-cam" }
 forge-post = { path = "../forge-post" }
 

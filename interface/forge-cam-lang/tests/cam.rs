@@ -2204,3 +2204,53 @@ fn a_vise_from_the_workholding_library_or_the_old_record() {
         cam.errors
     );
 }
+
+#[test]
+fn a_vise_with_a_makers_model_is_checked_against_its_real_bodies() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2)), origin: \"top-center\", tol: 0.01, fixture: vise(\"haas-vise-05-0404\", across: \"x\", clamp: 15, clearance: 1))\nskim = facing(op1, tool: t1, to: 19.95, step: 1)\nprog = program(op1, post: \"fanuc\")\n";
+    let cam = forge_cam_lang::run(src, &dir);
+    assert!(cam.ok, "{:?}", cam.errors);
+    let f = cam.setup_view(0).unwrap().fixture.unwrap();
+    // the real bodies, not boxes: every one of them has compiled faces, none fell back
+    assert!(f.enveloped.is_empty(), "{:?}", f.enveloped);
+    assert!(
+        f.pieces.iter().all(|p| p.0.starts_with("parallel")),
+        "{:?}",
+        f.pieces.iter().map(|p| &p.0).collect::<Vec<_>>()
+    );
+    let names: Vec<&str> = f.shaped.iter().map(|s| s.0.as_str()).collect();
+    for n in ["base", "fixed jaw", "moving jaw"] {
+        assert!(names.contains(&n), "{n} in {names:?}");
+    }
+    // the drive's motion is unknown: both places are checked
+    assert!(
+        names.iter().any(|n| n.contains("drive (fixed)"))
+            && names.iter().any(|n| n.contains("drive (with the jaw)"))
+    );
+    // the model's own faces, far more than a box's six
+    assert!(f.faces().len() > 2000, "{}", f.faces().len());
+    assert!(f.faces().iter().all(|x| f.piece_of(x.id).is_some()));
+    // the vise stands on the table: its own underside, the record's published height
+    // (117.20284, rounded) below the jaw top, which grips the stock's top 15 mm
+    assert!(
+        (f.table_z.unwrap() - (f.jaw_top - 117.20284)).abs() < 1e-3,
+        "{:?}",
+        f.table_z
+    );
+    let p = cam
+        .setup_view(0)
+        .unwrap()
+        .fixture
+        .unwrap()
+        .placed
+        .as_ref()
+        .unwrap();
+    let base = p.bodies.iter().find(|b| b.name == "base").unwrap();
+    assert!(
+        (base.bounds().0[2] - f.table_z.unwrap()).abs() < 1e-6,
+        "{:?}",
+        base.bounds()
+    );
+    assert!(base.exact.is_some() && base.part.as_deref() == Some("haas-tooling/05-0404/base.stl"));
+}

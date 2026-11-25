@@ -7,19 +7,24 @@ name = "haas-vise-05-0404"
 kind = "vise"
 vendor = "Haas"
 product = "6 in single-station CrossOver vise, 9 in opening (PN 05-0404, Haas Workholding by Kurt: the DX6)"
-note = "Haas sells it (haastooling.com, Haas Automation's own store); haascnc.com refused automated reading; height in conflict: the page gives OAH 110.74 but BH 73.03 + JH 44.07 = 117.10 (and Penn Tool lists 117.09 for the Kurt DX6): measure it; VO 225.0 is the rated opening, J1 0-230.6 the jaws' range (used); OAL with handle 463.75"
-unknown = ["jaw_thickness"]
-conflict = ["height"]
+model = "haas-05-0404"
+note = "Haas sells it (haastooling.com, Haas Automation's own store); haascnc.com refused automated reading. Its bodies are Haas Tooling's own model of it (data/models.toml haas-05-0404), which settles what the page left in conflict: the page gives OAH 110.74 but BH 73.03 + JH 44.07 = 117.10 (Penn Tool lists 117.09 for the Kurt DX6); the model measures 117.20 from its base's underside to the jaw plates' top, and its jaw plates 44.069 high (the page's 44.07), 18.415 thick, 151.61 wide (the page's JW 150.0, kept as the published jaw width). VO 225.0 is the rated opening, J1 0-230.6 the jaws' range (used; the model is drawn open 228.60); OAL with handle 463.75"
 jaw_width = 150
-jaw_height = 44.07
+jaw_height = 44.06902
+jaw_thickness = 18.41501
 max_opening = 230.6
 body_length = 426.97
 body_width = 187.73
+height = 117.20284
 weight = 35
 [[workholding.cite]]
-fields = ["jaw_width", "jaw_height", "max_opening", "body_length", "body_width", "weight"]
+fields = ["jaw_width", "max_opening", "body_length", "body_width", "weight"]
 source = "https://www.haastooling.com/p/05-0404 (JW 150.0, JH 44.07, J1 0.0-230.6, BL 426.97, OAW 187.73, 35.0 kg)"
 taken = "2026-11-23"
+[[workholding.cite]]
+fields = ["jaw_height", "jaw_thickness", "height"]
+source = "https://www.haastooling.com/p/05-0404 (the 3D model Haas offers there; the file as the repo owner uploaded it, 05-0404.STEP, sha256 21af355a572df8ef225eb419c4a873836edc0f4704f39c1f0398997be2300cbc, data/models/haas-tooling/05-0404/): measured on it, the jaw plate D60-315 from y 70.45959 to 114.52861 and x -90.47481 to -72.05980, the body DX6-1 down to y -2.67423"
+taken = "2026-11-25"
 
 [[workholding]]
 name = "haas-vise-05-0958"
