@@ -751,6 +751,81 @@ fn orient_blends(p: &mut Proto, blends: &[usize]) {
     }
 }
 
+/// A read body's measure checked once more, past `finish`'s mass-against-mesh (which allows 1%):
+/// a volume not above zero is a body inside out, refused; each face's area from the body's
+/// integrals against the face's own (`mass::face_area`, a separate integration) to 1e-4, else
+/// the body is not called verified. A cone face of a Haas part measured 421 mm2 short in the
+/// body's integrals and still passed the mesh at 0.8% (research/parasolid/results.md).
+fn cross_check(
+    mut body: forge_topo::Body,
+    mass: Option<forge_topo::mass::MassProps>,
+) -> Result<(forge_topo::Body, Option<forge_topo::mass::MassProps>), String> {
+    let Some(m) = &mass else { return Ok((body, mass)) };
+    if !(m.volume > 0.0) {
+        return Err(format!("it measures inside out (volume {:.6e})", m.volume));
+    }
+    if body.unverified.is_none() {
+        // each face's drawn area against its integral: a drawing at chord c is within c times
+        // the face's turn of it, so a face off by more than 1% and the chord's share is wrong
+        let bx = body.edge_ids().fold(forge_math::Box3::EMPTY, |x, e| {
+            let ed = body.edge(e);
+            x.hull(&ed.curve.bbox(ed.range))
+        });
+        let diag = if bx.is_empty() || !bx.diagonal().is_finite() {
+            body.faces_box().diagonal()
+        } else {
+            bx.diagonal()
+        };
+        let chord = 1e-3 * diag;
+        let q = forge_mesh::Quality {
+            chord,
+            ..forge_mesh::Quality::default()
+        };
+        if let Ok(mesh) = forge_mesh::tessellate::tessellate_tolerant(&body, &q) {
+            let mut drawn = vec![0.0; body.faces.len()];
+            for (t, &f) in mesh.triangles.iter().zip(&mesh.face_of) {
+                let [a, b, c] = t.map(|i| mesh.positions[i as usize]);
+                drawn[f as usize] += 0.5 * (b - a).cross(c - a).length();
+            }
+            // each edge's drawn length: a face's chords stray from its edges by the chord at most
+            let edge_len: Vec<f64> = mesh
+                .edges
+                .iter()
+                .map(|p| {
+                    p.windows(2)
+                        .map(|w| mesh.positions[w[0] as usize].distance(mesh.positions[w[1] as usize]))
+                        .sum()
+                })
+                .collect();
+            for &(f, a) in &m.faces {
+                let d = drawn[f.index()];
+                let rim: f64 = body
+                    .face(f)
+                    .loops
+                    .iter()
+                    .flat_map(|&l| body.lp(l).coedges())
+                    .map(|c| edge_len.get(body.coedge(c).edge.index()).copied().unwrap_or(0.0))
+                    .sum();
+                let curved = !matches!(body.face(f).surface, forge_geom::Surface::Plane(_));
+                let allow = 0.01 * d.abs().max(a.abs())
+                    + 2.0 * chord * rim
+                    + if curved {
+                        chord * (d.abs() + a.abs()).sqrt()
+                    } else {
+                        0.0
+                    };
+                if !mesh.unsettled.contains(&(f.index() as u32)) && (a - d).abs() > allow {
+                    body.unverified = Some(format!(
+                        "a face's area is {a:.6e} in the body's integrals but drawn {d:.6e}: one of the two is wrong, and which is not known"
+                    ));
+                    break;
+                }
+            }
+        }
+    }
+    Ok((body, mass))
+}
+
 pub(crate) fn import(b: &[u8], lim: &Limits, place: bool) -> Result<Imported, ImportError> {
     let s = super::nodes::read(b, lim).map_err(ImportError::Xt)?;
     let mut refusals = Vec::new();
@@ -823,7 +898,7 @@ pub(crate) fn import(b: &[u8], lim: &Limits, place: bool) -> Result<Imported, Im
                 proto.vtol.resize(proto.verts.len(), 0.0);
             }
             match built {
-                Ok(()) => match finish(proto, res, lim, &mut stats) {
+                Ok(()) => match finish(proto, res, lim, &mut stats).and_then(|(b, m)| cross_check(b, m)) {
                     Ok((body, mass)) => solids.push(Solid {
                         entity: pl.body,
                         name: pl.name.clone(),

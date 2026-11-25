@@ -288,13 +288,17 @@ fn main() {
         let show = |tag: &str, v: &[Sum]| {
             for (k, s) in v.iter().enumerate() {
                 eprintln!(
-                    "{tag} {k}: faces {} vol {:.6} area {:.4} valid {} box {:?} {:?}",
+                    "{tag} {k}: faces {} vol {:.6} area {:.4} valid {} box {:?} {:?} {:?}",
                     s.faces,
                     s.volume,
                     s.area,
                     s.valid,
                     s.bx.map(|x| (x * 1000.0).round() / 1000.0),
-                    s.kinds
+                    s.kinds,
+                    s.kind_area
+                        .iter()
+                        .map(|(k, a)| format!("{k} {a:.3}"))
+                        .collect::<Vec<_>>()
                 );
             }
         };

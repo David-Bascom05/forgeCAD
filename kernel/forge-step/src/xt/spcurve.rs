@@ -180,7 +180,11 @@ impl ProceduralCurve for OnSurface {
                 u = Interval::new(u.lo.min(c.x), u.hi.max(c.x));
                 v = Interval::new(v.lo.min(c.y), v.hi.max(c.y));
             }
-            return s.bbox(Box2::new(u, v));
+            let b = s.bbox(Box2::new(u, v));
+            // a surface's box can come back NaN (a cone's, over some spans): the samples' then
+            if b.diagonal().is_finite() {
+                return b;
+            }
         }
         // samples, grown by how far the curve can stray between them at its greatest speed
         let n = 64;

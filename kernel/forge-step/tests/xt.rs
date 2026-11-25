@@ -327,3 +327,21 @@ fn a_file_in_a_schema_it_does_not_carry_reads_by_the_known_layouts() {
         1e-9
     ));
 }
+
+/// SP-curves on a cone (a Haas ST-20 part, research/parasolid/extract.py --bare): the cone's box
+/// over their parameters came back NaN, so the face measured 421 mm2 short and the body 1.45%
+/// under its STEP export's 331084.582 mm3 while passing the 1% mesh check. Each edge's box now
+/// finite, the volume the STEP's.
+#[test]
+fn sp_curves_on_a_cone_have_boxes_and_the_part_its_volume() {
+    let imp = import(&data("haas_cone_sp.x_t"), &Limits::default()).unwrap();
+    assert!(imp.refusals.is_empty(), "{:?}", imp.refusals);
+    let s = &imp.solids[0];
+    for e in s.body.edge_ids() {
+        let ed = s.body.edge(e);
+        let bx = forge_geom::CurveGeom::bbox(&ed.curve, ed.range);
+        assert!(bx.diagonal().is_finite(), "{e:?}: {bx:?}");
+    }
+    let v = s.mass.as_ref().map(|m| m.volume).expect("measured");
+    assert!(near(v, 331084.582, 1e-6), "{v}");
+}
