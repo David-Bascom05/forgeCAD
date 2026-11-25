@@ -11,7 +11,13 @@
 //! Threads an op starts (`forge_math::par`'s) share its budget and its watch: on the first, the
 //! bank becomes one all its threads draw slices from, each giving back what it holds of its slice
 //! when it ends, so what is spent is counted whole wherever it was spent. A thread that finds the
-//! shared bank empty marks it dry, and the op, whichever thread looks (`exhausted`), refuses.
+//! shared bank empty works on owing what it spends (`debt`) until the op is certainly past its
+//! budget, whatever its other threads hold of their slices (the debt at least what they hold):
+//! then it marks the bank dry, and the op, whichever thread looks (`exhausted`), refuses. So an op
+//! is cut short only past its budget, and its verdict is its whole spend's: the same on any
+//! machine, whatever its threads (an op within a few slices of its budget refused on one machine
+//! and answered on another, as threads held slices aside: the independent review of
+//! ks/far-line-torus, 2026-11-25).
 
 use std::cell::Cell;
 use std::sync::Arc;
@@ -25,6 +31,8 @@ thread_local! {
     static DRAWN: Cell<u64> = const { Cell::new(u64::MAX) };
     /// What is left beyond it (while no bank is shared).
     static BANK: Cell<u64> = const { Cell::new(0) };
+    /// What was spent past the bank (while no bank is shared): see `Money::debt`.
+    static DEBT: Cell<u64> = const { Cell::new(0) };
     /// The slice last handed out (what a watch is told was spent at the next).
     static GIVEN: Cell<u64> = const { Cell::new(0) };
     static LIMITED: Cell<bool> = const { Cell::new(false) };
@@ -39,9 +47,6 @@ thread_local! {
     /// What the budget in force allows in all (its `scoped` or `isolated` start, less a `cap_total`
     /// cut), while no bank is shared.
     static TOTAL: Cell<u64> = const { Cell::new(u64::MAX) };
-    /// What a `cap_total` cut could not take at once (the op's other threads held it in hand):
-    /// paid from the bank before anything else is taken from it, while no bank is shared.
-    static OWED: Cell<u64> = const { Cell::new(0) };
     /// Whether the budget in force was cut by `cap_total` (once only), while no bank is shared.
     static CAPPED: Cell<bool> = const { Cell::new(false) };
     /// How many times `cap_total` was asked on this thread, and the last total asked: what a
@@ -60,14 +65,51 @@ pub fn slice_for_tests(n: u64) {
 /// An op's bank, shared by its threads.
 #[derive(Debug)]
 struct Shared {
-    bank: AtomicU64,
-    /// A thread found it empty (or the watch stopped): the op's work is cut short somewhere.
+    money: std::sync::Mutex<Money>,
+    /// The op is certainly past its budget (or the watch stopped): its work is cut short.
     dry: AtomicBool,
-    /// `TOTAL`, `OWED` and `CAPPED` for the op's threads together.
+    /// `TOTAL` and `CAPPED` for the op's threads together.
     total: AtomicU64,
-    owed: std::sync::Mutex<u64>,
-    owing: AtomicBool,
     capped: AtomicBool,
+}
+
+/// What an op's threads draw on (locked only where a slice is handed out or given back, or
+/// spent past: once a slice's work). What the op has spent, all told, is its budget less `bank`,
+/// less what its threads hold unspent of their slices, plus `debt`.
+#[derive(Debug, Default)]
+struct Money {
+    /// Not yet handed out.
+    bank: u64,
+    /// Spent past the bank: a thread that found it empty went on, owing; paid first from what
+    /// threads give back. (Where there is debt the bank is empty.)
+    debt: u64,
+    /// The slices the op's threads hold, handed out and not yet spent through or given back:
+    /// at most what they hold unspent.
+    out: u64,
+}
+
+impl Shared {
+    fn money<R>(&self, f: impl FnOnce(&mut Money) -> R) -> R {
+        f(&mut self.money.lock().unwrap_or_else(|e| e.into_inner()))
+    }
+}
+
+/// `f` of this thread's op's money: the shared bank's, or this thread's own.
+fn with_money<R>(f: impl FnOnce(&mut Money) -> R) -> R {
+    match shared() {
+        Some(s) => s.money(f),
+        None => {
+            let mut m = Money {
+                bank: BANK.get(),
+                debt: DEBT.get(),
+                out: 0,
+            };
+            let r = f(&mut m);
+            BANK.set(m.bank);
+            DEBT.set(m.debt);
+            r
+        }
+    }
 }
 
 /// What the reading of one solid from a file may spend, where its caller sets no other (the import's
@@ -160,155 +202,18 @@ fn with_watch<R>(f: impl FnOnce(&Option<Arc<Watch>>) -> R) -> R {
     })
 }
 
-/// What the bank holds beyond the slice in hand.
-fn bank() -> u64 {
-    match shared() {
-        Some(s) => s.bank.load(Ordering::Relaxed).saturating_sub(owed()),
-        None => BANK.get().saturating_sub(OWED.get()),
-    }
-}
-
-/// How many times `cap_total` was asked on this thread, and the total last asked: a cache of an
-/// answer whose finding asked it keeps that, to ask it again where it answers from memory (the
-/// cap would otherwise hang on whether the answer was fresh).
-pub fn caps_asked() -> (u64, u64) {
-    ASKED.get()
-}
-
-/// What a `cap_total` cut still owes the bank.
-fn owed() -> u64 {
-    match shared() {
-        Some(s) => {
-            if s.owing.load(Ordering::Relaxed) {
-                *s.owed.lock().unwrap_or_else(|e| e.into_inner())
-            } else {
-                0
-            }
-        }
-        None => OWED.get(),
-    }
-}
-
-/// What the budget in force allows in all (see `TOTAL`).
-fn total() -> u64 {
-    match shared() {
-        Some(s) => s.total.load(Ordering::Relaxed),
-        None => TOTAL.get(),
-    }
-}
-
-/// What the budget in force has spent (on all the op's threads, their slices back in the bank).
-fn spent_of_total() -> u64 {
-    let t = total();
-    t - (LEFT.get().saturating_add(bank())).min(t)
-}
-
-/// The op's budget, from now on, `m` in all where it allowed more: what it allowed past `m` taken
-/// out of the bank (and the slice in hand), what other threads hold in theirs owed, paid first
-/// from what they put back; an op past `m` already is over (`exhausted`). Once per budget: the
-/// first call cuts, later ones do nothing. For a path that may run long and may still answer
-/// (a branch carried onto a spline patch's rim, intcurve.rs): whether it is taken is decided by
-/// the op's geometry, and what is spent does not hang on threads or order, so the verdict is the
-/// same everywhere. Nothing inside `uncounted`, or with no budget.
-pub fn cap_total(m: u64) {
-    let (n, _) = ASKED.get();
-    ASKED.set((n.wrapping_add(1), m));
-    if FREE.get() || !LIMITED.get() {
-        return;
-    }
-    let mut cut = match shared() {
-        Some(s) => {
-            if s.capped.swap(true, Ordering::Relaxed) {
-                return;
-            }
-            let t = s.total.load(Ordering::Relaxed);
-            if t <= m {
-                return;
-            }
-            s.total.store(m, Ordering::Relaxed);
-            let want = t - m;
-            let was = s
-                .bank
-                .try_update(Ordering::Relaxed, Ordering::Relaxed, |b| Some(b - b.min(want)))
-                .unwrap_or(0);
-            want - was.min(want)
-        }
-        None => {
-            if CAPPED.replace(true) {
-                return;
-            }
-            let t = TOTAL.get();
-            if t <= m {
-                return;
-            }
-            TOTAL.set(m);
-            let want = t - m;
-            let b = BANK.get();
-            BANK.set(b - b.min(want));
-            want - b.min(want)
-        }
-    };
-    // from the slice in hand (allowed, not spent: `spent` unmoved)
-    let l = LEFT.get();
-    let t = l.min(cut);
-    LEFT.set(l - t);
-    DRAWN.set(DRAWN.get().wrapping_sub(t));
-    cut -= t;
-    if cut > 0 {
-        match shared() {
-            Some(s) => {
-                *s.owed.lock().unwrap_or_else(|e| e.into_inner()) += cut;
-                s.owing.store(true, Ordering::Relaxed);
-            }
-            None => OWED.set(OWED.get() + cut),
-        }
-    }
-}
-
-/// Up to `want` from the bank: what it gave.
-fn bank_take(want: u64) -> u64 {
-    match shared() {
-        Some(s) => {
-            // (a cut's debt first: see cap_total)
-            if s.owing.load(Ordering::Relaxed) {
-                let mut o = s.owed.lock().unwrap_or_else(|e| e.into_inner());
-                let was = s
-                    .bank
-                    .try_update(Ordering::Relaxed, Ordering::Relaxed, |b| Some(b - b.min(*o)))
-                    .unwrap_or(0);
-                *o -= was.min(*o);
-                if *o == 0 {
-                    s.owing.store(false, Ordering::Relaxed);
-                }
-            }
-            let was = s
-                .bank
-                .try_update(Ordering::Relaxed, Ordering::Relaxed, |b| Some(b - b.min(want)))
-                .unwrap_or(0);
-            was.min(want)
-        }
-        None => {
-            let o = OWED.get();
-            if o > 0 {
-                let b = BANK.get();
-                BANK.set(b - b.min(o));
-                OWED.set(o - b.min(o));
-            }
-            let b = BANK.get();
-            let t = b.min(want);
-            BANK.set(b - t);
-            t
-        }
-    }
+/// What the bank holds beyond the slice in hand, less what was spent past it.
+fn bank_net() -> i128 {
+    with_money(|m| i128::from(m.bank) - i128::from(m.debt))
 }
 
 /// `n` to spend from now: a slice in hand, the rest in the bank (this thread's own).
 fn set_total(n: u64) {
-    TOTAL.set(n);
-    OWED.set(0);
-    CAPPED.set(false);
     let s = n.min(SLICE_NOW.get());
     SHARED.with(|x| x.set(None));
+    DEBT.set(0);
+    TOTAL.set(n);
+    CAPPED.set(false);
     DRAWN.set(spent().wrapping_add(s));
     LEFT.set(s);
     BANK.set(n - s);
@@ -317,10 +222,10 @@ fn set_total(n: u64) {
 
 /// No limit again.
 fn end() {
-    TOTAL.set(u64::MAX);
-    OWED.set(0);
-    CAPPED.set(false);
     SHARED.with(|x| x.set(None));
+    DEBT.set(0);
+    TOTAL.set(u64::MAX);
+    CAPPED.set(false);
     DRAWN.set(spent().wrapping_add(u64::MAX));
     LEFT.set(u64::MAX);
     BANK.set(0);
@@ -342,6 +247,8 @@ pub fn limited() -> bool {
 pub struct Budget {
     /// The outer budget's left when this began, or none.
     outer: Option<u64>,
+    /// This one's left when it began.
+    start: u64,
     /// Begun on a shared bank: the op's, nothing of its own.
     within: bool,
 }
@@ -352,6 +259,7 @@ pub fn scoped(most: u64) -> Budget {
     if FREE.get() || shared().is_some() {
         return Budget {
             outer: None,
+            start: 0,
             within: true,
         };
     }
@@ -359,7 +267,11 @@ pub fn scoped(most: u64) -> Budget {
     let start = outer.map_or(most, |o| o.min(most));
     set_total(start);
     LIMITED.set(true);
-    Budget { outer, within: false }
+    Budget {
+        outer,
+        start,
+        within: false,
+    }
 }
 
 impl Drop for Budget {
@@ -370,9 +282,10 @@ impl Drop for Budget {
         // (the threads it started are joined: what they held of their slices is back in the bank)
         match self.outer {
             Some(o) => {
-                // (what was spent: a cap_total cut was allowed, not spent)
-                let spent = spent_of_total();
-                set_total(o.saturating_sub(spent));
+                // (past the start where it ran over: its debt is the outer's too; a cap_total cut
+                // was allowed, not spent)
+                let _ = self.start;
+                set_total(o.saturating_sub(spent_of_total()));
             }
             None => end(),
         }
@@ -406,7 +319,11 @@ pub fn spend_many(n: u64) {
 #[inline(never)]
 fn overdraw(n: u64) {
     DRAWN.set(DRAWN.get().wrapping_add(n));
-    bank_take(n);
+    with_money(|m| {
+        let t = m.bank.min(n);
+        m.bank -= t;
+        m.debt += n - t;
+    });
 }
 
 /// What this thread has spent, all told (wrapping; a difference of two readings is what was spent
@@ -425,15 +342,8 @@ pub fn over() -> bool {
 /// `over`, or the op's shared bank run dry on another of its threads (whose work is then cut
 /// short): what an op asks at its end, before it answers.
 pub fn exhausted() -> bool {
-    over() || shared().is_some_and(|s| s.dry.load(Ordering::Relaxed)) || owed() > bank_held()
-}
-
-/// The bank as it holds, before a cut's debt is paid from it.
-fn bank_held() -> u64 {
-    match shared() {
-        Some(s) => s.bank.load(Ordering::Relaxed),
-        None => BANK.get(),
-    }
+    // (or, at the op's end, its threads joined: what it spent, all told, its budget or more)
+    over() || shared().is_some_and(|s| s.dry.load(Ordering::Relaxed)) || LIMITED.get() && left_net() <= 0
 }
 
 /// The slice in hand is spent: tell the watch, and hand out the next if there is one and no stop.
@@ -450,16 +360,28 @@ fn refill() -> bool {
         }
         None => false,
     });
-    GIVEN.set(0);
+    let given = GIVEN.replace(0);
     let sh = shared();
-    if stopped {
-        match &sh {
-            Some(s) => s.bank.store(0, Ordering::Relaxed),
-            None => BANK.set(0),
+    let want = SLICE_NOW.get();
+    // the slice spent through, the next handed out; or, the bank empty, whether the op is certainly
+    // past its budget: owing at least all its other threads hold
+    let (s, past) = with_money(|m| {
+        if sh.is_some() {
+            m.out -= given.min(m.out);
         }
-    }
-    let s = if stopped { 0 } else { bank_take(SLICE_NOW.get()) };
+        if stopped {
+            m.bank = 0;
+        }
+        let s = m.bank.min(want);
+        m.bank -= s;
+        m.out += if sh.is_some() { s } else { 0 };
+        (s, stopped || m.debt >= m.out)
+    });
     if s == 0 {
+        if !past {
+            // not yet certain: on, owing what it spends (each `over` looks again)
+            return true;
+        }
         if let Some(sh) = sh {
             sh.dry.store(true, Ordering::Relaxed);
         }
@@ -474,7 +396,74 @@ fn refill() -> bool {
 /// How many are left (`u64::MAX` less what was spent, with no limit set): on a shared bank, what
 /// the op's other threads hold of their slices aside.
 pub fn left() -> u64 {
-    LEFT.get().saturating_add(bank())
+    left_net().clamp(0, i128::from(u64::MAX)) as u64
+}
+
+/// `left`, less what was spent past the bank (below 0 where the op ran past its budget).
+fn left_net() -> i128 {
+    i128::from(LEFT.get()) + bank_net()
+}
+
+/// What the budget in force allows in all (see `TOTAL`).
+fn total() -> u64 {
+    match shared() {
+        Some(s) => s.total.load(Ordering::Relaxed),
+        None => TOTAL.get(),
+    }
+}
+
+/// What the budget in force has spent, all told (its threads joined): its total less what is left.
+fn spent_of_total() -> u64 {
+    (i128::from(total()) - left_net()).max(0) as u64
+}
+
+/// How many times `cap_total` was asked on this thread, and the total last asked: a cache of an
+/// answer whose finding asked it keeps that, to ask it again where it answers from memory (the
+/// cap would otherwise hang on whether the answer was fresh).
+pub fn caps_asked() -> (u64, u64) {
+    ASKED.get()
+}
+
+/// The op's budget, from now on, `m` in all where it allowed more: as if it had started with `m`.
+/// What it allowed past `m` comes out of the bank, then the slice in hand, and what other threads
+/// hold of theirs is owed (`Money::debt`); an op past `m` already is over. Once per budget: later
+/// calls do nothing. For a path that may run long and may still answer (a branch ended at a
+/// spline patch's rim, intcurve.rs): whether it is taken is the op's geometry's, and the verdict
+/// is the op's whole spend's (see the module), so the same on any machine, thread or order.
+/// Nothing inside `uncounted`, or with no budget.
+pub fn cap_total(m: u64) {
+    let (n, _) = ASKED.get();
+    ASKED.set((n.wrapping_add(1), m));
+    if FREE.get() || !LIMITED.get() {
+        return;
+    }
+    let first = match shared() {
+        Some(s) => !s.capped.swap(true, Ordering::Relaxed),
+        None => !CAPPED.replace(true),
+    };
+    let t = total();
+    if !first || t <= m {
+        return;
+    }
+    match shared() {
+        Some(s) => s.total.store(m, Ordering::Relaxed),
+        None => TOTAL.set(m),
+    }
+    let mut cut = t - m;
+    cut -= with_money(|mo| {
+        let b = mo.bank.min(cut);
+        mo.bank -= b;
+        b
+    });
+    // from the slice in hand (allowed, not spent: `spent` unmoved)
+    let l = LEFT.get();
+    let h = l.min(cut);
+    LEFT.set(l - h);
+    DRAWN.set(DRAWN.get().wrapping_sub(h));
+    cut -= h;
+    if cut > 0 {
+        with_money(|mo| mo.debt += cut);
+    }
 }
 
 /// `f`'s evaluations not counted: a lazy cache's filling (a spline's seed grid, a face's box), which
@@ -514,7 +503,8 @@ impl Drop for Freed {
 /// on a thread sharing one), what it spends returned and charged nowhere else. For work whose
 /// spend must be its own whatever thread runs it (an item of a parallel step summed in item
 /// order: IMPORT-SPEED's `map_until`). A stop on this thread's watch reaches it as any budget.
-/// What `f` sees as over is `f`'s own budget, as for `scoped`.
+/// What `f` sees as over is `f`'s own budget, as for `scoped`; what it returns is what `f` spent,
+/// all told, past `limit` too.
 pub fn isolated<T>(limit: u64, f: impl FnOnce() -> T) -> (u64, T) {
     hand_down();
     // inside `uncounted`, the op's watch is out of reach here too
@@ -523,12 +513,12 @@ pub fn isolated<T>(limit: u64, f: impl FnOnce() -> T) -> (u64, T) {
         left: LEFT.get(),
         drawn: DRAWN.get(),
         bank: BANK.get(),
+        debt: DEBT.get(),
         given: GIVEN.get(),
+        total: TOTAL.get(),
+        capped: CAPPED.get(),
         limited: LIMITED.get(),
         free,
-        total: TOTAL.get(),
-        owed: OWED.get(),
-        capped: CAPPED.get(),
         watch: if free {
             WATCH.with(|w| w.take())
         } else {
@@ -563,11 +553,11 @@ struct Taken {
     left: u64,
     drawn: u64,
     bank: u64,
+    debt: u64,
     given: u64,
     limited: bool,
     free: bool,
     total: u64,
-    owed: u64,
     capped: bool,
     watch: Option<Arc<Watch>>,
     shared: Option<Arc<Shared>>,
@@ -579,12 +569,12 @@ impl Taken {
         LEFT.set(self.left);
         DRAWN.set(self.drawn);
         BANK.set(self.bank);
+        DEBT.set(self.debt);
         GIVEN.set(self.given);
+        TOTAL.set(self.total);
+        CAPPED.set(self.capped);
         LIMITED.set(self.limited);
         FREE.set(self.free);
-        TOTAL.set(self.total);
-        OWED.set(self.owed);
-        CAPPED.set(self.capped);
         WATCH.with(|w| w.set(self.watch.take()));
         SHARED.with(|x| x.set(self.shared.take()));
     }
@@ -595,8 +585,15 @@ struct Started(Taken);
 
 impl Drop for Started {
     fn drop(&mut self) {
+        // its slice held no more; what is unspent of it pays the op's debt first, then the bank
         if let Some(s) = shared() {
-            s.bank.fetch_add(LEFT.get(), Ordering::Relaxed);
+            let (given, left) = (GIVEN.get(), LEFT.get());
+            s.money(|m| {
+                m.out -= given.min(m.out);
+                let pay = m.debt.min(left);
+                m.debt -= pay;
+                m.bank += left - pay;
+            });
         }
         if let Some(w) = with_watch(|w| w.clone()) {
             w.spent
@@ -618,16 +615,19 @@ fn capture() -> Option<Box<dyn std::any::Any + Send>> {
     }
     let shared = limited.then(|| {
         shared().unwrap_or_else(|| {
+            // (the slice this thread holds is out from now on)
             let s = Arc::new(Shared {
-                bank: AtomicU64::new(BANK.get()),
+                money: std::sync::Mutex::new(Money {
+                    bank: BANK.get(),
+                    debt: DEBT.get(),
+                    out: GIVEN.get(),
+                }),
                 dry: AtomicBool::new(false),
                 total: AtomicU64::new(TOTAL.get()),
-                owed: std::sync::Mutex::new(OWED.get()),
-                owing: AtomicBool::new(OWED.get() > 0),
                 capped: AtomicBool::new(CAPPED.get()),
             });
             BANK.set(0);
-            OWED.set(0);
+            DEBT.set(0);
             SHARED.with(|x| x.set(Some(s.clone())));
             s
         })
@@ -644,12 +644,12 @@ fn enter(h: Box<dyn std::any::Any + Send>) -> Box<dyn std::any::Any> {
         left: LEFT.get(),
         drawn: DRAWN.get(),
         bank: BANK.get(),
+        debt: DEBT.get(),
         given: GIVEN.get(),
+        total: TOTAL.get(),
+        capped: CAPPED.get(),
         limited: LIMITED.get(),
         free: FREE.replace(false),
-        total: TOTAL.get(),
-        owed: OWED.get(),
-        capped: CAPPED.get(),
         watch: WATCH.with(|w| w.take()),
         shared: SHARED.with(|x| x.take()),
     };
@@ -658,11 +658,11 @@ fn enter(h: Box<dyn std::any::Any + Send>) -> Box<dyn std::any::Any> {
     DRAWN.set(spent().wrapping_add(l));
     LEFT.set(l);
     BANK.set(0);
-    GIVEN.set(0);
-    // (a cut and its debt are the shared bank's: see cap_total)
+    DEBT.set(0);
+    // (a cut is the shared bank's: see cap_total)
     TOTAL.set(u64::MAX);
-    OWED.set(0);
     CAPPED.set(false);
+    GIVEN.set(0);
     LIMITED.set(limited);
     WATCH.with(|w| w.set(watch));
     SHARED.with(|x| x.set(shared));
@@ -856,7 +856,8 @@ mod tests {
                     super::spend_many(60);
                     super::over()
                 });
-                assert_eq!(n, 50);
+                // what it spent, all told: past its limit too (counted as owed, not lost)
+                assert_eq!(n, 60);
                 assert!(over);
             })
             .join()
@@ -866,10 +867,57 @@ mod tests {
         assert_eq!(super::left(), 900);
     }
 
+    /// An op whose threads hold slices aside is cut short only past its budget: its verdict is its
+    /// whole spend's, whatever its threads hold, so the same on any machine. Five threads spend
+    /// 100k each; a budget of the whole spend is past (refused), one more is not (answers), on one
+    /// thread or on five, with slices bigger than the budget (all of it in one thread's hand) or
+    /// smaller.
+    #[test]
+    fn an_op_is_cut_short_only_past_its_budget_whatever_its_threads_hold() {
+        for slice in [super::SLICE, 30_000, 1000] {
+            for threads in [0, 4] {
+                for (budget, past) in [
+                    (500_000, true),
+                    (500_001, false),
+                    (400_000, true),
+                    (2_000_000, false),
+                ] {
+                    super::slice_for_tests(slice);
+                    let _op = super::scoped(budget);
+                    let done = std::sync::atomic::AtomicU64::new(0);
+                    let work = || {
+                        for _ in 0..100 {
+                            super::spend_many(1000);
+                            if super::over() {
+                                return;
+                            }
+                        }
+                        done.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    };
+                    forge_math::par::scope(|s| {
+                        let hs: Vec<_> = (0..threads).map(|_| s.spawn(work)).collect();
+                        for _ in 0..(5 - threads) {
+                            work();
+                        }
+                        for h in hs {
+                            h.join().unwrap();
+                        }
+                    });
+                    let ctx = format!("slice {slice}, {threads} threads, budget {budget}");
+                    assert_eq!(super::exhausted(), past, "{ctx}");
+                    if !past {
+                        // nothing was cut short
+                        assert_eq!(done.load(std::sync::atomic::Ordering::Relaxed), 5, "{ctx}");
+                    }
+                }
+            }
+        }
+        super::slice_for_tests(super::SLICE);
+    }
+
     #[test]
     fn a_cap_cuts_the_budget_in_force_once_and_charges_only_what_was_spent() {
         let outer = super::scoped(u64::MAX >> 1);
-        let before = super::left();
         for slice in [100, super::SLICE] {
             super::slice_for_tests(slice);
             {
@@ -901,38 +949,44 @@ mod tests {
             assert!(super::exhausted(), "slice {slice}");
         }
         super::slice_for_tests(super::SLICE);
-        assert!(before > super::left());
         drop(outer);
     }
 
     /// Cut on any of an op's threads, while the others hold slices: the op is as if it had started
-    /// with the cap (its bank less what the cut took; owed where the threads held it in hand). As
-    /// for any budget shared by threads, within a few slices of the cap what the threads hold
-    /// decides; clear of it, the verdict is the spend's.
+    /// with the cap, so its verdict is its whole spend's against the cap, whatever its threads
+    /// hold: five items of 100k, the third cutting the op's budget at its start.
     #[test]
     fn a_cap_on_any_thread_is_the_ops_whatever_the_threads_hold() {
-        for (cap, over) in [(100_000, true), (50_000_000, false)] {
-            let _op = super::scoped(super::OP);
-            // five items of 100k, the third cutting the op's budget at its start
-            let work = |k: usize| {
-                if k == 2 {
-                    super::cap_total(cap);
-                }
-                for _ in 0..100 {
-                    super::spend_many(1000);
-                    if super::over() {
-                        break;
+        for threads in [0, 4] {
+            for (cap, past) in [
+                (500_000, true),
+                (500_001, false),
+                (100_000, true),
+                (50_000_000, false),
+            ] {
+                let _op = super::scoped(super::OP);
+                let work = |k: usize| {
+                    if k == 2 {
+                        super::cap_total(cap);
                     }
-                }
-            };
-            forge_math::par::scope(|s| {
-                let hs: Vec<_> = (0..4).map(|k| s.spawn(move || work(k))).collect();
-                work(4);
-                for h in hs {
-                    h.join().unwrap();
-                }
-            });
-            assert_eq!(super::exhausted(), over, "cap {cap}");
+                    for _ in 0..100 {
+                        super::spend_many(1000);
+                        if super::over() {
+                            break;
+                        }
+                    }
+                };
+                forge_math::par::scope(|s| {
+                    let hs: Vec<_> = (0..threads).map(|k| s.spawn(move || work(k))).collect();
+                    for k in threads..5 {
+                        work(k);
+                    }
+                    for h in hs {
+                        h.join().unwrap();
+                    }
+                });
+                assert_eq!(super::exhausted(), past, "{threads} threads, cap {cap}");
+            }
         }
     }
 

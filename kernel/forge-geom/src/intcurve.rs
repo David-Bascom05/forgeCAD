@@ -943,18 +943,27 @@ fn walk(
             }
             // a procedural surface may stop at its face's rim: the branch ends there (any part
             // of it back on the face is seeded and traced from there)
-            // (b asked only where a does not end: as `||` did)
-            if let Some(end) = ends(a, p, d, h).or_else(|| ends(b, p, d, h)) {
-                // an op past a branch that once stalled at a rim (ends()'s second test) may go on
-                // a long way and still not answer: bounded (see CARRIED)
-                if end == End::Rim {
-                    crate::budget::cap_total(CARRIED);
-                }
-                // (a spline patch's rim short of the march: the branch carried onto it, so the
-                // edge there is met, not missed by the hair the march stopped short)
-                if let Some(q) = rim_point(a, b, p, step).or_else(|| rim_point(b, a, p, step)) {
-                    pts.push(q);
-                }
+            let ea = ends(a, p, d, h);
+            let eb = if ea == Some(End::Off) {
+                None
+            } else {
+                ends(b, p, d, h)
+            };
+            if ea == Some(End::Off) || eb == Some(End::Off) {
+                return Some((pts, false));
+            }
+            // a spline patch's rim short of the march (ends()'s second test): the branch carried
+            // onto it, so the edge there is met, not missed by the hair the march stopped short.
+            // Only where it is carried: a branch left short of the rim would be cut there, short
+            // of the face's edge (the independent review: a wrong answer's path), so with no point
+            // on the rim it goes on as before 7be140be, to the forward tries and their stall
+            if (ea == Some(End::Rim) || eb == Some(End::Rim))
+                && let Some(q) = rim_point(a, b, p, step).or_else(|| rim_point(b, a, p, step))
+            {
+                pts.push(q);
+                // an op past a branch that once stalled at a rim may go on a long way and still
+                // not answer: bounded (see CARRIED)
+                crate::budget::cap_total(CARRIED);
                 return Some((pts, false));
             }
             // last, any forward step at all: near a branch point (a cone's apex on the other
