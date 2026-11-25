@@ -1,11 +1,12 @@
-# haas-vf-2 table: 914 x 356 published, thickness estimated; one T-slot
+# haas-vf-2 table: 914 x 356 published, thickness estimated; one T-slot. Its top is the part
+# mount's datum (z 0): drawn where parts sit, the envelope with no margin on that face
 # frame: the machine's base frame at the home pose (forgecad Haas approximation).
 shared x0 = -673
 shared y0 = -200
 shared z0 = -209
 shared lx = 1346
 shared ly = 400
-shared lz = 208
+shared lz = 209
 shared cx = 0
 shared cy = 0
 shared cw = 914

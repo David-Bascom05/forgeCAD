@@ -20,6 +20,10 @@ pub struct PartCheck {
     pub vertices: usize,
     /// Vertices outside every primitive by more than the tolerance, with how far.
     pub outside: Vec<([f64; 3], f64)>,
+    /// The part's bounds (its tessellation's vertices: points on the exact surface), base frame
+    /// at the home pose.
+    pub lo: [f64; 3],
+    pub hi: [f64; 3],
 }
 
 /// How far a point lies outside a primitive (≤ 0 inside).
@@ -82,8 +86,13 @@ pub fn check_parts(def: &MachineDef, dir: &Path, tol: f64) -> Result<Vec<PartChe
         let body = run.body.ok_or_else(|| format!("{}: no body", path.display()))?;
         let mesh = tessellate(&body, &q).map_err(|e| format!("{}: {e:?}", path.display()))?;
         let mut bad = Vec::new();
+        let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
         for p in &mesh.positions {
             let x = [p.x, p.y, p.z];
+            for k in 0..3 {
+                lo[k] = lo[k].min(x[k]);
+                hi[k] = hi[k].max(x[k]);
+            }
             let d = b
                 .prims
                 .iter()
@@ -100,6 +109,8 @@ pub fn check_parts(def: &MachineDef, dir: &Path, tol: f64) -> Result<Vec<PartChe
             envelope: b.prims.iter().map(prim_volume).sum(),
             vertices: mesh.positions.len(),
             outside: bad,
+            lo,
+            hi,
         });
     }
     Ok(out)
