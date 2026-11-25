@@ -26,6 +26,7 @@
 
 use crate::ops::{PMove, Phase};
 use forge_math::dmath;
+use forge_math::ipow::Powi as _;
 
 /// One fitted move, from the previous piece's end (or the polyline's start).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -201,7 +202,7 @@ fn arc_fit(pts: &[[f64; 3]], f: &Fit) -> Option<Piece> {
             return None;
         }
         let p = pts[k];
-        let er = (((p[0] - c[0]).powi(2) + (p[1] - c[1]).powi(2)).sqrt() - r).abs();
+        let er = (((p[0] - c[0]).ipow(2) + (p[1] - c[1]).ipow(2)).sqrt() - r).abs();
         let zl = a[2] + (b[2] - a[2]) * us[k] / sweep;
         let ez = (p[2] - zl).abs();
         err.push((er * er + ez * ez).sqrt());
@@ -325,7 +326,7 @@ fn point(at: [f64; 3], p: &Piece, t: f64) -> [f64; 3] {
             at[2] + (to[2] - at[2]) * t,
         ],
         Piece::Arc { to, c, cw } => {
-            let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
+            let r = ((at[0] - c[0]).ipow(2) + (at[1] - c[1]).ipow(2)).sqrt();
             let a0 = dmath::atan2(at[1] - c[1], at[0] - c[0]);
             let mut a1 = dmath::atan2(to[1] - c[1], to[0] - c[0]);
             let tau = std::f64::consts::TAU;
@@ -477,7 +478,7 @@ mod tests {
                     }
                 }
                 Piece::Arc { to, c, cw } => {
-                    let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
+                    let r = ((at[0] - c[0]).ipow(2) + (at[1] - c[1]).ipow(2)).sqrt();
                     let a0 = dmath::atan2(at[1] - c[1], at[0] - c[0]);
                     let mut a1 = dmath::atan2(to[1] - c[1], to[0] - c[0]);
                     let tau = std::f64::consts::TAU;

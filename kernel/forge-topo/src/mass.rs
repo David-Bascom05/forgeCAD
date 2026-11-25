@@ -2500,6 +2500,7 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
     } else {
         span(&loops, ax).0
     };
+    let floor = floors(size, rel);
     let mut cx = Ctx {
         s,
         ax,
@@ -2511,10 +2512,7 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
             20_000 + 20 * loops.iter().flat_map(|l| &l.runs).map(Vec::len).sum::<usize>(),
         ),
         rel,
-        floor: std::array::from_fn(|m| {
-            let k = [3, 4, 4, 4, 5, 5, 5, 5, 5, 5, 2][m];
-            1e-6 * rel * size.powi(k)
-        }),
+        floor,
     };
     // F's degree along a, and along b: a polynomial (Some) or trigonometric (None)
     let fourier = match (s, ax) {
@@ -2743,6 +2741,17 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
     Ok((out, err))
 }
 
+/// The floors, `1e-6 rel size^k` for each integrand's degree `k`: the powers as `ipow` makes them,
+/// each once.
+#[inline]
+fn floors(size: f64, rel: f64) -> F {
+    let s2 = size * size;
+    let s4 = s2 * s2;
+    let (s3, s5) = (size * s2, size * s4);
+    let p = [s3, s4, s4, s4, s5, s5, s5, s5, s5, s5, s2];
+    std::array::from_fn(|m| 1e-6 * rel * p[m])
+}
+
 /// A corner patch's face that is its whole domain polygon (its vertices on the polygon's
 /// corners, its edges along the sides): the integrals over the polygon directly, by the patch's
 /// own rule at 12, 16 and 32 points, the last two's difference the error.
@@ -2796,7 +2805,7 @@ fn whole_patch(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Option
         }
         (v, abs)
     };
-    let floor: F = std::array::from_fn(|m| 1e-6 * rel * size.powi([3, 4, 4, 4, 5, 5, 5, 5, 5, 5, 2][m]));
+    let floor = floors(size, rel);
     // the rule converges geometrically: 12 points draw it to about 2e-11, 16 to rounding
     // (measured: research/mass-props)
     let (mut was, _) = sum(12);
@@ -2872,6 +2881,7 @@ pub fn eigen(m: [[f64; 3]; 3]) -> ([f64; 3], [Vec3; 3]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use forge_math::ipow::Powi as _;
 
     /// A cylinder of a file: past its ends it stays at them.
     #[derive(Debug)]
@@ -2934,11 +2944,11 @@ mod tests {
         for r in [rule(4), r12, r36] {
             let n = r.x.len();
             // exact for polynomials below degree n
-            let i: f64 = (0..n).map(|k| r.w[k] * r.x[k].powi(2)).sum();
+            let i: f64 = (0..n).map(|k| r.w[k] * r.x[k].ipow(2)).sum();
             assert!((i - 2.0 / 3.0).abs() < 1e-14, "{i}");
             for k in 0..n {
-                let d: f64 = (0..n).map(|j| r.d[k * n + j] * r.x[j].powi(3)).sum();
-                assert!((d - 3.0 * r.x[k].powi(2)).abs() < 1e-11, "{d}");
+                let d: f64 = (0..n).map(|j| r.d[k * n + j] * r.x[j].ipow(3)).sum();
+                assert!((d - 3.0 * r.x[k].ipow(2)).abs() < 1e-11, "{d}");
             }
         }
         for k in 0..12 {

@@ -2,6 +2,7 @@
 //! cone (from outside it or inside), and up to the next face. Volumes by hand (or by quadrature
 //! where the end is a cone met from the side), and the same solid from both regens.
 
+use forge_math::ipow::Powi as _;
 use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath};
 use forge_mesh::{Quality, tessellate};
 use forge_model::{Combine, End, Extent, ExtentError, Feature, Head, Hole, Part, RegenError, Target, Turn};
@@ -148,13 +149,13 @@ fn parts() -> Vec<(&'static str, Part, f64)> {
     let half = |z: f64| (9.0 - (z - 20.0) * (z - 20.0)).max(0.0).sqrt();
     let ring = |x: f64, y: f64| (x * x + y * y).sqrt();
     let below = over_disc(1.0, (10.0, 0.0), |x, y| {
-        20.0 - (9.0 - (ring(x, y) - 10.0).powi(2)).sqrt()
+        20.0 - (9.0 - (ring(x, y) - 10.0).ipow(2)).sqrt()
     });
     let within = over_disc(1.0, (10.0, 0.0), |x, y| {
-        1.0 + (9.0 - (ring(x, y) - 10.0).powi(2)).sqrt()
+        1.0 + (9.0 - (ring(x, y) - 10.0).ipow(2)).sqrt()
     });
-    let outer = |y: f64, z: f64| ((10.0 + half(z)).powi(2) - y * y).sqrt();
-    let inner = |y: f64, z: f64| ((10.0 - half(z)).powi(2) - y * y).sqrt();
+    let outer = |y: f64, z: f64| ((10.0 + half(z)).ipow(2) - y * y).sqrt();
+    let inner = |y: f64, z: f64| ((10.0 - half(z)).ipow(2) - y * y).sqrt();
     let from_side = over_disc(1.0, (0.0, 20.0), |y, z| 30.0 - outer(y, z));
     let to_hole = over_disc(1.0, (0.0, 20.0), |y, z| 11.0 - inner(y, z));
     // from the hole the end lies either way; it goes toward the torus's centre, across the hole

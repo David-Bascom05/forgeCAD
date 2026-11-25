@@ -26,7 +26,9 @@ rapid = 30000
 [[machine.joint]]
 name = "Z"
 axis = [0, 0, 1]
-range = [-400, 0]
+# as forge-machine's generic-vmc3 record (data/machines/generic.toml), the source for every
+# value both give: forge-cam-lang refuses a machine whose two records disagree
+range = [-450, 0]
 rapid = 24000
 
 [[machine]]

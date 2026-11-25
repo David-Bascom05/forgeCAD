@@ -10,6 +10,7 @@ use crate::scene::{Placement, Scene};
 use crate::shell::bendsim::Framing;
 use crate::shell::env::EnvId;
 use forge_brake::scene::{Body, Look, Mesh, stage_at};
+use forge_math::ipow::Powi as _;
 
 struct Taken {
     renderer: Renderer,
@@ -163,7 +164,7 @@ pub fn part_of(m: &Mesh) -> PartMesh {
     });
     let (lo, hi) = m.bounds().unwrap_or(([0.0; 3], [0.0; 3]));
     let center = [0, 1, 2].map(|k| (lo[k] + hi[k]) * 0.5);
-    let radius = (0..3).map(|k| (hi[k] - lo[k]).powi(2)).sum::<f32>().sqrt() * 0.5;
+    let radius = (0..3).map(|k| (hi[k] - lo[k]).ipow(2)).sum::<f32>().sqrt() * 0.5;
     PartMesh {
         center,
         radius: radius.max(1e-3),
@@ -290,7 +291,7 @@ pub fn framing(
         0.5 * (lo[1] + hi[1]),
         0.5 * (lo[2] + hi[2]),
     ];
-    let radius = 0.5 * ((hi[0] - lo[0]).powi(2) + (hi[1] - lo[1]).powi(2) + (hi[2] - lo[2]).powi(2)).sqrt();
+    let radius = 0.5 * ((hi[0] - lo[0]).ipow(2) + (hi[1] - lo[1]).ipow(2) + (hi[2] - lo[2]).ipow(2)).sqrt();
     let mut cam = crate::camera::Camera::fit(center, radius);
     let (yaw, pitch) = match how {
         Framing::Work => (215f32, 28f32),

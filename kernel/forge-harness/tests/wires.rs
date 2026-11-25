@@ -1,5 +1,6 @@
 use forge_harness::wires::{pack, paths, slots, tube_mesh};
 use forge_harness::*;
+use forge_math::ipow::Powi as _;
 use forge_math::{Point3, UnitVec3, Vec3};
 use std::time::Instant;
 
@@ -9,10 +10,10 @@ fn p(x: f64, y: f64, z: f64) -> Point3 {
 
 fn no_overlap(r: &[f64], at: &[[f64; 2]], d: f64) {
     for i in 0..r.len() {
-        let reach = (at[i][0].powi(2) + at[i][1].powi(2)).sqrt() + r[i];
+        let reach = (at[i][0].ipow(2) + at[i][1].ipow(2)).sqrt() + r[i];
         assert!(reach <= d / 2.0 + 1e-9);
         for j in 0..i {
-            let gap = ((at[i][0] - at[j][0]).powi(2) + (at[i][1] - at[j][1]).powi(2)).sqrt();
+            let gap = ((at[i][0] - at[j][0]).ipow(2) + (at[i][1] - at[j][1]).ipow(2)).sqrt();
             assert!(gap >= r[i] + r[j] - 1e-9, "{i} {j} overlap");
         }
     }
@@ -150,7 +151,7 @@ fn a_wire_tube_is_rings_and_caps() {
         let axis = if q.x < 10.0 - 1e-9 {
             (q.y * q.y + q.z * q.z).sqrt()
         } else {
-            ((q.x - 10.0).powi(2) + q.z * q.z).sqrt()
+            ((q.x - 10.0).ipow(2) + q.z * q.z).sqrt()
         };
         assert!((axis - 0.5).abs() < 1e-9 || q.x > 9.0, "{q:?}");
     }

@@ -5,6 +5,7 @@ use crate::livegpu::{Delta, FaceGpu};
 use crate::mesh::VERTEX;
 use crate::tess;
 use forge_agent::facemesh;
+use forge_math::ipow::Powi as _;
 use forge_mesh::Quality;
 use forge_topo::{Body, FaceId};
 use std::collections::HashMap;
@@ -42,7 +43,7 @@ fn box_radius(body: &Body) -> f64 {
         bb = bb.hull(&body.face_box(f));
     }
     let d = |r: forge_math::Interval| r.hi - r.lo;
-    (d(bb.x).powi(2) + d(bb.y).powi(2) + d(bb.z).powi(2)).sqrt() / 2.0
+    (d(bb.x).ipow(2) + d(bb.y).ipow(2) + d(bb.z).ipow(2)).sqrt() / 2.0
 }
 
 fn mesh_face(body: &Body, f: FaceId, q: &Quality) -> Arc<FaceGpu> {
@@ -117,7 +118,7 @@ impl Mesher {
             }
         }
         d.center = [0, 1, 2].map(|k| (lo[k] + hi[k]) * 0.5);
-        let half: f32 = (0..3).map(|k| (hi[k] - lo[k]).powi(2)).sum();
+        let half: f32 = (0..3).map(|k| (hi[k] - lo[k]).ipow(2)).sum();
         d.radius = half.sqrt() * 0.5;
         d
     }

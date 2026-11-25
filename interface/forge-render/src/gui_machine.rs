@@ -8,6 +8,7 @@ use crate::render::Renderer;
 use crate::scene::{Placement, Rows, Scene};
 use forge_machine::def::{MachineDef, Prim};
 use forge_machine::kin;
+use forge_math::ipow::Powi as _;
 
 #[derive(Default)]
 pub struct MachHost {
@@ -110,7 +111,7 @@ pub fn body_mesh(t: &crate::machine_mesh::Tris) -> PartMesh {
         .iter()
         .map(|p| {
             let p = f(*p);
-            (0..3).map(|k| (p[k] - center[k]).powi(2)).sum::<f32>()
+            (0..3).map(|k| (p[k] - center[k]).ipow(2)).sum::<f32>()
         })
         .fold(0.0f32, f32::max)
         .sqrt();

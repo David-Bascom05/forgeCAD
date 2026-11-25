@@ -98,6 +98,8 @@ pub enum ImportError {
     Brep,
     /// An IGES file that does not read as one.
     Iges,
+    /// A Parasolid transmit file that does not read as one.
+    Xt(crate::xt::XtError),
     NoSolids,
 }
 
@@ -107,6 +109,7 @@ impl std::fmt::Display for ImportError {
             ImportError::Parse(e) => write!(f, "{e}"),
             ImportError::Brep => write!(f, "not a readable OpenCascade .brep file"),
             ImportError::Iges => write!(f, "not a readable IGES file"),
+            ImportError::Xt(e) => write!(f, "not a readable Parasolid file: {e}"),
             ImportError::NoSolids => write!(f, "the file holds no solid"),
         }
     }
@@ -1543,11 +1546,24 @@ fn mesh_agrees<'a>(
             },
         )
     };
-    let diagonal = body.faces_box().diagonal();
+    // the chord from the edges' box: a face's box can be far looser (a closed extrusion's is its
+    // whole sweep, a million mm), and a chord from it draws the face too coarsely to check
+    let edges = body.edge_ids().fold(Box3::EMPTY, |b, e| {
+        let ed = body.edge(e);
+        b.hull(&ed.curve.bbox(ed.range))
+    });
+    let diagonal = if edges.is_empty() || !edges.diagonal().is_finite() {
+        body.faces_box().diagonal()
+    } else {
+        edges.diagonal()
+    };
+    // the display mesh is drawn from the faces' box (`Solid::display_quality`): the same drawing
+    // as this check's only where the two chords are the same number
+    let same = (5e-4 * diagonal).to_bits() == Solid::display_quality(body).chord.to_bits();
     let before = forge_geom::budget::left();
     // the display mesh where drawing it here would be the same: it spent less than is left
     let first = match pre {
-        Some((m, spent)) if spent < before => {
+        Some((m, spent)) if same && spent < before => {
             forge_geom::budget::spend_many(spent);
             Ok(Cow::Borrowed(m))
         }
@@ -1556,7 +1572,7 @@ fn mesh_agrees<'a>(
     let (mesh, chord, display) = match first {
         Ok(x) => {
             let left = forge_geom::budget::left();
-            let display = left > 0 && before - left < forge_mesh::tessellate::MESH;
+            let display = same && left > 0 && before - left < forge_mesh::tessellate::MESH;
             (x, 5e-4 * diagonal, display)
         }
         Err(_) => match mesh_at(5e-3 * diagonal) {
@@ -2167,6 +2183,9 @@ pub fn import(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
     }
     if crate::iges::is_iges(text) {
         return crate::iges::import(text, lim);
+    }
+    if crate::xt::is_xt(text) {
+        return crate::xt::import(text, lim);
     }
     read_file(text, lim, false)
 }

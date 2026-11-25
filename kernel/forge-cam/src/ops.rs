@@ -13,6 +13,7 @@ use forge_cam_geom::offset::offset;
 use forge_cam_geom::region::{Loop, P2, Region, Seg};
 use forge_cam_geom::tool::{Part, Shape};
 use forge_math::dmath;
+use forge_math::ipow::Powi as _;
 use forge_tooling::Tool;
 
 /// The stock: a box in the part's frame.
@@ -296,7 +297,7 @@ pub fn checker_moves(p: &OpPath) -> Vec<(Move, Phase, usize)> {
                 at = to;
             }
             PMove::Arc { to, c, cw, .. } => {
-                let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
+                let r = ((at[0] - c[0]).ipow(2) + (at[1] - c[1]).ipow(2)).sqrt();
                 let a0 = dmath::atan2(at[1] - c[1], at[0] - c[0]);
                 let mut a1 = dmath::atan2(to[1] - c[1], to[0] - c[0]);
                 let tau = std::f64::consts::TAU;
@@ -1805,7 +1806,7 @@ fn seg_box_dist(a: [f64; 2], b: [f64; 2], lo: [f64; 2], hi: [f64; 2]) -> f64 {
 /// box: at an end, at a point where the arc's normal is along an axis (nearest an edge), on the
 /// ray from c to a corner (nearest the corner), or 0 where it crosses an edge.
 fn arc_box_dist(a: [f64; 2], c: [f64; 2], sw: f64, lo: [f64; 2], hi: [f64; 2]) -> f64 {
-    let rr = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2)).sqrt();
+    let rr = ((a[0] - c[0]).ipow(2) + (a[1] - c[1]).ipow(2)).sqrt();
     let a0 = dmath::atan2(a[1] - c[1], a[0] - c[0]);
     let tau = std::f64::consts::TAU;
     let within = |th: f64| {
@@ -1908,7 +1909,7 @@ fn trim_air(
         let level = to[2] == at[2];
         let (air, len) = match *m {
             PMove::Line { phase, .. } if level && matches!(phase, Phase::Cut | Phase::Link | Phase::Hop) => {
-                let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
+                let l = ((to[0] - at[0]).ipow(2) + (to[1] - at[1]).ipow(2)).sqrt();
                 let again = done.contains(&(key(at), key(to))) || done.contains(&(key(to), key(at)));
                 if phase == Phase::Cut {
                     done.insert((key(at), key(to)));
@@ -1919,7 +1920,7 @@ fn trim_air(
                 )
             }
             PMove::Arc { c, cw, .. } if level => {
-                let rr = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
+                let rr = ((at[0] - c[0]).ipow(2) + (at[1] - c[1]).ipow(2)).sqrt();
                 let a0 = dmath::atan2(at[1] - c[1], at[0] - c[0]);
                 let a1 = dmath::atan2(to[1] - c[1], to[0] - c[0]);
                 let tau = std::f64::consts::TAU;

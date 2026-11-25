@@ -23,7 +23,7 @@ static FONTS: Cache<forge_font::Font> = Mutex::new(None);
 static SOLIDS: Cache<Body> = Mutex::new(None);
 
 const FONT_KINDS: &[&str] = &["ttf", "otf"];
-const SOLID_KINDS: &[&str] = &["step", "stp", "brep", "igs", "iges"];
+const SOLID_KINDS: &[&str] = &["step", "stp", "brep", "igs", "iges", "x_t", "x_b", "xmt_txt", "xmt_bin"];
 /// The most a file may be: larger ones are refused unread.
 const LIMIT: u64 = 64 << 20;
 
@@ -146,7 +146,7 @@ fn is_font(head: &[u8], len: u64) -> bool {
 }
 
 /// Whether a file is a model of the kind its extension says: STEP's header, an
-/// IGES start line, an OpenCascade BREP's banner.
+/// IGES start line, an OpenCascade BREP's banner, a Parasolid transmit file's header or flag.
 fn is_model(ext: &str, head: &[u8]) -> bool {
     match ext {
         "step" | "stp" => {
@@ -163,6 +163,7 @@ fn is_model(ext: &str, head: &[u8]) -> bool {
                     .is_some_and(|n| n.iter().all(|c| c.is_ascii_digit() || *c == b' '))
         }
         "brep" => head.windows(16).take(256).any(|w| w == b"CASCADE Topology"),
+        "x_t" | "x_b" | "xmt_txt" | "xmt_bin" => forge_step::xt::is_xt(head),
         _ => false,
     }
 }
@@ -255,7 +256,15 @@ pub fn solid(dir: Option<&Path>, root: Option<&Path>, file: &str, span: Span) ->
         }
         // the reader's words would quote the file: only how far it got
         let imp = forge_step::import(data, &forge_step::Limits::default())
-            .map_err(|_| FileProblem::Unreadable("not a model this reads".into()))?;
+            .map_err(|_| {
+                let kind = match ext.as_str() {
+                    "step" | "stp" => "STEP",
+                    "igs" | "iges" => "IGES",
+                    "brep" => "BREP",
+                    _ => "Parasolid",
+                };
+                FileProblem::Unreadable(format!("couldn't be read as a {kind} model"))
+            })?;
         if imp.solids.is_empty() {
             return Err(FileProblem::Unreadable("no solid this reads".into()));
         }

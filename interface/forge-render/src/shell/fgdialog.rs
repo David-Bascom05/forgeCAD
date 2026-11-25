@@ -957,7 +957,10 @@ pub fn offer_lists(t: &mut FgTool, dir: Option<&std::path::Path>) {
     let screws = hole_sizes();
     // every list, whether or not the form has its word yet: a choice may bring it in
     t.offer("font", beside(&["ttf", "otf"]));
-    t.offer("file", beside(&["step", "stp", "brep", "igs", "iges"]));
+    t.offer(
+        "file",
+        beside(&["step", "stp", "brep", "igs", "iges", "x_t", "x_b", "xmt_txt", "xmt_bin"]),
+    );
     t.offer("screw", screws.clone());
     t.offer("spec", screws);
     t.offer("fit", hole_fits());

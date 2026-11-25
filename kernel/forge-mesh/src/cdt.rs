@@ -1996,6 +1996,7 @@ impl Mesh {
 mod tests {
     use super::*;
     use forge_math::dmath;
+    use forge_math::ipow::Powi as _;
     use forge_math::rng::Rng;
 
     fn tangled(pts: &[(f64, f64)], loops: &[&[u32]]) -> f64 {
@@ -2037,7 +2038,7 @@ mod tests {
 
     #[test]
     fn range_is_two_to_the_two_hundred() {
-        assert_eq!(RANGE, 2f64.powi(200));
+        assert_eq!(RANGE, 2f64.ipow(200));
     }
 
     #[test]

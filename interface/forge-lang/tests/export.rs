@@ -2,6 +2,7 @@
 //! export), an assembly's structure as forge-asm writes it; each read back by forge-step.
 
 use forge_lang::{Options, Run, export};
+use forge_math::ipow::Powi as _;
 use std::path::{Path, PathBuf};
 
 fn dir(tag: &str) -> PathBuf {
@@ -221,7 +222,7 @@ fn the_flat_pattern_dxf_carries_bend_notes() {
     assert_eq!(lines.len(), 2);
     for ((_, x, y, rot), (mx, my)) in notes.iter().zip(&lines) {
         assert!(
-            ((x - mx).powi(2) + (y - my).powi(2)).sqrt() < 3.0,
+            ((x - mx).ipow(2) + (y - my).ipow(2)).sqrt() < 3.0,
             "{x},{y} vs {mx},{my}"
         );
         assert!((rot - 90.0).abs() < 1e-9, "{rot}");

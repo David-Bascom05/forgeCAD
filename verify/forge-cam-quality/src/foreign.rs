@@ -16,6 +16,7 @@
 use crate::{JobQ, OpQ, PathIn, ProgQ, measure_op, side_mill};
 use forge_cam::ops::{PMove, Phase};
 use forge_machine::gcode::{self, Centre, Ev, FeedMode};
+use forge_math::ipow::Powi as _;
 use forge_tooling::{Kind, Tool};
 
 #[derive(Clone, Debug)]
@@ -114,7 +115,7 @@ fn arc_points(
     l: f64,
 ) -> Vec<[f64; 3]> {
     let (a, b) = axes;
-    let r = ((from[a] - c[0]).powi(2) + (from[b] - c[1]).powi(2)).sqrt();
+    let r = ((from[a] - c[0]).ipow(2) + (from[b] - c[1]).ipow(2)).sqrt();
     let a0 = forge_math::dmath::atan2(from[b] - c[1], from[a] - c[0]);
     let a1 = forge_math::dmath::atan2(to[b] - c[1], to[a] - c[0]);
     let tau = std::f64::consts::TAU;
@@ -231,8 +232,8 @@ pub fn measure_text(text: &str, file: String, f: &Foreign) -> JobQ {
         seen_block = true;
     }
     let op_of_line = |line: usize| op_at.iter().rposition(|(l, _)| *l <= line);
-    let kq = 10f64.powi(control.decimals as i32);
-    let kf = 10f64.powi(control.feed_decimals as i32);
+    let kq = 10f64.ipow(control.decimals as i32);
+    let kf = 10f64.ipow(control.feed_decimals as i32);
     let ix = |c: char| control.letters.iter().position(|l| *l == c);
     let (ixx, iyy, izz) = (ix('X').unwrap(), ix('Y').unwrap(), ix('Z').unwrap());
     let top = f.stock.1[2];
