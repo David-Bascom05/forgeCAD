@@ -283,7 +283,7 @@ impl Circuit {
                     let key = if *global {
                         format!("@global:{text}")
                     } else {
-                        format!("@{scope}:{text}")
+                        format!("@local:{scope}:{text}")
                     };
                     self.origins.entry(key.clone()).or_insert(row.span);
                     self.labels.insert(key.clone(), text.clone());
@@ -428,12 +428,12 @@ impl Circuit {
                     "functional relationship spans disconnected supply or signal pins",
                 ));
             } else if link.returns.as_ref().is_some_and(|(a, b)| {
-                self.net_of[a] != self.net_of[b] || self.net_of[a] == self.net_of[&link.want]
+                a == b || self.net_of[a] != self.net_of[b] || self.net_of[a] == self.net_of[&link.want]
             }) {
                 self.issues.push(issue(
                     "ReturnMismatch",
                     vec![link.id.clone()],
-                    "return endpoints need a common net distinct from the supply",
+                    "distinct return endpoints need a common net separate from the supply",
                 ));
             } else {
                 satisfied.insert((&link.want, &link.role));

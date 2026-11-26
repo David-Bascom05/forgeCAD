@@ -224,3 +224,24 @@ fn cached_moves_equal_fresh_results_in_every_sheet_occurrence() {
         }
     }
 }
+
+#[test]
+fn local_labels_on_a_sheet_named_global_stay_local() {
+    let src = r#"schematic
+global = sheet()
+a = junction(sheet: global, at: (0, 0))
+b = junction(sheet: global, at: (5, 0))
+la = label(sheet: global, on: a, value: "VCC", at: (0, 0))
+lb = label(sheet: global, on: b, value: "VCC", global: true, at: (5, 0))
+"#;
+    let (_, c) = run(src).unwrap();
+    assert_ne!(c.net_of["global/a"], c.net_of["global/b"]);
+}
+
+#[test]
+fn a_return_pin_cannot_confirm_its_own_connection() {
+    let src = DESIGN.replace("return_from: c.minus", "return_from: u.vss");
+    let (_, c) = run(&src).unwrap();
+    assert!(c.issues.iter().any(|i| i.kind == "ReturnMismatch"));
+    assert!(c.issues.iter().any(|i| i.kind == "UnfulfilledRole"));
+}
