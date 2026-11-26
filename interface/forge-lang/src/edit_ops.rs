@@ -31,9 +31,15 @@ fn expr_of(text: &str) -> R<Expr> {
     }
 }
 
-pub fn precheck_set_arg(prog: &[Stmt], id: &str, text: &str) -> R<()> {
+pub fn precheck_set_arg(prog: &[Stmt], id: &str, arg: &str, text: &str) -> R<()> {
     let k = call_of(prog, id)?;
     let e = expr_of(text)?;
+    if let StmtKind::Assign { value, .. } = &prog[k].kind
+        && let ExprKind::Call(head, _) = &value.kind
+        && crate::edit::deferred_role_arg(prog, head, arg)
+    {
+        return Ok(());
+    }
     // what it reads must be bound above the statement (or be built-in)
     let probe = Stmt {
         kind: StmtKind::Expr(e),

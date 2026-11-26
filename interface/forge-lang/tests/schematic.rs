@@ -885,3 +885,25 @@ fn paths_use_the_declared_component_type_and_terminal_pair() {
         .1;
     assert!(!cap_wrong.connections["main/J1.P1"][&doc.role_names["output_cap"]].satisfied);
 }
+
+#[test]
+fn source_edits_resolve_pin_targets_after_placements_and_quantities_in_order() {
+    use forge_lang::{edit, error::Op};
+    let src = "schematic\nmain = sheet()\nlate = junction(sheet: main, at: (1,1))\n";
+    let add = |text: &str| Op::AddFeature {
+        before: Some("late".into()),
+        text: text.into(),
+    };
+    let s = edit::apply(src, &add("intent = role(kind: \"bias\", connect_to: late.P1)")).unwrap();
+    let updated = edit::apply(
+        &s,
+        &Op::SetArg {
+            id: "intent".into(),
+            arg: "connect_to".into(),
+            text: "late.P2".into(),
+        },
+    )
+    .unwrap();
+    assert!(updated.contains("connect_to: late.P2"));
+    assert!(edit::apply(src, &add("rail = role(kind: \"power\", voltage_mv: late)")).is_err());
+}

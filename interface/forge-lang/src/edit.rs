@@ -132,6 +132,41 @@ pub fn mentions_in(s: &Stmt, closed: bool) -> BTreeSet<String> {
     out
 }
 
+/// A schematic role's target pin and intervening symbol resolve after placements
+/// and libraries are read. They still count as references for renames.
+pub(crate) fn deferred_role_arg(prog: &[Stmt], head: &Expr, arg: &str) -> bool {
+    matches!(arg, "connect_to" | "through")
+        && matches!(&head.kind, ExprKind::Name(n) if n == "role")
+        && matches!(prog.first().map(|s|&s.kind),
+            Some(StmtKind::Expr(Expr {kind: ExprKind::Name(n),..})) if n == "schematic" || n == "symbol_library")
+}
+
+fn ordering_reads(prog: &[Stmt], s: &Stmt, closed: bool) -> BTreeSet<String> {
+    if let StmtKind::Assign { value, .. } = &s.kind
+        && let ExprKind::Call(head, args) = &value.kind
+        && args.iter().any(|a| {
+            a.name
+                .as_ref()
+                .is_some_and(|(key, _)| deferred_role_arg(prog, head, key))
+        })
+    {
+        let mut reads = BTreeSet::new();
+        for arg in args.iter().filter(|a| {
+            !a.name
+                .as_ref()
+                .is_some_and(|(key, _)| deferred_role_arg(prog, head, key))
+        }) {
+            names_expr(&arg.value, false, &mut |e| {
+                if let ExprKind::Name(name) = &e.kind {
+                    reads.insert(name.clone());
+                }
+            });
+        }
+        return reads;
+    }
+    mentions_in(s, closed)
+}
+
 /// Whether `span` is exactly a read of a name: one identifier token, not a binder, a member, a
 /// keyword argument's name or a part of a token (Respell's span).
 pub fn reads_at(prog: &[Stmt], span: Span) -> bool {
@@ -395,8 +430,10 @@ fn precheck(prog: &[Stmt], op: &Op, dim_of: &dyn Fn(&ParamKey) -> Option<Dim>) -
                 // up: it may read nothing that what it passes binds
                 let passed = bound(&prog[to..j]);
                 let closed = crate::edit_ops::calls_closed(prog);
-                let reads: BTreeSet<String> =
-                    prog[j..=k].iter().flat_map(|s| mentions_in(s, closed)).collect();
+                let reads: BTreeSet<String> = prog[j..=k]
+                    .iter()
+                    .flat_map(|s| ordering_reads(prog, s, closed))
+                    .collect();
                 if let Some(n) = passed.iter().find(|n| reads.contains(*n)) {
                     return Err(Error::StillRead {
                         name: n.clone(),
@@ -407,7 +444,7 @@ fn precheck(prog: &[Stmt], op: &Op, dim_of: &dyn Fn(&ParamKey) -> Option<Dim>) -
                 unread(prog, &bound(&prog[j..=k]), prog.len(), prog.len())
             }
         }
-        Op::SetArg { id, text, .. } => crate::edit_ops::precheck_set_arg(prog, id, text),
+        Op::SetArg { id, arg, text } => crate::edit_ops::precheck_set_arg(prog, id, arg, text),
         Op::Rename { from, to } => crate::edit_ops::precheck_rename(prog, from, to),
         Op::SetProperty { .. } | Op::Suppress { .. } | Op::Unsuppress { .. } | Op::Respell { .. } => Ok(()),
         Op::AddFeature { before, text } => {
@@ -423,7 +460,7 @@ fn precheck(prog: &[Stmt], op: &Op, dim_of: &dyn Fn(&ParamKey) -> Option<Dim>) -
             };
             // what it reads must be bound above it
             let closed = crate::edit_ops::calls_closed(prog);
-            let reads: BTreeSet<String> = new.iter().flat_map(|s| mentions_in(s, closed)).collect();
+            let reads: BTreeSet<String> = new.iter().flat_map(|s| ordering_reads(prog, s, closed)).collect();
             let later = bound(&prog[at..]);
             if let Some(n) = reads.iter().find(|n| later.contains(*n) && !names.contains(*n)) {
                 return Err(Error::StillRead {
