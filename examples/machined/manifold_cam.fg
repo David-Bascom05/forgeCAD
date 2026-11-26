@@ -1,0 +1,39 @@
+machining
+# manifold.fg from saw-cut bar (3 mm over on each end, 4.5 under, 1.5 over the boss), in two
+# setups on a 3-axis VMC. op1, in a vise gripping the bottom 6 mm of the bar: face, rough round
+# the boss, profile the outline (two finishing passes and a spring pass), pocket the deep well
+# round its island and finish its R2 corners with a 3 mm tool, the shallow pocket, the groove
+# along its centreline, the boss's bore drilled and thread-milled, the dowel holes, the M6 holes
+# spotted, drilled and tapped, the top edges broken. op2: turned over in the vise: face to
+# thickness, the relief pocket, the counterbored holes from below.
+shared tol = 0.01
+
+f    = part("manifold.fg", group: "N")
+m    = machine("generic-vmc3")
+t1   = tool("flat-10", t: 1, stickout: 40, holder: "bt40-er32")
+t2   = tool("flat-6", t: 2, stickout: 30, holder: "bt40-er32")
+t3   = tool("flat-3", t: 3, stickout: 26, holder: "bt40-er32")
+t4   = tool("chamfer-10-90", t: 4, stickout: 30, holder: "bt40-er32")
+t5   = tool("threadmill-m6-m12-1", t: 5, stickout: 30, holder: "bt40-er32")
+t6   = tool("face-50", t: 6, stickout: 40, holder: "bt40-er32")
+op1  = setup(f, machine: m, stock: box(margin: (3, 2.5, 1.5), below: 4.5), origin: "top-corner", tol: tol, at: (-60, -40, -260), fixture: vise("generic-vise-150", across: "y", clamp: 6))
+
+skim  = facing(op1, tool: t6, to: 32, step: 1)
+rough = clear(op1, tool: t1, from: 32, to: 26, step: 3, stepover: 4)
+prof  = contour(op1, tool: t1, side: "outside", from: 32, to: 3, step: 5, finish: 2, finish_step: 0.3, spring: 1)
+well  = pocket(op1, tool: t2, from: 26, to: 8, stepover: 2.5, step: 3, ramp: 3)
+crn   = pocket(op1, tool: t3, from: 26, to: 8, stepover: 1, step: 2, ramp: 3)
+shal  = pocket(op1, tool: t2, from: 26, to: 23, stepover: 2.5, step: 1.5)
+grv   = slot(op1, f.grl, tool: t2, depth: 4, step: 2, ramp: 3)
+bored = drill(op1, f.bore, plan: "drill")
+thr   = thread_mill(op1, f.bore, tool: t5)
+dwl   = drill(op1, f.dowels, plan: "auto")
+tap   = drill(op1, f.taps, plan: "auto")
+brk   = edge_break(op1, tool: t4, size: 0.3)
+p1    = program(op1, post: "fanuc", number: 5001)
+
+op2  = setup(f, from: op1, machine: m, origin: "top-corner", tol: tol, at: (-60, 40, -260), fixture: vise("generic-vise-150", across: "y", clamp: 6))
+face2 = facing(op2, tool: t6, to: 32, step: 1.5)
+rel   = pocket(op2, tool: t2, from: 32, to: 30, stepover: 2.5, step: 1)
+cbh   = drill(op2, f.cb, plan: "auto")
+p2    = program(op2, post: "fanuc", number: 5002)

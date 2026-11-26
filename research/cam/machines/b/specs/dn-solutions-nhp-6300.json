@@ -1,0 +1,128 @@
+{
+ "vendor": "DN Solutions",
+ "model": "NHP 6300",
+ "family": "NHP",
+ "source": [
+  "https://www.dn-solutions.com/us/product/machining-center/horizontal/nhp-6300.do"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "hmc",
+ "architecture": null,
+ "control": {
+  "standard": null,
+  "options": []
+ },
+ "travel_mm": {
+  "X": 1050,
+  "Y": 900,
+  "Z": 1000
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": [
+   630,
+   630
+  ],
+  "change_s": null,
+  "load_kg": 1500
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 10000,
+  "rpm_min": null,
+  "taper_or_interface": "ISO #50",
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": "30 kW (rating not stated)"
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 600
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 60,
+  "Y": 60,
+  "Z": 60,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 40,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": 3930,
+  "D": 6520,
+  "H": 3495
+ },
+ "weight_kg": 18000,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "architecture",
+  "changer.chip_to_chip_s",
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "changer.max_tool_dia_mm",
+  "changer.max_tool_kg",
+  "changer.max_tool_len_mm",
+  "changer.tool_to_tool_s",
+  "control.standard",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "pallet.change_s",
+  "pallet.count",
+  "rotary.B",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.rpm_min",
+  "spindle.torque_nm.cont",
+  "spindle_center_to_column_mm",
+  "spindle_center_to_pallet_top_mm"
+ ],
+ "options": [
+  "15000 rpm spindle (809 N·m printed in braces; pairing uncertain)"
+ ],
+ "notes": "US page summary table. Pallet count, B-table indexing, spindle-to-pallet distances, pallet change time not on page. A 2nd-generation NHP 6300 also listed (see dn-solutions-nhp-6300-2nd.json)."
+}

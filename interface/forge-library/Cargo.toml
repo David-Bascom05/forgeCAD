@@ -1,0 +1,13 @@
+[package]
+name = "forge-library"
+description = "The shared library builder: a kind of library record (machine, tool, holder, workholding) kept at the project, user and built-in levels with shadowing, saved byte-stable with a read-back, and its field schema for the builder's forms (research/cam/library-builder.md)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-dirs = { path = "../../kernel/forge-dirs" }
+
+[lints]
+workspace = true

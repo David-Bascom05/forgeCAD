@@ -7,11 +7,20 @@ pub use std::time::Instant;
 #[cfg(target_arch = "wasm32")]
 pub use web_time::Instant;
 
+/// Jobs run on the caller's thread, before `spawn` returns: the single-threaded browser build. A
+/// long one there blocks the page for its whole length.
+pub const INLINE_JOBS: bool = cfg!(all(target_arch = "wasm32", not(target_feature = "atomics")));
+
 /// Runs `f` off the caller's thread where there are threads: natively a named thread; in the
 /// threaded browser build a Web Worker on the page's memory (`threads`); in the single-threaded
 /// browser build right away, before this returns. A job's result goes back through a channel
 /// either way, so the caller reads it the same.
 pub fn spawn(name: &str, f: impl FnOnce() + Send + 'static) {
+    // a job's forge-lang runs' sketches freed as it ends (`release_sketches`: on its own thread)
+    let f = move || {
+        f();
+        release_sketches();
+    };
     #[cfg(not(target_arch = "wasm32"))]
     {
         std::thread::Builder::new()
@@ -145,11 +154,28 @@ pub mod threads {
     }
 }
 
+/// How many times the system's file or folder picker was asked for (the UI audit counts it as a
+/// command's visible answer).
+pub static PICKERS_ASKED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Set by the headless UI audit: a picker asked for is counted, not shown, and answers nothing
+/// chosen.
+pub static NO_PICKER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(not(target_arch = "wasm32"))]
+fn no_picker() -> bool {
+    PICKERS_ASKED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    NO_PICKER.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// A file to open, by the platform's picker: natively the system's dialog; in the browser, one
 /// of the project's files (see `storage`), none while the page's own picker is still to answer.
 pub fn pick_file(title: Option<&str>, kind: &str, exts: &[&str]) -> Option<String> {
     #[cfg(not(target_arch = "wasm32"))]
     {
+        if no_picker() {
+            return None;
+        }
         let mut d = rfd::FileDialog::new().add_filter(kind, exts);
         if let Some(t) = title {
             d = d.set_title(t);
@@ -160,6 +186,25 @@ pub fn pick_file(title: Option<&str>, kind: &str, exts: &[&str]) -> Option<Strin
     {
         let _ = (title, kind, exts);
         web::pick_pending()
+    }
+}
+
+/// A folder, by the system's picker (natively; the browser's downloads have no folder: None).
+pub fn pick_folder(title: &str) -> Option<String> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        if no_picker() {
+            return None;
+        }
+        rfd::FileDialog::new()
+            .set_title(title)
+            .pick_folder()
+            .map(|p| p.to_string_lossy().into_owned())
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = title;
+        None
     }
 }
 
@@ -254,7 +299,10 @@ pub fn serve<J: Send + 'static>(
     {
         spawn(name, move || {
             while let Ok(j) = rx.recv() {
-                if !f(j, &rx) {
+                let go_on = f(j, &rx);
+                // each job's sketches freed as it ends, not only the thread's last
+                release_sketches();
+                if !go_on {
                     return;
                 }
             }
@@ -286,6 +334,7 @@ impl<J> Server<J> {
             let (rx, f, live) = &mut *r;
             while *live && let Ok(j) = rx.try_recv() {
                 *live = f(j, rx);
+                release_sketches();
             }
             return *live;
         }
@@ -326,4 +375,16 @@ pub fn par_map<T: Sync, R: Send>(items: &[T], threads: usize, f: impl Fn(&T) -> 
         let _ = threads;
         items.iter().map(f).collect()
     }
+}
+
+/// Frees the sketches forge-lang's runs on this thread kept (`forge_keep`): each lets go of its
+/// names, the cycle through them broken (a sketch with a named entity is an `Rc` cycle: its
+/// `named` holds `Value::Ent`s of itself). A run frees none itself, so the speed gate's builds do
+/// what they did; between builds, never during one, on the thread that ran them. Without it every
+/// run kept its sketches (5.5 KB a run of a small part natively, ~30 KB an edit in the browser).
+/// A process that never calls it (the speed gate's benchparts, a one-shot CLI command) keeps them
+/// till it exits, as every process did before. Its own cost: the freeing a run paid before, about
+/// 5,500 instructions a run of a small one-sketch part.
+pub fn release_sketches() {
+    forge_lang::release_sketches();
 }

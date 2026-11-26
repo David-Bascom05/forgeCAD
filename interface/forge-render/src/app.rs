@@ -178,6 +178,8 @@ fn present_mode(asked: Option<&str>, has: &[wgpu::PresentMode]) -> wgpu::Present
 
 pub struct App {
     file: Option<String>,
+    /// The environment to open it in (`--env`).
+    env: Option<String>,
     size: (f64, f64),
     proxy: EventLoopProxy<()>,
     live: Option<Live>,
@@ -352,6 +354,17 @@ impl App {
                 _ => {}
             }
         }
+        // the Manufacture workspace's Export…: the system's save dialog off the loop
+        if let Some(x) = l.gui.shell.cam.as_mut().and_then(|w| w.export.take()) {
+            let (send, recv) = std::sync::mpsc::channel();
+            self.exported = Some(recv);
+            let proxy = self.proxy.clone();
+            l.gui.shell.status = "Export NC: choose where".into();
+            std::thread::spawn(move || {
+                let _ = send.send(crate::shell::cam::nc::save_dialog(x));
+                let _ = proxy.send_event(());
+            });
+        }
         l.gui.shell.view.maximized = l.window.is_maximized();
     }
 }
@@ -429,6 +442,7 @@ impl ApplicationHandler for App {
         if let Some(f) = self.file.take() {
             gui.open(&f);
         }
+        gui.env_asked = self.env.take();
         let egui = egui_winit::State::new(
             gui.ctx.clone(),
             egui::ViewportId::ROOT,
@@ -464,6 +478,11 @@ impl ApplicationHandler for App {
         {
             self.exported = None;
             if let Some(l) = &mut self.live {
+                if let Some(w) = &mut l.gui.shell.cam {
+                    w.said = Some(said.clone());
+                    w.write_gen += 1;
+                    w.exported += 1;
+                }
                 l.gui.shell.status = said;
                 l.window.request_redraw();
             }
@@ -487,6 +506,21 @@ impl ApplicationHandler for App {
             return;
         }
         let Some(l) = &mut self.live else { return };
+        // Ctrl+V (Cmd+V) with the Agent tab showing and a picture on the clipboard: the picture
+        // goes with the next message, and egui's own (text) paste is skipped, unless the
+        // clipboard's text is what was meant (`picture_wins`)
+        if let WindowEvent::KeyboardInput { event: k, .. } = &event
+            && k.state == ElementState::Pressed
+            && k.physical_key == PhysicalKey::Code(winit::keyboard::KeyCode::KeyV)
+            && (self.mods.control_key() || self.mods.super_key())
+            && l.gui.shell.agent.tab == crate::shell::agent::SideTab::Agent
+            && let Some((png, text)) = clipboard_picture()
+            && picture_wins(&l.gui.shell.agent.input, text.as_deref())
+        {
+            l.gui.agent_picture(png);
+            l.window.request_redraw();
+            return;
+        }
         let response = l.egui.on_window_event(&l.window, &event);
         l.gui.view_event(&event);
         if matches!(
@@ -506,9 +540,18 @@ impl ApplicationHandler for App {
                 redraw = true;
             }
             WindowEvent::ModifiersChanged(m) => self.mods = m.state(),
-            // a file dropped on the window opens in its tab, as File > Open would
+            // a file dropped on the window opens in its tab, as File > Open would; a picture,
+            // with the Agent tab showing, goes with its next message
             WindowEvent::DroppedFile(path) => {
-                l.gui.open(&path.to_string_lossy());
+                let picture = path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+                    ["png", "jpg", "jpeg", "gif", "webp"].contains(&e.to_ascii_lowercase().as_str())
+                });
+                let taken = picture
+                    && l.gui.shell.agent.tab == crate::shell::agent::SideTab::Agent
+                    && std::fs::read(path).is_ok_and(|b| l.gui.agent_picture(b));
+                if !taken {
+                    l.gui.open(&path.to_string_lossy());
+                }
                 redraw = true;
             }
             WindowEvent::KeyboardInput { event, .. }
@@ -626,8 +669,10 @@ impl ApplicationHandler for App {
 }
 
 /// Runs the app, on this file if there is one.
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     file: Option<String>,
+    env: Option<String>,
     size: (f64, f64),
     times: bool,
     present: Option<String>,
@@ -638,6 +683,7 @@ pub fn run(
     let proxy = on_loop.create_proxy();
     let mut app = App {
         file,
+        env,
         size,
         proxy,
         live: None,
@@ -685,5 +731,75 @@ mod tests {
             while_out(now, Some(later), Some(end), false).0,
             ControlFlow::WaitUntil(end)
         );
+    }
+}
+
+/// The clipboard's picture, if it holds one, as PNG (the agent's tray takes it as a pasted one).
+/// The clipboard's picture as PNG, and its text if it holds that too (some apps put both).
+fn clipboard_picture() -> Option<(Vec<u8>, Option<String>)> {
+    let mut c = arboard::Clipboard::new().ok()?;
+    let img = c.get_image().ok()?;
+    let png = rgba_png(img.width, img.height, &img.bytes)?;
+    Some((png, c.get_text().ok()))
+}
+
+/// With text on the clipboard too, the picture is what was meant only when the box is empty
+/// or the text is just the picture's file path; else the text is pasted, as it was meant.
+fn picture_wins(input: &str, text: Option<&str>) -> bool {
+    let Some(t) = text.map(str::trim).filter(|t| !t.is_empty()) else {
+        return true;
+    };
+    let path = !t.contains('\n')
+        && (t.starts_with('/')
+            || t.starts_with("~/")
+            || t.starts_with("file://")
+            || t.as_bytes().get(1..3) == Some(b":\\"));
+    input.trim().is_empty() || path
+}
+
+/// RGBA pixels as a PNG, their alpha over white (a screenshot's is opaque anyway).
+fn rgba_png(w: usize, h: usize, rgba: &[u8]) -> Option<Vec<u8>> {
+    if rgba.len() != w * h * 4 || w == 0 || h == 0 {
+        return None;
+    }
+    let rgb: Vec<u8> = rgba
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .flat_map(|p| {
+            let a = p[3] as u32;
+            [0, 1, 2].map(|k| ((p[k] as u32 * a + 255 * (255 - a)) / 255) as u8)
+        })
+        .collect();
+    crate::agent::apptools::png(w as u32, h as u32, &rgb).ok()
+}
+
+#[cfg(test)]
+mod paste_tests {
+    #[test]
+    fn a_picture_wins_over_its_text_only_when_that_was_meant() {
+        use super::picture_wins;
+        // no text: the picture
+        assert!(picture_wins("half typed", None));
+        assert!(picture_wins("half typed", Some("  ")));
+        // text and a picture: the picture into an empty box, the text into a box being typed in
+        assert!(picture_wins("", Some("a caption")));
+        assert!(!picture_wins("make it", Some("thicker")));
+        // the text just the picture's path: the picture
+        assert!(picture_wins("look at", Some("/home/me/shot.png")));
+        assert!(picture_wins("look at", Some("file:///tmp/shot.png")));
+        assert!(picture_wins("look at", Some("C:\\Users\\me\\shot.png")));
+        assert!(!picture_wins("look at", Some("/a\n/b")));
+    }
+
+    #[test]
+    fn a_clipboard_picture_is_a_png_its_alpha_over_white() {
+        // 2×1: opaque red, and blue at half alpha
+        let png = super::rgba_png(2, 1, &[255, 0, 0, 255, 0, 0, 255, 128]).unwrap();
+        let (w, h, rgba) = crate::look::decode_image(&png).unwrap();
+        assert_eq!((w, h), (2, 1));
+        assert_eq!(&rgba[..3], &[255, 0, 0]);
+        assert_eq!(&rgba[4..7], &[127, 127, 255]);
+        assert_eq!(super::rgba_png(2, 2, &[0; 4]), None, "not its size: nothing");
     }
 }

@@ -128,6 +128,10 @@ jobs:
           workspaces: |
             . -> target
             interface/forge-speech -> target
+      # hash_inputs resolves metadata for the whole workspace offline, including crates
+      # outside the packages built by this job.
+      - name: Fetch locked workspace dependencies
+        run: cargo fetch --locked
       - name: tests of the platform code
         # every check runs, so one failure does not hide the others
         shell: bash
@@ -137,11 +141,15 @@ jobs:
       - name: the language, its bench parts, and the kernel under its random programs (once forge-agent's history tests)
         if: ${{ !cancelled() }}
         shell: bash
-        run: cargo test --locked -p forge-lang --test bench_ports --test ports --test harness --test fuzz --test kernel_history_repros
+        run: cargo test --locked -p forge-lang --test bench_ports --test ports --test harness --test fuzz --test kernel_history_repros --test hash_inputs
       - name: the one-pass parser against the table parser, answers and errors, with overflow checks on
         if: ${{ !cancelled() }}
         shell: bash
         run: cargo test --locked -p forge-lang --test parse_diff
+      - name: knife edges stay linear, the features stepped counted under the decision log
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: cargo test --locked -p forge-model --features decisions --test knife_linear
 
   # the kernel's results bit for bit on another CPU and OS: informative until it holds
   bits:

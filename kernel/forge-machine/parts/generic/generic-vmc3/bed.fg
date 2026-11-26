@@ -1,0 +1,19 @@
+# generic-vmc3 bed: the cast base, ways on top for the saddle; a chip trough along the front.
+# frame: the machine's base frame at the home pose.
+shared L = 1000
+shared W = 900
+shared H = 150
+shared z0 = -400
+shared trough_w = 120
+shared trough_d = 40
+shared lip = 20
+shared trough_end = 40
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(center: (0, 0), size: (L, W))
+}
+base = extrude(plan, H)
+sketch tr(on: base.end) {
+  r = rect(center: (0, -W / 2 + trough_w / 2 + lip), size: (L - 2 * trough_end, trough_w))
+}
+trough = cut(tr.r, trough_d)

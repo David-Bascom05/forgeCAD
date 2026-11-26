@@ -1,0 +1,21 @@
+[package]
+name = "forge-workholding-builder"
+description = "Workholding as a library-builder kind (research/cam/library-builder.md): forge-workholding's records in forge-library's catalog, forms, checks, previews and CLI"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-dirs = { path = "../../kernel/forge-dirs" }
+forge-library = { path = "../forge-library" }
+forge-workholding = { path = "../../kernel/forge-workholding" }
+forge-cam = { path = "../../kernel/forge-cam" }
+forge-cam-geom = { path = "../../kernel/forge-cam-geom" }
+forge-mesh = { path = "../../kernel/forge-mesh" }
+forge-step = { path = "../../kernel/forge-step" }
+forge-topo = { path = "../../kernel/forge-topo" }
+forge-math = { path = "../../kernel/forge-math" }
+
+[lints]
+workspace = true

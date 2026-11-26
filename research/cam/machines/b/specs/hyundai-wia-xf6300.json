@@ -1,0 +1,136 @@
+{
+ "vendor": "Hyundai WIA (WIA Machine Tools)",
+ "model": "XF6300",
+ "family": "XF Series",
+ "source": [
+  "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=26&productType=MC",
+  "https://www.wiamachine.com/api/public/series/detail"
+ ],
+ "source_secondary": [
+  "https://www.komachine.com/en/companies/hyundai-wia/products/38041"
+ ],
+ "taken": "2026-11-23",
+ "kind": "table-table",
+ "architecture": "5-axis VMC, vertical built-in spindle, all-in-one bed and column, X-axis box-in-box structure, built-in DDM rotary table (Ø630). Rotary axis names, tilt range and which unit carries them are not published on the fetched pages.",
+ "control": {
+  "standard": "HEIDENHAIN (24 in monitor per feature text; model not named)",
+  "options": []
+ },
+ "travel_mm": {
+  "X": 650,
+  "Y": 600,
+  "Z": 500
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": 600,
+ "rotary_table_dia_mm": 630,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 15000,
+  "rpm_min": null,
+  "taper_or_interface": "HSK-A63",
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": 31
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 153
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 60,
+  "Y": 60,
+  "Z": 60,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 34,
+  "options": [
+   68,
+   102
+  ],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": 4.5,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "changer.max_tool_dia_mm",
+  "changer.max_tool_kg",
+  "changer.max_tool_len_mm",
+  "changer.tool_to_tool_s",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rotary.A",
+  "rotary.B",
+  "rotary.C",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.rpm_min",
+  "spindle.torque_nm.cont",
+  "spindle_nose_to_table_mm",
+  "table_height_from_floor_mm",
+  "weight_kg"
+ ],
+ "options": [
+  "spindle 24000 r/min 26/20 kW 85.9/66.5 N·m",
+  "spindle 40000 r/min HSK-E40 26/18 kW 9.9/6.9 N·m",
+  "ring ATC 68 / 102 tools"
+ ],
+ "notes": "Source is the maker's current machine-tool site www.wiamachine.com (WIA MACHINE TOOLS; linked from en.hyundai-wia.com machine-tool page). Data read from its public JSON endpoint https://www.wiamachine.com/api/public/series/detail (POST seriesSeq=26, productType=MC) that the series page renders; units are implied by the site's labels (mm, r/min, kW, N·m, m/min, kg). Brackets [] are options on the site. Spindle power/torque published as an unlabeled pair (first value placed in peak/other / max; second listed in notes). Catalogue PDF requires an applicant form (not used). Pairs: power 31/25 kW, torque 153/123 N·m. C-C 4.5 s and 34-tool ring ATC from series feature text. Older Komachine maker listing differs: table '630x400', max load 300 kg, drive 'Direct' (current site: Ø630, 600 kg, built-in); current site used. Not applicable to this machine kind (left null, not listed in unknown): swing_over_bed_mm, max_turning_dia_mm, max_turning_length_mm, chuck_size_in, bar_capacity_mm, spindle_nose_type, sub_spindle, live_tool, turret_stations, turret_index_s, tailstock, milling_head, pallet, spindle_center_to_column_mm, spindle_center_to_pallet_top_mm, table_mm."
+}

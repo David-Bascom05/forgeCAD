@@ -216,10 +216,10 @@ fn check_honours_vertex_tolerance() {
     let mut moved = good.clone();
     moved.vertices[0].point.x += 3e-5;
     assert!(!check(&moved).is_empty());
-    moved.vertices[0].tol = 4e-5;
+    moved.grow_vertex_tol(forge_topo::VertexId(0), 4e-5);
     valid(&moved);
     // a ball reaching halfway along an edge is no longer a tolerance
-    moved.vertices[0].tol = 6.0;
+    moved.grow_vertex_tol(forge_topo::VertexId(0), 6.0);
     assert!(
         check(&moved)
             .iter()
@@ -669,5 +669,833 @@ fn bends_tangent_on_one_flat_touch() {
         let common =
             boolean(&bracket, &post, Op::Intersect, 3).unwrap_or_else(|e| panic!("dip {dip}: {e:?}"));
         assert!(volume(&common).abs() < 1e-6, "dip {dip}: {}", volume(&common));
+    }
+}
+
+/// B2 (research/kernel-audit/tilt-wrong-ok.md): a box and a prism under its y = 0 wall whose top
+/// wall runs from y = -1.2e-5 to 1.2e-5 over the length, crossing the box's wall at x = L/2 at
+/// 2.4e-5/L rad. Between the walls lies a wedge 1.2e-5 thick at x = L (1.2·LINEAR): every op is a
+/// valid solid of the exact volume (once an invalid body for intersect and false ZeroThickness
+/// refusals for union and subtract: the prism's bottom edge was not imprinted into the box's
+/// coplanar bottom, its samples all within LINEAR of the box's edge).
+#[test]
+fn tilted_wedge_thinner_than_two_tolerances() {
+    let prism = |pts: &[(f64, f64)], feature: u64| {
+        let n = pts.len();
+        let segs = (0..n)
+            .map(|i| {
+                let (a, b) = (pts[i], pts[(i + 1) % n]);
+                (
+                    Segment::Line {
+                        a: Point2::new(a.0, a.1),
+                        b: Point2::new(b.0, b.1),
+                    },
+                    feature * 10 + i as u64,
+                )
+            })
+            .collect();
+        extrude(
+            &Profile {
+                plane: Frame::WORLD,
+                loops: vec![ProfileLoop::new(segs)],
+            },
+            10.0,
+            feature,
+        )
+        .unwrap()
+    };
+    for l in [1e3, 1e5, 1e6, 2e6] {
+        let a = prism(&[(0.0, 0.0), (l, 0.0), (l, 10.0), (0.0, 10.0)], 1);
+        let b = prism(&[(0.0, -10.0), (l, -10.0), (l, 1.2e-5), (0.0, -1.2e-5)], 2);
+        // the wedge: a triangle L/2 long and 1.2e-5 wide at its end, 10 high
+        let wedge = 3e-5 * l;
+        for (op, want) in [
+            (Op::Intersect, wedge),
+            (Op::Union, 200.0 * l - wedge),
+            (Op::Subtract, 100.0 * l - wedge),
+        ] {
+            let r = boolean(&a, &b, op, 9).unwrap_or_else(|e| panic!("L {l} {op:?}: {e:?}"));
+            valid(&r);
+            let open = tessellate(&r, &Quality::default()).unwrap().open_edges();
+            assert!(open.is_empty(), "L {l} {op:?}: {} open mesh edges", open.len());
+            // (the volume with its error bound: the wedge's own is tiny beside its coordinates)
+            let m = forge_topo::mass::mass(&r).unwrap();
+            let slack = m.err[0] + 1e-9 * want;
+            assert!(
+                (m.volume - want).abs() <= slack,
+                "L {l} {op:?}: {} want {want}",
+                m.volume
+            );
+        }
+    }
+}
+
+/// A chain of booleans on one plate: tilted rectangular prisms (z tilted up to `tilt`, any angle
+/// in plane), nine subtracts through it then a union below, `n` of them, as in turn from seed 7.
+/// The tools with ids in `only` (all if empty). Each result must be valid (names included).
+fn plate_chain(n: usize, tilt: f64, only: &[u64]) {
+    let block = |f: Frame, w: f64, h: f64, d: f64, id: u64| {
+        extrude(
+            &Profile {
+                plane: f,
+                loops: vec![Profile::rectangle(Point2::ORIGIN, w, h, id * 10)],
+            },
+            d,
+            id,
+        )
+    };
+    let mut rng = Rng::new(7);
+    let mut body = block(Frame::WORLD, 200.0, 200.0, 10.0, 1).unwrap();
+    for i in 0..n {
+        let z = Vec3::new(rng.range(-tilt, tilt), rng.range(-tilt, tilt), 1.0)
+            .normalize()
+            .unwrap();
+        let (s, c) = dmath::sin_cos(rng.range(0.0, dmath::TAU));
+        let o = Point3::new(
+            rng.range(10.0, 180.0),
+            rng.range(10.0, 180.0),
+            rng.range(-5.0, 2.0),
+        );
+        let Some(f) = Frame::from_zx(o, z, Vec3::new(c, s, 0.0)) else {
+            continue;
+        };
+        let (w, h) = (rng.range(3.0, 30.0), rng.range(3.0, 30.0));
+        let op = if i % 10 == 9 { Op::Union } else { Op::Subtract };
+        let d = if op == Op::Union {
+            rng.range(1.0, 8.0)
+        } else {
+            20.0
+        };
+        let id = 100 + i as u64;
+        if !only.is_empty() && !only.contains(&id) {
+            continue;
+        }
+        let tool = block(f, w, h, d, id).unwrap();
+        body = boolean(&body, &tool, op, id).unwrap_or_else(|e| panic!("op {i} {op:?}: {e:?}"));
+        let p = check(&body);
+        assert!(p.is_empty(), "after op {i} ({op:?}): {p:?}");
+    }
+}
+
+/// A face split twice, the second time by its own boundary piece that named it the first time:
+/// the new region once took the face's own name (`Name::piece` keeps the first whole's high
+/// half), a duplicate name in a body handed out (the plate's bottom, at the tenth tool).
+#[test]
+fn a_region_split_again_by_its_naming_edge_gets_its_own_name() {
+    plate_chain(95, 0.05, &[118, 119, 138, 139, 144, 145, 186, 187, 188, 194]);
+}
+
+/// The chain whole: 100 booleans of tilted tools on one plate, every result valid.
+#[test]
+fn a_hundred_tilted_booleans_on_one_plate() {
+    plate_chain(100, 0.05, &[]);
+}
+
+/// `drift_adv top`'s op `i` from its parameters `q` (each in [-1, 1]): a 3 mm slab, tilted by up
+/// to 1e-7, its bottom (a union) or top (a cut) within two tolerances of a plate's top at z = 10;
+/// and the 100 x 100 x 10 plate itself.
+fn top_slab(i: usize, q: [f64; 6]) -> (Body, Op) {
+    const L: f64 = 1e-5;
+    let id = 100 + i as u64;
+    let op = if i.is_multiple_of(2) {
+        Op::Subtract
+    } else {
+        Op::Union
+    };
+    let (x0, y0) = (50.0 + 40.0 * q[0], 50.0 + 40.0 * q[1]);
+    let (w, h) = (5.0 + 20.0 * (q[2] + 1.0), 5.0 + 20.0 * (q[3] + 1.0));
+    let z = 10.0 + 2.0 * L * q[4];
+    let tilt = 1e-7 * q[5];
+    let n = Vec3::new(tilt, -tilt, 1.0).normalize().unwrap();
+    let at = Point3::new(x0, y0, if op == Op::Union { z } else { z - 3.0 });
+    let f = Frame::from_zx(at, n, Vec3::new(1.0, 0.0, 0.0)).unwrap();
+    (slab(f, w, h, 3.0, id), op)
+}
+
+fn slab(f: Frame, w: f64, h: f64, d: f64, id: u64) -> Body {
+    let pts = [(0.0, 0.0), (w, 0.0), (w, h), (0.0, h)];
+    let segs = (0..4)
+        .map(|i| {
+            let (a, b) = (pts[i], pts[(i + 1) % 4]);
+            (
+                Segment::Line {
+                    a: Point2::new(a.0, a.1),
+                    b: Point2::new(b.0, b.1),
+                },
+                id * 10 + i as u64,
+            )
+        })
+        .collect();
+    extrude(
+        &Profile {
+            plane: f,
+            loops: vec![ProfileLoop::new(segs)],
+        },
+        d,
+        id,
+    )
+    .unwrap()
+}
+
+/// Slabs stacked within two tolerances of a plate's top and tilted by up to 1e-7, so each one's
+/// face is found on the top's surface (coplanar) and the edges of one imprint on the other: an
+/// imprinted edge strays 1.29e-5 from the face it now bounds, past its own tolerance of 1e-5.
+/// Its tolerance must grow to hold that (research/booleans/drift.md): with it the result was an
+/// Ok that `check` finds an edge off its face in (EdgeOffFace), a wrong Ok. Four ops of a
+/// hill-climbed fifty (`drift_adv top`), by their original indices.
+#[test]
+fn an_imprinted_edge_off_its_new_face_grows_its_tolerance() {
+    let mut body = slab(Frame::WORLD, 100.0, 100.0, 10.0, 1);
+    let ops: [(usize, [f64; 6]); 4] = [
+        (
+            7,
+            [
+                0.5918829918885135,
+                0.30239341812934617,
+                -0.3509277137226333,
+                0.0393398165925507,
+                0.42821974697303966,
+                0.4670581994319918,
+            ],
+        ),
+        (
+            26,
+            [
+                0.5088582386782867,
+                0.8576087878475563,
+                -0.1598695157072878,
+                -0.015880172925941904,
+                0.00011761254002262689,
+                0.388185391233117,
+            ],
+        ),
+        (
+            31,
+            [
+                0.9556838675228327,
+                0.020294401467336298,
+                1.0,
+                0.329820388187806,
+                -0.9624960073434354,
+                0.23750013520793,
+            ],
+        ),
+        (
+            32,
+            [
+                0.9348006431398126,
+                0.41442383150441364,
+                -0.8599947362654539,
+                0.7072555274370649,
+                -0.21964280055656504,
+                0.22248465631838577,
+            ],
+        ),
+    ];
+    for (i, q) in ops {
+        let (tool, op) = top_slab(i, q);
+        // a refusal is an honest answer; an Ok must be a valid solid
+        if let Ok(r) = boolean(&body, &tool, op, 100 + i as u64) {
+            let p = check(&r);
+            assert!(p.is_empty(), "op {i} ({op:?}): {p:?}");
+            body = r;
+        }
+    }
+}
+
+/// The same stack: an edge's end vertex where it is imprinted on the other body's face lies
+/// 1.51e-5 from that face's plane; its tolerance (the ball every surface through it meets,
+/// `Vertex::tol`) must grow to hold it, not stay at 1e-5. Three ops of a hill-climbed fifty.
+#[test]
+fn an_imprinted_edges_end_vertex_holds_its_new_face() {
+    let mut body = slab(Frame::WORLD, 100.0, 100.0, 10.0, 1);
+    let ops: [(usize, [f64; 6]); 3] = [
+        (
+            9,
+            [
+                -0.26507043851392975,
+                0.8406934451433343,
+                0.13335405654850618,
+                0.31614661880392536,
+                0.60960096690831,
+                1.0,
+            ],
+        ),
+        (
+            27,
+            [
+                -0.6739908258109015,
+                0.8580906948089231,
+                0.36771629220373514,
+                0.35843675683996346,
+                0.10504478019733154,
+                0.3343261878770015,
+            ],
+        ),
+        (
+            34,
+            [
+                -0.543396694807474,
+                0.736688722718039,
+                0.881245991414807,
+                0.4951744296767451,
+                0.7269937185748625,
+                -0.7096159813835494,
+            ],
+        ),
+    ];
+    for (i, q) in ops {
+        let (tool, op) = top_slab(i, q);
+        let Ok(r) = boolean(&body, &tool, op, 100 + i as u64) else {
+            continue;
+        };
+        for e in r.edge_ids() {
+            let edge = r.edge(e);
+            for &c in &edge.coedges {
+                let f = r.coedge_face(c);
+                let forge_geom::Surface::Plane(pl) = &r.face(f).surface else {
+                    continue;
+                };
+                for v in [edge.start, edge.end] {
+                    let x = r.vertex(v);
+                    let d = pl.signed_distance(x.point).abs();
+                    assert!(
+                        d <= x.tol,
+                        "op {i} ({op:?}): vertex {v:?} {d:e} from face {f:?}, tol {:e}",
+                        x.tol
+                    );
+                }
+            }
+        }
+        body = r;
+    }
+}
+
+/// `drift_adv edge`'s op `i` from its parameters `q` (each in [-1, 1]): a cut (even ops) or a wall
+/// (odd ops) whose faces end within two tolerances of a 100 x 100 x 10 plate's y = 0 wall.
+fn edge_wall(i: usize, q: [f64; 6]) -> (Body, Op) {
+    edge_wall_in(Frame::WORLD, i, q)
+}
+
+/// The 100 x 100 x 10 plate the walls of `edge_wall` stand on, in frame `base`.
+fn wall_plate(base: Frame) -> Body {
+    extrude(
+        &Profile {
+            plane: base,
+            loops: vec![Profile::rectangle(Point2::ORIGIN, 100.0, 100.0, 10)],
+        },
+        10.0,
+        1,
+    )
+    .unwrap()
+}
+
+/// `edge_wall`, plate and tool built in frame `base` (`drift_adv diag`: turned 45° about z).
+fn edge_wall_in(base: Frame, i: usize, q: [f64; 6]) -> (Body, Op) {
+    const L: f64 = 1e-5;
+    let id = 100 + i as u64;
+    let op = if i.is_multiple_of(2) {
+        Op::Subtract
+    } else {
+        Op::Union
+    };
+    let (x0, x1) = (50.0 + 45.0 * q[0], 50.0 + 45.0 * q[0] + 5.0 + 40.0 * (q[1] + 1.0));
+    let (e0, e1) = (2.0 * L * q[2], 2.0 * L * q[3]);
+    let z0 = -1.0 + 6.0 * (q[4] + 1.0);
+    let f = base.compose(&Frame::WORLD.with_origin(Point3::new(0.0, 0.0, z0)));
+    let pts = if op == Op::Subtract {
+        [(x0, e0 - 3.0), (x1, e1 - 3.0), (x1, e1), (x0, e0)]
+    } else {
+        [(x0, -3.0), (x1, -3.0), (x1, e1), (x0, e0)]
+    };
+    let segs = (0..4)
+        .map(|k| {
+            let (a, b) = (pts[k], pts[(k + 1) % 4]);
+            (
+                Segment::Line {
+                    a: Point2::new(a.0, a.1),
+                    b: Point2::new(b.0, b.1),
+                },
+                id * 10 + k as u64,
+            )
+        })
+        .collect();
+    let body = extrude(
+        &Profile {
+            plane: f,
+            loops: vec![ProfileLoop::new(segs)],
+        },
+        4.0 + 2.0 * (q[5] + 1.0),
+        id,
+    )
+    .unwrap();
+    (body, op)
+}
+
+/// Walls and notches within two tolerances of a plate's wall: an imprint grows an edge's end
+/// vertex to 1.65e-5, past the middle of a kept edge 3e-5 long, so the edge is shorter than the
+/// balls at its ends (`check`: VertexTolerance). Such a boolean is refused (TolerancesMeet), not
+/// handed out; on main the same ops give an open shell and an edge off its face. Five ops of a
+/// hill-climbed fifty (`drift_adv edge`), by their original indices.
+#[test]
+fn an_imprint_growing_a_vertex_past_its_edge_is_refused() {
+    let mut body = extrude(
+        &Profile {
+            plane: Frame::WORLD,
+            loops: vec![Profile::rectangle(Point2::ORIGIN, 100.0, 100.0, 10)],
+        },
+        10.0,
+        1,
+    )
+    .unwrap();
+    let ops: [(usize, [f64; 6]); 5] = [
+        (
+            4,
+            [
+                0.24043599453866538,
+                1.0,
+                1.0,
+                0.46278583338977464,
+                0.13888022155812785,
+                -0.25231714000559846,
+            ],
+        ),
+        (
+            5,
+            [
+                -0.34260200510255745,
+                -0.5008453451283781,
+                0.5439194898173249,
+                0.8864538098387861,
+                -0.3742697749892536,
+                1.0,
+            ],
+        ),
+        (
+            6,
+            [
+                -0.6052129218507916,
+                -0.14151901731041128,
+                -0.03859426551685785,
+                -0.328741331270186,
+                0.06324335293438621,
+                -0.7961567910602003,
+            ],
+        ),
+        (
+            12,
+            [
+                0.1285076930502913,
+                1.0,
+                -0.48202232932225164,
+                0.16922547450692205,
+                -0.27066331050627457,
+                0.36967690966676126,
+            ],
+        ),
+        (
+            15,
+            [
+                -0.11662935493797899,
+                -0.3211166218619659,
+                -1.0,
+                -0.6168664278629803,
+                0.1091801553503916,
+                0.343770057423318,
+            ],
+        ),
+    ];
+    for (i, q) in ops {
+        let (tool, op) = edge_wall(i, q);
+        // a refusal is an honest answer; an Ok must be a valid solid
+        if let Ok(r) = boolean(&body, &tool, op, 100 + i as u64) {
+            let p = check(&r);
+            assert!(p.is_empty(), "op {i} ({op:?}): {p:?}");
+            body = r;
+        }
+    }
+}
+
+/// A notch cut across a plate's wall, its walls ending within two tolerances of the plate's face,
+/// then a wall unioned against that face, its own face within two tolerances of it: the union
+/// came out an open shell (four edges used once), a wrong Ok. Two ops of a hill-climbed fifty
+/// (`drift_adv edge`, research/booleans/drift.md §6), by their original indices.
+#[test]
+fn a_wall_unioned_flush_on_a_notched_face_stays_closed() {
+    let plate = extrude(
+        &Profile {
+            plane: Frame::WORLD,
+            loops: vec![Profile::rectangle(Point2::ORIGIN, 100.0, 100.0, 10)],
+        },
+        10.0,
+        1,
+    )
+    .unwrap();
+    let mut body = plate;
+    let ops: [(usize, [f64; 6]); 2] = [
+        (
+            2,
+            [
+                0.8234008506443795,
+                0.943091713370833,
+                0.9816978534888866,
+                -0.9265032466161587,
+                -0.3739713735018809,
+                0.8838505963032673,
+            ],
+        ),
+        (
+            41,
+            [
+                0.6199122167988423,
+                0.8434506663474743,
+                -0.6076188493258957,
+                -0.9263658549015378,
+                -0.323243568577226,
+                -0.2806420579990162,
+            ],
+        ),
+    ];
+    for (i, q) in ops {
+        let (tool, op) = edge_wall(i, q);
+        // a refusal is an honest answer; an Ok must be a valid solid
+        if let Ok(r) = boolean(&body, &tool, op, 100 + i as u64) {
+            let p = check(&r);
+            assert!(p.is_empty(), "op {i} ({op:?}): {p:?}");
+            // the wall stands 1.2e-5 off the plate, past the tolerance: the union holds both
+            if op == Op::Union {
+                let (got, want) = (volume(&r), volume(&body) + volume(&tool));
+                assert!(
+                    (got - want).abs() <= 1e-9 * want,
+                    "op {i}: volume {got} want {want}"
+                );
+            }
+            body = r;
+        }
+    }
+}
+
+/// `an_imprinted_edges_end_vertex_holds_its_new_face` through the n-ary boolean, each op its own
+/// two-tool call: its imprinted ends must grow as the sequential boolean's do (`imprint_tols`).
+/// Three ops of a hill-climbed fifty (`drift_adv top`, `NARY=1`), by their original indices.
+#[test]
+fn an_nary_imprinted_edges_end_vertex_holds_its_new_face() {
+    let mut body = slab(Frame::WORLD, 100.0, 100.0, 10.0, 1);
+    let ops: [(usize, [f64; 6]); 3] = [
+        (
+            9,
+            [
+                -0.26507043851392975,
+                0.8406934451433343,
+                0.24718198994817364,
+                0.31614661880392536,
+                0.60960096690831,
+                1.0,
+            ],
+        ),
+        (
+            27,
+            [
+                -0.6739908258109015,
+                0.8580906948089231,
+                0.36771629220373514,
+                0.35843675683996346,
+                0.10504478019733154,
+                0.3343261878770015,
+            ],
+        ),
+        (
+            34,
+            [
+                -0.46367594489168495,
+                0.736688722718039,
+                0.881245991414807,
+                0.4951744296767451,
+                0.7269937185748625,
+                -0.7096159813835494,
+            ],
+        ),
+    ];
+    for (i, q) in ops {
+        let (tool, op) = top_slab(i, q);
+        let Ok(r) = forge_bool::nary(&[&body, &tool], &[op], 1) else {
+            continue;
+        };
+        for e in r.edge_ids() {
+            let edge = r.edge(e);
+            for &c in &edge.coedges {
+                let f = r.coedge_face(c);
+                let forge_geom::Surface::Plane(pl) = &r.face(f).surface else {
+                    continue;
+                };
+                for v in [edge.start, edge.end] {
+                    let x = r.vertex(v);
+                    let d = pl.signed_distance(x.point).abs();
+                    assert!(
+                        d <= x.tol,
+                        "op {i} ({op:?}): vertex {v:?} {d:e} from face {f:?}, tol {:e}",
+                        x.tol
+                    );
+                }
+            }
+        }
+        body = r;
+    }
+}
+
+/// Through the n-ary boolean, a wall unioned beside a wall within two tolerances of a plate's
+/// face left a piece 1.75e-5 long crossing that face and bounding it (EdgeOffFace); and a slab cut
+/// within two tolerances of a plate's top left two vertices 6.3e-6 apart unmerged, joined by an
+/// edge 8e-13 long (EdgeDegenerate). Both Oks were wrong; edges that short are now checked once
+/// built and refused (TolerancesMeet). Two ops each of hill-climbed fifties (`drift_adv`,
+/// `NARY=1`, research/booleans/drift.md §9), by their original indices.
+#[test]
+fn nary_edges_shorter_than_their_tolerances_are_refused() {
+    let walls: [(usize, [f64; 6]); 2] = [
+        (
+            21,
+            [
+                -0.937536536084658,
+                -0.1294825111441824,
+                -0.41736311767210044,
+                0.4618893574349905,
+                -0.4952621930311446,
+                0.21589878069515733,
+            ],
+        ),
+        (
+            45,
+            [
+                -1.0,
+                -0.06752310596340017,
+                -0.3006744354686879,
+                0.8751654910424523,
+                -0.7156475910458602,
+                0.20559144756225,
+            ],
+        ),
+    ];
+    let slabs: [(usize, [f64; 6]); 2] = [
+        (
+            2,
+            [
+                0.8234008506443795,
+                1.0,
+                0.9816978534888866,
+                -0.7512060189793819,
+                0.2798211277911311,
+                0.8838505963032673,
+            ],
+        ),
+        (
+            18,
+            [
+                0.7656299434906249,
+                0.30714060737671345,
+                0.5776076114719819,
+                0.3038072858117933,
+                0.5922808713271944,
+                0.1803587185311606,
+            ],
+        ),
+    ];
+    let run = |ops: &[(usize, [f64; 6])], make: fn(usize, [f64; 6]) -> (Body, Op)| {
+        let mut body = wall_plate(Frame::WORLD);
+        for &(i, q) in ops {
+            let (tool, op) = make(i, q);
+            // a refusal is an honest answer; an Ok must be a valid solid
+            if let Ok(r) = forge_bool::nary(&[&body, &tool], &[op], 1) {
+                let p = check(&r);
+                assert!(p.is_empty(), "op {i} ({op:?}): {p:?}");
+                body = r;
+            }
+        }
+    };
+    run(&walls, edge_wall);
+    run(&slabs, top_slab);
+}
+
+/// The notches and walls of `a_wall_unioned_flush_on_a_notched_face_stays_closed`'s kind, turned
+/// 45° about z, plate and all (`drift_adv diag`): the sliver a notch leaves runs diagonally, so its
+/// box is wide where the face is not, and the point a step in from its edge, off the face but in
+/// its box, lay inside the wall unioned beside it; the sliver was dropped and the union came out an
+/// open shell (three edges used once), a wrong Ok. Five ops of a hill-climbed fifty, by their
+/// original indices (research/booleans/drift.md §6).
+#[test]
+fn a_wall_unioned_flush_on_a_diagonal_notched_face_stays_closed() {
+    let base = Frame::WORLD.rotated_about_z(std::f64::consts::FRAC_PI_4);
+    let mut body = wall_plate(base);
+    let ops: [(usize, [f64; 6]); 5] = [
+        (
+            2,
+            [
+                0.8234008506443795,
+                1.0,
+                0.9816978534888866,
+                -0.9265032466161587,
+                0.04905408202770589,
+                0.8838505963032673,
+            ],
+        ),
+        (
+            9,
+            [
+                -0.14336190423823236,
+                0.32007579953348275,
+                0.08482040944165237,
+                0.4465830093433477,
+                1.0,
+                0.39367157788269225,
+            ],
+        ),
+        (
+            10,
+            [
+                -0.08371573368001006,
+                0.00689904248278117,
+                -0.39004145013251035,
+                0.13185010546027787,
+                -0.009849046413234586,
+                0.2954004841119977,
+            ],
+        ),
+        (
+            26,
+            [
+                0.17380094844587457,
+                0.8576087878475563,
+                -0.18109883026769524,
+                -0.015880172925941904,
+                0.00011761254002262689,
+                0.388185391233117,
+            ],
+        ),
+        (
+            41,
+            [
+                0.8962183512510973,
+                0.8434506663474743,
+                -0.5744924207274574,
+                -1.0,
+                0.1389087155465082,
+                -0.2806420579990162,
+            ],
+        ),
+    ];
+    for (i, q) in ops {
+        let (tool, op) = edge_wall_in(base, i, q);
+        // a refusal is an honest answer; an Ok must be a valid solid
+        if let Ok(r) = boolean(&body, &tool, op, 100 + i as u64) {
+            let p = check(&r);
+            assert!(p.is_empty(), "op {i} ({op:?}): {p:?}");
+            body = r;
+        }
+    }
+}
+
+/// Three notches whose tops lie within tolerance of a plate's y = 0 wall, each by the n-ary pass.
+/// The first imprints its top on the wall (a face of the wall's plane inside the wall's). The
+/// second's top, a hair off the plane (1.7e-6 to 1.15e-5 along it), was judged flush with that short
+/// face over its own overlap and not with the long wall round it over theirs: its edges were
+/// imprinted on the short face only, the crossings split only that face's edges, and the short face
+/// took them whole, walked out and back, as a hole (`check` passes it); the third found it on the
+/// wrong side of its loop (FaceWrongSide). Two planes all but parallel are now judged over the whole
+/// of each plane's faces, one verdict for every pair of them. Three ops of a hill-climbed fifty
+/// (`drift_adv diag`; the same in the world frame), by their original indices
+/// (research/booleans/drift.md §9).
+#[test]
+fn nary_a_plane_is_flush_with_all_of_a_planes_faces_or_none() {
+    let mut body = wall_plate(Frame::WORLD);
+    let ops: [(usize, [f64; 6]); 3] = [
+        (
+            0,
+            [
+                -0.8372800888218773,
+                -0.11373138087108248,
+                -0.2204833551204205,
+                0.17906482084578879,
+                -0.3544689322679776,
+                0.15642457524751008,
+            ],
+        ),
+        (
+            6,
+            [
+                -0.6052129218507916,
+                0.22383341292989567,
+                -0.08696144819919327,
+                -0.5762008893474448,
+                -0.04268567467012552,
+                -0.8144618293755979,
+            ],
+        ),
+        (
+            20,
+            [
+                0.3442284394203804,
+                1.0,
+                -0.6891012720410121,
+                -0.6789593456834419,
+                0.6571770356516388,
+                0.41846620468641493,
+            ],
+        ),
+    ];
+    for (i, q) in ops {
+        let (tool, op) = edge_wall(i, q);
+        // a refusal is an honest answer; an Ok must be a valid solid
+        match forge_bool::nary(&[&body, &tool], &[op], 1) {
+            Ok(r) => {
+                let p = check(&r);
+                assert!(p.is_empty(), "op {i} ({op:?}): {p:?}");
+                body = r;
+            }
+            Err(e) => eprintln!("op {i} refused: {e}"),
+        }
+    }
+}
+
+/// Two walls flush (5.5e-6 off) against a plate's y = 0 wall, the second almost wholly inside the
+/// first, its front a hair off the first's: unioned, the second crossed the first's front at 6e-7
+/// rad, one edge of that crossing was made and the pieces closing it, within tolerance, were not;
+/// the classifier dropped the plate's bottom and the first wall's front below it, and the union
+/// came out an open shell (eight edges used once), a wrong Ok. An open shell the boolean makes is
+/// refused (OpenShell). Two ops of `drift_adv edge`, by their original indices
+/// (research/booleans/drift.md §8).
+#[test]
+fn a_union_left_open_is_refused() {
+    let ops: [(usize, [f64; 6]); 2] = [
+        (
+            25,
+            [
+                -0.4870355810546001,
+                0.1901779229804108,
+                -0.27625441155899466,
+                -0.295604682866215,
+                -0.9833093286502677,
+                1.0,
+            ],
+        ),
+        (
+            43,
+            [
+                0.029814267349035806,
+                -0.5315581713293835,
+                -0.2762644949939368,
+                -1.0,
+                -0.8423443716357213,
+                0.4469800308709223,
+            ],
+        ),
+    ];
+    let mut body = wall_plate(Frame::WORLD);
+    for (i, q) in ops {
+        let (tool, op) = edge_wall_in(Frame::WORLD, i, q);
+        // a refusal is an honest answer; an Ok must be a valid solid
+        if let Ok(r) = boolean(&body, &tool, op, 100 + i as u64) {
+            let p = check(&r);
+            assert!(p.is_empty(), "op {i} ({op:?}): {p:?}");
+            body = r;
+        }
     }
 }

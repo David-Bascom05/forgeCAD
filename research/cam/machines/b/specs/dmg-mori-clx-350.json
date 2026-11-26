@@ -1,0 +1,152 @@
+{
+ "vendor": "DMG MORI",
+ "model": "CLX 350 (3rd Generation)",
+ "family": "CLX",
+ "source": [
+  "https://en.dmgmori.com/products/machines/turning/universal-turning/clx/clx-350",
+  "https://us.dmgmori.com/products/machines/turning/universal-turning/clx/clx-350"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "lathe-y",
+ "architecture": "Universal turning, cast iron bed, main spindle + counter spindle (integrated motor spindle ISM 36), turret with Y-axis +/-40 mm; direct drives in linear axes, direct measuring X & Y standard.",
+ "control": {
+  "standard": "SINUMERIK ONE (en page, ERGOline X 24in)",
+  "options": [
+   "FANUC (US page, 19in SLIMline)"
+  ]
+ },
+ "travel_mm": {
+  "X": 242.5,
+  "Y": 80,
+  "Z": 540
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": 320,
+ "max_turning_length_mm": 530,
+ "chuck_size_in": null,
+ "bar_capacity_mm": 65,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 5000,
+  "rpm_min": null,
+  "taper_or_interface": null,
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": 16.5
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 168
+  },
+  "curve_points": null
+ },
+ "sub_spindle": {
+  "rpm_max": 5000,
+  "power_kw": 16.2,
+  "torque_nm": 62,
+  "type": "ISM 36 integrated motor spindle"
+ },
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": null,
+  "Y": null,
+  "Z": null,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": null,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "chuck_size_in",
+  "coolant.through_spindle",
+  "live_tool.power_kw",
+  "live_tool.rpm_max",
+  "max_cutting_feed_m_min",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rapid_m_min.X",
+  "rapid_m_min.Y",
+  "rapid_m_min.Z",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.rpm_min",
+  "spindle.taper_or_interface",
+  "spindle.torque_nm.cont",
+  "spindle_nose_type",
+  "swing_over_bed_mm",
+  "table_height_from_floor_mm",
+  "tailstock",
+  "turret_index_s",
+  "turret_stations",
+  "weight_kg"
+ ],
+ "options": [
+  "part catcher (parts up to dia 66 x 200 mm, 3 kg per US page in inches)",
+  "bar feeder interface"
+ ],
+ "notes": "Main spindle power/torque at 40% DC (US page: 22.1 hp, 123.9 ft-lb, 40% DC; en page 16.5 kW / 168 Nm). Counter spindle: en page 16.2 kW / 62 Nm; US page 16.9 hp (=12.6 kW) / 45.7 ft-lb (=62 Nm) 40% DC -> kW values disagree between regional pages. X travel 242.5 mm (US) vs 242 mm (en). Turret stations, live tool and chuck size not on public page. Footprint 53.8 ft2 (US). DMG MORI's full technical data and brochures (PDF) are behind a DMG MORI Account registration (download URL returns 'Download - Registrierung erforderlich' HTML); not used. Only data printed on the public product page (and public TECHNOLOGY EXCELLENCE magazine PDFs) recorded.",
+ "_not_applicable": [
+  "rotary",
+  "spindle_nose_to_table_mm",
+  "spindle_center_to_column_mm",
+  "spindle_center_to_pallet_top_mm",
+  "table_mm",
+  "table_load_kg",
+  "rotary_table_dia_mm",
+  "pallet",
+  "changer",
+  "milling_head"
+ ]
+}

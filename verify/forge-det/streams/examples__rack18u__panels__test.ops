@@ -1,0 +1,7 @@
+{"doc":"examples/rack18u/panels/test.fg"}
+{"op":"SetParam","param":"latch_rest","value":{"value":8.5785,"dim":"Length"}}
+{"op":"SetParam","param":"latch_lift","value":{"value":0.5,"dim":"Length"}}
+{"op":"SetParam","param":"hinge_off","value":{"value":-10.416,"dim":"Length"}}
+{"op":"Rename","from":"post_fl","to":"post_fl_r"}
+{"op":"MoveFeature","id":"stop","before":null}
+{"op":"ReplaceFeature","id":"seat_cam","text":"seat_cam = fit(cam, strike)\n"}

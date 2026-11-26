@@ -1,0 +1,6 @@
+{"doc":"examples/demo/sheet_tools.fg"}
+{"op":"SetParam","param":"t","value":{"value":1.5750000000000002,"dim":"Length"}}
+{"op":"SetParam","param":"r","value":{"value":2.1,"dim":"Length"}}
+{"op":"SetParam","param":"k","value":{"value":0.462,"dim":"Ratio"}}
+{"op":"Rename","from":"sk1","to":"sk1_r"}
+{"op":"ReplaceFeature","id":"pem1","text":"pem1 = pem(\"nut\", \"M4\", at: pem1_at.p, wall: face1)\n"}

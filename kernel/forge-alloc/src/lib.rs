@@ -45,6 +45,84 @@ fn class(size: usize) -> (usize, usize) {
     (8 + (b - 7) * 4 + sub, (5 + sub) << (b - 2))
 }
 
+/// The size of class `c`'s blocks (`class`'s second answer for its sizes).
+#[allow(dead_code)]
+fn class_size(c: usize) -> usize {
+    if c < 8 {
+        return (c + 1) * 16;
+    }
+    let (b, sub) = ((c - 8) / 4 + 7, (c - 8) % 4);
+    (5 + sub) << (b - 2)
+}
+
+/// A thread's own small blocks, by size class (the threaded build's, one per thread): blocks
+/// freed on it (from any heap: each goes back to its own heap when the cache sheds it), and
+/// blocks taken from a heap in a batch. Taking from it or giving to it takes no lock and no
+/// atomic: the heaps' locks are taken once a batch. A block in a cache is a used block to its
+/// heap, as it was before it was freed; a cache holds at most `TCAP` bytes, so the memory the
+/// caches hide from a heap's merge-before-growing is bounded by threads × TCAP. Each class is
+/// a list linked through its blocks' first words.
+#[allow(dead_code)]
+struct Cache {
+    heads: [usize; CACHES],
+    counts: [u16; CACHES],
+    bytes: usize,
+}
+
+/// Most bytes a thread's cache holds; past it, a class's blocks go back to their heaps.
+const TCAP: usize = 32 << 10;
+/// Blocks taken from a heap at once to fill an empty class (at most what `TCAP` leaves room for).
+const BATCH: usize = 16;
+
+#[allow(dead_code)]
+impl Cache {
+    const fn new() -> Cache {
+        Cache {
+            heads: [0; CACHES],
+            counts: [0; CACHES],
+            bytes: 0,
+        }
+    }
+
+    /// A block of class `c`, or 0.
+    fn pop(&mut self, c: usize) -> usize {
+        let p = self.heads[c];
+        if p != 0 {
+            self.heads[c] = rd(p);
+            self.counts[c] -= 1;
+            self.bytes -= class_size(c);
+        }
+        p
+    }
+
+    /// How many blocks of `size` to take for an empty class: the one asked for and the batch's
+    /// rest, as many as the cache has room for.
+    fn want(&self, size: usize) -> usize {
+        BATCH.min(TCAP.saturating_sub(self.bytes) / size).max(1)
+    }
+
+    /// Block `p` (of class `c`) kept.
+    fn put(&mut self, p: usize, c: usize) {
+        wr(p, self.heads[c]);
+        self.heads[c] = p;
+        self.counts[c] += 1;
+        self.bytes += class_size(c);
+    }
+
+    /// Past `TCAP`: the class holding the most bytes, all of it, taken out (its list's head and
+    /// its blocks' size), for the caller to give each block back to its heap.
+    fn shed(&mut self) -> Option<(usize, usize)> {
+        if self.bytes <= TCAP {
+            return None;
+        }
+        let k = (0..CACHES).max_by_key(|&k| self.counts[k] as usize * class_size(k))?;
+        let size = class_size(k);
+        self.bytes -= self.counts[k] as usize * size;
+        self.counts[k] = 0;
+        Some((core::mem::take(&mut self.heads[k]), size))
+    }
+}
+
 /// The list a free block of `size` (a multiple of 16) goes on.
 fn index(size: usize) -> usize {
     if size < 256 {
@@ -79,6 +157,9 @@ pub struct Heap {
     /// The last region's end sentinel (a used block of size 0), and where the region stops.
     end: usize,
     top: usize,
+    /// A quick look only: a block off the lists as they stand, or none, with the cached blocks
+    /// kept and nothing searched (`alloc_block`). The threaded build's first look in each heap.
+    thrift: bool,
 }
 
 impl Default for Heap {
@@ -97,6 +178,7 @@ impl Heap {
             wild: 0,
             end: 0,
             top: 0,
+            thrift: false,
         }
     }
 
@@ -234,7 +316,7 @@ impl Heap {
     ) -> usize {
         let need = block(payload);
         let p = self.fit(need, false);
-        if p != 0 {
+        if p != 0 || self.thrift {
             return p;
         }
         // before growing: the cached blocks merged back, and a look through the nearest list
@@ -413,8 +495,8 @@ mod global {
 /// Spins, never waits: the page's main thread may not block (`memory.atomic.wait` traps there),
 /// and a heap is held only for an allocation's few hundred instructions. Plain wasm and native
 /// builds never compile this.
-#[cfg(all(target_family = "wasm", target_feature = "atomics"))]
-mod global {
+#[cfg(any(all(target_family = "wasm", target_feature = "atomics"), test))]
+mod threaded {
     use super::Heap;
     use core::alloc::{GlobalAlloc, Layout};
     use core::cell::UnsafeCell;
@@ -433,7 +515,18 @@ mod global {
         heap: UnsafeCell<Heap>,
     }
 
-    struct Alloc {
+    /// The linear memory the heaps grow into: the wasm memory itself (base 0, `memory.grow`), or
+    /// in the tests an arena standing in for it, so this allocator runs natively on many threads
+    /// (`tests::threaded_stress`).
+    pub(crate) struct Mem {
+        /// The address of the memory's page 0.
+        pub base: fn() -> usize,
+        /// Grows the memory by `pages` 64 KiB pages: the first new page's index, or usize::MAX.
+        pub grow: fn(usize) -> usize,
+    }
+
+    pub(crate) struct Alloc {
+        mem: Mem,
         shards: [Shard; HEAPS + 1],
         /// Each 64 KiB page's heap (the memory's whole 4 GiB): set when a heap grows into it,
         /// before any block of it is handed out.
@@ -443,29 +536,55 @@ mod global {
     // every use of a shard's `heap` is under its `held`
     unsafe impl Sync for Alloc {}
 
-    #[global_allocator]
-    static ALLOC: Alloc = Alloc {
-        shards: [const {
-            Shard {
-                held: AtomicBool::new(false),
-                heap: UnsafeCell::new(Heap::new()),
+    impl Alloc {
+        pub(crate) const fn new(mem: Mem) -> Alloc {
+            Alloc {
+                mem,
+                shards: [const {
+                    Shard {
+                        held: AtomicBool::new(false),
+                        heap: UnsafeCell::new(Heap::new()),
+                    }
+                }; HEAPS + 1],
+                owner: [const { AtomicU8::new(0) }; 1 << 16],
             }
-        }; HEAPS + 1],
-        owner: [const { AtomicU8::new(0) }; 1 << 16],
-    };
+        }
 
-    /// New memory for heap `k`, its pages marked as its own.
-    fn grow(k: usize, bytes: usize) -> Option<(usize, usize)> {
-        let pages = bytes.div_ceil(PAGE).max(16);
-        let old = core::arch::wasm32::memory_grow(0, pages);
-        if old == usize::MAX {
-            return None;
+        /// New memory for heap `k`, its pages marked as its own.
+        fn grow(&self, k: usize, bytes: usize) -> Option<(usize, usize)> {
+            let pages = bytes.div_ceil(PAGE).max(16);
+            let old = (self.mem.grow)(pages);
+            if old == usize::MAX {
+                return None;
+            }
+            for p in old..old + pages {
+                self.owner[p].store(k as u8, Ordering::Release);
+            }
+            Some(((self.mem.base)() + old * PAGE, pages * PAGE))
         }
-        for p in old..old + pages {
-            ALLOC.owner[p].store(k as u8, Ordering::Release);
+
+        /// The heap whose memory `p` is, by its page.
+        fn owner_index(&self, p: usize) -> usize {
+            self.owner[(p - (self.mem.base)()) / PAGE].load(Ordering::Acquire) as usize
         }
-        Some((old * PAGE, pages * PAGE))
     }
+
+    #[cfg(all(target_family = "wasm", target_feature = "atomics"))]
+    fn wasm_base() -> usize {
+        0
+    }
+
+    #[cfg(all(target_family = "wasm", target_feature = "atomics"))]
+    fn wasm_grow(pages: usize) -> usize {
+        core::arch::wasm32::memory_grow(0, pages)
+    }
+
+    #[cfg(all(target_family = "wasm", target_feature = "atomics"))]
+    #[global_allocator]
+    static ALLOC: Alloc = Alloc::new(Mem {
+        base: wasm_base,
+        grow: wasm_grow,
+    });
 
     impl Shard {
         fn try_take(&self) -> bool {
@@ -488,6 +607,8 @@ mod global {
             self.held.store(false, Ordering::Release);
         }
 
+        // the &mut comes from the UnsafeCell, under the shard's lock (`held`): one holder at a time
+        #[allow(clippy::mut_from_ref)]
         fn heap(&self) -> &mut Heap {
             // only while held
             unsafe { &mut *self.heap.get() }
@@ -520,12 +641,33 @@ mod global {
             f: impl Fn(&mut Heap, &mut dyn FnMut(usize) -> Option<(usize, usize)>) -> *mut u8,
         ) -> *mut u8 {
             let k = self.pick();
-            let p = f(self.shards[k].heap(), &mut |_| None);
+            // first a quick look in every heap (the thread's own first): a block off its lists
+            // as they stand. Merging a heap's cached blocks back (to find room before memory
+            // grows) empties its caches, so it is left until no heap has room as it stands:
+            // done on every miss of the thread's own heap, it cost a threaded CAM rerun most
+            // of its time in the allocator
+            let quick = |s: &Shard| {
+                let h = s.heap();
+                h.thrift = true;
+                let p = f(h, &mut |_| None);
+                h.thrift = false;
+                p
+            };
+            let p = quick(&self.shards[k]);
             self.shards[k].give();
             if !p.is_null() {
                 return p;
             }
             for j in (1..HEAPS).map(|i| (k + i) % HEAPS) {
+                let s = &self.shards[j];
+                s.take();
+                let p = quick(s);
+                s.give();
+                if !p.is_null() {
+                    return p;
+                }
+            }
+            for j in (0..HEAPS).map(|i| (k + i) % HEAPS) {
                 let s = &self.shards[j];
                 s.take();
                 let p = f(s.heap(), &mut |_| None);
@@ -536,16 +678,94 @@ mod global {
             }
             let s = &self.shards[k];
             s.take();
-            let p = f(s.heap(), &mut |b| grow(k, b));
+            let p = f(s.heap(), &mut |b| self.grow(k, b));
             s.give();
             p
         }
 
         /// The heap block `p` is of, held.
         fn owner_of(&self, p: *mut u8) -> &Shard {
-            let s = &self.shards[self.owner[p as usize / PAGE].load(Ordering::Acquire) as usize];
+            let s = &self.shards[self.owner_index(p as usize)];
             s.take();
             s
+        }
+    }
+
+    std::thread_local! {
+        static CACHE: core::cell::UnsafeCell<Cache> = const { core::cell::UnsafeCell::new(Cache::new()) };
+    }
+
+    /// The thread's cache, once its thread locals exist. A worker's first allocations (its
+    /// stack, its thread locals' own block) run before they do: its thread-local base is
+    /// still 0 then, so the cache's address is its small offset into the block, not memory of
+    /// its own. Those allocations take the heaps directly.
+    use super::Cache;
+
+    /// Whether threads keep their own small blocks (`Cache`). Off: a threaded page died with an
+    /// out-of-bounds access in realloc (CI, parity shard 1/3, rack18u) not reproduced since; until
+    /// it is understood every block goes through the heaps, as before the caches.
+    const THREAD_CACHE: bool = false;
+
+    fn cache() -> Option<*mut Cache> {
+        if !THREAD_CACHE {
+            return None;
+        }
+        let c = CACHE.with(|c| c.get());
+        (c as usize >= 1 << 16).then_some(c)
+    }
+
+    impl Alloc {
+        /// A small block of class `c` (`size` bytes) off the thread's cache, filling it from
+        /// a heap when empty.
+        fn small(&self, l: Layout, c: usize, size: usize) -> *mut u8 {
+            let Some(t) = cache() else {
+                return self.fresh(|h, g| unsafe { h.alloc(l.size(), l.align(), &mut |b| g(b)) });
+            };
+            // only this thread touches its cache, and no allocation happens while it is borrowed
+            let p = unsafe { (*t).pop(c) };
+            if p != 0 {
+                return p as *mut u8;
+            }
+            // a batch, under one take of a heap: the first returned, the rest kept
+            let n = unsafe { (*t).want(size) };
+            self.fresh(|h, g| {
+                let first = unsafe { h.alloc(size, 16, &mut |b| g(b)) };
+                if !first.is_null() {
+                    for _ in 1..n {
+                        // off this heap's memory as it stands: never grown for the batch
+                        let q = unsafe { h.alloc(size, 16, &mut |_| None) } as usize;
+                        if q == 0 {
+                            break;
+                        }
+                        unsafe { (*t).put(q, c) };
+                    }
+                }
+                first
+            })
+        }
+
+        /// A small block given back on this thread: into its cache, a class's blocks back to
+        /// their heaps once the cache is full.
+        fn small_free(&self, p: *mut u8, l: Layout, c: usize) {
+            let Some(t) = cache() else {
+                let s = self.owner_of(p);
+                unsafe { s.heap().dealloc(p, l.size(), l.align()) };
+                s.give();
+                return;
+            };
+            let shed = unsafe {
+                (*t).put(p as usize, c);
+                (*t).shed()
+            };
+            if let Some((mut q, size)) = shed {
+                while q != 0 {
+                    let next = super::rd(q);
+                    let s = self.owner_of(q as *mut u8);
+                    unsafe { s.heap().dealloc(q as *mut u8, size, 16) };
+                    s.give();
+                    q = next;
+                }
+            }
         }
     }
 
@@ -554,12 +774,16 @@ mod global {
             let f = |h: &mut Heap, g: &mut dyn FnMut(usize) -> Option<(usize, usize)>| unsafe {
                 h.alloc(l.size(), l.align(), &mut |b| g(b))
             };
+            if l.size() <= super::SMALL && l.align() <= 16 {
+                let (c, size) = super::class(l.size());
+                return self.small(l, c, size);
+            }
             if l.size() < BIG && l.align() <= 16 {
                 return self.fresh(f);
             }
             let s = &self.shards[BIG_HEAP];
             s.take();
-            let p = f(s.heap(), &mut |b| grow(BIG_HEAP, b));
+            let p = f(s.heap(), &mut |b| self.grow(BIG_HEAP, b));
             s.give();
             if !p.is_null() {
                 return p;
@@ -570,6 +794,9 @@ mod global {
 
         #[inline(never)]
         unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
+            if l.size() <= super::SMALL && l.align() <= 16 {
+                return self.small_free(p, l, super::class(l.size()).0);
+            }
             let s = self.owner_of(p);
             unsafe { s.heap().dealloc(p, l.size(), l.align()) };
             s.give();
@@ -578,12 +805,20 @@ mod global {
         unsafe fn realloc(&self, p: *mut u8, l: Layout, new: usize) -> *mut u8 {
             // in its own heap if it stays the size that heap keeps (in place, or moved within it;
             // the big blocks' heap may grow for it), else a new block, and this one freed
-            let k = self.owner[p as usize / PAGE].load(Ordering::Acquire) as usize;
+            // a small block that stays in its class stays where it is
+            if l.align() <= 16
+                && l.size() <= super::SMALL
+                && new <= super::SMALL
+                && super::class(l.size()).0 == super::class(new).0
+            {
+                return p;
+            }
+            let k = self.owner_index(p as usize);
             if (k == BIG_HEAP) == (new >= BIG) {
                 let s = self.owner_of(p);
                 let q = unsafe {
                     s.heap().realloc(p, l.size(), l.align(), new, &mut |b| {
-                        if k == BIG_HEAP { grow(k, b) } else { None }
+                        if k == BIG_HEAP { self.grow(k, b) } else { None }
                     })
                 };
                 s.give();
@@ -614,6 +849,7 @@ mod tests {
         for s in 1..=SMALL {
             let (c, size) = class(s);
             assert!(size >= s && size % 16 == 0 && c < CACHES, "{s}");
+            assert_eq!(class_size(c), size, "{s}");
             assert!(
                 c == last.0 && size == last.1 || c == last.0 + 1 && size > last.1,
                 "{s}"
@@ -847,5 +1083,265 @@ mod tests {
         }
         // fragmentation costs a little over the rounds, not a round's worth
         assert!(tops[39] < tops[0] + tops[0] / 8, "{tops:?}");
+    }
+
+    #[test]
+    fn a_quick_look_neither_flushes_nor_grows() {
+        // small blocks freed into the caches, the rest of their 64 KiB block the wild one: a
+        // large block fits only once those are merged back
+        let mut a = Arena::new(16 << 20, false);
+        let ap = &raw mut a;
+        let grown = core::cell::Cell::new(0);
+        let mut grow = |n: usize| {
+            grown.set(grown.get() + 1);
+            unsafe { (*ap).grow(n) }
+        };
+        let mut h = Heap::new();
+        let small: Vec<usize> = (0..40)
+            .map(|_| unsafe { h.alloc(512, 8, &mut grow) } as usize)
+            .collect();
+        for &p in &small {
+            unsafe { h.dealloc(p as *mut u8, 512, 8) };
+        }
+        let (cached, grows) = (h.cached, grown.get());
+        assert!(cached > 0);
+        h.thrift = true;
+        let p = unsafe { h.alloc(40_000, 8, &mut grow) };
+        assert!(p.is_null(), "found without merging");
+        assert_eq!(
+            (h.cached, grown.get()),
+            (cached, grows),
+            "a quick look changed the heap"
+        );
+        check(&h, unsafe { &*ap });
+        // the full look merges and finds it, still without growing
+        h.thrift = false;
+        let p = unsafe { h.alloc(40_000, 8, &mut grow) } as usize;
+        assert!(p != 0 && grown.get() == grows);
+        fill(p, 40_000, 7);
+        check(&h, unsafe { &*ap });
+    }
+
+    /// The threaded build's thread cache over one heap, as its allocator drives them: random
+    /// small allocations and frees against a model of the live blocks. Each block handed out
+    /// is disjoint from every live one and keeps its contents; the cache stays within TCAP;
+    /// and with everything given back (the cache shed into the heap) the heap is whole again.
+    #[test]
+    fn a_thread_cache_hands_out_each_block_once() {
+        let mut a = Arena::new(64 << 20, false);
+        let ap = &raw mut a;
+        let mut grow = |n: usize| unsafe { (*ap).grow(n) };
+        let mut h = Heap::new();
+        let mut t = Cache::new();
+        let mut r = Rng(11);
+        let mut live: BTreeMap<usize, (usize, u8)> = BTreeMap::new();
+        let back = |h: &mut Heap, mut q: usize, size: usize| {
+            while q != 0 {
+                let next = rd(q);
+                unsafe { h.dealloc(q as *mut u8, size, 16) };
+                q = next;
+            }
+        };
+        for step in 0..60_000u32 {
+            let tag = (step % 251) as u8 + 1;
+            if r.below(2) == 0 || live.is_empty() {
+                let size = 1 + r.below(SMALL as u64) as usize;
+                let (c, cs) = class(size);
+                let mut p = t.pop(c);
+                if p == 0 {
+                    let n = t.want(cs);
+                    p = unsafe { h.alloc(cs, 16, &mut grow) } as usize;
+                    for _ in 1..n {
+                        let q = unsafe { h.alloc(cs, 16, &mut |_| None) } as usize;
+                        if q == 0 {
+                            break;
+                        }
+                        t.put(q, c);
+                    }
+                }
+                assert!(p != 0 && p.is_multiple_of(16));
+                // disjoint from every live block
+                if let Some((&q, &(qs, _))) = live.range(..=p).next_back() {
+                    assert!(q + qs <= p, "{p:x} inside live {q:x}");
+                }
+                if let Some((&q, _)) = live.range(p..).next() {
+                    assert!(p + size <= q, "{p:x} runs into live {q:x}");
+                }
+                fill(p, size, tag);
+                live.insert(p, (size, tag));
+            } else {
+                let k = r.below(live.len() as u64) as usize;
+                let (&p, &(size, tag)) = live.iter().nth(k).unwrap();
+                assert!(holds(p, size, tag), "contents of {p:x}");
+                live.remove(&p);
+                t.put(p, class(size).0);
+                if let Some((q, qs)) = t.shed() {
+                    back(&mut h, q, qs);
+                }
+            }
+            assert!(t.bytes <= TCAP, "the cache holds {}", t.bytes);
+            assert_eq!(
+                t.bytes,
+                (0..CACHES)
+                    .map(|c| t.counts[c] as usize * class_size(c))
+                    .sum::<usize>()
+            );
+        }
+        for (p, (size, tag)) in std::mem::take(&mut live) {
+            assert!(holds(p, size, tag));
+            unsafe { h.dealloc(p as *mut u8, size, 8) };
+        }
+        for c in 0..CACHES {
+            let q = core::mem::take(&mut t.heads[c]);
+            back(&mut h, q, class_size(c));
+        }
+        h.flush();
+        let a = unsafe { &*ap };
+        let free = check(&h, a);
+        let regions = a
+            .regions
+            .iter()
+            .enumerate()
+            .filter(|&(i, &(s, _))| i == 0 || s != a.regions[i - 1].0 + a.regions[i - 1].1);
+        assert_eq!(free.len(), regions.count(), "everything merged back");
+    }
+
+    /// The threaded build's allocator itself (`threaded`, the wasm32+atomics global), run
+    /// natively on an arena standing in for the wasm memory: eight threads (more than the cores,
+    /// so holders of the heaps' spin locks are preempted) allocate, grow and shrink, and free
+    /// blocks of every size, a quarter of them freed on another thread than the one that made
+    /// them (the thread caches give them back to their own heaps). Every block is filled with its
+    /// own tag and checked before every realloc and free: a block handed out twice, or a heap's
+    /// lists corrupted, shows as another block's tag (or a crash).
+    // (threads: none on wasip1)
+    #[cfg(not(target_os = "wasi"))]
+    #[test]
+    fn threaded_stress() {
+        use core::alloc::{GlobalAlloc, Layout};
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::{Mutex, OnceLock};
+        const ARENA: usize = 2 << 30;
+        static BASE: OnceLock<usize> = OnceLock::new();
+        static USED: AtomicUsize = AtomicUsize::new(0);
+        fn base() -> usize {
+            // reserved, not touched: the OS maps its pages as the heaps write them
+            *BASE.get_or_init(|| unsafe {
+                std::alloc::alloc_zeroed(Layout::from_size_align(ARENA, 65536).unwrap()) as usize
+            })
+        }
+        fn grow(pages: usize) -> usize {
+            let old = USED.fetch_add(pages, Ordering::SeqCst);
+            if (old + pages) * 65536 > ARENA {
+                usize::MAX
+            } else {
+                old
+            }
+        }
+        static A: threaded::Alloc = threaded::Alloc::new(threaded::Mem { base, grow });
+        assert!(base() != 0);
+        // blocks handed between threads: (address, layout, tag)
+        static HANDED: Mutex<Vec<(usize, usize, usize, u8)>> = Mutex::new(Vec::new());
+        let threads = std::env::var("FORGE_ALLOC_STRESS_THREADS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(8usize);
+        let steps: u32 = std::env::var("FORGE_ALLOC_STRESS_STEPS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(60_000);
+        let fill = |p: usize, n: usize, t: u8| unsafe { core::ptr::write_bytes(p as *mut u8, t, n) };
+        let holds = |p: usize, n: usize, t: u8| unsafe {
+            core::slice::from_raw_parts(p as *const u8, n)
+                .iter()
+                .all(|&b| b == t)
+        };
+        std::thread::scope(|sc| {
+            for th in 0..threads {
+                sc.spawn(move || {
+                    let mut r = Rng(0x5eed_0000 + th as u64 * 7919);
+                    let mut live: Vec<(usize, usize, usize, u8)> = Vec::new();
+                    let tag_of = |step: u32| ((th as u32 * 31 + step) % 251) as u8 + 1;
+                    for step in 0..steps {
+                        let tag = tag_of(step);
+                        // live data held under 8 MiB a thread (the arena is 2 GiB): past it, a free
+                        let held: usize = live.iter().map(|b| b.1).sum();
+                        let op = if held > 8 << 20 { 99 } else { r.below(100) };
+                        if op < 45 || live.is_empty() {
+                            // sizes: mostly small classes, some medium, a few big blocks
+                            let size = match r.below(20) {
+                                0 => 65536 + r.below(200_000) as usize,
+                                1..=4 => 1025 + r.below(60_000) as usize,
+                                _ => 1 + r.below(1024) as usize,
+                            };
+                            let align = if r.below(10) == 0 { 16 } else { 8 };
+                            let l = Layout::from_size_align(size, align).unwrap();
+                            let p = unsafe { A.alloc(l) } as usize;
+                            assert!(p != 0 && p.is_multiple_of(align), "alloc {size}");
+                            fill(p, size, tag);
+                            live.push((p, size, align, tag));
+                        } else if op < 70 {
+                            // realloc: grow or shrink, across classes and heaps
+                            let k = r.below(live.len() as u64) as usize;
+                            let (p, size, align, t) = live[k];
+                            assert!(
+                                holds(p, size, t),
+                                "thread {th}: block {p:x} ({size}) overwritten before realloc"
+                            );
+                            let new = match r.below(4) {
+                                0 => (size / 2).max(1),
+                                1 => size + 1 + r.below(64) as usize,
+                                2 => (size * 2).min(256 << 10),
+                                _ => 1 + r.below(70_000) as usize,
+                            };
+                            let l = Layout::from_size_align(size, align).unwrap();
+                            let q = unsafe { A.realloc(p as *mut u8, l, new) } as usize;
+                            assert!(q != 0 && q.is_multiple_of(align));
+                            assert!(
+                                holds(q, size.min(new), t),
+                                "thread {th}: realloc lost the contents"
+                            );
+                            fill(q, new, tag);
+                            live[k] = (q, new, align, tag);
+                        } else if op < 80 {
+                            // hand one to another thread, take one handed over
+                            let k = r.below(live.len() as u64) as usize;
+                            let b = live.swap_remove(k);
+                            let got = {
+                                let mut h = HANDED.lock().unwrap();
+                                h.push(b);
+                                if h.len() > 1 {
+                                    let j = r.below(h.len() as u64) as usize;
+                                    Some(h.swap_remove(j))
+                                } else {
+                                    None
+                                }
+                            };
+                            if let Some(g) = got {
+                                live.push(g);
+                            }
+                        } else {
+                            let k = r.below(live.len() as u64) as usize;
+                            let (p, size, align, t) = live.swap_remove(k);
+                            assert!(
+                                holds(p, size, t),
+                                "thread {th}: block {p:x} ({size}) overwritten before free"
+                            );
+                            unsafe { A.dealloc(p as *mut u8, Layout::from_size_align(size, align).unwrap()) };
+                        }
+                    }
+                    for (p, size, align, t) in live {
+                        assert!(
+                            holds(p, size, t),
+                            "thread {th}: block {p:x} ({size}) overwritten at the end"
+                        );
+                        unsafe { A.dealloc(p as *mut u8, Layout::from_size_align(size, align).unwrap()) };
+                    }
+                });
+            }
+        });
+        for (p, size, align, t) in std::mem::take(&mut *HANDED.lock().unwrap()) {
+            assert!(holds(p, size, t), "handed block {p:x} ({size}) overwritten");
+            unsafe { A.dealloc(p as *mut u8, Layout::from_size_align(size, align).unwrap()) };
+        }
     }
 }

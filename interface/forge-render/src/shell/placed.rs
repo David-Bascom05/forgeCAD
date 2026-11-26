@@ -11,6 +11,12 @@ pub(crate) trait Placed: Sized {
     /// Shown, and whether this was its unseen sizing pass.
     fn show_sizing<R>(self, ctx: &Context, add: impl FnOnce(&mut Ui) -> R) -> (Self::Out<R>, bool);
 
+    /// Shown as `show` would be, with the fitting `show_sizing` does (a window: inside the app,
+    /// and a sheet across the bottom of a narrow one).
+    fn show_fit<R>(self, ctx: &Context, add: impl FnOnce(&mut Ui) -> R) -> Self::Out<R> {
+        self.show_sizing(ctx, add).0
+    }
+
     /// Shown, keeping what it names in `places` only when it's drawn where it's seen.
     fn show_placed<R>(
         self,
@@ -32,7 +38,20 @@ impl Placed for egui::Window<'_> {
 
     fn show_sizing<R>(self, ctx: &Context, add: impl FnOnce(&mut Ui) -> R) -> (Self::Out<R>, bool) {
         let mut sizing = false;
-        let r = self.show(ctx, |ui| {
+        // every window the shell opens fits the window it's in (UX-LEAD, the UI audit's 480 px
+        // pass): no bigger than the dialog area less a margin, and kept inside it. (A scroll
+        // area here collapsed the auto-sized dialogs: a window too wide for a narrow window
+        // gets its own narrow layout, theme::NARROW.)
+        let area = super::dialog_area(ctx).shrink(8.0);
+        let mut w = self.max_size(area.size()).constrain_to(area);
+        // a narrow window: a sheet across the bottom, not where it would sit at 1400 (UX-LEAD)
+        if ctx.content_rect().width() < super::theme::NARROW {
+            let margin = ctx.global_style().spacing.window_margin.sum().x;
+            w = w
+                .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, 0.0))
+                .min_width(area.width() - margin);
+        }
+        let r = w.show(ctx, |ui| {
             sizing = ui.is_sizing_pass();
             add(ui)
         });
@@ -50,5 +69,54 @@ impl Placed for egui::Area {
             add(ui)
         });
         (r, sizing)
+    }
+}
+
+/// Where a dialog is shown: floating over the view, or docked in a rect of the environment's
+/// properties column (docs/ux/STANDARD.md: docked panels, not floating windows). The same body
+/// draws in either; docked, it scrolls when taller than its rect.
+pub(crate) enum Host<'a> {
+    Float(Box<egui::Window<'a>>),
+    Dock(egui::Id, Rect, egui::Frame),
+}
+
+impl Placed for Host<'_> {
+    type Out<R> = Option<InnerResponse<Option<R>>>;
+
+    fn show_sizing<R>(self, ctx: &Context, add: impl FnOnce(&mut Ui) -> R) -> (Self::Out<R>, bool) {
+        match self {
+            Host::Float(w) => (*w).show_sizing(ctx, add),
+            Host::Dock(id, r, frame) => {
+                let mut sizing = false;
+                let ir = egui::Area::new(id)
+                    .fixed_pos(r.min)
+                    // at the rect, always: content wider than it is clipped, never shifts it
+                    .constrain(false)
+                    .order(egui::Order::Middle)
+                    .fade_in(false)
+                    .show(ctx, |ui| {
+                        ui.set_width(r.width());
+                        ui.set_max_height(r.height());
+                        // nothing past the rect (what is under it, a section below, keeps its clicks)
+                        ui.set_clip_rect(r);
+                        // the frame's own margins and stroke are inside the rect too
+                        let m = frame.total_margin().sum().y;
+                        frame
+                            .show(ui, |ui| {
+                                egui::ScrollArea::vertical()
+                                    .id_salt(id.with("scroll"))
+                                    .max_height((r.height() - m - 2.0).max(40.0))
+                                    .auto_shrink([false, true])
+                                    .show(ui, |ui| {
+                                        sizing = ui.is_sizing_pass();
+                                        add(ui)
+                                    })
+                                    .inner
+                            })
+                            .inner
+                    });
+                (Some(InnerResponse::new(Some(ir.inner), ir.response)), sizing)
+            }
+        }
     }
 }

@@ -1,0 +1,7 @@
+{"doc":"examples/rack18u/hw/tests/latch_base_stud.fg"}
+{"op":"SetParam","param":"z_door","value":{"value":0.5,"dim":"Length"}}
+{"op":"SetParam","param":"size_m4","value":{"value":4.2,"dim":"Length"}}
+{"op":"SetParam","param":"min_m4","value":{"value":5.25,"dim":"Length"}}
+{"op":"Rename","from":"door","to":"door_r"}
+{"op":"MoveFeature","id":"m4","before":null}
+{"op":"ReplaceFeature","id":"press","text":"press = fit_rule(\"../pem_fh_m4_12.fg\", \"plates/door_stud_t1.fg\")\n"}

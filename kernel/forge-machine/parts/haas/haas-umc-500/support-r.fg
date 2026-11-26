@@ -1,0 +1,13 @@
+# haas-umc-500 trunnion support r (unpublished, conservative)
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared x0 = -159
+shared y0 = 221
+shared z0 = -549
+shared lx = 318
+shared ly = 138
+shared lz = 588
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (lx, ly))
+}
+block = extrude(plan, lz)

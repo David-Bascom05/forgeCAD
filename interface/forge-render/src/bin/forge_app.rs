@@ -2,8 +2,8 @@
 
 use forge_render::gui::Headless;
 
-const USAGE: &str = "forge-app [PART | file.fg | file.dwg] [--size WxH] [--times]
-  [--shot FILE.ppm [--scale S] [--light] [--pastel] [--background floor|gradient|solid] [--settings FILE.toml] [--tab N] [--select NAME] [--click NAME].. [--rclick NAME].. [--wait] [--at X Y] [--sketch STATEMENT;STATEMENT..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH] [--marking]]
+const USAGE: &str = "forge-app [PART | file.fg | file.dwg] [--env NAME] [--size WxH] [--times]
+  [--shot FILE.ppm [--scale S] [--light] [--pastel] [--background floor|gradient|solid] [--settings FILE.toml] [--tab N] [--env NAME] [--select NAME] [--click NAME].. [--rclick NAME].. [--wait] [--at X Y] [--sketch STATEMENT;STATEMENT..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH] [--marking]]
   steps, in order: --click NAME --dclick NAME --rclick NAME --wait --type TEXT --key NAME (enter, escape, tab, backspace, or M, Ctrl+Z, F6...)
   --hover X Y (the view's pick there) --clickat X Y --drag X Y X2 Y2 --drag-hold X Y X2 Y2 (not let go) --snap FILE.ppm --save
   --viewnow YAW PITCH --home --zoom F (the camera's distance times F) --wheel X Y DY (scroll there) --new-drawing
@@ -12,8 +12,12 @@ const USAGE: &str = "forge-app [PART | file.fg | file.dwg] [--size WxH] [--times
   --sleep SECONDS (frames that long by the clock) --keydown KEY --keyup KEY (a key held over frames)
   [--present fifo|mailbox|immediate] [--run-for SECONDS] [--spin]
   [--bench]
+  [--photo FILE.png | --record FILE.mp4|DIR [--fps N] [--seconds S] [--frames]] [--out-size WxH]
 PART: a bench part (its Forge port) or a file. --times: input-to-present on exit. --shot: one frame, no window.
---bench: what clicks and frames cost, no window.";
+--bench: what clicks and frames cost, no window.
+--photo: the view as a PNG; --record: the environment's timeline (or a turntable of S seconds, 12 by
+default) frame by frame at N fps (30) to MP4 by ffmpeg, or with --frames (or no ffmpeg) PNG frames in
+DIR; --out-size: the picture's pixels (the view's by default). No window; research/render/record.md.";
 
 enum Step {
     Click(String),
@@ -48,6 +52,8 @@ enum Step {
     /// A key going down, or coming up, alone (a key held to talk).
     KeyDown(String),
     KeyUp(String),
+    /// A length param of the open document set, as its field does (by its name).
+    Set(String, f64),
 }
 
 struct Args {
@@ -62,6 +68,8 @@ struct Args {
     settings: Option<String>,
     shot: Option<String>,
     tab: usize,
+    /// The environment to open the file in (shell/env: thermoform, bendsim, render, ...).
+    env: Option<String>,
     select: Option<String>,
     /// Clicks by name and waits for the Forge file's builds and checks, in order.
     steps: Vec<Step>,
@@ -73,7 +81,15 @@ struct Args {
     /// Shows the marking menu at the view's middle, for a shot.
     marking: bool,
     bench: bool,
+    photo: Option<String>,
+    record: Option<String>,
+    fps: u32,
+    seconds: Option<f32>,
+    frames: bool,
+    out_size: Option<(u32, u32)>,
     times: bool,
+    /// Each step's frames: p50, p95, p99 of the UI thread's frame (research/big-render).
+    frame_log: bool,
     present: Option<String>,
     run_for: Option<f64>,
     spin: bool,
@@ -90,6 +106,7 @@ fn args() -> Result<Args, String> {
         settings: None,
         shot: None,
         tab: 0,
+        env: None,
         select: None,
         steps: Vec::new(),
         at: None,
@@ -99,7 +116,14 @@ fn args() -> Result<Args, String> {
         draw: None,
         marking: false,
         bench: false,
+        photo: None,
+        record: None,
+        fps: 30,
+        seconds: None,
+        frames: false,
+        out_size: None,
         times: false,
+        frame_log: false,
         present: None,
         run_for: None,
         spin: false,
@@ -119,7 +143,18 @@ fn args() -> Result<Args, String> {
             "--background" => a.background = Some(v()?),
             "--settings" => a.settings = Some(v()?),
             "--shot" => a.shot = Some(v()?),
+            "--photo" => a.photo = Some(v()?),
+            "--record" => a.record = Some(v()?),
+            "--fps" => a.fps = v()?.parse().map_err(|_| USAGE)?,
+            "--seconds" => a.seconds = Some(v()?.parse().map_err(|_| USAGE)?),
+            "--frames" => a.frames = true,
+            "--out-size" => {
+                let s = v()?;
+                let (w, h) = s.split_once('x').ok_or(USAGE)?;
+                a.out_size = Some((w.parse().map_err(|_| USAGE)?, h.parse().map_err(|_| USAGE)?));
+            }
             "--tab" => a.tab = v()?.parse().map_err(|_| USAGE)?,
+            "--env" => a.env = Some(v()?),
             "--select" => a.select = Some(v()?),
             "--click" => a.steps.push(Step::Click(v()?)),
             "--rclick" => a.steps.push(Step::RightClick(v()?)),
@@ -197,7 +232,13 @@ fn args() -> Result<Args, String> {
             }
             "--marking" => a.marking = true,
             "--bench" => a.bench = true,
+            "--set" => {
+                let name = it.next().ok_or("--set PARAM VALUE")?;
+                let v = it.next().and_then(|v| v.parse().ok()).ok_or("--set PARAM VALUE")?;
+                a.steps.push(Step::Set(name, v));
+            }
             "--times" => a.times = true,
+            "--frame-log" => a.frame_log = true,
             "--present" => a.present = Some(v()?),
             "--run-for" => a.run_for = Some(v()?.parse().map_err(|_| USAGE)?),
             "--spin" => a.spin = true,
@@ -446,6 +487,14 @@ fn hover(h: &mut Headless, x: f32, y: f32) {
     }
 }
 
+/// A step's frames: the whole UI-thread frame, then its parts as the app times them.
+fn frame_report(step: &str, log: &[[f64; 5]]) {
+    for (k, what) in ["frame", "ui", "tess", "view", "draw"].iter().enumerate() {
+        let v: Vec<f64> = log.iter().map(|r| r[k]).collect();
+        println!("{}", forge_render::bench::report_split(&format!("{step} {what}"), &v));
+    }
+}
+
 fn wait(h: &mut Headless) {
     let t = std::time::Instant::now();
     while t.elapsed().as_secs() < 900 {
@@ -498,9 +547,10 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let a = args()?;
-    if a.shot.is_none() && !a.bench {
+    if a.shot.is_none() && !a.bench && a.photo.is_none() && a.record.is_none() {
         return forge_render::app::run(
             a.file,
+            a.env,
             (a.size.0 as f64, a.size.1 as f64),
             a.times,
             a.present,
@@ -538,7 +588,22 @@ fn run() -> Result<(), String> {
     }
     // a drawing opens on its first tab: the one asked for after
     h.gui.shell.tab = a.tab;
-    for step in &a.steps {
+    if let Some(e) = &a.env {
+        h.gui.env_asked = Some(e.clone());
+        h.settle();
+        for _ in 0..5 {
+            h.step();
+        }
+    }
+    for (k, step) in a.steps.iter().enumerate() {
+        if a.frame_log {
+            if let Some(log) = h.frame_log.take()
+                && !log.is_empty()
+            {
+                frame_report(&format!("step {k}"), &log);
+            }
+            h.frame_log = Some(Vec::new());
+        }
         let (right, c) = match step {
             Step::Click(c) | Step::DoubleClick(c) => (false, c),
             Step::RightClick(c) => (true, c),
@@ -603,6 +668,19 @@ fn run() -> Result<(), String> {
             }
             Step::Hover(x, y) => {
                 hover(&mut h, *x, *y);
+                continue;
+            }
+            Step::Set(name, v) => {
+                let key = h.gui.shell.fg.as_ref().and_then(|p| {
+                    p.params.iter().find(|r| r.key.name == *name).map(|r| r.key.clone())
+                });
+                let Some(key) = key else {
+                    return Err(format!("no param {name}"));
+                };
+                if !set_length(&mut h, &key, *v) {
+                    return Err(format!("{name} = {v} refused"));
+                }
+                h.step();
                 continue;
             }
             Step::Sleep(secs) => {
@@ -761,6 +839,11 @@ fn run() -> Result<(), String> {
         h.step();
         h.step();
     }
+    if let Some(log) = h.frame_log.take()
+        && !log.is_empty()
+    {
+        frame_report("last step", &log);
+    }
     if let Some(s) = &a.select
         && !h.click(&format!("fg:row:{s}"))
     {
@@ -842,6 +925,41 @@ fn run() -> Result<(), String> {
     }
     if let Some(s) = &a.shot {
         forge_dirs::fs::write(s, h.ppm()).map_err(|e| e.to_string())?;
+    }
+    capture(&mut h, &a)
+}
+
+/// `--photo`, `--record`: the Capture group's work (gui_record.rs) to the file named, waited out.
+fn capture(h: &mut Headless, a: &Args) -> Result<(), String> {
+    use forge_render::shell::capture::{Capture, Format, Size};
+    for (out, ask) in [(&a.photo, Capture::Photo), (&a.record, Capture::Record)] {
+        let Some(out) = out else { continue };
+        let c = &mut h.gui.shell.capture;
+        let size = a.out_size.map_or(Size::Window, |(w, h)| Size::Custom(w, h));
+        (c.photo_size, c.size, c.fps) = (size, size, a.fps.max(1));
+        c.orbit_seconds = a.seconds.unwrap_or(12.0);
+        c.format = if a.frames { Format::Frames } else { Format::Mp4 };
+        c.out = Some(out.clone());
+        c.asks.push(ask);
+        h.step();
+        let mut shown = 0;
+        while h.gui.capture_busy() {
+            h.step();
+            if let Some((k, n)) = h.gui.shell.capture.recording
+                && k >= shown
+            {
+                eprint!("\rframe {k} of {n}");
+                shown = k + n.div_ceil(20).max(1);
+            }
+        }
+        let said = &h.gui.shell.capture.last;
+        if a.record.is_some() && ask == Capture::Record {
+            eprintln!();
+        }
+        if said.starts_with("Couldn't") || said.is_empty() {
+            return Err(format!("{out}: {said}"));
+        }
+        println!("{said}");
     }
     Ok(())
 }

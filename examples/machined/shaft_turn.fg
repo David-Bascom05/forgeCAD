@@ -1,0 +1,19 @@
+machining
+# shaft.fg on the generic lathe from a Ø32 bar: face, rough, finish, thread M20 x 1.5, part off.
+# Placed (the work's Z0 at machine Z 100, every station's offsets 0): G5 is checked in full.
+shared bar = 32
+
+f     = part("shaft.fg")
+t1    = lathe_tool("od-rough-cnmg", t: 1)
+t2    = lathe_tool("od-finish-dnmg", t: 2)
+t4    = lathe_tool("thread-60", t: 4)
+t5    = lathe_tool("part-3", t: 5)
+jaws  = chuck(face: -70, grip: 30, jaw: 15)
+op1   = lathe_setup(f, bar: bar, front: 2, chuck: jaws, machine: "generic-lathe", at: 100,
+                    offsets: ((1, 0, 0), (2, 0, 0), (4, 0, 0), (5, 0, 0)))
+face  = turn_face(op1, tool: t1, to: 0, step: 1)
+rough = turn_rough(op1, tool: t1, leave: 0.3, step: 2, to: -56)
+fin   = turn_finish(op1, tool: t2, to: -55)
+thr   = turn_thread(op1, tool: t4, d: 20, pitch: 1.5, from: 3, to: -30, passes: 8)
+cut   = part_off(op1, tool: t5, at: -55)
+prog  = lathe_program(op1, post: "fanuc-lathe", number: 1)

@@ -1,0 +1,4 @@
+{"doc":"examples/rack18u/casters/ball_3969.fg"}
+{"op":"SetParam","param":"dw","value":{"value":4.16745,"dim":"Length"}}
+{"op":"SetParam","param":"rw","value":{"value":2.083725,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}

@@ -1,0 +1,14 @@
+# mazak-hcn-6000 bed: the bed (estimate).
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared x0 = -800
+shared y0 = -770
+shared z0 = -655
+shared L = 1600
+shared W = 399
+shared H = 3635
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (L, W))
+}
+body = extrude(plan, H)

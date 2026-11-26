@@ -7,6 +7,7 @@ use forge_geom::ruled::{Rail, Ruled, line_wall, meet_ruled, wrap_wall};
 use forge_geom::testing::rand_frame;
 use forge_geom::wrap::{Flat, Wrap, wrap_surface};
 use forge_geom::{Curve, Line, Parabola, Plane, Surface, SurfaceGeom};
+use forge_math::ipow::Powi as _;
 use forge_math::rng::Rng;
 use forge_math::{Frame, Interval, Point2, Point3, Vec3, dmath};
 
@@ -82,7 +83,7 @@ fn a_wrapped_circle_is_an_ellipse_and_its_wall_a_right_conoid() {
         // in (phi, h) the ellipse with semi-axes radius / unroll and radius
         let q = unwrapped(&axis, p, unroll, center.x);
         let phi = q.x / unroll;
-        let e = ((phi - center.x / unroll) * unroll / radius).powi(2) + ((q.y - center.y) / radius).powi(2);
+        let e = ((phi - center.x / unroll) * unroll / radius).ipow(2) + ((q.y - center.y) / radius).ipow(2);
         assert!((e - 1.0).abs() < 1e-12, "{e}");
         let l = axis.point_to_local(p);
         assert!(((l.x * l.x + l.y * l.y).sqrt() - w.radius).abs() < 1e-12);
@@ -130,7 +131,7 @@ fn parabola() -> Flat {
     )
     .expect("a frame");
     Flat::Parabola {
-        curve: Parabola { frame, focal: 0.5 },
+        curve: Parabola::new(frame, 0.5),
         range: Interval::new(-3.0, 3.0),
     }
 }
@@ -271,12 +272,12 @@ fn random_flat(r: &mut Rng) -> Flat {
         1 => {
             let lo = r.range(-2.0, 0.0);
             Flat::Parabola {
-                curve: Parabola {
-                    frame: Frame::WORLD
+                curve: Parabola::new(
+                    Frame::WORLD
                         .rotated_about_z(r.range(0.0, 6.0))
                         .with_origin(Point3::new(r.range(-1.0, 1.0), r.range(-1.0, 1.0), 0.0)),
-                    focal: r.range(0.3, 3.0),
-                },
+                    r.range(0.3, 3.0),
+                ),
                 range: Interval::new(lo, lo + r.range(1.0, 3.0)),
             }
         }

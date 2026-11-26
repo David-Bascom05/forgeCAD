@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/casters/cage_half.fg"}
+{"op":"SetParam","param":"rci","value":{"value":6.825,"dim":"Length"}}
+{"op":"SetParam","param":"rco","value":{"value":8.925,"dim":"Length"}}
+{"op":"SetParam","param":"tw","value":{"value":0.47250000000000003,"dim":"Length"}}
+{"op":"Rename","from":"pk","to":"pk_r"}
+{"op":"MoveFeature","id":"trim","before":null}

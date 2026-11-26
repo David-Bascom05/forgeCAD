@@ -212,26 +212,68 @@ flat = unfold(base, on: offset(base.bottom, gap))
     assert!(text.contains("touch"), "{text}");
 }
 
-/// A kernel refusal reads as words, not the error's Debug dump: a tapped hole where the
-/// counterbored hole1 already is.
+/// A kernel refusal reads as words, not the error's Debug dump: the face a boolean found untouched
+/// on the other body (UntouchedOnOther), as the tapped hole below was refused before its thread's
+/// crest band on hole1's bore was known to lie on it.
 #[test]
 fn a_kernel_refusal_is_words() {
-    let src = format!(
-        "{}hole2 = hole(at: sk2.p1, screw: \"M5\", fit: \"tap\", depth: thru)\nhole2_thread = thread(hole: hole2, length: \"full\")\n",
-        include_str!("../../../examples/demo/part_tools.fg")
-    );
-    let r = run(&src);
-    let e = r
-        .errors
-        .iter()
-        .find(|e| e.kind() == "Build")
-        .expect("the thread is refused");
+    let face = forge_bool::FaceRef {
+        name: forge_topo::Name::feature(7),
+        surface: "cylinder",
+        near: forge_math::Point3::new(20.0, 0.0, 4.5),
+    };
+    let e = forge_lang::error::Error::Build {
+        span: forge_lang::syntax::Span::new(0, 1),
+        id: "hole2_thread".into(),
+        error: forge_model::RegenError::Boolean {
+            feature: 0,
+            error: forge_bool::BoolError::Unsupported(Box::new(forge_bool::Unhandled::UntouchedOnOther {
+                face,
+            })),
+        },
+        fit: None,
+    };
     let t = e.text();
     assert!(
         t.starts_with("hole2_thread: the kernel refused it: not supported yet: "),
         "{t}"
     );
     assert!(!t.contains(['{', '}']) && !t.contains("FaceRef"), "{t}");
+}
+
+/// A tapped hole where hole1's plain 5 mm hole already is: the M5 thread's groove runs out to the
+/// 5 mm major diameter, all of it in hole1's void, its crest band on hole1's bore (forge-geom
+/// `meet_coaxial`: Coincident). It builds, and takes nothing (it was refused: UntouchedOnOther).
+#[test]
+fn a_thread_inside_a_hole_as_wide_as_its_major_diameter_takes_nothing() {
+    let base = format!(
+        "{}hole2 = hole(at: sk2.p1, screw: \"M5\", fit: \"tap\", depth: thru)\n",
+        include_str!("../../../examples/demo/part_tools.fg")
+    );
+    let threaded = format!("{base}hole2_thread = thread(hole: hole2, length: \"full\")\n");
+    // (beside the demo part, where its text's font is)
+    let opts = || Options {
+        dir: Some(format!("{}/../../examples/demo", env!("CARGO_MANIFEST_DIR")).into()),
+        ..Options::default()
+    };
+    let volume = |src: &str| {
+        let r = forge_lang::run(src, opts(), Default::default()).0;
+        assert!(
+            r.errors.iter().all(|e| e.kind() != "Build"),
+            "{}",
+            report::text(&r, src)
+        );
+        let b = r.body.unwrap_or_else(|| {
+            panic!(
+                "no body: {:?}",
+                r.errors.iter().map(|e| e.text()).collect::<Vec<_>>()
+            )
+        });
+        assert!(forge_topo::check(&b).is_empty());
+        forge_topo::mass::mass(&b).expect("mass").volume
+    };
+    let (plain, with) = (volume(&base), volume(&threaded));
+    assert!((plain - with).abs() <= 1e-6 * plain, "{plain} {with}");
 }
 
 #[test]

@@ -1,0 +1,11 @@
+# generic-trunnion-bc bed: the base under the trunnion supports.
+# frame: the machine's base frame at the home pose (rotary table top centre = origin).
+shared L = 1000
+shared W = 900
+shared H = 200
+shared z0 = -500
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(center: (0, 0), size: (L, W))
+}
+base = extrude(plan, H)

@@ -32,8 +32,32 @@ use std::sync::{Arc, Mutex};
 
 /// The most a request's body may hold.
 const MAX_BODY: usize = 64 << 20;
+/// The most connections served at once.
+const MAX_CONNECTIONS: usize = 128;
+/// How long a connection may wait between requests, and a request's head may take once it
+/// starts; how long a write may wait on a reader (an event stream no one reads ends then).
+const IDLE_TIME: std::time::Duration = std::time::Duration::from_secs(120);
+const HEAD_TIME: std::time::Duration = std::time::Duration::from_secs(30);
+const WRITE_TIME: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// A connection's place among `MAX_CONNECTIONS`, given back however its thread ends.
+struct Slot(Arc<std::sync::atomic::AtomicUsize>);
+
+impl Drop for Slot {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
 /// The most a request's head may hold.
 const MAX_HEAD: usize = 64 << 10;
+/// The most an agent call's body may hold (a message with a picture).
+const MAX_AGENT_BODY: usize = 12 << 20;
+
+/// What the page may run and reach: its own files only, no inline script, no plugins, never
+/// framed. index.html carries the same as a <meta> for static hosts.
+pub const CSP: &str = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; \
+     img-src 'self' blob: data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; \
+     base-uri 'none'; frame-ancestors 'none'";
 
 pub struct Config {
     pub root: PathBuf,
@@ -42,9 +66,14 @@ pub struct Config {
     pub port: u16,
     pub token: Option<String>,
     pub writable: bool,
+    /// `--agent`: the page's agent is the person's Claude Code, run here (agent_bridge.rs).
+    pub agent: Option<Arc<crate::agent_bridge::Agent>>,
+    /// How long a request's head may take from its first byte (`HEAD_TIME`; less in tests).
+    pub head_time: std::time::Duration,
 }
 
-const USAGE: &str = "forgecad web DIR [--port P] [--bind ADDR] [--token T] [--app WEBDIR] [--read-only]";
+const USAGE: &str =
+    "forgecad web DIR [--port P] [--bind ADDR] [--token T] [--app WEBDIR] [--read-only] [--agent]";
 
 /// The command line's words after `web`.
 pub fn main(args: &[String]) -> ExitCode {
@@ -68,6 +97,7 @@ pub fn main(args: &[String]) -> ExitCode {
 fn parse(args: &[String]) -> Result<Config, String> {
     let (mut root, mut app, mut bind, mut port, mut token, mut writable) =
         (None, None, IpAddr::from([127, 0, 0, 1]), 8080u16, None, true);
+    let mut agent = false;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         let mut val = |name: &str| it.next().cloned().ok_or(format!("{name} takes a value"));
@@ -77,6 +107,7 @@ fn parse(args: &[String]) -> Result<Config, String> {
             "--token" => token = Some(val("--token")?),
             "--app" => app = Some(PathBuf::from(val("--app")?)),
             "--read-only" => writable = false,
+            "--agent" => agent = true,
             s if s.starts_with("--") => return Err(format!("{s}: not an option")),
             s if root.is_none() => root = Some(PathBuf::from(s)),
             s => return Err(format!("{s}: one folder only")),
@@ -94,6 +125,16 @@ fn parse(args: &[String]) -> Result<Config, String> {
     if !bind.is_loopback() && token.is_none() {
         token = Some(random_token());
     }
+    // the agent drives this machine as the person: never served past loopback (use SSH)
+    if agent && !bind.is_loopback() {
+        return Err(
+            "--agent: loopback only (127.0.0.1 or ::1); from another machine, use an SSH tunnel".into(),
+        );
+    }
+    if agent && !writable {
+        return Err("--agent: Claude Code writes the files; drop --read-only".into());
+    }
+    let agent = agent.then(|| Arc::new(crate::agent_bridge::Agent::new(root.clone(), random_token())));
     Ok(Config {
         root,
         app,
@@ -101,6 +142,8 @@ fn parse(args: &[String]) -> Result<Config, String> {
         port,
         token,
         writable,
+        agent,
+        head_time: HEAD_TIME,
     })
 }
 
@@ -116,6 +159,18 @@ fn default_app() -> Option<PathBuf> {
 
 /// 128 bits from the OS's randomness (std seeds each `RandomState` from it), as hex.
 fn random_token() -> String {
+    // the OS's CSPRNG device where there is one
+    #[cfg(unix)]
+    {
+        use std::io::Read;
+        let mut b = [0u8; 16];
+        if std::fs::File::open("/dev/urandom")
+            .and_then(|mut f| f.read_exact(&mut b))
+            .is_ok()
+        {
+            return b.iter().map(|x| format!("{x:02x}")).collect();
+        }
+    }
     let mut s = String::new();
     for i in 0..2u64 {
         let mut h = RandomState::new().build_hasher();
@@ -135,10 +190,21 @@ pub fn serve(c: Config, ready: impl FnOnce(&Path, &str)) -> Result<(), String> {
     } else {
         at.ip().to_string()
     };
-    let url = match &c.token {
+    let mut url = match &c.token {
         Some(t) => format!("http://{host}:{}/?token={t}", at.port()),
         None => format!("http://{host}:{}/", at.port()),
     };
+    // the agent's token in the fragment: never sent to a server, never in a Referer
+    if let Some(a) = &c.agent {
+        url.push_str(&format!("#agent={}", a.token));
+        let a = a.clone();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(30));
+                a.reap();
+            }
+        });
+    }
     if c.app.is_none() {
         eprintln!("forgecad web: no built app (FORGECAD_WEB, --app): only the API is served");
     }
@@ -150,10 +216,22 @@ pub fn serve(c: Config, ready: impl FnOnce(&Path, &str)) -> Result<(), String> {
 pub fn run(l: TcpListener, c: Arc<Config>) -> Result<(), String> {
     // one writer at a time: a check-then-write is whole
     let lock = Arc::new(Mutex::new(()));
+    // a thread a connection, so a cap on them: past it a new one is closed at once; one left
+    // idle is closed after a while (an agent's event stream is never idle: it's written to)
+    let open = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     for s in l.incoming() {
         let Ok(s) = s else { continue };
+        if open.load(std::sync::atomic::Ordering::SeqCst) >= MAX_CONNECTIONS {
+            drop(s);
+            continue;
+        }
+        let _ = s.set_read_timeout(Some(IDLE_TIME));
+        let _ = s.set_write_timeout(Some(WRITE_TIME));
+        open.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let slot = Slot(open.clone());
         let (c, lock) = (c.clone(), lock.clone());
         std::thread::spawn(move || {
+            let _slot = slot;
             let _ = connection(s, &c, &lock);
         });
     }
@@ -213,7 +291,10 @@ fn reason(s: u16) -> &'static str {
         404 => "Not Found",
         405 => "Method Not Allowed",
         409 => "Conflict",
+        415 => "Unsupported Media Type",
+        503 => "Service Unavailable",
         412 => "Precondition Failed",
+        408 => "Request Timeout",
         413 => "Payload Too Large",
         421 => "Misdirected Request",
         428 => "Precondition Required",
@@ -221,13 +302,59 @@ fn reason(s: u16) -> &'static str {
     }
 }
 
-fn read_request(r: &mut BufReader<TcpStream>) -> Result<Option<Request>, Response> {
+/// A read that failed: out of time (408), or otherwise (400, as `what`).
+fn slow_or(e: std::io::Error, what: &str) -> Response {
+    match e.kind() {
+        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut => {
+            error(408, "the request came too slowly")
+        }
+        _ => error(400, what),
+    }
+}
+
+fn read_request(r: &mut BufReader<TcpStream>, c: &Config) -> Result<Option<Request>, Response> {
     let mut head = Vec::new();
+    // a request, once it starts, comes in good time: its head in 30 s, its body in 30 s more
+    // and a second a 64 KB; a client trickling it in loses the connection, not a slot forever
+    let stream = r.get_ref().try_clone().map_err(|_| error(400, "unreadable"))?;
+    let within = |by: std::time::Instant| -> Result<(), Response> {
+        let left = by.saturating_duration_since(std::time::Instant::now());
+        if left.is_zero() {
+            return Err(error(408, "the request came too slowly"));
+        }
+        let _ = stream.set_read_timeout(Some(left));
+        Ok(())
+    };
+    // the clock starts at the request's first byte (waiting for it is the idle time)
+    if r.fill_buf().map_err(|e| slow_or(e, "unreadable"))?.is_empty() {
+        return Ok(None);
+    }
+    let began = std::time::Instant::now();
     loop {
+        within(began + c.head_time)?;
+        // a line, as it comes: in time (each piece of it, not just the whole) and no longer
+        // than a head may be
         let mut line = Vec::new();
-        let n = r
-            .read_until(b'\n', &mut line)
-            .map_err(|_| error(400, "unreadable"))?;
+        loop {
+            within(began + c.head_time)?;
+            let buf = r.fill_buf().map_err(|e| slow_or(e, "unreadable"))?;
+            if buf.is_empty() {
+                break;
+            }
+            let (take, done) = match buf.iter().position(|b| *b == b'\n') {
+                Some(k) => (k + 1, true),
+                None => (buf.len(), false),
+            };
+            line.extend_from_slice(&buf[..take]);
+            r.consume(take);
+            if head.len() + line.len() > MAX_HEAD + 2 {
+                return Err(error(413, "the request's head is too large"));
+            }
+            if done {
+                break;
+            }
+        }
+        let n = line.len();
         if n == 0 {
             return if head.is_empty() {
                 Ok(None)
@@ -260,9 +387,37 @@ fn read_request(r: &mut BufReader<TcpStream>) -> Result<Option<Request>, Respons
     if len > MAX_BODY {
         return Err(error(413, "the file is too large"));
     }
+    // refused before its body is read: a Host that isn't this machine's, an Origin that isn't
+    // this page's, an agent call larger than any it takes
+    let (path, _) = target.split_once('?').unwrap_or((target, ""));
+    let header = |k: &str| {
+        headers
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(k))
+            .map(|(_, v)| v.as_str())
+    };
+    if c.bind.is_loopback() && !header("host").is_some_and(is_loopback_name) {
+        return Err(error(421, "this server answers to localhost only"));
+    }
+    if let Some(o) = header("origin")
+        && !o
+            .split_once("://")
+            .map_or(o, |x| x.1)
+            .eq_ignore_ascii_case(header("host").unwrap_or_default())
+    {
+        return Err(error(403, "a request from another origin"));
+    }
+    if path.starts_with("/api/agent/") && len > MAX_AGENT_BODY {
+        return Err(error(413, "too large"));
+    }
     let mut body = vec![0; len];
+    within(
+        std::time::Instant::now() + c.head_time + std::time::Duration::from_secs((len / (64 << 10)) as u64),
+    )?;
     r.read_exact(&mut body)
-        .map_err(|_| error(400, "the body cut short"))?;
+        .map_err(|e| slow_or(e, "the body cut short"))?;
+    // idle again until the next request
+    let _ = stream.set_read_timeout(Some(IDLE_TIME));
     let (path, query) = target.split_once('?').unwrap_or((target, ""));
     Ok(Some(Request {
         method: method.to_string(),
@@ -279,7 +434,8 @@ fn write_response(s: &mut TcpStream, r: &Response, keep: bool, head: bool) -> st
     let mut text = format!(
         "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nX-Content-Type-Options: nosniff\r\n\
          Cache-Control: no-cache\r\nCross-Origin-Opener-Policy: same-origin\r\n\
-         Cross-Origin-Embedder-Policy: require-corp\r\nConnection: {}\r\n",
+         Cross-Origin-Embedder-Policy: require-corp\r\nReferrer-Policy: no-referrer\r\n\
+         Content-Security-Policy: {CSP}\r\nConnection: {}\r\n",
         r.status,
         reason(r.status),
         r.kind,
@@ -301,9 +457,19 @@ fn connection(s: TcpStream, c: &Config, lock: &Mutex<()>) -> std::io::Result<()>
     let mut out = s.try_clone()?;
     let mut r = BufReader::new(s);
     loop {
-        let (resp, keep, head) = match read_request(&mut r) {
+        let (resp, keep, head) = match read_request(&mut r, c) {
             Ok(None) => return Ok(()),
             Ok(Some(q)) => {
+                // the agent's events: a streamed answer, the connection's last
+                if q.method == "GET"
+                    && q.path == "/api/agent/events"
+                    && let Some(a) = &c.agent
+                {
+                    return match agent_gate(&q, a) {
+                        Err(e) => write_response(&mut out, &e, false, false),
+                        Ok(client) => stream_events(&mut out, a, &q, &client),
+                    };
+                }
                 let keep = !q
                     .header("connection")
                     .is_some_and(|v| v.eq_ignore_ascii_case("close"));
@@ -316,6 +482,66 @@ fn connection(s: TcpStream, c: &Config, lock: &Mutex<()>) -> std::io::Result<()>
             return Ok(());
         }
     }
+}
+
+/// An agent call's gate, before its route: a loopback Host, the page's own Origin (when one's
+/// sent), then the agent's token; the page's id (`X-Forge-Client`) if it passes.
+fn agent_gate(q: &Request, a: &crate::agent_bridge::Agent) -> Result<String, Response> {
+    if !q.header("host").is_some_and(is_loopback_name) {
+        return Err(error(421, "this server answers to localhost only"));
+    }
+    if let Some(o) = q.header("origin") {
+        let h = q.header("host").unwrap_or_default();
+        let o = o.split_once("://").map_or(o, |x| x.1);
+        if !o.eq_ignore_ascii_case(h) {
+            return Err(error(403, "a request from another origin"));
+        }
+    }
+    let given = q.header("authorization").and_then(|v| v.strip_prefix("Bearer "));
+    if !given.is_some_and(|g| same(g, &a.token)) {
+        return Err(error(
+            401,
+            "the agent's token is needed (Authorization: Bearer T, from the URL forgecad web printed)",
+        ));
+    }
+    if q.method == "POST"
+        && !q
+            .header("content-type")
+            .is_some_and(|t| t.starts_with("application/json"))
+    {
+        return Err(error(415, "JSON only (Content-Type: application/json)"));
+    }
+    if q.body.len() > MAX_AGENT_BODY {
+        return Err(error(413, "too large"));
+    }
+    Ok(q.header("x-forge-client")
+        .unwrap_or("")
+        .chars()
+        .take(64)
+        .collect())
+}
+
+/// The agent's lines from `?from=N`, a chunk each as they come, until the page goes.
+fn stream_events(
+    out: &mut TcpStream,
+    a: &crate::agent_bridge::Agent,
+    q: &Request,
+    client: &str,
+) -> std::io::Result<()> {
+    let from = q.query("from").and_then(|f| f.parse().ok()).unwrap_or(0);
+    let head = "HTTP/1.1 200 OK\r\nContent-Type: application/x-ndjson\r\nTransfer-Encoding: chunked\r\n\
+         X-Content-Type-Options: nosniff\r\nCache-Control: no-cache\r\nReferrer-Policy: no-referrer\r\n\
+         Cross-Origin-Resource-Policy: same-origin\r\nConnection: close\r\n\r\n";
+    out.write_all(head.as_bytes())?;
+    out.flush()?;
+    a.stream(from, client, |bytes| {
+        out.write_all(format!("{:x}\r\n", bytes.len()).as_bytes())?;
+        out.write_all(bytes)?;
+        out.write_all(b"\r\n")?;
+        out.flush()
+    });
+    let _ = out.write_all(b"0\r\n\r\n");
+    Ok(())
 }
 
 /// Equal without saying where they differ.
@@ -371,6 +597,17 @@ fn answer(q: &Request, c: &Config, lock: &Mutex<()>) -> Response {
         }
     }
     let rest = q.path.strip_prefix("/api").unwrap_or_default();
+    if let (Some(name), Some(a)) = (rest.strip_prefix("/agent/"), &c.agent) {
+        if q.method != "POST" {
+            return error(405, "POST");
+        }
+        let client = match agent_gate(q, a) {
+            Ok(c) => c,
+            Err(e) => return e,
+        };
+        let (status, j) = a.call(name, &q.body, &client);
+        return json(status, j);
+    }
     match (q.method.as_str(), rest) {
         ("GET", "/info") => json(
             200,
@@ -384,6 +621,7 @@ fn answer(q: &Request, c: &Config, lock: &Mutex<()>) -> Response {
                         .into(),
                 ),
                 ("writable", c.writable.into()),
+                ("agent", c.agent.is_some().into()),
             ]),
         ),
         ("GET", "/files") => list(c),
@@ -396,7 +634,7 @@ fn answer(q: &Request, c: &Config, lock: &Mutex<()>) -> Response {
             rename(c, &q.body)
         }
         (m, f) if f.starts_with("/files/") => {
-            let rel = match unescape(&f["/files/".len()..]).and_then(|p| clean(&p)) {
+            let rel = match unescape(&f["/files/".len()..]).and_then(|p| clean_project(&p)) {
                 Ok(p) => p,
                 Err(e) => return error(400, &e),
             };
@@ -458,6 +696,119 @@ pub fn clean(p: &str) -> Result<PathBuf, String> {
     Ok(out)
 }
 
+/// A file of the served project: as `clean`, and the project's own git repository too (the
+/// page's Versions keep its history there): the root's `.gitignore`, and in the root's `.git`
+/// only what forge-git keeps (`GIT_FILES`, `GIT_DIRS`). No other dot path.
+pub fn clean_project(p: &str) -> Result<PathBuf, String> {
+    let refused = || Err(format!("{p}: not a project path"));
+    if p == ".gitignore" {
+        return Ok(PathBuf::from(p));
+    }
+    let Some(rest) = p.strip_prefix(".git/") else {
+        return clean(p);
+    };
+    let rest = clean(rest)?;
+    if !git_allowed(&rest) {
+        return refused();
+    }
+    Ok(Path::new(".git").join(rest))
+}
+
+/// The files in `.git` forge-git reads and writes, and so the page may: anything else there
+/// (`commondir`, `gitdir`, `config.worktree`, `modules/`, `worktrees/`, `hooks/`,
+/// `objects/info/alternates`, ...) can make the machine's own `git` run a program or read
+/// elsewhere, and is refused. An allowlist: what git adds later is refused until it's here.
+const GIT_FILES: [&str; 8] = [
+    "HEAD",
+    "index",
+    "config",
+    "description",
+    "packed-refs",
+    "ORIG_HEAD",
+    "COMMIT_EDITMSG",
+    "info/exclude",
+];
+/// The folders in `.git` whose every file is data: objects (not `objects/info`), refs, reflogs,
+/// and ForgeCAD's own (`forgecad/history-v1`, forge-history's saves list), which git never reads.
+const GIT_DIRS: [&str; 4] = ["objects", "refs", "logs", "forgecad"];
+
+/// `rel` (inside `.git`, already `clean`) is one of forge-git's own.
+fn git_allowed(rel: &Path) -> bool {
+    // as a case-insensitive filesystem (macOS, Windows) reads them: `objects/INFO` is
+    // `objects/info`; and Windows drops a name's trailing dots and spaces, so none may end so
+    let parts: Vec<String> = rel
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().to_ascii_lowercase())
+        .collect();
+    // nor hold anything but ASCII: HFS+ ignores some characters (`in\u{200c}fo` is `info`)
+    if parts
+        .iter()
+        .any(|p| p.ends_with('.') || p.ends_with(' ') || !p.is_ascii())
+    {
+        return false;
+    }
+    let whole = parts.join("/");
+    if GIT_FILES.iter().any(|g| g.eq_ignore_ascii_case(&whole)) {
+        return true;
+    }
+    // forge-git's own passing files beside them, which git never runs: a file's lock
+    // (`index.lock`, renamed over `index` on the page's side; here each is written whole, the
+    // config through its check, and nothing in .git is renamed) and a new file's temporary
+    // (`tmp_obj_…`)
+    if let [one] = parts.as_slice()
+        && (one
+            .strip_suffix(".lock")
+            .is_some_and(|f| GIT_FILES.iter().any(|g| g.eq_ignore_ascii_case(f)))
+            || one
+                .strip_prefix("tmp_obj_")
+                .is_some_and(|t| !t.is_empty() && t.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')))
+    {
+        return true;
+    }
+    match parts.as_slice() {
+        [dir, _, ..] if GIT_DIRS.contains(&dir.as_str()) => !(dir == "objects" && parts[1] == "info"),
+        _ => false,
+    }
+}
+
+/// What a page may write as the repository's `.git/config`: what forge-git writes, keys git
+/// only reads as settings. Refused: anything git would run (`core.fsmonitor`, `core.hooksPath`,
+/// `core.sshCommand`, `alias.*`, filters, helpers, ...), which a written config could otherwise
+/// make the machine's own `git` run.
+fn safe_git_config(body: &[u8]) -> Result<(), String> {
+    const KEYS: [&str; 10] = [
+        "core.repositoryformatversion",
+        "core.filemode",
+        "core.bare",
+        "core.logallrefupdates",
+        "core.ignorecase",
+        "core.precomposeunicode",
+        "core.symlinks",
+        "extensions.objectformat",
+        "user.name",
+        "user.email",
+    ];
+    let text = std::str::from_utf8(body).map_err(|_| "not text".to_string())?;
+    let mut section = String::new();
+    for line in text.lines().map(str::trim) {
+        if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
+            continue;
+        }
+        if let Some(s) = line.strip_prefix('[') {
+            let s = s.strip_suffix(']').ok_or("a section header")?;
+            // a subsection (`[remote "x"]`) is never one of the keys allowed
+            section = s.trim().to_ascii_lowercase();
+            continue;
+        }
+        let key = line.split('=').next().unwrap_or("").trim().to_ascii_lowercase();
+        let full = format!("{section}.{key}");
+        if !KEYS.contains(&full.as_str()) {
+            return Err(format!(".git/config: {full} is not a setting this server writes"));
+        }
+    }
+    Ok(())
+}
+
 /// The file's place on disk, refused if it (or the folder it would be made in) leads out of the
 /// root through a link.
 fn place(c: &Config, rel: &Path) -> Result<PathBuf, Response> {
@@ -470,6 +821,21 @@ fn place(c: &Config, rel: &Path) -> Result<PathBuf, Response> {
     let real = std::fs::canonicalize(there).map_err(|_| error(404, "not found"))?;
     if !real.starts_with(&c.root) {
         return Err(error(403, "outside the folder"));
+    }
+    // where it really is: a link on the way (`g -> .git`, `x -> .git/hooks`) mustn't reach the
+    // repository's files by another name, around `clean_project`'s allowlist and the config's
+    // check. So a path that goes into .git, or comes out of it, by a link is refused; one that
+    // doesn't is as before
+    let rest = p.strip_prefix(there).unwrap_or(Path::new(""));
+    let real_rel = real.join(rest);
+    let real_rel = real_rel.strip_prefix(&c.root).unwrap_or(&real_rel);
+    let in_git = |q: &Path| {
+        q.components()
+            .next()
+            .is_some_and(|x| x.as_os_str().to_string_lossy().eq_ignore_ascii_case(".git"))
+    };
+    if (in_git(real_rel) || in_git(rel)) && real_rel != rel {
+        return Err(error(403, "a link into or out of the repository's .git"));
     }
     if std::fs::symlink_metadata(&p).is_ok_and(|m| m.file_type().is_symlink())
         && std::fs::canonicalize(&p).is_ok_and(|r| !r.starts_with(&c.root))
@@ -492,11 +858,33 @@ fn walk(c: &Config) -> Vec<(String, Vec<u8>)> {
         let Ok(rd) = std::fs::read_dir(&d) else { continue };
         for e in rd.flatten() {
             let name = e.file_name().to_string_lossy().into_owned();
-            if name.starts_with('.') {
+            // the project's own repository (its history), as `clean_project` allows
+            let git = d == c.root && (name == ".gitignore" || (name == ".git" && git_small(&e.path())));
+            if name.starts_with('.') && !git {
                 continue;
             }
-            let Ok(ft) = e.file_type() else { continue };
+            // in .git, only forge-git's own files, as `clean_project` allows (a folder is
+            // walked if anything in it can be)
             let p = e.path();
+            if let Ok(rel) = p.strip_prefix(c.root.join(".git")) {
+                let file = e.file_type().is_ok_and(|t| t.is_file());
+                let rel = rel.to_string_lossy();
+                let fine = if rel.is_empty() {
+                    true
+                } else if file {
+                    clean_project(&format!(".git/{rel}")).is_ok()
+                } else {
+                    GIT_DIRS
+                        .iter()
+                        .any(|g| rel == *g || rel.starts_with(&format!("{g}/")))
+                        && !rel.starts_with("objects/info")
+                        || GIT_FILES.iter().any(|f| f.starts_with(&format!("{rel}/")))
+                };
+                if !fine {
+                    continue;
+                }
+            }
+            let Ok(ft) = e.file_type() else { continue };
             if ft.is_dir() {
                 dirs.push(p);
             } else if ft.is_file()
@@ -513,6 +901,32 @@ fn walk(c: &Config) -> Vec<(String, Vec<u8>)> {
     }
     files.sort();
     files
+}
+
+/// The most a repository may hold to go to the page: a big one (a checkout of a project's own
+/// repository) stays on the machine, its history not shown in the page.
+const GIT_CAP: u64 = 64 << 20;
+
+fn git_small(dir: &Path) -> bool {
+    let mut total = 0u64;
+    let mut dirs = vec![dir.to_path_buf()];
+    while let Some(d) = dirs.pop() {
+        let Ok(rd) = std::fs::read_dir(&d) else {
+            return false;
+        };
+        for e in rd.flatten() {
+            let Ok(m) = e.metadata() else { continue };
+            if m.is_dir() {
+                dirs.push(e.path());
+            } else {
+                total += m.len();
+                if total > GIT_CAP {
+                    return false;
+                }
+            }
+        }
+    }
+    true
 }
 
 /// The most a bundle holds: past it the page reads the files one by one.
@@ -615,18 +1029,42 @@ fn precondition(q: &Request, now: &Option<String>) -> Result<(), Response> {
 }
 
 /// Written whole or not at all: a file beside it, then renamed over it.
-fn put(p: &Path, bytes: &[u8]) -> std::io::Result<()> {
+pub(crate) fn put(p: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
     if let Some(d) = p.parent() {
         std::fs::create_dir_all(d)?;
     }
-    let tmp = p.with_file_name(format!(
-        ".{}.forgecad-web-{}",
-        p.file_name()
-            .map_or_else(Default::default, |n| n.to_string_lossy()),
-        forge_dirs::process_id()
-    ));
-    std::fs::write(&tmp, bytes)?;
-    std::fs::rename(&tmp, p).inspect_err(|_| {
+    // the file beside it: a name no one can guess, made new (O_CREAT|O_EXCL: a link or a file
+    // already there is refused, never written through), then renamed over it
+    let mut tries = 0;
+    let (tmp, mut f) = loop {
+        // a name taken 16 times running is no accident: fail, closed
+        tries += 1;
+        if tries > 16 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                "no free name for the file written beside it",
+            ));
+        }
+        let tmp = p.with_file_name(format!(
+            ".{}.forgecad-web-{}",
+            p.file_name()
+                .map_or_else(Default::default, |n| n.to_string_lossy()),
+            random_token()
+        ));
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)
+        {
+            Ok(f) => break (tmp, f),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    };
+    let written = f.write_all(bytes).and_then(|_| f.sync_all());
+    drop(f);
+    written.and_then(|_| std::fs::rename(&tmp, p)).inspect_err(|_| {
         let _ = std::fs::remove_file(&tmp);
     })
 }
@@ -641,6 +1079,12 @@ fn write(c: &Config, rel: &Path, q: &Request) -> Response {
     }
     if let Err(r) = precondition(q, &current(&p)) {
         return r;
+    }
+    // `.git/CONFIG` is the config too where names are case-insensitive
+    if rel.to_string_lossy().eq_ignore_ascii_case(".git/config")
+        && let Err(e) = safe_git_config(&q.body)
+    {
+        return error(403, &e);
     }
     match put(&p, &q.body) {
         Ok(()) => json(200, Json::obj(vec![("etag", etag(&q.body).into())])),
@@ -682,12 +1126,17 @@ fn rename(c: &Config, body: &[u8]) -> Response {
         j.get(k)
             .and_then(Json::str)
             .ok_or(format!("{k}?"))
-            .and_then(clean)
+            .and_then(clean_project)
     };
     let (from, to) = match (get("from"), get("to")) {
         (Ok(a), Ok(b)) => (a, b),
         (Err(e), _) | (_, Err(e)) => return error(400, &e),
     };
+    // the repository's files are written whole, never renamed: a rename onto `.git/config`
+    // would skip the check its writes get
+    if from.starts_with(".git") || to.starts_with(".git") {
+        return error(400, "a file in .git is written, not renamed");
+    }
     let (a, b) = match (place(c, &from), place(c, &to)) {
         (Ok(a), Ok(b)) => (a, b),
         (Err(r), _) | (_, Err(r)) => return r,
@@ -778,6 +1227,312 @@ mod tests {
     }
 
     #[test]
+    fn the_projects_own_repository_and_no_other_dot_path() {
+        for ok in [
+            ".git/config",
+            ".git/objects/ab/cdef",
+            ".git/refs/heads/main",
+            ".gitignore",
+        ] {
+            assert!(clean_project(ok).is_ok(), "{ok}");
+        }
+        for ok in [
+            ".git/index.lock",
+            ".git/HEAD.lock",
+            ".git/config.lock",
+            ".git/tmp_obj_123_0_456",
+            ".git/HEAD",
+            ".git/index",
+            ".git/packed-refs",
+            ".git/logs/HEAD",
+            ".git/logs/refs/heads/main",
+            ".git/objects/pack/pack-1.pack",
+            ".git/info/exclude",
+            ".git/forgecad/history-v1",
+        ] {
+            assert!(clean_project(ok).is_ok(), "{ok}");
+        }
+        // anything else in .git can make the machine's git run a program, or read elsewhere
+        for bad in [
+            ".git/commondir",
+            ".git/gitdir",
+            ".git/config.worktree",
+            ".git/modules/sub/config",
+            ".git/modules/sub/hooks/post-checkout",
+            ".git/worktrees/w/commondir",
+            ".git/objects/info/alternates",
+            ".git/info/attributes",
+            ".git/commondir.lock",
+            ".git/objects/INFO/alternates",
+            ".git/objects/info./alternates",
+            ".git/objects/info /alternates",
+            ".git/objects/in\u{200c}fo/alternates",
+            ".git/r\u{e9}fs/x",
+            ".git/COMMONDIR",
+            ".git/refs/heads/x.",
+            ".git/tmp_obj_",
+            ".git/info",
+            ".git/refs",
+            ".git/hooks",
+            ".git/HEAD/x",
+            ".git/hooks/pre-commit",
+            ".git/../x",
+            ".git/a/.b",
+            ".git/",
+            ".git",
+            "a/.git/config",
+            ".github/workflows/x",
+            ".hidden",
+            "a/.gitignore",
+        ] {
+            assert!(clean_project(bad).is_err(), "{bad}");
+        }
+        // forge-git's own configs are taken, anything git would run is not
+        for ok in [
+            "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n",
+            "[core]\n\trepositoryformatversion = 1\n[extensions]\n\tobjectformat = sha256\n",
+            "[user]\n\tname = A\n\temail = a@example.com\n",
+        ] {
+            assert!(safe_git_config(ok.as_bytes()).is_ok(), "{ok}");
+        }
+        for bad in [
+            "[core]\n\tfsmonitor = touch /tmp/pwned\n",
+            "[core]\n\thooksPath = /tmp\n",
+            "[core]\n\tsshCommand = x\n",
+            "[alias]\n\tst = !sh\n",
+            "[filter \"x\"]\n\tclean = sh\n",
+            "[include]\n\tpath = /etc/x\n",
+        ] {
+            assert!(safe_git_config(bad.as_bytes()).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn history_is_written_under_the_projects_git_only() {
+        let (at, root) = started(None, true);
+        let (s, _, b) = call(
+            at,
+            "PUT",
+            "/api/files/.git/objects/ab/cdef",
+            &[("If-None-Match", "*")],
+            b"object",
+        );
+        assert_eq!(s, 200, "{}", String::from_utf8_lossy(&b));
+        assert_eq!(
+            std::fs::read(root.join(".git/objects/ab/cdef")).unwrap(),
+            b"object"
+        );
+        let (s, _, _) = call(
+            at,
+            "PUT",
+            "/api/files/.gitignore",
+            &[("If-None-Match", "*")],
+            b"*.tmp\n",
+        );
+        assert_eq!(s, 200);
+        // a config that would make the machine's git run something is refused
+        let (_, head, _) = call(at, "GET", "/api/files/.git/config", &[], b"");
+        let v = header(&head, "etag").unwrap();
+        let (s, _, _) = call(
+            at,
+            "PUT",
+            "/api/files/.git/config",
+            &[("If-Match", &v)],
+            b"[core]\n\tfsmonitor = touch planted\n",
+        );
+        assert_eq!(s, 403);
+        assert!(
+            !std::fs::read_to_string(root.join(".git/config"))
+                .unwrap()
+                .contains("fsmonitor")
+        );
+        let (s, _, _) = call(
+            at,
+            "PUT",
+            "/api/files/.git/hooks/post-commit",
+            &[("If-None-Match", "*")],
+            b"#!/bin/sh\n",
+        );
+        assert_eq!(s, 400);
+        assert!(!root.join(".git/hooks/post-commit").exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The final review's: the temporary file a write makes beside its file was named by the
+    /// process id and written through whatever was there, so a link planted at that name
+    /// (`.part.fg.forgecad-web-PID -> .git/config`, or a file outside) took the write. Now its
+    /// name is random and it's made new, never through a link.
+    #[cfg(unix)]
+    #[test]
+    fn a_write_never_goes_through_a_link_planted_beside_it() {
+        let (at, root) = started(None, true);
+        let outside = root
+            .parent()
+            .unwrap()
+            .join(format!("forgecad-web-outside-{}", forge_dirs::process_id()));
+        std::fs::write(&outside, "untouched").unwrap();
+        // every name the old scheme could have used, and then some
+        for name in [
+            format!(".part.fg.forgecad-web-{}", forge_dirs::process_id()),
+            ".part.fg.forgecad-web-0".to_string(),
+        ] {
+            std::os::unix::fs::symlink(&outside, root.join(&name)).unwrap();
+            std::os::unix::fs::symlink(".git/config", root.join(format!("{name}.git"))).unwrap();
+        }
+        let config = std::fs::read(root.join(".git/config")).unwrap();
+        let (_, head, _) = call(at, "GET", "/api/files/part.fg", &[], b"");
+        let v = header(&head, "etag").unwrap();
+        let (s, _, _) = call(
+            at,
+            "PUT",
+            "/api/files/part.fg",
+            &[("If-Match", &v)],
+            b"shared t = 3\n",
+        );
+        assert_eq!(s, 200);
+        assert_eq!(
+            std::fs::read_to_string(root.join("part.fg")).unwrap(),
+            "shared t = 3\n"
+        );
+        assert_eq!(std::fs::read_to_string(&outside).unwrap(), "untouched");
+        assert_eq!(std::fs::read(root.join(".git/config")).unwrap(), config);
+        // and no temporary left behind
+        let left: Vec<_> = std::fs::read_dir(&root)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.contains("forgecad-web") && !n.ends_with(".git") && n.len() > 30)
+            .collect();
+        assert!(left.is_empty(), "{left:?}");
+        let _ = std::fs::remove_file(outside);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The re-review's: a link in the project into .git (`git clone` makes them happily) must not
+    /// reach the repository's files around the allowlist, nor its config around its check.
+    #[cfg(unix)]
+    #[test]
+    fn no_link_reaches_into_git() {
+        let (at, root) = started(None, true);
+        std::fs::create_dir_all(root.join(".git/hooks")).unwrap();
+        std::os::unix::fs::symlink(".git", root.join("g")).unwrap();
+        std::os::unix::fs::symlink(".git/hooks", root.join("x")).unwrap();
+        std::os::unix::fs::symlink(".git/config", root.join("c.fg")).unwrap();
+        for (m, path) in [
+            ("PUT", "/api/files/g/config"),
+            ("PUT", "/api/files/g/commondir"),
+            ("PUT", "/api/files/x/post-commit"),
+            ("PUT", "/api/files/c.fg"),
+            ("GET", "/api/files/g/config"),
+            ("GET", "/api/files/c.fg"),
+            ("DELETE", "/api/files/c.fg"),
+        ] {
+            let (s, _, _) = call(
+                at,
+                m,
+                path,
+                &[("If-None-Match", "*")],
+                b"[core]\n\tfsmonitor = touch planted\n",
+            );
+            assert!(s == 403 || s == 400, "{m} {path}: {s}");
+        }
+        assert!(!root.join(".git/commondir").exists());
+        assert!(!root.join(".git/hooks/post-commit").exists());
+        assert!(
+            !std::fs::read_to_string(root.join(".git/config"))
+                .unwrap()
+                .contains("fsmonitor")
+        );
+        // nor by a rename onto one
+        let (s, _, _) = call(
+            at,
+            "POST",
+            "/api/rename",
+            &[],
+            br#"{"from":"part.fg","to":"g/commondir"}"#,
+        );
+        assert!(s == 403 || s == 400, "{s}");
+        assert!(root.join("part.fg").exists());
+        // the config by another case, where names are case-insensitive, is checked all the same
+        let (s, _, _) = call(
+            at,
+            "PUT",
+            "/api/files/.git/CONFIG",
+            &[("If-None-Match", "*")],
+            b"[core]\n\tfsmonitor = x\n",
+        );
+        assert_eq!(s, 403);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The review's attack: `.git/commondir` pointing at a folder whose `config` sets
+    /// `core.fsmonitor`, so the machine's next `git status` runs it. Nothing in `.git` but
+    /// forge-git's own files is written, renamed to, or even listed.
+    #[test]
+    fn nothing_in_git_but_its_data_is_written_or_listed() {
+        let (at, root) = started(None, true);
+        for path in [
+            ".git/commondir",
+            ".git/gitdir",
+            ".git/config.worktree",
+            ".git/modules/sub/config",
+            ".git/modules/sub/hooks/post-checkout",
+            ".git/worktrees/w/commondir",
+            ".git/objects/info/alternates",
+            ".git/info/attributes",
+        ] {
+            let (s, _, _) = call(
+                at,
+                "PUT",
+                &format!("/api/files/{path}"),
+                &[("If-None-Match", "*")],
+                b"../evil\n",
+            );
+            assert_eq!(s, 400, "{path}");
+            assert!(!root.join(path).exists(), "{path}");
+            // nor by a rename onto it
+            let body = format!("{{\"from\":\"part.fg\",\"to\":\"{path}\"}}");
+            let (s, _, _) = call(at, "POST", "/api/rename", &[], body.as_bytes());
+            assert_eq!(s, 400, "rename to {path}");
+        }
+        assert!(root.join("part.fg").exists());
+        // a written config is checked, so it can't come by a rename either
+        let (s, _, _) = call(
+            at,
+            "PUT",
+            "/api/files/.git/HEAD.lock",
+            &[("If-None-Match", "*")],
+            b"x",
+        );
+        assert_eq!(s, 200, "a lock beside HEAD, as forge-git makes");
+        let (s, _, _) = call(
+            at,
+            "POST",
+            "/api/rename",
+            &[],
+            br#"{"from":".git/HEAD.lock","to":".git/config"}"#,
+        );
+        assert_eq!(s, 400);
+        // the attack's second half, a config elsewhere in the project, is just a file: inert
+        // without commondir; and planted on disk by other means, none is listed or read
+        std::fs::write(root.join(".git/commondir"), "../evil\n").unwrap();
+        std::fs::create_dir_all(root.join(".git/modules/sub")).unwrap();
+        std::fs::write(root.join(".git/modules/sub/config"), "[core]\n\tfsmonitor = x\n").unwrap();
+        std::fs::write(root.join(".git/HEAD"), "ref: refs/heads/main\n").unwrap();
+        let (_, _, b) = call(at, "GET", "/api/files", &[], b"");
+        let listed = String::from_utf8_lossy(&b);
+        assert!(listed.contains("\".git/HEAD\""), "{listed}");
+        for hidden in ["commondir", "modules", "hooks"] {
+            assert!(!listed.contains(hidden), "{hidden} listed: {listed}");
+        }
+        let (s, _, _) = call(at, "GET", "/api/files/.git/commondir", &[], b"");
+        assert_eq!(s, 400);
+        let (_, _, b) = call(at, "GET", "/api/bundle", &[], b"");
+        assert!(!String::from_utf8_lossy(&b).contains("commondir"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn hosts_are_loopback_names_only_when_they_are() {
         for ok in ["localhost:8080", "127.0.0.1:1", "[::1]:80", "LOCALHOST"] {
             assert!(is_loopback_name(ok), "{ok}");
@@ -840,7 +1595,10 @@ mod tests {
         std::fs::write(d.join("part.fg"), "shared t = 2\n").unwrap();
         std::fs::write(d.join("sub/b.fg"), "shared u = 3\n").unwrap();
         std::fs::create_dir_all(d.join(".git")).unwrap();
-        std::fs::write(d.join(".git/config"), "secret").unwrap();
+        std::fs::write(d.join(".git/config"), "[core]\n\tbare = false\n").unwrap();
+        std::fs::create_dir_all(d.join(".git/hooks")).unwrap();
+        std::fs::write(d.join(".git/hooks/pre-commit"), "#!/bin/sh\n").unwrap();
+        std::fs::write(d.join(".hidden"), "secret").unwrap();
         let root = std::fs::canonicalize(&d).unwrap();
         let l = TcpListener::bind("127.0.0.1:0").unwrap();
         let at = l.local_addr().unwrap();
@@ -851,6 +1609,9 @@ mod tests {
             port: at.port(),
             token: token.map(str::to_string),
             writable,
+            agent: None,
+            // a slow request's test needn't wait 30 s
+            head_time: std::time::Duration::from_secs(2),
         });
         std::thread::spawn(move || run(l, c));
         (at, root)
@@ -869,7 +1630,12 @@ mod tests {
             listed.contains("\"part.fg\"") && listed.contains("\"sub/b.fg\""),
             "{listed}"
         );
-        assert!(!listed.contains(".git"), "dot files are not served: {listed}");
+        // the project's own repository goes to the page (its history), its hooks never
+        assert!(listed.contains("\".git/config\""), "{listed}");
+        assert!(
+            !listed.contains("hooks") && !listed.contains(".hidden"),
+            "{listed}"
+        );
         // read: the bytes and the version `edit --base` takes
         let (s, head, b) = call(at, "GET", "/api/files/part.fg", &[], b"");
         assert_eq!((s, b.as_slice()), (200, &b"shared t = 2\n"[..]));
@@ -952,7 +1718,11 @@ mod tests {
         for p in [
             "/api/files/..%2Fsecret",
             "/api/files/%2E%2E/x",
-            "/api/files/.git/config",
+            "/api/files/.git/hooks/pre-commit",
+            "/api/files/.git/..%2F.hidden",
+            "/api/files/.hidden",
+            "/api/files/sub/.git/config",
+            "/api/files/.github/x",
             "/api/files/sub%5C..%5C..%5Cx",
         ] {
             let (s, _, b) = call(at, "GET", p, &[], b"");
@@ -1049,12 +1819,63 @@ mod tests {
             .iter()
             .map(|p| String::from_utf8(p[0].clone()).unwrap())
             .collect();
-        assert_eq!(names, ["part.fg", "sub/b.fg"], "no dot files");
-        assert_eq!(got[0][2], b"shared t = 2\n");
+        // the repository's files (not its hooks), no other dot file
+        assert_eq!(names, [".git/config", "part.fg", "sub/b.fg"]);
+        assert_eq!(got[1][2], b"shared t = 2\n");
         assert_eq!(
-            String::from_utf8(got[0][1].clone()).unwrap(),
+            String::from_utf8(got[1][1].clone()).unwrap(),
             etag(b"shared t = 2\n")
         );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The review's: a client trickling its request in held a thread (and a slot) for as long as
+    /// it liked; now a request has 30 s from its first byte, and it's 408 then.
+    #[test]
+    fn a_request_trickled_in_is_ended_in_good_time() {
+        use std::io::{Read, Write};
+        let (at, root) = started(None, true);
+        let mut s = std::net::TcpStream::connect(at).unwrap();
+        let t = std::time::Instant::now();
+        // the request line itself trickled, a byte every 0.4 s: never idle long, never done;
+        // the clock runs from its first byte (the head's time is 2 s here)
+        let mut all = String::new();
+        s.set_read_timeout(Some(std::time::Duration::from_millis(100)))
+            .unwrap();
+        for b in b"GET /api/info HTTP/1.1".iter().cycle() {
+            if t.elapsed() > std::time::Duration::from_secs(10) {
+                break;
+            }
+            let _ = s.write_all(&[*b]);
+            let mut got = [0u8; 512];
+            match s.read(&mut got) {
+                Ok(0) => break,
+                Ok(n) => all.push_str(&String::from_utf8_lossy(&got[..n])),
+                Err(_) => {}
+            }
+            if all.contains("\r\n\r\n") {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(300));
+        }
+        assert!(all.starts_with("HTTP/1.1 408"), "{all}");
+        let took = t.elapsed().as_millis();
+        assert!((1900..5000).contains(&took), "{took} ms");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A head's line is no longer than a head may be: refused as it grows past that.
+    #[test]
+    fn a_line_too_long_is_refused_as_it_comes() {
+        use std::io::{Read, Write};
+        let (at, root) = started(None, true);
+        let mut s = std::net::TcpStream::connect(at).unwrap();
+        let _ = s.write_all(format!("GET /{} HTTP/1.1", "a".repeat(80 << 10)).as_bytes());
+        let mut all = String::new();
+        s.set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
+        let _ = s.read_to_string(&mut all);
+        assert!(all.starts_with("HTTP/1.1 413"), "{}", &all[..all.len().min(80)]);
         let _ = std::fs::remove_dir_all(&root);
     }
 

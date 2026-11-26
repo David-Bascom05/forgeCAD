@@ -1,0 +1,23 @@
+# haas-vf-2 table: 914 x 356 published, thickness estimated; one T-slot. Its top is the part
+# mount's datum (z 0): drawn where parts sit, the envelope with no margin on that face
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared x0 = -673
+shared y0 = -200
+shared z0 = -209
+shared lx = 1346
+shared ly = 400
+shared lz = 209
+shared cx = 0
+shared cy = 0
+shared cw = 914
+shared cl = 16
+shared cd = 14
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (lx, ly))
+}
+block = extrude(plan, lz)
+sketch top(on: block.end) {
+  r = rect(center: (cx, cy), size: (cw, cl))
+}
+tslot = cut(top.r, cd)

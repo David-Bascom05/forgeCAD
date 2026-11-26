@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/hw/iso4014_m8x55.fg"}
+{"op":"SetParam","param":"d","value":{"value":8.4,"dim":"Length"}}
+{"op":"SetParam","param":"P","value":{"value":1.3125,"dim":"Length"}}
+{"op":"SetParam","param":"l","value":{"value":57.75,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}
+{"op":"MoveFeature","id":"hexhead","before":null}

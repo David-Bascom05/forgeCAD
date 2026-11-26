@@ -3,8 +3,10 @@
 
 use super::Shell;
 use super::fgasm::{dialog_frame, dialog_head};
+use super::placed::Placed as _;
 use super::theme::{self, S1, S2};
 use egui::{Rect, pos2, vec2};
+use forge_math::ipow::Powi as _;
 
 /// One row of the cut list: identical members (section, lengths and end cuts, either way round).
 #[derive(Clone, Debug, PartialEq)]
@@ -42,7 +44,7 @@ pub struct CutList {
 }
 
 fn round(x: f64, places: i32) -> f64 {
-    let k = 10f64.powi(places);
+    let k = 10f64.ipow(places);
     (x * k).round() / k
 }
 
@@ -185,7 +187,9 @@ impl Shell {
         let v = self.view_rect;
         let mut places: Vec<(String, Rect)> = Vec::new();
         let (mut close, mut copy, mut export) = (false, false, false);
-        let w = W.min(v.width() - 32.0).max(420.0);
+        // fits the window it's in; under theme::NARROW the table scrolls sideways inside it
+        let area = super::dialog_area(ctx);
+        let w = W.min(v.width() - 32.0).max(420.0).min(area.width() - 16.0);
         let shown = egui::Window::new("Cut List")
             .id(egui::Id::unique("weld-cutlist"))
             .title_bar(false)
@@ -199,7 +203,7 @@ impl Shell {
             .max_width(w)
             .frame(dialog_frame(&t))
             .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
+            .show_fit(ctx, |ui| {
                 close = dialog_head(ui, &t, "cutlist", "Cut List", "weld:cutlist", &mut places);
                 if list.is_empty() {
                     ui.label(
@@ -223,7 +227,7 @@ impl Shell {
                     .color(t.ink2),
                 );
                 ui.add_space(S1);
-                egui::ScrollArea::vertical()
+                egui::ScrollArea::both()
                     .max_height((v.height() * 0.5).max(160.0))
                     .auto_shrink([false, true])
                     .show(ui, |ui| {
@@ -314,7 +318,9 @@ impl Shell {
         }
         if export {
             let to = csv_path(&path);
-            self.status = match std::fs::write(&to, list.csv()) {
+            // through the app's filesystem: in a page, std's has no files (it failed: "operation not
+            // supported on this platform"); there the project's, kept where the project is
+            self.status = match forge_dirs::fs::write(&to, list.csv()) {
                 Ok(()) => format!("Cut list written to {}", to.display()),
                 Err(e) => format!("Couldn't write {}: {e}", to.display()),
             };

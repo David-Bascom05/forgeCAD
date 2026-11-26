@@ -1,0 +1,24 @@
+# A two-axis arm with a sliding finger: `forgecad export arm2.fg urdf effort 5 velocity 1`
+# writes arm2_urdf/ (research/export/urdf.md).
+assembly
+
+param shoulder.turn = 30deg
+param shoulder.lo = -170deg
+param shoulder.hi = 170deg
+param elbow.turn = -60deg
+param elbow.lo = -135deg
+param elbow.hi = 135deg
+param grip.along = 0
+param grip.lo = -10
+param grip.hi = 10
+
+base = part("base.fg", ground: true)
+upper = part("link.fg")
+fore = part("link.fg")
+finger = part("finger.fg")
+shoulder = revolute(upper.a, base.o, turn: turn, limit: (lo, hi))
+elbow = revolute(fore.a, upper.b, turn: turn, limit: (lo, hi))
+grip = slider(finger.glide, fore.tip, along: along, limit: (lo, hi))
+
+expect interferences = 0
+expect mobility = 0

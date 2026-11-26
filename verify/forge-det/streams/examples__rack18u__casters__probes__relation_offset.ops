@@ -1,0 +1,5 @@
+{"doc":"examples/rack18u/casters/probes/relation_offset.fg"}
+{"op":"SetParam","param":"k","value":{"value":0.525,"dim":"Ratio"}}
+{"op":"SetParam","param":"g_turn","value":{"value":0.5,"dim":"Angle"}}
+{"op":"Rename","from":"base","to":"base_r"}
+{"op":"ReplaceFeature","id":"mesh","text":"mesh = gear(g, h, ratio: k)\n"}

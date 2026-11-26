@@ -16,7 +16,6 @@ This file is the answer and the index. The detail, with every source, is in eigh
 | [libraries-machines-posts-feeds.md](libraries-machines-posts-feeds.md) | Machine kinematics and definitions, Fusion's post engine and library, the NC dialects (Fanuc, Haas, Siemens, Heidenhain, LinuxCNC, GRBL), cutting data and formulas, the calculators, fixtures and stock; our machine, dialect and fixture TOML | 725 |
 | [opensource.md](opensource.md) | FreeCAD CAM, OpenCAMLib, libarea, Kiri:Moto, PyCAM, Fabex, OpenVoronoi, Clipper2, cavalier_contours, LinuxCNC, GRBL, CAMotics, Rust crates; a licence table for MPL-2.0 | 289 |
 | [literature.md](literature.md) | The research literature on ten topics, and what can be exact, what needs certified intervals, and the honest specs | 570 |
-| [patents.md](patents.md) | Adaptive and engagement-milling patents, live and expired, and a design that probably stays clear. Not legal advice. | 186 |
 | [design.md](design.md) | The forgecad design: crates, reuse, the `.fg` surface, the reply schema, the Lean spec, the six levels, libraries, the phased plan | 291 |
 
 **How sources are marked** in every note: **[R]** read directly this session (2026-11-23);
@@ -109,9 +108,9 @@ sources: commercial.md §2.
 | 2 | **Mastercam** (Sandvik) | installed base, reseller and post network, breadth (mill, lathe, router, wire, Swiss) | wider machine coverage; posts usually paid; 2026.R2 GPU verification, auto-tilt with bull tools [R] | Dynamic Motion |
 | 3 | **hyperMILL** (OPEN MIND) | high-end 5-axis, blades and impellers, barrel cutters with tangent-plane finishing, automatic indexing, tool-length prediction [R] | stronger 5-axis and automation; perpetual, quote-only | MAXX HPC |
 | 4 | **Siemens NX CAM** | enterprise and aerospace, feature-based machining, G-code-driven sim, mill-turn sync, closed-loop probing (2606) [R] | far stronger at the high end; about $7k–12k per seat-year [S] | Adaptive Milling |
-| 5 | **ESPRIT EDGE** (Hexagon) | multi-channel mill-turn and Swiss; machine-builder-validated posts and twins | the mill-turn reference | ProfitMilling (patented, patents.md) |
+| 5 | **ESPRIT EDGE** (Hexagon) | multi-channel mill-turn and Swiss; machine-builder-validated posts and twins | the mill-turn reference | ProfitMilling |
 | 6 | **PowerMill** (Autodesk) | mold and die, huge models, rich tool-axis modes (lines, fixed direction, blisk, lead-then-lean) [R] | Autodesk's own high end; sold bundled with Fusion | Vortex |
-| 7 | **SolidCAM** | in-SOLIDWORKS CAM; iMachining with its Technology Wizard | strongest embedded roughing; patented (patents.md) | iMachining |
+| 7 | **SolidCAM** | in-SOLIDWORKS CAM; iMachining with its Technology Wizard | strongest embedded roughing | iMachining |
 | 8 | **CAMWorks / SOLIDWORKS CAM** | automatic feature recognition plus TechDB shop rules | better rules-based automation | VoluMill |
 | 9 | **Onshape CAM Studio** (PTC) | cloud-native, 2.5D/3-axis only so far, kinematic sim [R] | narrower; proves a small first release is accepted | Adaptive |
 | — | WorkNC, Cimatron, GibbsCAM, BobCAD, TopSolid | mold automation, mold+electrodes, multi-task, low-cost, top satisfaction | niche leaders | Waveform, … |
@@ -227,7 +226,7 @@ its help pages, read [R]. The IDs and parameters are in the notes named in each 
 | item | Fusion (all base) | mark |
 |---|---|---|
 | Face | facing passes over the stock top | M |
-| 2D Adaptive Roughing | constant optimal load, minimum cutting radius, slot clearing, flat-area detection | M (phase 2; patent-aware design, §4) |
+| 2D Adaptive Roughing | constant optimal load, minimum cutting radius, slot clearing, flat-area detection | M (phase 2) |
 | 2D Offset Roughing (was 2D Pocket) | offset pocketing | M |
 | 2D Contour | compensation in computer, in control, wear, inverse wear; chamfer mode; tabs | M |
 | Slot | along a slot centreline | L |
@@ -458,7 +457,7 @@ Estimates are in session-weeks (one focused agent session's week, with review), 
 |---|---|---|
 | **0. The risk, first** | Exact 2D line/arc region offsetting with islands, through topology change. Swept regions and their exact union. The L1 spec for 2.5D. The certified checker for flat, ball and bull tools along lines and arcs, with `sd_err` proven. **Go/no-go:** checker speed on bench pockets. | 6–10 |
 | **1. Usable 2.5D** | The `machining` document; setups, WCS, stock. Facing, contour with compensation, pocket, slot, trace, engrave, chamfer, bore, drilling cycles, and drill plans from hole features. Leads, ramps, heights. Posts: Fanuc, Haas, LinuxCNC, GRBL. Setup sheets. Tool and holder TOML and the Fusion JSON importer. Dexel preview. | 10–14 |
-| **2. Adaptive** | Constant-engagement roughing from exact engagement, clean-room and patent-aware (§4); 2D rest; feeds with chip thinning; cycle time | 6–10 |
+| **2. Adaptive** | Constant-engagement roughing from exact engagement; 2D rest; feeds with chip thinning; cycle time | 6–10 |
 | **3. 3-axis** | Drop-cutter and push-cutter (closed form, then certified); 3D adaptive, parallel, waterline, scallop, pencil, flat, rest from the ball opening; 3D gouge checks. After the curved boolean's L2 matures (ROADMAP item 4). | 12–20 |
 | **4. 3+2 and 4-axis** | Orientations, 4th axis, trunnion kinematics, axis limits, holder/fixture/machine collisions, tilted-plane post codes | 6–10 |
 | **5. Turning** | Lathe setups and the core turning ops; inserts and holders | 6–8 |
@@ -472,7 +471,7 @@ about a second natively, the certificate runs in the background (`--certify`), a
 
 ---
 
-## 4. Licences and patents (not legal advice: check with counsel)
+## 4. Licences
 
 **Licences** (opensource.md §12). forgecad is MPL-2.0, which is file-level copyleft.
 - **Permissive, may port with attribution:** libarea core (BSD-3), HeeksCAD (BSD-3), Clipper2
@@ -484,31 +483,7 @@ about a second natively, the certificate runs in the background (`--certify`), a
   libactp.
 - **Fusion's posts** are "All rights reserved": use the facts about controls, never the code.
   Fusion's tool JSON schema is published, and reading the format to import it is interoperability.
-  Have counsel confirm.
 - ISO 13399 and ISO 6983 are paywalled standards. Restate the facts only.
-
-**Patents** (patents.md). The live families closest to adaptive clearing:
-
-| patent | holder | expiry (Google estimate) | gist |
-|---|---|---|---|
-| US 8,489,224, US 9,690,282 (+ US 12,248,293) | SolidCAM (iMachining) | 2031-08 / 2033-01 | an engagement-angle band with gradual variation |
-| US 8,295,972, US 8,880,212 | Celeritive (VoluMill) | 2030 / 2029 | linking moves built inside transition areas that cross the cuts |
-| US 10,579,040 | Celeritive | 2032 | toolpaths from a Voronoi diagram with added branches |
-| US 8,560,113 | Truemill (ex-Surfware) | 2031 | an inside pocket corner cut as a series of arcs |
-| US 9,778,649 (+ US 10,488,847) | DP Technology / Hexagon (ProfitMilling) | 2034 | offset corner radius set by a limit on how fast engagement may change |
-| US 7,577,490 | Truemill | **2026-12-17** | the last live member of the 2004 engagement-milling family |
-
-Expired, and usable as prior art: the rest of the Surfware 2004 family (2025), and GE's adaptive
-feed-rate patent US 5,828,574 (2017). No patent numbers were found for Fusion/HSM Adaptive,
-PowerMill Vortex, Mastercam Dynamic Motion, Open Mind's barrel cutters, CloudNC or Vericut;
-patents.md lists the searches counsel should run.
-
-**A design that probably stays clear**, for counsel to confirm:
-- Track the cleared area, and aim at one target of material removed per step, as FreeCAD does.
-- Link by retract, or by straight moves checked against the cleared area. Do not construct
-  transition toolpaths.
-- Clear with offset or plain medial-axis spirals; trochoid parameters are set by the user.
-- Keep the dated research notes in this directory as the record of independent development.
 
 ---
 
@@ -519,7 +494,6 @@ patents.md lists the searches counsel should run.
    rests on it.
 3. Open a real Fusion tool library export and a real Sandvik GTC package to settle the open
    format questions (the `TA` half angle; the GTC layout) before writing importers.
-4. Patent counsel on the five live families above, before phase 2.
 
 Open questions the research could not settle are listed at the end of each note: Fusion's stock
 representation in simulation, the `.mch` format, whether stock transfer between setups works for

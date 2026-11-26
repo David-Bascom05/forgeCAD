@@ -1,0 +1,5 @@
+{"doc":"examples/sheetmetal/tray_asm.fg"}
+{"op":"SetParam","param":"gap","value":{"value":0.21000000000000002,"dim":"Length"}}
+{"op":"SetParam","param":"t","value":{"value":1.5750000000000002,"dim":"Length"}}
+{"op":"Rename","from":"tray","to":"tray_r"}
+{"op":"ReplaceFeature","id":"rack","text":"rack = part(\"rack_face.fg\", ground: true, at: pose(at: (-(t + gap), -25, -20), z: (0, -1, 0), x: (1, 0, 0)))\n"}

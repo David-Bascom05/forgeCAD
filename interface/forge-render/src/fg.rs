@@ -16,6 +16,7 @@ use forge_lang::error::{Error, Op, Warning};
 use forge_lang::eval::Value;
 use forge_lang::values::{Dim, Src};
 use forge_lang::{Measure, Options, Run, Timings};
+use forge_math::ipow::Powi as _;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -137,6 +138,8 @@ pub struct Occ {
     pub placement: Option<usize>,
     /// Its part's thermoform moulds, placed with it, drawn when their row's eye says.
     pub tooling: Option<usize>,
+    /// Its part's own material (the part document's `props(material:)`), for its look.
+    pub material: Option<String>,
 }
 
 /// An assembly's solve for the screen and the panel. Each distinct part is meshed once (by its
@@ -152,6 +155,8 @@ pub struct AsmView {
     /// again (the worker holds no GPU after the first: a device kept on a thread outlives the
     /// driver at exit).
     pub restage: Option<Vec<PartMesh>>,
+    /// Whose meshes `restage` holds, and how many (`AsmMeshes::lineage`).
+    pub lineage: (u64, usize),
     pub joints: Vec<forge_lang::asm::JointOut>,
     pub mobility: usize,
     pub bom: Vec<(String, usize)>,
@@ -197,6 +202,8 @@ pub struct Built {
     pub reused: usize,
     /// The part's new mesh; none when the part is the one already shown, or didn't build.
     pub mesh: Option<PartMesh>,
+    /// What of `mesh` the view could not draw (Some with every mesh replaced, None otherwise).
+    pub undrawn: Option<crate::shell::fg::Undrawn>,
     /// The faces the build changed, for the screen at once (the whole mesh follows).
     pub delta: Option<Delta>,
     /// When `mesh` is new: the flat pattern of the part's first sheet; none without one.
@@ -226,7 +233,9 @@ pub struct Built {
 }
 
 impl Built {
-    pub fn summary(&self) -> String {
+    /// The status line's words for the build: the short state first (valid, the volume in
+    /// `sys`'s units, the faces), the details after, so a narrow status bar's cut takes those.
+    pub fn summary(&self, sys: crate::shell::ux::System) -> String {
         if self.preview {
             return "opening: the last build on screen while it builds".into();
         }
@@ -235,10 +244,10 @@ impl Built {
         }
         let mut s = match &self.measure {
             Some(m) => format!(
-                "volume {} mm³ · {} faces · {} · ",
-                crate::shell::fg::short((m.volume * 10.0).round() / 10.0),
-                m.faces,
-                if m.problems == 0 { "valid" } else { "INVALID" }
+                "{} · {} · {} faces · ",
+                if m.problems == 0 { "valid" } else { "INVALID" },
+                crate::shell::ux::show(m.volume, crate::shell::ux::Qty::Volume, sys),
+                m.faces
             ),
             None if self.ok => "nothing built · ".into(),
             None => "not built · ".into(),
@@ -394,7 +403,9 @@ fn flat_view(s: &forge_lang::sheet::SheetOut, p: &forge_sheet::Pattern) -> crate
             let mut line = vec![];
             for cv in c {
                 match cv {
-                    Curve2::Arc { c, r, start, sweep, .. } => {
+                    Curve2::Arc {
+                        c, r, start, sweep, ..
+                    } => {
                         let n = ((sweep.abs() / 0.15).ceil() as usize).max(2);
                         for i in 0..=n {
                             let a = start + sweep * i as f64 / n as f64;
@@ -616,6 +627,8 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
                 Error::Asm(n) => Some(n.issue.clone()),
                 _ => None,
             },
+            stale: false,
+            detail: e.detail(),
         }
     };
     let mut issues: Vec<Issue> = run.errors.iter().map(|e| issue(e, Severity::Error)).collect();
@@ -640,6 +653,8 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
                     fixes: n.fixes.clone(),
                     feature: Some(n.id.clone()),
                     asm: None,
+                    stale: false,
+                    detail: None,
                 });
                 continue;
             }
@@ -658,6 +673,8 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
                     fixes: n.fixes.clone(),
                     feature: Some(n.id.clone()),
                     asm: None,
+                    stale: false,
+                    detail: None,
                 });
                 continue;
             }
@@ -672,6 +689,8 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
                     fixes: n.fixes(),
                     feature: feature_at(Some(n.span)),
                     asm: Some(n.issue.clone()),
+                    stale: false,
+                    detail: n.issue.detail(),
                 });
                 continue;
             }
@@ -693,6 +712,8 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
             fixes: vec![],
             feature: feature_at(Some(span)),
             asm: None,
+            stale: false,
+            detail: None,
         });
     }
     (feats, params, issues)
@@ -708,6 +729,8 @@ pub enum Msg {
         mesh: PartMesh,
         flat: Option<PartMesh>,
         mesh_ms: f64,
+        /// What of the part the mesh could not draw (said in Issues, outlined in the view).
+        undrawn: crate::shell::fg::Undrawn,
     },
     /// Drives set in the kept solve: each occurrence's pose (the last build's order), or None
     /// when they need a build; and the solve's time.
@@ -718,13 +741,75 @@ pub enum Msg {
     },
 }
 
-fn whole(body: &forge_topo::Body, flat: Option<&forge_topo::Body>) -> (PartMesh, Option<PartMesh>) {
-    let mesh = tess::build_part(body).unwrap_or_else(|e| {
-        eprintln!("forge-app: can't mesh it: {e:?}");
-        PartMesh::empty()
-    });
+fn whole(
+    body: &forge_topo::Body,
+    flat: Option<&forge_topo::Body>,
+) -> (PartMesh, Option<PartMesh>, crate::shell::fg::Undrawn) {
+    let (mesh, undrawn) = match tess::build_part_reporting(body) {
+        Ok((m, left)) => {
+            // drawn without the faces that cannot be meshed: said, face by face (Issues), and
+            // their border outlined in the view
+            for l in &left {
+                eprintln!("forge-app: face {} left out of the drawing: {}", l.face, l.why);
+            }
+            let u = undrawn_of(body, &left);
+            (m, u)
+        }
+        Err(e) => {
+            eprintln!("forge-app: can't mesh it: {e:?}");
+            let none = crate::shell::fg::Undrawn {
+                faces: Vec::new(),
+                none_drawn: true,
+            };
+            (PartMesh::empty(), none)
+        }
+    };
     let flat = flat.map(|b| tess::build_part(b).unwrap_or_else(|_| PartMesh::empty()));
-    (mesh, flat)
+    (mesh, flat, undrawn)
+}
+
+/// The faces a part's drawing left out, for the Issues window and the view: each one's border
+/// (the B-rep edges the faces beside it draw, outlined) and where it is (Show). Ids are those the
+/// mesher gave, of the body as it numbers its live faces (compacted, as the mesher meshed it).
+pub fn undrawn_of(body: &forge_topo::Body, left: &[tess::LeftOut]) -> crate::shell::fg::Undrawn {
+    use forge_topo::FaceId;
+    let compacted;
+    let body = if body.dead > 0 {
+        compacted = body.compact();
+        &compacted
+    } else {
+        body
+    };
+    let faces = left
+        .iter()
+        .map(|l| {
+            let f = FaceId(l.face);
+            let mut edges: Vec<u32> = body
+                .face(f)
+                .loops
+                .iter()
+                .flat_map(|&lp| body.lp(lp).coedges())
+                .map(|c| body.coedge(c).edge.0)
+                .collect();
+            edges.sort_unstable();
+            edges.dedup();
+            let b = body.face_box(f);
+            let (x, y, z) = (b.x, b.y, b.z);
+            let center = [x.mid(), y.mid(), z.mid()];
+            let radius = ((x.hi - x.lo).ipow(2) + (y.hi - y.lo).ipow(2) + (z.hi - z.lo).ipow(2)).sqrt() / 2.0;
+            crate::shell::fg::UndrawnFace {
+                face: l.face,
+                why: l.why.clone(),
+                edges,
+                center,
+                radius: if radius.is_finite() { radius } else { 1.0 },
+            }
+        })
+        .collect();
+    crate::shell::fg::Undrawn {
+        faces,
+        none_drawn: false,
+    }
 }
 
 type Whole = (u64, forge_topo::Body, Option<forge_topo::Body>);
@@ -737,7 +822,7 @@ fn mesh_whole(bodies: Receiver<Whole>, out: Sender<Msg>, waker: Arc<dyn Fn() + S
             w = n;
         }
         let t = Instant::now();
-        let (mesh, flat) = whole(&w.1, w.2.as_ref());
+        let (mesh, flat, undrawn) = whole(&w.1, w.2.as_ref());
         let mesh_ms = t.elapsed().as_secs_f64() * 1e3;
         if out
             .send(Msg::Final {
@@ -745,6 +830,7 @@ fn mesh_whole(bodies: Receiver<Whole>, out: Sender<Msg>, waker: Arc<dyn Fn() + S
                 mesh,
                 flat,
                 mesh_ms,
+                undrawn,
             })
             .is_err()
         {
@@ -806,15 +892,15 @@ type Builder = (
 );
 static BUILDERS: std::sync::Mutex<Vec<Builder>> = std::sync::Mutex::new(Vec::new());
 
-/// Stops the build threads this thread's documents started, and waits for each.
 /// File > Export STL / 3MF / OBJ: the part's text built afresh (an assembly with its parts' bodies)
-/// and its mesh written to `out` at the default tolerances; what to say in the status bar.
-pub fn export_mesh(
+/// and its mesh at the default tolerances, as the file `name` (its stem names the objects): the
+/// file's bytes, and what to say in the status bar.
+pub fn mesh_file(
     src: &str,
     part: Option<&str>,
-    out: &std::path::Path,
+    name: &str,
     f: forge_lang::meshfile::Format,
-) -> Result<String, String> {
+) -> Result<(Vec<u8>, String), String> {
     use forge_lang::meshfile;
     let dir = part.and_then(|p| std::path::Path::new(p).parent().map(std::path::Path::to_path_buf));
     let opts = forge_lang::Options {
@@ -823,29 +909,45 @@ pub fn export_mesh(
         ..forge_lang::Options::default()
     };
     let (run, _) = forge_lang::run(src, opts, Cache::default());
-    let name = part
-        .or(out.to_str())
-        .and_then(|p| std::path::Path::new(p).file_stem())
+    let stem = std::path::Path::new(part.unwrap_or(name))
+        .file_stem()
         .map_or_else(|| "part".into(), |s| s.to_string_lossy().into_owned());
-    let e = meshfile::export(&run, &name, dir.as_deref(), &meshfile::Options::new(f))?;
-    std::fs::write(out, &e.bytes).map_err(|e| format!("{}: {e}", out.display()))?;
-    let file = out
-        .file_name()
-        .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-    Ok(if e.watertight() && e.manifold() {
+    let e = meshfile::export(&run, &stem, dir.as_deref(), &meshfile::Options::new(f))?;
+    let said = if e.watertight() && e.manifold() {
         format!(
-            "Exported {file}: {} objects, {} triangles, watertight and manifold",
+            "Exported {name}: {} objects, {} triangles, watertight and manifold",
             e.checks.len(),
             e.triangles()
         )
     } else {
         format!(
-            "Exported {file}: {} triangles, but not closed and manifold: check it before printing",
+            "Exported {name}: {} triangles, but not closed and manifold: check it before printing",
             e.triangles()
         )
-    })
+    };
+    Ok((e.bytes, said))
 }
 
+/// `mesh_file`, written to `out`; what to say in the status bar.
+pub fn export_mesh(
+    src: &str,
+    part: Option<&str>,
+    out: &std::path::Path,
+    f: forge_lang::meshfile::Format,
+) -> Result<String, String> {
+    let name = out
+        .file_name()
+        .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+    let (bytes, said) = mesh_file(src, part, &name, f)?;
+    forge_dirs::fs::write(out, &bytes).map_err(|e| format!("{}: {e}", out.display()))?;
+    Ok(said)
+}
+
+/// How many sketches a build worker kept after its last step (`forge_keep::kept` on its thread):
+/// none, as each step frees what its runs made. What the tests hold bounded.
+pub static WORKER_KEPT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Stops the build threads this thread's documents started, and waits for each.
 pub fn stop_builders() {
     let me = std::thread::current().id();
     let mine: Vec<Builder> = {
@@ -918,6 +1020,14 @@ struct Worker {
     to_mesh: Sender<Whole>,
     /// A drive sent after a text, kept till that text is built.
     next: Option<Work>,
+    /// An assembly whose shape was sent (`Built { checked: false }`): its seq, so the run of the
+    /// same job that follows is the one with the overlap check and the expects.
+    asm_shaped: Option<u64>,
+    /// That checks run, waiting behind a drive that holds `next`.
+    asm_checks: Option<Job>,
+    /// The last checked assembly build's issue rows: what its checks found stays listed, marked
+    /// stale, while the next build's checks run.
+    asm_checked_rows: Vec<Issue>,
 }
 
 impl Worker {
@@ -951,6 +1061,9 @@ impl Worker {
             #[cfg(not(target_arch = "wasm32"))]
             to_mesh,
             next: None,
+            asm_shaped: None,
+            asm_checks: None,
+            asm_checked_rows: vec![],
         }
     }
 
@@ -970,13 +1083,14 @@ impl Worker {
         #[cfg(target_arch = "wasm32")]
         {
             let t = Instant::now();
-            let (mesh, flat) = whole(&w.1, w.2.as_ref());
+            let (mesh, flat, undrawn) = whole(&w.1, w.2.as_ref());
             let mesh_ms = t.elapsed().as_secs_f64() * 1e3;
             self.send(Msg::Final {
                 seq: w.0,
                 mesh,
                 flat,
                 mesh_ms,
+                undrawn,
             })
         }
     }
@@ -984,6 +1098,15 @@ impl Worker {
     /// One batch of work: `first` and whatever else waits in `jobs`. False once the session is
     /// gone (its results have nowhere to go, or it was stopped).
     fn step(&mut self, first: Work, jobs: &Receiver<Work>) -> bool {
+        let go_on = self.step_work(first, jobs);
+        // the sketches this step's runs made: freed now (each with a named entity is an Rc cycle,
+        // and a run lets none go: every edit kept its sketches, without bound)
+        crate::plat::release_sketches();
+        WORKER_KEPT.store(forge_keep::kept(), std::sync::atomic::Ordering::Relaxed);
+        go_on
+    }
+
+    fn step_work(&mut self, first: Work, jobs: &Receiver<Work>) -> bool {
         let mut all = vec![first];
         all.extend(jobs.try_iter());
         // only the latest text matters, and the latest drive after it
@@ -1001,6 +1124,10 @@ impl Worker {
                 let ms = t.elapsed().as_secs_f64() * 1e3;
                 if !self.send(Msg::Posed { seq: *seq, poses, ms }) {
                     return false;
+                }
+                // an assembly's checks that waited behind this drive
+                if self.next.is_none() {
+                    self.next = self.asm_checks.take().map(Work::Text);
                 }
                 return true;
             }
@@ -1024,13 +1151,19 @@ impl Worker {
         if is_assembly(&job.1) {
             // the document's own model named too: picks in the posed view feed 3D Model's tools
             let want = self.anchored.as_deref() != Some(job.1.as_str());
+            // the overlap check and the expects are the slow part of a big assembly: on request,
+            // and then shape first (the posed parts on screen, `checked: false`), the checks in
+            // the step after, on the warm cache; a newer text in between replaces both
+            let checks = job.2 && self.asm_shaped == Some(job.0);
+            if self.asm_checks.as_ref().is_some_and(|c| c.0 != job.0) {
+                self.asm_checks = None;
+            }
             let opts = Options {
                 anchors: want,
                 dir: self.dir.clone(),
                 render: true,
-                // the overlap check and the expects are the slow part of a big assembly: on request
-                overlap: job.2,
-                expects: job.2,
+                overlap: checks,
+                expects: checks,
                 ..Options::default()
             };
             let watch = forge_lang::deps::watch();
@@ -1051,7 +1184,21 @@ impl Worker {
             }
             let (asm, view) = asm_view(&run, &mut self.asm_meshes, &mut self.gpu, &mut self.asm_shape);
             let mesh_ms = t.elapsed().as_secs_f64() * 1e3;
-            let (feats, params, issues) = rows(&run, &job.1);
+            let (feats, params, mut issues) = rows(&run, &job.1);
+            if checks || !job.2 {
+                // what the checks found now (or none asked for): the rows to keep for next time
+                self.asm_checked_rows = if checks { issues.clone() } else { vec![] };
+            } else {
+                // the shape alone: the last checks' findings stay, marked stale, till these
+                // checks are done (a clash never seems to vanish and come back)
+                let kept: Vec<Issue> = self
+                    .asm_checked_rows
+                    .iter()
+                    .filter(|r| !issues.iter().any(|i| i.kind == r.kind && i.text == r.text))
+                    .map(|r| Issue { stale: true, ..r.clone() })
+                    .collect();
+                issues.extend(kept);
+            }
             let built = Built {
                 seq: job.0,
                 ok: run.ok(),
@@ -1063,6 +1210,7 @@ impl Worker {
                 rebuilt: run.rebuilt,
                 reused: run.reused,
                 mesh: None,
+                undrawn: None,
                 flat: None,
                 delta: None,
                 sheets: vec![],
@@ -1071,7 +1219,7 @@ impl Worker {
                 anchors,
                 inspect: asm.as_ref().map(|a| a.inspect.clone()),
                 preview: false,
-                checked: true,
+                checked: checks || !job.2,
                 cutlist: None,
                 asm,
                 build_ms,
@@ -1079,6 +1227,17 @@ impl Worker {
             };
             if !self.send(Msg::Built(Box::new(built))) {
                 return false;
+            }
+            if job.2 && !checks {
+                // the checks next: after a drive that waits in `next`, else at once
+                self.asm_shaped = Some(job.0);
+                if self.next.is_none() {
+                    self.next = Some(Work::Text(job));
+                } else {
+                    self.asm_checks = Some(job);
+                }
+            } else {
+                self.asm_shaped = None;
             }
             return true;
         }
@@ -1090,14 +1249,18 @@ impl Worker {
             .map(|p| p.to_string_lossy().to_string());
         let opening = self.gpu.is_some();
         let before = if opening {
-            place.as_deref().and_then(|p| shown_before(p, &job.1))
+            // (what of it couldn't be drawn comes with the first build, which meshes it again)
+            place
+                .as_deref()
+                .and_then(|p| shown_before(p, &job.1))
+                .map(|(m, f)| (m, f, crate::shell::fg::Undrawn::default()))
         } else {
             None
         };
         // opening with nothing kept: the part as built without its checks first (a thermoform's
         // forming, the measures), on screen while they run; its mesh is the first build's too
         // when that build is the same stage (meshed once: a face that can't mesh is slow to fail)
-        let mut quick_mesh: Option<(u64, PartMesh, Option<PartMesh>)> = None;
+        let mut quick_mesh: Option<(u64, PartMesh, Option<PartMesh>, crate::shell::fg::Undrawn)> = None;
         let before = before.or_else(|| {
             if !opening {
                 return None;
@@ -1111,13 +1274,13 @@ impl Worker {
             let (shape, c) = forge_lang::run(&job.1, quick, std::mem::take(&mut self.cache));
             self.cache = c;
             let b = shape.body.as_ref()?;
-            let (mesh, flat) = whole(b, flat_body(&shape).as_ref());
+            let (mesh, flat, undrawn) = whole(b, flat_body(&shape).as_ref());
             if shape.stage != 0 {
-                quick_mesh = Some((shape.stage, mesh.clone(), flat.clone()));
+                quick_mesh = Some((shape.stage, mesh.clone(), flat.clone(), undrawn.clone()));
             }
-            Some((mesh, flat))
+            Some((mesh, flat, undrawn))
         });
-        if opening && let Some((mesh, flat)) = before {
+        if opening && let Some((mesh, flat, undrawn)) = before {
             let quick = Options {
                 build: false,
                 dir: self.dir.clone(),
@@ -1128,6 +1291,9 @@ impl Worker {
             let view = self.gpu.take().map(|gpu| {
                 let parts = vec![mesh.clone()];
                 let mut scene = Scene::new(&part_info(&parts), vec![Placement::at(0, [0.0; 3])]);
+                // the part's own box, so framing fits the part, not the sphere round it (a slender
+                // shaft filled a third of that sphere's cube)
+                scene.set_part_boxes(parts.iter().map(crate::explode::mesh_box).collect());
                 scene.set_explode(0.0);
                 make_view(gpu, parts, scene)
             });
@@ -1142,6 +1308,7 @@ impl Worker {
                 rebuilt: 0,
                 reused: 0,
                 mesh: Some(mesh),
+                undrawn: Some(undrawn),
                 flat,
                 delta: None,
                 sheets: vec![],
@@ -1213,12 +1380,14 @@ impl Worker {
             // the first build comes whole (after a preview too, which it replaces)
             let first = opening;
             let (mut mesh, mut flat, mut delta) = (None, None, None);
+            let mut undrawn = None;
             match changed {
                 Some(b) if first => {
-                    let (m, f) = match quick_mesh.take() {
-                        Some((stage, m, f)) if stage == run.stage => (m, f),
+                    let (m, f, u) = match quick_mesh.take() {
+                        Some((stage, m, f, u)) if stage == run.stage => (m, f, u),
                         _ => whole(b, flat_body(&run).as_ref()),
                     };
+                    undrawn = Some(u);
                     if let (Some(place), Some(read)) = (&place, &read) {
                         keep_shown(place, &job.1, read, &m, f.as_ref());
                     }
@@ -1263,6 +1432,7 @@ impl Worker {
             let view = self.gpu.take().map(|gpu| {
                 let parts = vec![mesh.clone().unwrap_or_else(PartMesh::empty)];
                 let mut scene = Scene::new(&part_info(&parts), vec![Placement::at(0, [0.0; 3])]);
+                scene.set_part_boxes(parts.iter().map(crate::explode::mesh_box).collect());
                 scene.set_explode(0.0);
                 make_view(gpu, parts, scene)
             });
@@ -1278,6 +1448,7 @@ impl Worker {
                 rebuilt: shaped.map_or(run.rebuilt, |x| x.0),
                 reused: shaped.map_or(run.reused, |x| x.1),
                 mesh,
+                undrawn,
                 flat,
                 delta,
                 sheets,
@@ -1408,12 +1579,26 @@ pub use crate::shell::fg::is_assembly;
 /// An assembly's part meshes so far: one per distinct body (by content), in the order made.
 #[derive(Default)]
 pub struct AsmMeshes {
+    /// Which these are, among all made in this run (0 until asked: `lineage`): `all` only
+    /// grows, so a renderer holding the first so many of them needs only the rest.
+    id: u64,
     by_key: HashMap<u64, usize>,
     pub all: Vec<PartMesh>,
     /// Each mesh's exact body.
     pub bodies: Vec<Arc<forge_topo::Body>>,
     /// Each mesh's box in its part's space: what the exploded view keeps apart.
     pub boxes: Vec<crate::explode::Aabb>,
+}
+
+impl AsmMeshes {
+    /// These meshes, and how many there are now.
+    pub fn lineage(&mut self) -> (u64, usize) {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        if self.id == 0 {
+            self.id = NEXT.fetch_add(1, Ordering::Relaxed);
+        }
+        (self.id, self.all.len())
+    }
 }
 
 /// A harness's piece in the view: a wire's tube, or a covered segment's sleeve.
@@ -1533,6 +1718,7 @@ fn asm_view(
             file: file.clone(),
             placement,
             tooling,
+            material: out.part_docs.get(file).and_then(|d| d.props.material.clone()),
         });
     }
     let mut harness_placed = vec![];
@@ -1644,7 +1830,14 @@ fn asm_view(
         let mut scene = Scene::new(&part_info(&parts), placements);
         scene.set_explode(0.0);
         scene.set_part_boxes(meshes.boxes.clone());
-        Some(make_view(gpu, parts, scene))
+        #[allow(unused_mut)]
+        let mut made = make_view(gpu, parts, scene);
+        // the renderer holds the first so many of these meshes, all of them then
+        #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
+        if !meshes.all.is_empty() {
+            made.0.set_lineage(Some(meshes.lineage()));
+        }
+        Some(made)
     } else {
         if restage {
             *shape = Some(now);
@@ -1659,6 +1852,7 @@ fn asm_view(
         placed,
         meshes: new_meshes,
         restage: all,
+        lineage: meshes.lineage(),
         joints: out.joints.clone(),
         mobility: out.mobility,
         bom: out.bom.clone(),
@@ -2102,5 +2296,40 @@ impl Session {
 
     pub fn until(&self) -> Option<String> {
         crate::plat::lock(&self.until).clone()
+    }
+}
+
+#[cfg(test)]
+mod undrawn_tests {
+    use super::*;
+
+    /// A face the mesher fails on (its outline turned the wrong way) is left out, and `whole`
+    /// says which, with the border edges the view outlines: B-rep ids the mesh draws, so the
+    /// outline finds their segments.
+    #[test]
+    fn a_face_left_out_comes_with_its_border_and_place() {
+        let body = crate::load::body("crank").expect("the crank bench part");
+        let (_, _, none) = whole(&body, None);
+        assert_eq!(none, crate::shell::fg::Undrawn::default(), "a part that meshes leaves nothing out");
+        let bad = body
+            .face_ids()
+            .find(|&f| matches!(body.face(f).surface, forge_geom::Surface::Plane(_)))
+            .expect("a cap");
+        let mut broken = body.clone();
+        let c = broken.lp(body.face(bad).loops[0]).coedges().next().unwrap();
+        broken.coedges[c.index()].forward ^= true;
+        let (mesh, _, u) = whole(&broken, None);
+        assert!(!u.none_drawn);
+        assert_eq!(u.faces.len(), 1, "{u:?}");
+        let f = &u.faces[0];
+        assert_eq!(f.face, bad.0);
+        assert!(!f.why.is_empty());
+        assert!(!f.edges.is_empty());
+        let drawn: Vec<u32> = mesh.lods[0].edges.iter().map(|e| e.edge).collect();
+        assert!(f.edges.iter().all(|e| drawn.contains(e)), "{:?} in {drawn:?}", f.edges);
+        // its place is its own face's box: the middle inside it, and no bigger than the part
+        let b = body.face_box(bad);
+        assert!(b.x.lo <= f.center[0] && f.center[0] <= b.x.hi, "{:?}", f.center);
+        assert!(f.radius > 0.0 && (f.radius as f32) < mesh.radius * 2.0, "{}", f.radius);
     }
 }

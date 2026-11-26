@@ -516,6 +516,46 @@ pub struct Libraries {
     pub errors: Vec<(PathBuf, ParseError)>,
 }
 
+/// Each document folder's library files as `cached` last found them, with their hashes; kept
+/// apart from the libraries themselves (and only where there are any) so a part that uses no
+/// library file allocates nothing more than it did.
+pub struct Sources;
+
+/// Folder (`None`: no document folder) and its files.
+pub type SourceTable = std::sync::Mutex<Vec<(Option<PathBuf>, Vec<(PathBuf, Option<u128>)>)>>;
+
+static LIBRARY_SOURCES: SourceTable = std::sync::Mutex::new(Vec::new());
+
+impl Sources {
+    /// After a cache miss for `doc`: its files (an empty list keeps nothing).
+    pub fn keep(table: &SourceTable, doc: &Option<PathBuf>, files: &[(PathBuf, Option<Vec<u8>>)]) {
+        let mut t = table.lock().unwrap_or_else(|e| e.into_inner());
+        if t.iter().any(|x| &x.0 == doc) {
+            t.retain(|x| &x.0 != doc);
+        }
+        if !files.is_empty() {
+            t.push((doc.clone(), sources_of(files)));
+        }
+    }
+
+    /// `doc`'s files as kept (none: an empty Vec, no allocation).
+    pub fn of(table: &SourceTable, doc: Option<&Path>) -> Vec<(PathBuf, Option<u128>)> {
+        let t = table.lock().unwrap_or_else(|e| e.into_inner());
+        t.iter()
+            .find(|x| x.0.as_deref() == doc)
+            .map(|x| x.1.clone())
+            .unwrap_or_default()
+    }
+}
+
+/// Each file and the hash of its bytes, as read (`None`: it did not read).
+pub fn sources_of(files: &[(PathBuf, Option<Vec<u8>>)]) -> Vec<(PathBuf, Option<u128>)> {
+    files
+        .iter()
+        .map(|(f, b)| (f.clone(), b.as_deref().map(forge_math::hash::hash128)))
+        .collect()
+}
+
 /// The user's library folder: `$XDG_CONFIG_HOME/forgecad/materials`, else `~/.config/..`.
 pub fn user_dir() -> Option<PathBuf> {
     let base = forge_dirs::config()?;
@@ -608,6 +648,13 @@ impl Libraries {
         out
     }
 
+    /// The library files `cached(doc_dir)` used last, each with the hash of its bytes (`None`: it
+    /// did not read): what a build that uses these libraries declares it read. Empty, and nothing
+    /// allocated, where there are none.
+    pub fn sources(doc_dir: Option<&Path>) -> Vec<(PathBuf, Option<u128>)> {
+        Sources::of(&LIBRARY_SOURCES, doc_dir)
+    }
+
     /// `load`, kept while the library files are unchanged: their names and bytes, read each time
     /// (never their sizes and times, which a replaced file can keep).
     pub fn cached(doc_dir: Option<&Path>) -> Arc<Libraries> {
@@ -634,6 +681,7 @@ impl Libraries {
             return hit.1.clone();
         }
         let libs = Arc::new(Libraries::load(doc_dir));
+        Sources::keep(&LIBRARY_SOURCES, &key.0, &key.1);
         c.retain(|x| x.0.0 != key.0);
         c.push((key, libs.clone()));
         libs
@@ -788,6 +836,42 @@ mod tests {
                 assert!(s.len() > 10, "{} {key}: {s}", m.name);
             }
             assert!((100.0..25000.0).contains(&m.density), "{}", m.name);
+            // CAM's machining keys: each with its own source; a known class; rows that line up
+            for (k, v) in &m.extra {
+                if k.starts_with("machining.") {
+                    assert!(
+                        m.sources.iter().any(|(sk, _)| sk == k),
+                        "{}: {k} has no source_{k}",
+                        m.name
+                    );
+                    if k == "machining.iso513" {
+                        assert!(
+                            matches!(v, Value::Str(c) if ["P", "M", "K", "N", "S", "H", "O"].contains(&c.as_str())),
+                            "{}: {k}",
+                            m.name
+                        );
+                    }
+                }
+            }
+            let rows = |k: &str| match m.extra(k) {
+                Some(Value::Nums(v)) => Some(v.clone()),
+                _ => None,
+            };
+            // a single Kienzle value comes as a pair
+            assert_eq!(
+                m.extra("machining.kc1_1").is_some(),
+                m.extra("machining.mc").is_some(),
+                "{}: machining.kc1_1 and machining.mc go together",
+                m.name
+            );
+            if let Some(vc) = rows("machining.vc_rows") {
+                let (kc, mc) = (
+                    rows("machining.kc1_1_rows").unwrap(),
+                    rows("machining.mc_rows").unwrap(),
+                );
+                assert!(kc.len() == vc.len() && mc.len() == vc.len(), "{}", m.name);
+                assert!(vc.windows(2).all(|w| w[0] < w[1]), "{}", m.name);
+            }
             assert!(m.poisson.is_none_or(|p| p < 0.5), "{}", m.name);
             // a drawn thermoplastic can break below its yield; a metal can't
             if let (Some(y), Some(u)) = (m.yield_mpa, m.uts)

@@ -68,18 +68,50 @@ pub struct Circle {
 
 /// Ellipse with semi-axis `major` along the frame's x and `minor` along y.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct Ellipse {
     pub frame: Frame,
     pub major: f64,
     pub minor: f64,
 }
 
+impl Ellipse {
+    /// An ellipse in `frame`'s xy plane: semi-axes `major` along x and `minor` along y, finite,
+    /// `major > 0`, `minor >= 0` (H.curveOK, verify/forge-bool-proof/LEDGER.md: what `across` needs
+    /// of an ellipse edge). Outside forge-geom this is the only way to make one (`#[non_exhaustive]`),
+    /// so every producer is a call here; the condition is asserted in debug and test builds and
+    /// costs nothing in release.
+    #[inline]
+    pub fn new(frame: Frame, major: f64, minor: f64) -> Ellipse {
+        debug_assert!(
+            major.is_finite() && major > 0.0 && minor.is_finite() && minor >= 0.0,
+            "an ellipse's semi-axes must be finite, the major positive: {major} {minor}"
+        );
+        Ellipse { frame, major, minor }
+    }
+}
+
 /// Parabola with vertex at the frame origin opening along x, focal length
 /// `focal`: P(t) = (t^2 / 4f) x + t y.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct Parabola {
     pub frame: Frame,
     pub focal: f64,
+}
+
+impl Parabola {
+    /// A parabola in `frame`'s xy plane with focal length `focal`, finite and not zero (a negative
+    /// one opens the other way; H.curveOK). Outside forge-geom the only way to make one
+    /// (`#[non_exhaustive]`); asserted in debug and test builds, nothing in release.
+    #[inline]
+    pub fn new(frame: Frame, focal: f64) -> Parabola {
+        debug_assert!(
+            focal.is_finite() && focal != 0.0,
+            "a parabola's focal length must be finite and not zero: {focal}"
+        );
+        Parabola { frame, focal }
+    }
 }
 
 /// One branch of a hyperbola centred on the frame origin, opening along +x:
@@ -284,7 +316,8 @@ impl CurveGeom for Circle {
         closest_on_arc(p, range, t, |t| self.eval(t))
     }
     fn bbox(&self, range: Interval) -> Box3 {
-        conic_box(&self.frame, range.cos() * self.radius, range.sin() * self.radius)
+        let (s, c) = range.sin_cos();
+        conic_box(&self.frame, c * self.radius, s * self.radius)
     }
     fn transformed(&self, f: &Frame) -> Self {
         Circle {
@@ -365,6 +398,140 @@ fn closest_numeric(c: &impl CurveGeom, p: Point3, range: Interval) -> f64 {
     best.1
 }
 
+/// `ellipse_square` for semi-axes in either order (`Ellipse::new` does not order them: a STEP
+/// ellipse's semi_axis_1 may be the shorter). With b > a, t = s + pi/2: the ellipse
+/// (a cos t, b sin t) at the point (x, y) is the ellipse (b cos s, a sin s) at (y, -x), whose
+/// major semi-axis is along x (EllipseFoot.lean `slope_swap`). The angles come back in
+/// (-pi/2, 3pi/2].
+fn ellipse_square_any(x: f64, y: f64, a: f64, b: f64) -> ([f64; 4], usize) {
+    if b <= a {
+        return ellipse_square(x, y, a, b);
+    }
+    let (mut ts, n) = ellipse_square(y, -x, b, a);
+    for t in &mut ts[..n] {
+        *t += dmath::FRAC_PI_2;
+    }
+    (ts, n)
+}
+
+/// Every angle t, in (-pi, pi], at which the ellipse (a cos t, b sin t), a >= b >= 0, a > 0, is square
+/// to the point (x, y) (where the distance from it, in any plane parallel to the ellipse's, is
+/// stationary): at most four.
+///
+/// Off the axes, a point square to (x, y) is cos t = a x / (d + e), sin t = b y / e, with
+/// d = a^2 - b^2 and e a root of G(e) = U^2 / (d + e)^2 + V^2 / e^2 - 1, U = a|x|, V = b|y|
+/// (Joachimsthal's, with e = mu + b^2), and every root gives one. G has poles at e = -d and 0:
+/// beyond them it is monotone, one root each (the nearest point on e > 0, in [V, hypot(U, V)];
+/// the farthest on d + e < 0, in [-hypot(U, V), -U]); between them, on (-d, 0), it is at least
+/// (U^(2/3) + V^(2/3))^3 / d^2 - 1, so has no root unless the point is inside the evolute, and then
+/// one each side of its least point e* = -d V^(2/3) / (U^(2/3) + V^(2/3)), each with its bracket.
+/// On an axis, at the centre and for b = 0 the angles are closed forms. Each root is found by
+/// Newton's method held inside its bracket, in the variable measured from the nearer pole so it
+/// keeps its relative precision. verify/forge-curved/ForgeCurved/EllipseFoot.lean.
+fn ellipse_square(x: f64, y: f64, a: f64, b: f64) -> ([f64; 4], usize) {
+    use dmath::{FRAC_PI_2, PI};
+    if b == 0.0 {
+        // a segment run twice: its ends and the foot of the perpendicular, on either run
+        let t = dmath::acos_clamped(x / a);
+        return ([0.0, PI, t, -t], 4);
+    }
+    let d = (a - b) * (a + b);
+    let (u, v) = (a * x.abs(), b * y.abs());
+    match (u == 0.0, v == 0.0) {
+        (true, true) => return ([0.0, FRAC_PI_2, PI, -FRAC_PI_2], 4),
+        // on the major axis: its two vertices, and inside the evolute the pair X = a^2 x / d
+        (false, true) => {
+            if u < d {
+                let c = a * x / d;
+                let t = dmath::atan2((1.0 - c * c).sqrt(), c);
+                return ([0.0, PI, t, -t], 4);
+            }
+            return ([0.0, PI, 0.0, 0.0], 2);
+        }
+        // on the minor axis: its two vertices, and inside the evolute the pair Y = -b^2 y / d
+        (true, false) => {
+            if v < d {
+                let s = -b * y / d;
+                let c = (1.0 - s * s).sqrt();
+                return (
+                    [FRAC_PI_2, -FRAC_PI_2, dmath::atan2(s, c), dmath::atan2(s, -c)],
+                    4,
+                );
+            }
+            return ([FRAC_PI_2, -FRAC_PI_2, 0.0, 0.0], 2);
+        }
+        (false, false) => {}
+    }
+    let mut out = [0.0; 4];
+    // the nearest point: e > 0
+    let g = |e: f64| {
+        let (p, q) = (u / (d + e), v / e);
+        (p * p + q * q - 1.0, -2.0 * (p * p / (d + e) + q * q / e))
+    };
+    // not `hypot`: the platform's libm rounds differently on each target (dmath's rule)
+    let h = (u * u + v * v).sqrt();
+    let e = held_newton(g, v, h, false);
+    out[0] = dmath::atan2(b * y / e, a * x / (d + e));
+    // in k = d + e, measured from the pole at e = -d
+    let gk = |k: f64| {
+        let (p, q) = (u / k, v / (k - d));
+        (p * p + q * q - 1.0, -2.0 * (p * p / k + q * q / (k - d)))
+    };
+    // the farthest point: d + e < 0
+    let k = held_newton(gk, -h, -u, true);
+    out[1] = dmath::atan2(b * y / (k - d), a * x / k);
+    if d == 0.0 {
+        return (out, 2);
+    }
+    let (cu, cv) = (dmath::cbrt(u), dmath::cbrt(v));
+    let (cu, cv) = (cu * cu, cv * cv);
+    let sum = cu + cv;
+    if sum * sum * sum > d * d {
+        return (out, 2);
+    }
+    // inside the evolute: the root by e = 0 (e in [e*, -V], G rising) and by e = -d (k in
+    // [U, d + e*], G falling); where U >> V or V >> U the far end rounds onto the pole
+    let e = held_newton(g, d * cv / -sum, -v, true);
+    out[2] = dmath::atan2(b * y / e, a * x / (d + e));
+    let k = held_newton(gk, u, d * cu / sum, false);
+    out[3] = dmath::atan2(b * y / (k - d), a * x / k);
+    (out, 4)
+}
+
+/// The root of `f` (value and slope) between `lo` and `hi`, where it changes sign, rising or
+/// falling as `rising` says (known, EllipseFoot.lean, not read off the ends: an end can round onto
+/// a pole, where `f` is infinite): Newton's steps, a bisection wherever one would leave the
+/// bracket, which shrinks every step; stops when a step moves nothing or the bracket is two
+/// neighbouring doubles. `f` is never evaluated at the ends.
+fn held_newton(f: impl Fn(f64) -> (f64, f64), mut lo: f64, mut hi: f64, rising: bool) -> f64 {
+    if lo > hi {
+        (lo, hi) = (hi, lo);
+    }
+    let mut t = 0.5 * (lo + hi);
+    for _ in 0..200 {
+        let (v, dv) = f(t);
+        if v == 0.0 {
+            break;
+        }
+        if (v < 0.0) == rising {
+            lo = t;
+        } else {
+            hi = t;
+        }
+        let m = 0.5 * (lo + hi);
+        if m <= lo || m >= hi {
+            break;
+        }
+        let n = t - v / dv;
+        let next = if n > lo && n < hi { n } else { m };
+        if next == t {
+            break;
+        }
+        t = next;
+    }
+    t
+}
+
 fn bisect_root(g: &impl Fn(f64) -> f64, mut a: f64, mut b: f64) -> f64 {
     for _ in 0..100 {
         let m = 0.5 * (a + b);
@@ -400,10 +567,31 @@ impl CurveGeom for Ellipse {
         } else {
             range
         };
-        closest_numeric(self, p, r)
+        if cfg!(feature = "ellipse-foot-sampled") {
+            return closest_numeric(self, p, r);
+        }
+        // the nearest of the range's ends and every point square to `p` inside it: the least
+        // distance over the range is at an end or at an interior point, which is square to `p`
+        let l = self.frame.point_to_local(p);
+        let (ts, n) = ellipse_square_any(l.x, l.y, self.major, self.minor);
+        let mut best = (self.eval(r.lo).distance_sq(p), r.lo);
+        let dhi = self.eval(r.hi).distance_sq(p);
+        if dhi < best.0 {
+            best = (dhi, r.hi);
+        }
+        for &t in &ts[..n] {
+            if let Some(t) = angle_into(t, r) {
+                let d = self.eval(t).distance_sq(p);
+                if d < best.0 {
+                    best = (d, t);
+                }
+            }
+        }
+        best.1
     }
     fn bbox(&self, range: Interval) -> Box3 {
-        conic_box(&self.frame, range.cos() * self.major, range.sin() * self.minor)
+        let (s, c) = range.sin_cos();
+        conic_box(&self.frame, c * self.major, s * self.minor)
     }
     fn transformed(&self, f: &Frame) -> Self {
         Ellipse {
@@ -582,12 +770,51 @@ impl Curve {
         match self {
             Curve::Circle(c) => conic(&c.frame, c.radius, c.radius, trig, out),
             Curve::Ellipse(e) => conic(&e.frame, e.major, e.minor, trig, out),
+            Curve::Hyperbola(_) => self.hyperbola_samples(range, n, out),
             _ => {
                 for k in 1..n {
                     out.push(self.eval(range.lo + dt * k as f64));
                 }
             }
         }
+    }
+
+    /// The parameter of `sample_interior`'s k-th point (k in 1..n): equal steps of the parameter,
+    /// but for a hyperbola, equal steps of u = asinh t (its point a cosh u x + b sinh u y), whose
+    /// tangent turns at most a / b a unit of u everywhere while t's speeds up as cosh u: equal
+    /// steps of t over a wide range put almost all of them where it is nearly straight.
+    pub fn sample_param(&self, range: Interval, n: usize, k: usize) -> f64 {
+        let mut ts = Vec::with_capacity(n);
+        self.sample_params(range, n, &mut ts);
+        ts[k - 1]
+    }
+
+    /// A hyperbola's interior samples (out of line: sample_interior's other arms stay as they were).
+    #[inline(never)]
+    fn hyperbola_samples(&self, range: Interval, n: usize, out: &mut Vec<Point3>) {
+        let mut ts = Vec::with_capacity(n);
+        self.sample_params(range, n, &mut ts);
+        out.extend(ts.iter().map(|&t| self.eval(t)));
+    }
+
+    /// `sample_param` for k in 1..n, into `out` (a hyperbola's by the addition formula from one
+    /// sinh and cosh of the first point and of the step: sinh(u + h) = sinh u cosh h + cosh u sinh h).
+    #[inline(never)]
+    pub fn sample_params(&self, range: Interval, n: usize, out: &mut Vec<f64>) {
+        out.clear();
+        if let Curve::Hyperbola(_) = self {
+            let (u0, u1) = (asinh(range.lo), asinh(range.hi));
+            let h = (u1 - u0) / n as f64;
+            let (sh, ch) = (sinh(h), (1.0 + sinh(h) * sinh(h)).sqrt());
+            let (mut s, mut c) = (range.lo, (1.0 + range.lo * range.lo).sqrt());
+            for _ in 1..n {
+                (s, c) = (s * ch + c * sh, c * ch + s * sh);
+                out.push(s.clamp(range.lo, range.hi));
+            }
+            return;
+        }
+        let dt = range.width() / n as f64;
+        out.extend((1..n).map(|k| range.lo + dt * k as f64));
     }
 
     /// The whole parameter range, clipped to `bound` where the curve is unbounded.
@@ -597,11 +824,224 @@ impl Curve {
     }
 }
 
+/// asinh by dmath's ln: ln(|x| + sqrt(x² + 1)) with x's sign (the series near 0, where the
+/// sum cancels).
+pub fn asinh(x: f64) -> f64 {
+    let a = x.abs();
+    let r = if a < 1e-4 {
+        a * (1.0 - a * a / 6.0)
+    } else {
+        dmath::ln(a + (a * a + 1.0).sqrt())
+    };
+    if x < 0.0 { -r } else { r }
+}
+
+/// sinh by dmath's exp (the series near 0, where the difference cancels).
+pub fn sinh(x: f64) -> f64 {
+    let a = x.abs();
+    let r = if a < 1e-4 {
+        a * (1.0 + a * a / 6.0)
+    } else {
+        let e = dmath::exp(a);
+        0.5 * (e - 1.0 / e)
+    };
+    if x < 0.0 { -r } else { r }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::testing::*;
+    use forge_math::ipow::Powi as _;
     use forge_math::rng::Rng;
+
+    /// The ellipses and points the foot point must get right: near-circular to flat (and b = 0),
+    /// points on and near the axes, at the evolute's cusps, at and near the centre, on the curve,
+    /// far off and out of plane; each with the whole turn, random arcs and tiny ones.
+    fn ellipse_cases(r: &mut Rng) -> Vec<(Ellipse, Point3, Interval)> {
+        let mut out = vec![];
+        let mut shapes: Vec<(f64, f64)> = vec![];
+        for k in [0, 3, 6, 9, 12, 15] {
+            shapes.push((1.0, 1.0 - if k == 0 { 0.0 } else { 10f64.ipow(-k) }));
+        }
+        for k in 1..=8 {
+            shapes.push((1.0, 10f64.ipow(-k)));
+        }
+        shapes.push((1.0, 0.0));
+        for _ in 0..40 {
+            let a = r.range(0.1, 50.0);
+            shapes.push((a, a * r.range(0.01, 1.0)));
+        }
+        // semi-axes the other way round (a STEP ellipse's semi_axis_1 may be the shorter)
+        let n = shapes.len();
+        for i in 0..n {
+            let (a, b) = shapes[i];
+            if b > 0.0 && b < a {
+                shapes.push((b, a));
+            }
+        }
+        for (a, b) in shapes {
+            let s = r.range(0.5, 200.0);
+            let (a, b) = (a * s, b * s);
+            let d = (a - b) * (a + b);
+            let (cx, cy) = (d / a, if b > 0.0 { d / b } else { 0.0 });
+            let mut pts = vec![
+                (0.0, 0.0),
+                (cx, 0.0),
+                (0.0, cy),
+                (cx * 0.5, 0.0),
+                (0.0, cy * 0.5),
+                (cx * 0.999, 1e-9 * a),
+                (1e-12 * a, cy * 0.999),
+                (1e-9 * a, 1e-9 * a),
+                (a, 0.0),
+                (0.0, b),
+                (a * 1e6, b * 3e5),
+                (-a * 0.3, b * 1e-13),
+            ];
+            for _ in 0..30 {
+                let t = r.range(-4.0, 4.0);
+                let k = r.range(0.0, 2.0);
+                pts.push((k * a * dmath::cos(t), k * b * dmath::sin(t)));
+            }
+            for _ in 0..20 {
+                pts.push((r.range(-2.0, 2.0) * a, r.range(-2.0, 2.0) * (b + a * 0.1)));
+            }
+            let frame = rand_frame(r);
+            let e = Ellipse::new(frame, a, b);
+            for (x, y) in pts {
+                let z = if r.bool() { 0.0 } else { r.range(-2.0, 2.0) * a };
+                let p = frame.point_to_world(Point3::new(x, y, z));
+                let lo = r.range(-10.0, 10.0);
+                for range in [
+                    Interval::new(0.0, dmath::TAU),
+                    Interval::new(lo, lo + r.range(0.0, dmath::TAU)),
+                    Interval::new(lo, lo + 1e-6),
+                    Interval::new(lo - 5.0, lo + 5.0),
+                ] {
+                    out.push((e, p, range));
+                }
+            }
+        }
+        out
+    }
+
+    /// The minor semi-axis longer than the major (a STEP ellipse may be so): the second review's
+    /// repros, against fine sampling. The first assumed a >= b and gave t = 0 at 1.41421 for the
+    /// first (the truth t = 0.3973 at 1.10136).
+    #[test]
+    fn an_ellipse_with_its_axes_the_other_way_finds_its_nearest_point() {
+        let e = Ellipse::new(Frame::WORLD, 1.0, 2.0);
+        for (x, y, want) in [(2.0, 1.0, 1.10136), (0.3, 0.5, 0.66153)] {
+            let p = Point3::new(x, y, 0.0);
+            let t = e.closest(p, Interval::new(0.0, dmath::TAU));
+            let d = e.eval(t).distance(p);
+            let best = (0..=200_000)
+                .map(|i| e.eval(dmath::TAU * i as f64 / 200_000.0).distance(p))
+                .fold(f64::INFINITY, f64::min);
+            assert!(
+                d <= best + 1e-12 && (d - want).abs() < 1e-5,
+                "({x}, {y}): t {t} at {d}, best {best}"
+            );
+        }
+    }
+
+    /// Old against new: the exact foot point is never farther than the sampled one (to rounding),
+    /// and where it is nearer, the sampler missed a minimum between two of its samples.
+    #[test]
+    fn the_ellipse_foot_point_is_never_farther_than_the_sampled_one() {
+        let mut r = Rng::new(0x5eed_e111);
+        let (mut n, mut nearer, mut tie, mut same) = (0, 0, 0, 0);
+        for (e, p, range) in ellipse_cases(&mut r) {
+            let full = if range.width() >= dmath::TAU {
+                Interval::new(0.0, dmath::TAU)
+            } else {
+                range
+            };
+            let t_old = closest_numeric(&e, p, full);
+            let t_new = e.closest(p, range);
+            assert!(t_new >= full.lo && t_new <= full.hi, "{t_new} outside {full:?}");
+            let (d_old, d_new) = (e.eval(t_old).distance(p), e.eval(t_new).distance(p));
+            let tol = 1e-12 * (e.major.max(e.minor) + p.distance(e.frame.origin));
+            assert!(
+                d_new <= d_old + tol,
+                "farther: {e:?} {p:?} {range:?}: new {t_new} at {d_new}, old {t_old} at {d_old}"
+            );
+            n += 1;
+            // every case is one of: the same point (to 1e-9 in the angle, or the same point by
+            // another angle: 0 and 2 pi), nearer (the sampler missed a minimum between its
+            // samples), or a tie (another point at the same distance: a mirror image)
+            let p_old = e.eval(t_old);
+            if (t_new - t_old).abs() <= 1e-9 || e.eval(t_new).distance(p_old) <= tol {
+                same += 1;
+            } else if d_new < d_old - tol {
+                nearer += 1;
+            } else {
+                assert!((d_new - d_old).abs() <= tol);
+                tie += 1;
+            }
+        }
+        assert_eq!(n, same + nearer + tie);
+        eprintln!("{n} cases: the same point {same}, nearer than the sampler {nearer}, a tie {tie}");
+    }
+
+    /// Against brute force: no point of 20 001 on the range is nearer than the foot point. (Not
+    /// with the old sampler switched back on: it misses minima between its samples.)
+    #[cfg(not(feature = "ellipse-foot-sampled"))]
+    #[test]
+    fn no_sample_of_the_range_is_nearer_than_the_ellipse_foot_point() {
+        let mut r = Rng::new(0xb2_07e);
+        for (e, p, range) in ellipse_cases(&mut r).into_iter().step_by(7) {
+            let full = if range.width() >= dmath::TAU {
+                Interval::new(0.0, dmath::TAU)
+            } else {
+                range
+            };
+            let d = e.eval(e.closest(p, range)).distance(p);
+            let tol = 1e-12 * (e.major.max(e.minor) + p.distance(e.frame.origin));
+            for i in 0..=20_000 {
+                let t = full.lo + full.width() * (i as f64 / 20_000.0);
+                let s = e.eval(t).distance(p);
+                assert!(d <= s + tol, "{e:?} {p:?} {range:?}: {d} but {s} at {t}");
+            }
+        }
+    }
+
+    /// Every angle `ellipse_square` gives is square to the point: the distance's slope there is
+    /// zero to rounding (a cosine between the offset and the tangent of 1e-7, or the offset along
+    /// the tangent within 1e-12 of the scale).
+    #[test]
+    fn every_ellipse_square_angle_is_square_to_the_point() {
+        let mut r = Rng::new(0x5_90a7e);
+        for (e, p, _) in ellipse_cases(&mut r) {
+            let l = e.frame.point_to_local(p);
+            let (ts, n) = ellipse_square_any(l.x, l.y, e.major, e.minor);
+            for &t in &ts[..n] {
+                let dv = e.deriv(t);
+                let off = Point3::new(l.x, l.y, 0.0) - e.frame.point_to_local(dv.p);
+                let tan = e.frame.vec_to_local(dv.d1);
+                let (lo, lt) = (off.length(), tan.length());
+                // the point on the curve, or the tangent vanishing (a flat ellipse's ends, where
+                // sin pi rounds to 1e-16): square there whatever the direction
+                let size = e.major.max(e.minor);
+                if lo <= 1e-12 * size || lt <= 1e-12 * size {
+                    continue;
+                }
+                // square to a cosine of 1e-7, or along the tangent within the tests' 1e-12 of the
+                // scale (where roots merge, at the evolute's cusps, the angle is ill-conditioned:
+                // the offset is then tiny and its direction rounding)
+                let cos = off.dot(tan) / (lo * lt);
+                let along = (off.dot(tan) / lt).abs();
+                let tol = 1e-12 * (e.major.max(e.minor) + p.distance(e.frame.origin));
+                assert!(
+                    cos.abs() <= 1e-7 || along <= tol,
+                    "{e:?} at ({}, {}): t {t}, cos {cos}, along {along}",
+                    l.x,
+                    l.y
+                );
+            }
+        }
+    }
 
     fn rand_curves(r: &mut Rng) -> Vec<Curve> {
         let f = rand_frame(r);

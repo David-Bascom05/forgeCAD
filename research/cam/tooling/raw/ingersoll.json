@@ -1,0 +1,1486 @@
+{
+ "source": "Ingersoll Cutting Tools (ingersoll-imc.com catalogue PDFs)",
+ "blocked": [],
+ "records": [
+  {
+   "kind": "insert",
+   "iso_code": "CNMG120404",
+   "id": "CNMG431 / CNMG120404",
+   "maker": "Ingersoll Cutting Tools",
+   "name": "Ingersoll turning insert CNMG120404 (Turning Inserts catalogue section, PDF dated 2011)",
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/0872_Turning_Inserts.pdf#page=24",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 12.395,
+     "unit": "mm",
+     "stated": "l 0.488 in"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "d 0.500 in"
+    },
+    "s": {
+     "v": 4.75,
+     "unit": "mm",
+     "stated": "t 0.187 in"
+    },
+    "re": {
+     "v": 0.406,
+     "unit": "mm",
+     "stated": "R 0.016 in"
+    },
+    "ansi_code": {
+     "v": "CNMG431",
+     "unit": "text",
+     "stated": "ANSI Number CNMG431"
+    },
+    "chipbreaker": {
+     "v": "common (no suffix)",
+     "unit": "text",
+     "stated": "CNMG COMMON CHIPBREAKER page (no suffix)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": {
+       "nominal": 0.279,
+       "range": [
+        0.178,
+        0.457
+       ]
+      },
+      "unit": "mm/rev",
+      "stated": "feed (ipr) .011 (.007-.018)"
+     },
+     "ap": {
+      "v": {
+       "nominal": 2.997,
+       "range": [
+        0.991,
+        5.004
+       ]
+      },
+      "unit": "mm",
+      "stated": "ap (inch) .118 (.039-.197)"
+     }
+    }
+   ],
+   "unknown": [
+    "l is printed as a value that changes with corner radius (e.g. 0.488 in for R .016, 0.472 in for R .031); it is not the ISO cutting edge length - kept with its label",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "CNMG120408",
+   "id": "CNMG432MP / CNMG120408MP",
+   "maker": "Ingersoll Cutting Tools",
+   "name": "Ingersoll turning insert CNMG120408MP (Turning Inserts catalogue section, PDF dated 2011)",
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/0872_Turning_Inserts.pdf#page=30",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 11.989,
+     "unit": "mm",
+     "stated": "l 0.472 in"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "d 0.500 in"
+    },
+    "s": {
+     "v": 4.75,
+     "unit": "mm",
+     "stated": "t 0.187 in"
+    },
+    "re": {
+     "v": 0.787,
+     "unit": "mm",
+     "stated": "R 0.031 in"
+    },
+    "ansi_code": {
+     "v": "CNMG432MP",
+     "unit": "text",
+     "stated": "ANSI Number CNMG432MP"
+    },
+    "chipbreaker": {
+     "v": "MP",
+     "unit": "text",
+     "stated": "MP"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": {
+       "nominal": 0.305,
+       "range": [
+        0.127,
+        0.406
+       ]
+      },
+      "unit": "mm/rev",
+      "stated": "feed (ipr) .012 (.005-.016)"
+     },
+     "ap": {
+      "v": {
+       "nominal": 2.007,
+       "range": [
+        0.991,
+        3.988
+       ]
+      },
+      "unit": "mm",
+      "stated": "ap (inch) .079 (.039-.157)"
+     }
+    }
+   ],
+   "unknown": [
+    "l is printed as a value that changes with corner radius (e.g. 0.488 in for R .016, 0.472 in for R .031); it is not the ISO cutting edge length - kept with its label",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "CNMG120408",
+   "id": "CNMG432MT / CNMG120408MT",
+   "maker": "Ingersoll Cutting Tools",
+   "name": "Ingersoll turning insert CNMG120408MT (Turning Inserts catalogue section, PDF dated 2011)",
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/0872_Turning_Inserts.pdf#page=31",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 11.989,
+     "unit": "mm",
+     "stated": "l 0.472 in"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "d 0.500 in"
+    },
+    "s": {
+     "v": 4.75,
+     "unit": "mm",
+     "stated": "t 0.187 in"
+    },
+    "re": {
+     "v": 0.787,
+     "unit": "mm",
+     "stated": "R 0.031 in"
+    },
+    "ansi_code": {
+     "v": "CNMG432MT",
+     "unit": "text",
+     "stated": "ANSI Number CNMG432MT"
+    },
+    "chipbreaker": {
+     "v": "MT",
+     "unit": "text",
+     "stated": "MT"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": {
+       "nominal": 0.356,
+       "range": [
+        0.178,
+        0.559
+       ]
+      },
+      "unit": "mm/rev",
+      "stated": "feed (ipr) .014 (.007-.022)"
+     },
+     "ap": {
+      "v": {
+       "nominal": 2.997,
+       "range": [
+        1.194,
+        5.004
+       ]
+      },
+      "unit": "mm",
+      "stated": "ap (inch) .118 (.047-.197)"
+     }
+    }
+   ],
+   "unknown": [
+    "l is printed as a value that changes with corner radius (e.g. 0.488 in for R .016, 0.472 in for R .031); it is not the ISO cutting edge length - kept with its label",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "DNMG150404",
+   "id": "DNMG431MT / DNMG150404MT",
+   "maker": "Ingersoll Cutting Tools",
+   "name": "Ingersoll turning insert DNMG150404MT (Turning Inserts catalogue section, PDF dated 2011)",
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/0872_Turning_Inserts.pdf#page=44",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 15.088,
+     "unit": "mm",
+     "stated": "l 0.594 in"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "d 0.500 in"
+    },
+    "s": {
+     "v": 4.75,
+     "unit": "mm",
+     "stated": "t 0.187 in"
+    },
+    "re": {
+     "v": 0.406,
+     "unit": "mm",
+     "stated": "R 0.016 in"
+    },
+    "ansi_code": {
+     "v": "DNMG431MT",
+     "unit": "text",
+     "stated": "ANSI Number DNMG431MT"
+    },
+    "chipbreaker": {
+     "v": "MT",
+     "unit": "text",
+     "stated": "MT"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": {
+       "nominal": 0.254,
+       "range": [
+        0.152,
+        0.406
+       ]
+      },
+      "unit": "mm/rev",
+      "stated": "feed (ipr) .010 (.006-.016)"
+     },
+     "ap": {
+      "v": {
+       "nominal": 2.007,
+       "range": [
+        0.787,
+        3.988
+       ]
+      },
+      "unit": "mm",
+      "stated": "ap (inch) .079 (.031-.157)"
+     }
+    }
+   ],
+   "unknown": [
+    "l is printed as a value that changes with corner radius (e.g. 0.488 in for R .016, 0.472 in for R .031); it is not the ISO cutting edge length - kept with its label",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "DNMG150408",
+   "id": "DNMG432MT / DNMG150408MT",
+   "maker": "Ingersoll Cutting Tools",
+   "name": "Ingersoll turning insert DNMG150408MT (Turning Inserts catalogue section, PDF dated 2011)",
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/0872_Turning_Inserts.pdf#page=44",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 14.707,
+     "unit": "mm",
+     "stated": "l 0.579 in"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "d 0.500 in"
+    },
+    "s": {
+     "v": 4.75,
+     "unit": "mm",
+     "stated": "t 0.187 in"
+    },
+    "re": {
+     "v": 0.787,
+     "unit": "mm",
+     "stated": "R 0.031 in"
+    },
+    "ansi_code": {
+     "v": "DNMG432MT",
+     "unit": "text",
+     "stated": "ANSI Number DNMG432MT"
+    },
+    "chipbreaker": {
+     "v": "MT",
+     "unit": "text",
+     "stated": "MT"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": {
+       "nominal": 0.356,
+       "range": [
+        0.178,
+        0.508
+       ]
+      },
+      "unit": "mm/rev",
+      "stated": "feed (ipr) .014 (.007-.020)"
+     },
+     "ap": {
+      "v": {
+       "nominal": 2.489,
+       "range": [
+        0.991,
+        3.988
+       ]
+      },
+      "unit": "mm",
+      "stated": "ap (inch) .098 (.039-.157)"
+     }
+    }
+   ],
+   "unknown": [
+    "l is printed as a value that changes with corner radius (e.g. 0.488 in for R .016, 0.472 in for R .031); it is not the ISO cutting edge length - kept with its label",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "DNMG150604",
+   "id": "DNMG441 / DNMG150604",
+   "maker": "Ingersoll Cutting Tools",
+   "name": "Ingersoll turning insert DNMG150604 (Turning Inserts catalogue section, PDF dated 2011)",
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/0872_Turning_Inserts.pdf#page=39",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 15.088,
+     "unit": "mm",
+     "stated": "l 0.594 in"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "d 0.500 in"
+    },
+    "s": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "t 0.250 in"
+    },
+    "re": {
+     "v": 0.406,
+     "unit": "mm",
+     "stated": "R 0.016 in"
+    },
+    "ansi_code": {
+     "v": "DNMG441",
+     "unit": "text",
+     "stated": "ANSI Number DNMG441"
+    },
+    "chipbreaker": {
+     "v": "common (no suffix)",
+     "unit": "text",
+     "stated": "CNMG COMMON CHIPBREAKER page (no suffix)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": {
+       "nominal": 0.279,
+       "range": [
+        0.178,
+        0.457
+       ]
+      },
+      "unit": "mm/rev",
+      "stated": "feed (ipr) .011 (.007-.018)"
+     },
+     "ap": {
+      "v": {
+       "nominal": 2.007,
+       "range": [
+        0.991,
+        3.988
+       ]
+      },
+      "unit": "mm",
+      "stated": "ap (inch) .079 (.039-.157)"
+     }
+    }
+   ],
+   "unknown": [
+    "l is printed as a value that changes with corner radius (e.g. 0.488 in for R .016, 0.472 in for R .031); it is not the ISO cutting edge length - kept with its label",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "DNMG150608",
+   "id": "DNMG442MP / DNMG150608MP",
+   "maker": "Ingersoll Cutting Tools",
+   "name": "Ingersoll turning insert DNMG150608MP (Turning Inserts catalogue section, PDF dated 2011)",
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/0872_Turning_Inserts.pdf#page=43",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 14.707,
+     "unit": "mm",
+     "stated": "l 0.579 in"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "d 0.500 in"
+    },
+    "s": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "t 0.250 in"
+    },
+    "re": {
+     "v": 0.787,
+     "unit": "mm",
+     "stated": "R 0.031 in"
+    },
+    "ansi_code": {
+     "v": "DNMG442MP",
+     "unit": "text",
+     "stated": "ANSI Number DNMG442MP"
+    },
+    "chipbreaker": {
+     "v": "MP",
+     "unit": "text",
+     "stated": "MP"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": {
+       "nominal": 0.305,
+       "range": [
+        0.127,
+        0.406
+       ]
+      },
+      "unit": "mm/rev",
+      "stated": "feed (ipr) .012 (.005-.016)"
+     },
+     "ap": {
+      "v": {
+       "nominal": 2.007,
+       "range": [
+        0.991,
+        3.988
+       ]
+      },
+      "unit": "mm",
+      "stated": "ap (inch) .079 (.039-.157)"
+     }
+    }
+   ],
+   "unknown": [
+    "l is printed as a value that changes with corner radius (e.g. 0.488 in for R .016, 0.472 in for R .031); it is not the ISO cutting edge length - kept with its label",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "TNMG160404",
+   "id": "TNMG331MP / TNMG160404MP",
+   "maker": "Ingersoll Cutting Tools",
+   "name": "Ingersoll turning insert TNMG160404MP (Turning Inserts catalogue section, PDF dated 2011)",
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/0872_Turning_Inserts.pdf#page=68",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 15.494,
+     "unit": "mm",
+     "stated": "l 0.610 in"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "d 0.375 in"
+    },
+    "s": {
+     "v": 4.75,
+     "unit": "mm",
+     "stated": "t 0.187 in"
+    },
+    "re": {
+     "v": 0.406,
+     "unit": "mm",
+     "stated": "R 0.016 in"
+    },
+    "ansi_code": {
+     "v": "TNMG331MP",
+     "unit": "text",
+     "stated": "ANSI Number TNMG331MP"
+    },
+    "chipbreaker": {
+     "v": "MP",
+     "unit": "text",
+     "stated": "MP"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": {
+       "nominal": 0.203,
+       "range": [
+        0.102,
+        0.305
+       ]
+      },
+      "unit": "mm/rev",
+      "stated": "feed (ipr) .008 (.004-.012)"
+     },
+     "ap": {
+      "v": {
+       "nominal": 1.499,
+       "range": [
+        0.787,
+        3.505
+       ]
+      },
+      "unit": "mm",
+      "stated": "ap (inch) .059 (.031-.138)"
+     }
+    }
+   ],
+   "unknown": [
+    "l is printed as a value that changes with corner radius (e.g. 0.488 in for R .016, 0.472 in for R .031); it is not the ISO cutting edge length - kept with its label",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "TNMG160408",
+   "id": "TNMG332MP / TNMG160408MP",
+   "maker": "Ingersoll Cutting Tools",
+   "name": "Ingersoll turning insert TNMG160408MP (Turning Inserts catalogue section, PDF dated 2011)",
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/0872_Turning_Inserts.pdf#page=68",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 14.503,
+     "unit": "mm",
+     "stated": "l 0.571 in"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "d 0.375 in"
+    },
+    "s": {
+     "v": 4.75,
+     "unit": "mm",
+     "stated": "t 0.187 in"
+    },
+    "re": {
+     "v": 0.787,
+     "unit": "mm",
+     "stated": "R 0.031 in"
+    },
+    "ansi_code": {
+     "v": "TNMG332MP",
+     "unit": "text",
+     "stated": "ANSI Number TNMG332MP"
+    },
+    "chipbreaker": {
+     "v": "MP",
+     "unit": "text",
+     "stated": "MP"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": {
+       "nominal": 0.305,
+       "range": [
+        0.127,
+        0.406
+       ]
+      },
+      "unit": "mm/rev",
+      "stated": "feed (ipr) .012 (.005-.016)"
+     },
+     "ap": {
+      "v": {
+       "nominal": 1.499,
+       "range": [
+        0.991,
+        3.505
+       ]
+      },
+      "unit": "mm",
+      "stated": "ap (inch) .059 (.039-.138)"
+     }
+    }
+   ],
+   "unknown": [
+    "l is printed as a value that changes with corner radius (e.g. 0.488 in for R .016, 0.472 in for R .031); it is not the ISO cutting edge length - kept with its label",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "VNMG160404",
+   "id": "VNMG331 / VNMG160404",
+   "maker": "Ingersoll Cutting Tools",
+   "name": "Ingersoll turning insert VNMG160404 (Turning Inserts catalogue section, PDF dated 2011)",
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/0872_Turning_Inserts.pdf#page=74",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 15.596,
+     "unit": "mm",
+     "stated": "l 0.614 in"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "d 0.375 in"
+    },
+    "s": {
+     "v": 4.75,
+     "unit": "mm",
+     "stated": "t 0.187 in"
+    },
+    "re": {
+     "v": 0.406,
+     "unit": "mm",
+     "stated": "R 0.016 in"
+    },
+    "ansi_code": {
+     "v": "VNMG331",
+     "unit": "text",
+     "stated": "ANSI Number VNMG331"
+    },
+    "chipbreaker": {
+     "v": "common (no suffix)",
+     "unit": "text",
+     "stated": "CNMG COMMON CHIPBREAKER page (no suffix)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": {
+       "nominal": 0.254,
+       "range": [
+        0.178,
+        0.406
+       ]
+      },
+      "unit": "mm/rev",
+      "stated": "feed (ipr) .010 (.007-.016)"
+     },
+     "ap": {
+      "v": {
+       "nominal": 1.499,
+       "range": [
+        0.991,
+        2.997
+       ]
+      },
+      "unit": "mm",
+      "stated": "ap (inch) .059 (.039-.118)"
+     }
+    }
+   ],
+   "unknown": [
+    "l is printed as a value that changes with corner radius (e.g. 0.488 in for R .016, 0.472 in for R .031); it is not the ISO cutting edge length - kept with its label",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "VNMG160408",
+   "id": "VNMG332 / VNMG160408",
+   "maker": "Ingersoll Cutting Tools",
+   "name": "Ingersoll turning insert VNMG160408 (Turning Inserts catalogue section, PDF dated 2011)",
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/0872_Turning_Inserts.pdf#page=74",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 14.605,
+     "unit": "mm",
+     "stated": "l 0.575 in"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "d 0.375 in"
+    },
+    "s": {
+     "v": 4.75,
+     "unit": "mm",
+     "stated": "t 0.187 in"
+    },
+    "re": {
+     "v": 0.787,
+     "unit": "mm",
+     "stated": "R 0.031 in"
+    },
+    "ansi_code": {
+     "v": "VNMG332",
+     "unit": "text",
+     "stated": "ANSI Number VNMG332"
+    },
+    "chipbreaker": {
+     "v": "common (no suffix)",
+     "unit": "text",
+     "stated": "CNMG COMMON CHIPBREAKER page (no suffix)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": {
+       "nominal": 0.33,
+       "range": [
+        0.178,
+        0.508
+       ]
+      },
+      "unit": "mm/rev",
+      "stated": "feed (ipr) .013 (.007-.020)"
+     },
+     "ap": {
+      "v": {
+       "nominal": 2.007,
+       "range": [
+        1.499,
+        2.997
+       ]
+      },
+      "unit": "mm",
+      "stated": "ap (inch) .079 (.059-.118)"
+     }
+    }
+   ],
+   "unknown": [
+    "l is printed as a value that changes with corner radius (e.g. 0.488 in for R .016, 0.472 in for R .031); it is not the ISO cutting edge length - kept with its label",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "WNMG080404",
+   "id": "WNMG431MP / WNMG080404MP",
+   "maker": "Ingersoll Cutting Tools",
+   "name": "Ingersoll turning insert WNMG080404MP (Turning Inserts catalogue section, PDF dated 2011)",
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/0872_Turning_Inserts.pdf#page=85",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 8.407,
+     "unit": "mm",
+     "stated": "l 0.331 in"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "d 0.500 in"
+    },
+    "s": {
+     "v": 4.75,
+     "unit": "mm",
+     "stated": "t 0.187 in"
+    },
+    "re": {
+     "v": 0.406,
+     "unit": "mm",
+     "stated": "R 0.016 in"
+    },
+    "ansi_code": {
+     "v": "WNMG431MP",
+     "unit": "text",
+     "stated": "ANSI Number WNMG431MP"
+    },
+    "chipbreaker": {
+     "v": "MP",
+     "unit": "text",
+     "stated": "MP"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": {
+       "nominal": 0.254,
+       "range": [
+        0.102,
+        0.356
+       ]
+      },
+      "unit": "mm/rev",
+      "stated": "feed (ipr) .010 (.004-.014)"
+     },
+     "ap": {
+      "v": {
+       "nominal": 2.007,
+       "range": [
+        0.991,
+        3.988
+       ]
+      },
+      "unit": "mm",
+      "stated": "ap (inch) .079 (.039-.157)"
+     }
+    }
+   ],
+   "unknown": [
+    "l is printed as a value that changes with corner radius (e.g. 0.488 in for R .016, 0.472 in for R .031); it is not the ISO cutting edge length - kept with its label",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "WNMG080408",
+   "id": "WNMG432MP / WNMG080408MP",
+   "maker": "Ingersoll Cutting Tools",
+   "name": "Ingersoll turning insert WNMG080408MP (Turning Inserts catalogue section, PDF dated 2011)",
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/0872_Turning_Inserts.pdf#page=85",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 8.306,
+     "unit": "mm",
+     "stated": "l 0.327 in"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "d 0.500 in"
+    },
+    "s": {
+     "v": 4.75,
+     "unit": "mm",
+     "stated": "t 0.187 in"
+    },
+    "re": {
+     "v": 0.787,
+     "unit": "mm",
+     "stated": "R 0.031 in"
+    },
+    "ansi_code": {
+     "v": "WNMG432MP",
+     "unit": "text",
+     "stated": "ANSI Number WNMG432MP"
+    },
+    "chipbreaker": {
+     "v": "MP",
+     "unit": "text",
+     "stated": "MP"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": {
+       "nominal": 0.305,
+       "range": [
+        0.127,
+        0.406
+       ]
+      },
+      "unit": "mm/rev",
+      "stated": "feed (ipr) .012 (.005-.016)"
+     },
+     "ap": {
+      "v": {
+       "nominal": 2.007,
+       "range": [
+        0.991,
+        3.988
+       ]
+      },
+      "unit": "mm",
+      "stated": "ap (inch) .079 (.039-.157)"
+     }
+    }
+   ],
+   "unknown": [
+    "l is printed as a value that changes with corner radius (e.g. 0.488 in for R .016, 0.472 in for R .031); it is not the ISO cutting edge length - kept with its label",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "CCMT09T304",
+   "id": "CCMT32.51MT / CCMT09T304MT",
+   "maker": "Ingersoll Cutting Tools",
+   "name": "Ingersoll turning insert CCMT09T304MT (Turning Inserts catalogue section, PDF dated 2011)",
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/0872_Turning_Inserts.pdf#page=93",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 9.195,
+     "unit": "mm",
+     "stated": "l 0.362 in"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "d 0.375 in"
+    },
+    "s": {
+     "v": 3.962,
+     "unit": "mm",
+     "stated": "t 0.156 in"
+    },
+    "re": {
+     "v": 0.406,
+     "unit": "mm",
+     "stated": "R 0.016 in"
+    },
+    "ansi_code": {
+     "v": "CCMT32.51MT",
+     "unit": "text",
+     "stated": "ANSI Number CCMT32.51MT"
+    },
+    "hole_d": {
+     "v": 4.394,
+     "unit": "mm",
+     "stated": "D1 0.173 in"
+    },
+    "chipbreaker": {
+     "v": "MT",
+     "unit": "text",
+     "stated": "MT"
+    },
+    "clearance": {
+     "v": 7,
+     "unit": "deg",
+     "stated": "7° (insert figure on the page)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": {
+       "nominal": 0.152,
+       "range": [
+        0.102,
+        0.254
+       ]
+      },
+      "unit": "mm/rev",
+      "stated": "feed (ipr) .006 (.004-.010)"
+     },
+     "ap": {
+      "v": {
+       "nominal": 1.499,
+       "range": [
+        0.711,
+        3.505
+       ]
+      },
+      "unit": "mm",
+      "stated": "ap (inch) .059 (.028-.138)"
+     }
+    }
+   ],
+   "unknown": [
+    "l is printed as a value that changes with corner radius (e.g. 0.488 in for R .016, 0.472 in for R .031); it is not the ISO cutting edge length - kept with its label",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "CCMT09T308",
+   "id": "CCMT32.52MT / CCMT09T308MT",
+   "maker": "Ingersoll Cutting Tools",
+   "name": "Ingersoll turning insert CCMT09T308MT (Turning Inserts catalogue section, PDF dated 2011)",
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/0872_Turning_Inserts.pdf#page=93",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 8.788,
+     "unit": "mm",
+     "stated": "l 0.346 in"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "d 0.375 in"
+    },
+    "s": {
+     "v": 3.962,
+     "unit": "mm",
+     "stated": "t 0.156 in"
+    },
+    "re": {
+     "v": 0.787,
+     "unit": "mm",
+     "stated": "R 0.031 in"
+    },
+    "ansi_code": {
+     "v": "CCMT32.52MT",
+     "unit": "text",
+     "stated": "ANSI Number CCMT32.52MT"
+    },
+    "hole_d": {
+     "v": 4.394,
+     "unit": "mm",
+     "stated": "D1 0.173 in"
+    },
+    "chipbreaker": {
+     "v": "MT",
+     "unit": "text",
+     "stated": "MT"
+    },
+    "clearance": {
+     "v": 7,
+     "unit": "deg",
+     "stated": "7° (insert figure on the page)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": {
+       "nominal": 0.178,
+       "range": [
+        0.127,
+        0.305
+       ]
+      },
+      "unit": "mm/rev",
+      "stated": "feed (ipr) .007 (.005-.012)"
+     },
+     "ap": {
+      "v": {
+       "nominal": 1.499,
+       "range": [
+        0.991,
+        3.505
+       ]
+      },
+      "unit": "mm",
+      "stated": "ap (inch) .059 (.039-.138)"
+     }
+    }
+   ],
+   "unknown": [
+    "l is printed as a value that changes with corner radius (e.g. 0.488 in for R .016, 0.472 in for R .031); it is not the ISO cutting edge length - kept with its label",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "DCMT11T304",
+   "id": "DCMT32.51MT / DCMT11T304MT",
+   "maker": "Ingersoll Cutting Tools",
+   "name": "Ingersoll turning insert DCMT11T304MT (Turning Inserts catalogue section, PDF dated 2011)",
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/0872_Turning_Inserts.pdf#page=99",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 11.201,
+     "unit": "mm",
+     "stated": "l 0.441 in"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "d 0.375 in"
+    },
+    "s": {
+     "v": 3.962,
+     "unit": "mm",
+     "stated": "t 0.156 in"
+    },
+    "re": {
+     "v": 0.406,
+     "unit": "mm",
+     "stated": "R 0.016 in"
+    },
+    "ansi_code": {
+     "v": "DCMT32.51MT",
+     "unit": "text",
+     "stated": "ANSI Number DCMT32.51MT"
+    },
+    "hole_d": {
+     "v": 4.394,
+     "unit": "mm",
+     "stated": "D1 0.173 in"
+    },
+    "chipbreaker": {
+     "v": "MT",
+     "unit": "text",
+     "stated": "MT"
+    },
+    "clearance": {
+     "v": 7,
+     "unit": "deg",
+     "stated": "7° (insert figure on the page)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": {
+       "nominal": 0.152,
+       "range": [
+        0.102,
+        0.254
+       ]
+      },
+      "unit": "mm/rev",
+      "stated": "feed (ipr) .006 (.004-.010)"
+     },
+     "ap": {
+      "v": {
+       "nominal": 0.991,
+       "range": [
+        0.711,
+        2.997
+       ]
+      },
+      "unit": "mm",
+      "stated": "ap (inch) .039 (.028-.118)"
+     }
+    }
+   ],
+   "unknown": [
+    "l is printed as a value that changes with corner radius (e.g. 0.488 in for R .016, 0.472 in for R .031); it is not the ISO cutting edge length - kept with its label",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "DCMT11T308",
+   "id": "DCMT32.52MT / DCMT11T308MT",
+   "maker": "Ingersoll Cutting Tools",
+   "name": "Ingersoll turning insert DCMT11T308MT (Turning Inserts catalogue section, PDF dated 2011)",
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/0872_Turning_Inserts.pdf#page=99",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 10.795,
+     "unit": "mm",
+     "stated": "l 0.425 in"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "d 0.375 in"
+    },
+    "s": {
+     "v": 3.962,
+     "unit": "mm",
+     "stated": "t 0.156 in"
+    },
+    "re": {
+     "v": 0.787,
+     "unit": "mm",
+     "stated": "R 0.031 in"
+    },
+    "ansi_code": {
+     "v": "DCMT32.52MT",
+     "unit": "text",
+     "stated": "ANSI Number DCMT32.52MT"
+    },
+    "hole_d": {
+     "v": 4.394,
+     "unit": "mm",
+     "stated": "D1 0.173 in"
+    },
+    "chipbreaker": {
+     "v": "MT",
+     "unit": "text",
+     "stated": "MT"
+    },
+    "clearance": {
+     "v": 7,
+     "unit": "deg",
+     "stated": "7° (insert figure on the page)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": {
+       "nominal": 0.178,
+       "range": [
+        0.127,
+        0.305
+       ]
+      },
+      "unit": "mm/rev",
+      "stated": "feed (ipr) .007 (.005-.012)"
+     },
+     "ap": {
+      "v": {
+       "nominal": 1.499,
+       "range": [
+        0.991,
+        3.505
+       ]
+      },
+      "unit": "mm",
+      "stated": "ap (inch) .059 (.039-.138)"
+     }
+    }
+   ],
+   "unknown": [
+    "l is printed as a value that changes with corner radius (e.g. 0.488 in for R .016, 0.472 in for R .031); it is not the ISO cutting edge length - kept with its label",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table"
+   ]
+  },
+  {
+   "kind": "turn_holder",
+   "iso_code": null,
+   "id": "MCLNR10-4B",
+   "maker": "Ingersoll Cutting Tools",
+   "name": "Ingersoll MCLNR/L external holder (inch, ANSI)",
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1024_Turning_Holders.pdf#page=26",
+   "taken": "2026-11-24",
+   "values": {
+    "h": {
+     "v": 15.875,
+     "unit": "mm",
+     "stated": "h 0.625 in"
+    },
+    "b": {
+     "v": 15.875,
+     "unit": "mm",
+     "stated": "b 0.625 in"
+    },
+    "l1": {
+     "v": 114.3,
+     "unit": "mm",
+     "stated": "l 4.500 in"
+    },
+    "f": {
+     "v": 25.4,
+     "unit": "mm",
+     "stated": "f 1.000 in"
+    },
+    "kr": {
+     "v": 95,
+     "unit": "deg",
+     "stated": "95° (figure)"
+    },
+    "hand": {
+     "v": "R",
+     "unit": "text",
+     "stated": "R in designation (L listed separately)"
+    },
+    "insert": {
+     "v": "CN__43_",
+     "unit": "text",
+     "stated": "Accepts Insert Series CN__43_"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "inch ANSI holder; no metric ISO designation stated"
+   ]
+  },
+  {
+   "kind": "turn_holder",
+   "iso_code": null,
+   "id": "MCLNR85-4D",
+   "maker": "Ingersoll Cutting Tools",
+   "name": "Ingersoll MCLNR/L external holder (inch, ANSI)",
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1024_Turning_Holders.pdf#page=26",
+   "taken": "2026-11-24",
+   "values": {
+    "h": {
+     "v": 31.75,
+     "unit": "mm",
+     "stated": "h 1.250 in"
+    },
+    "b": {
+     "v": 25.4,
+     "unit": "mm",
+     "stated": "b 1.000 in"
+    },
+    "l1": {
+     "v": 152.4,
+     "unit": "mm",
+     "stated": "l 6.000 in"
+    },
+    "f": {
+     "v": 31.75,
+     "unit": "mm",
+     "stated": "f 1.250 in"
+    },
+    "kr": {
+     "v": 95,
+     "unit": "deg",
+     "stated": "95° (figure)"
+    },
+    "hand": {
+     "v": "R",
+     "unit": "text",
+     "stated": "R in designation (L listed separately)"
+    },
+    "insert": {
+     "v": "CN__43_",
+     "unit": "text",
+     "stated": "Accepts Insert Series CN__43_"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "inch ANSI holder"
+   ]
+  },
+  {
+   "kind": "boring_bar",
+   "iso_code": null,
+   "id": "S16T-PCLNR-3",
+   "maker": "Ingersoll Cutting Tools",
+   "name": "Ingersoll S-PCLNR/L boring bar (inch)",
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1024_Turning_Holders.pdf#page=100",
+   "taken": "2026-11-24",
+   "values": {
+    "dmm": {
+     "v": 25.4,
+     "unit": "mm",
+     "stated": "d 1.000 in"
+    },
+    "min_bore": {
+     "v": 31.75,
+     "unit": "mm",
+     "stated": "Dmin 1.250 in"
+    },
+    "l1": {
+     "v": 304.8,
+     "unit": "mm",
+     "stated": "L 12.00 in"
+    },
+    "f": {
+     "v": 15.875,
+     "unit": "mm",
+     "stated": "f 0.625 in"
+    },
+    "kr": {
+     "v": 95,
+     "unit": "deg",
+     "stated": "95° (figure)"
+    },
+    "hand": {
+     "v": "R",
+     "unit": "text",
+     "stated": "R in designation (L listed separately)"
+    },
+    "insert": {
+     "v": "CN__32_",
+     "unit": "text",
+     "stated": "Accepts Insert Series CN__32_"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "inch ANSI bar"
+   ]
+  },
+  {
+   "kind": "boring_bar",
+   "iso_code": null,
+   "id": "S12S-SCLCR-3",
+   "maker": "Ingersoll Cutting Tools",
+   "name": "Ingersoll S-SCLCR/L boring bar (inch)",
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1024_Turning_Holders.pdf#page=103",
+   "taken": "2026-11-24",
+   "values": {
+    "dmm": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "d 0.750 in"
+    },
+    "min_bore": {
+     "v": 24.232,
+     "unit": "mm",
+     "stated": "Dmin 0.954 in"
+    },
+    "l1": {
+     "v": 254.0,
+     "unit": "mm",
+     "stated": "L 10.00 in"
+    },
+    "f": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "f 0.500 in"
+    },
+    "hand": {
+     "v": "R",
+     "unit": "text",
+     "stated": "R in designation (L listed separately)"
+    },
+    "insert": {
+     "v": "CC_T32.5_",
+     "unit": "text",
+     "stated": "Accepts Insert Series CC_T32.5_"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "inch ANSI bar",
+    "entering angle not printed in extracted text for this table"
+   ]
+  }
+ ],
+ "notes": [
+  "Turning inserts: https://ssl.ingersoll-imc.com/resources/pdf/0872_Turning_Inserts.pdf ; holders: 1024_Turning_Holders.pdf (both linked from https://www.ingersoll-imc.com/catalogs). Holders/bars are inch (ANSI) only; no metric 2020K12-type holders found."
+ ]
+}

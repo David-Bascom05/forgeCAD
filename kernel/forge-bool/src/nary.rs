@@ -15,14 +15,15 @@
 
 use crate::boolean::{
     BoolError, Cut, CutOn, FaceRef, Imprint, Lost, Op, Piece, R, Seg, Side, Touch, Unhandled, VKey, Walk,
-    branches_meet, crossings_near, edge_split, grown_tols, imprint, lean, local_class, on_edge, overlap,
-    settle, split_face, touches, trim,
+    branches_meet, crossings_near, edge_split, grown_tols, imprint, imprint_tols, lean, local_class, on_edge,
+    overlap, refuse_tolerances_meeting, settle, split_face, touches, trim,
 };
 use crate::classify::{Index, Where};
 use crate::shape::{Member, Shape};
 use crate::ssi;
 use forge_geom::intersect::{Contact, CurveSurface, SurfaceSurface, curve_surface};
 use forge_geom::{Curve, CurveGeom, SurfaceGeom};
+use forge_math::ipow::Powi as _;
 use forge_math::{Interval, Point2, Point3, tol};
 use forge_topo::{Body, EdgeId, FaceId, Name, VertexId};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -572,19 +573,25 @@ pub fn nary_with(
     threads: usize,
     root: Name,
 ) -> R<Body> {
+    #[cfg(debug_assertions)]
+    crate::size::debug_check(tools);
+    #[cfg(debug_assertions)]
+    crate::curve_ok::debug_check(tools);
     // flat faces: the whole history as one pointwise rule, one call of the decide-once core
     #[cfg(feature = "decide_once")]
     if let Some(r) = crate::decide_once::history(tools, ops)? {
+        #[cfg(feature = "certify")]
+        crate::certify::skipped("the decide-once path");
         return Ok(r);
     }
-    crate::boolean::UNDECIDED.with(|u| u.set(None));
+    let mut undecided = None;
     #[cfg(feature = "decisions")]
     let scope = crate::decisions::scope("n-ary", String::from("plain"));
-    let body = nary_body(tools, ops, shapes, batch, threads, root);
+    let body = nary_noted(tools, ops, shapes, batch, threads, root, &mut undecided);
     #[cfg(feature = "decisions")]
     scope.outcome(crate::decisions::Outcome::of(&body));
     let out = body?;
-    crate::boolean::undecided_touch(&out)?;
+    crate::boolean::undecided_touch(&out, undecided)?;
     crate::boolean::refuse_strays(&out, 0)?;
     // pieces left touching at a point pinch (boolean::pinched): where walking round a vertex from
     // one coedge leaving it (back along its loop, across to the partner) misses some of the others
@@ -645,6 +652,42 @@ pub fn nary_with(
     Ok(out)
 }
 
+/// `boolean::apex::sheets_at` for n tools: whether each side's face, at a cone's apex, is kept in
+/// the result, from its sheet's place against every other tool.
+#[cold]
+#[inline(never)]
+fn apex_kept(
+    tools: &[&Body],
+    index: &[Index],
+    ops: &[Op],
+    any_intersect: bool,
+    t: &Touch,
+) -> R<[Option<bool>; 2]> {
+    let n = tools.len();
+    let mut out = [None; 2];
+    for (k, slot) in out.iter_mut().enumerate() {
+        let (sd, f) = (t.sides[k], t.faces[k]);
+        let Some(sheet) = crate::apex::apex_sheet(tools[sd], f, t.at) else {
+            continue;
+        };
+        let refuse = BoolError::ZeroThickness { at: t.at };
+        let sheet = sheet.ok_or(refuse.clone())?;
+        let mut inner = vec![false; n];
+        inner[sd] = true;
+        for j in (0..n).filter(|&j| j != sd) {
+            match crate::apex::where_sheet(tools[j], &index[j], t.at, &sheet) {
+                Some(Where::Inside) => inner[j] = true,
+                Some(_) => {}
+                None => return Err(refuse),
+            }
+        }
+        let mut outer = inner.clone();
+        outer[sd] = false;
+        *slot = Some(in_result(ops, &inner, any_intersect) != in_result(ops, &outer, any_intersect));
+    }
+    Ok(out)
+}
+
 fn nary_body(
     tools: &[&Body],
     ops: &[Op],
@@ -652,6 +695,7 @@ fn nary_body(
     batch: Option<&dyn Batch>,
     threads: usize,
     root: Name,
+    undecided: &mut Option<Point3>,
 ) -> R<Body> {
     assert_eq!(ops.len() + 1, tools.len(), "one op per tool after the first");
     let n = tools.len();
@@ -881,6 +925,9 @@ fn nary_body(
             }
         }
     }
+    // each tool's faces' boxes grown to all its faces on their very planes (`plane_boxes`), made the
+    // first time a pair of all but parallel planes needs them, once per tool for every pair
+    let plane_groups = std::sync::OnceLock::new();
     let outs = par_map(pairs.len(), threads, 2, |pi| -> R<PairOut> {
         let (i, j) = pairs[pi];
         let (a, b) = (tools[i], tools[j]);
@@ -889,16 +936,20 @@ fn nary_body(
         // a face surely clear of the other tool's solid meets none of its faces
         let clear = |f: &forge_math::Box3, k: Side| shapes.is_some_and(|sh| sh[k].box_out(f, SHAPE_MARGIN));
         let (ba, bb) = (ia.boxes(), ib.boxes());
-        let b_clear: Vec<bool> = b
+        // Reject B's faces once for this pair of tools. Keep the live face ids in arena order.
+        let candidates: Vec<_> = b
             .face_ids()
-            .map(|fb| bb[fb.index()].overlaps(&ia.bbox) && (clear(&bb[fb.index()], i) || dead(j, fb)))
+            .filter(|&fb| {
+                let bx = &bb[fb.index()];
+                bx.overlaps(&ia.bbox) && !clear(bx, i) && !dead(j, fb)
+            })
             .collect();
         for fa in a.face_ids() {
             if !ba[fa.index()].overlaps(&ib.bbox) || clear(&ba[fa.index()], j) || dead(i, fa) {
                 continue;
             }
-            for fb in b.face_ids() {
-                if !ba[fa.index()].overlaps(&bb[fb.index()]) || b_clear[fb.index()] {
+            for &fb in &candidates {
+                if !ba[fa.index()].overlaps(&bb[fb.index()]) {
                     continue;
                 }
                 let region = overlap(&ba[fa.index()], &bb[fb.index()]).grow(tol::LINEAR);
@@ -923,7 +974,23 @@ fn nary_body(
                 }
                 // a pair with no closed form is searched, at a cost: not where the tools holding all
                 // of the region (by bounds) say its curves would divide neither face
-                let found = match ssi::closed_or_flush(sa, sb, &region) {
+                let judged = match (sa, sb) {
+                    (forge_geom::Surface::Plane(p), forge_geom::Surface::Plane(q))
+                        if p.normal_vec().dot(q.normal_vec()).abs() > 1.0 - 1e-6
+                            && p.normal_vec().cross(q.normal_vec()) != forge_math::Vec3::ZERO =>
+                    {
+                        // two planes all but parallel are judged flush or crossing over where the
+                        // whole of each plane's faces meet: one verdict for every face pair of them
+                        // (planes parallel to the bit are judged without a region, ssi.rs)
+                        let groups = plane_groups
+                            .get_or_init(|| (0..n).map(|_| std::sync::OnceLock::new()).collect::<Vec<_>>());
+                        let ga = groups[i].get_or_init(|| plane_boxes(a, ba))[fa.index()];
+                        let gb = groups[j].get_or_init(|| plane_boxes(b, bb))[fb.index()];
+                        overlap(&ga, &gb).grow(tol::LINEAR)
+                    }
+                    _ => region,
+                };
+                let found = match ssi::closed_or_flush(sa, sb, &judged) {
                     SurfaceSurface::NotAnalytic if !meets_matter(&region, i, j) => {
                         out.loose.push(((i, fa), (j, fb)));
                         continue;
@@ -954,6 +1021,7 @@ fn nary_body(
                     SurfaceSurface::Coincident => {
                         out.coplanar.push([(i, fa), (j, fb)]);
                         let both = [a, b];
+                        let made = out.imprints.len();
                         imprint(
                             both,
                             [ia, ib],
@@ -976,6 +1044,9 @@ fn nary_body(
                             &mut out.imprints,
                             &mut Vec::new(),
                         )?;
+                        if out.imprints.len() > made {
+                            crate::boolean::mark_exact(&mut out.imprints[made..], sa, sb);
+                        }
                         continue;
                     }
                     // where either face is buried there is no curve to find
@@ -1030,6 +1101,7 @@ fn nary_body(
                         &mut out.imprints,
                         &mut out.touching,
                         None,
+                        &mut crate::boolean::Tried::default(),
                     )?;
                 }
                 if !whole || out.imprints.len() > imprints_before {
@@ -1123,6 +1195,10 @@ fn nary_body(
         outer[side] = false;
         Some(in_result(ops, &inner, any_intersect) != in_result(ops, &outer, any_intersect))
     };
+    decided!(crate::decisions::site(
+        "D3 touch listed (n-ary)",
+        touching.len() as u64
+    ));
     for t in &touching {
         if debug {
             let got: Vec<_> = (0..2)
@@ -1136,12 +1212,24 @@ fn nary_body(
                 t.sides, t.faces, t.at
             );
         }
+        // at a cone's apex the face's sheet is its generators, decided in closed form against
+        // every other tool; one that cannot be read there is refused at the point, never guessed
+        let sheets = if t.dir.is_none() && (0..2).any(|k| crate::apex::is_cone(tools[t.sides[k]], t.faces[k]))
+        {
+            apex_kept(tools, &index, ops, any_intersect, t)?
+        } else {
+            [None; 2]
+        };
         let kept = [0, 1].map(|k| {
+            if let Some(w) = sheets[k] {
+                return Some(w);
+            }
             let (sd, f) = (t.sides[k], t.faces[k]);
             local_class(tools[sd], &index[sd], f, t.at, t.dir, |q| kept_at(sd, q))
         });
         if t.dir.is_none() && kept.contains(&None) {
-            crate::boolean::UNDECIDED.with(|u| u.set(Some(t.at)));
+            decided!(crate::decisions::site("G4 UNDECIDED set (n-ary)", 1));
+            *undecided = Some(t.at);
         }
         let both = kept == [Some(true); 2];
         let flipped = |sd: usize| sd > 0 && ops[sd - 1] == Op::Subtract;
@@ -1159,6 +1247,7 @@ fn nary_body(
                 !flipped(t.sides[0]) && !flipped(t.sides[1]),
             )
         {
+            decided!(crate::decisions::site("D3 touch refused (n-ary)", 1));
             return Err(BoolError::ZeroThickness { at: t.at });
         }
     }
@@ -1203,7 +1292,7 @@ fn nary_body(
         };
         for hit in hits
             .into_iter()
-            .flat_map(|x| crossings_near(&sg.curve, sg.range, s, x))
+            .flat_map(|x| crossings_near(&sg.curve, sg.range, s, x, crate::boolean::Rung::PLAIN))
         {
             if index[k].point_in_face(h, hit.point) != Where::Outside {
                 got.push((hit.t, hit.point, tol::LINEAR, k, Some((k, h))));
@@ -1393,7 +1482,7 @@ fn nary_body(
     lap(&mut clock, 1);
     // a small boolean's later stages, on one thread (THREADED_AFTER_PAIRS); the answers are the
     // same either way
-    let threads = if born.elapsed() < THREADED_AFTER_PAIRS {
+    let threads = if born.elapsed() < THREADED_AFTER_PAIRS && !forge_math::par::forced() {
         1
     } else {
         threads
@@ -1805,7 +1894,7 @@ fn nary_body(
     let mut face_imprints: Vec<Vec<Vec<usize>>> =
         tools.iter().map(|b| vec![Vec::new(); b.faces.len()]).collect();
     for (ii, im) in imprints.iter().enumerate() {
-        face_imprints[im.into_side][im.into.index()].push(ii);
+        face_imprints[im.into_side as usize][im.into.index()].push(ii);
     }
     let mut cut_faces: Vec<Vec<bool>> = tools.iter().map(|b| vec![false; b.faces.len()]).collect();
     for &(sd, e, _) in &by_edge {
@@ -1889,6 +1978,22 @@ fn nary_body(
             }
             let boundary = pieces.walks(side, f);
             jobs.push((side, f, boundary, new_edges));
+        }
+    }
+    // imprinted edges' and their ends' tolerances grown to hold the faces they now bound
+    // (`imprint_tols`; the result is built fresh, so the pieces carry the edges' tolerances)
+    let mut imprint_grown: Vec<(VKey, f64)> = Vec::new();
+    if !imprints.iter().all(|im| im.exact) {
+        let first = grown.len();
+        let of_edge = &pieces.of_edge;
+        let pieces_of = |sd: Side, e: EdgeId| {
+            let (f, n) = of_edge[sd][e.index()];
+            (n > 0).then_some((f as usize, n as usize))
+        };
+        imprint_tols(tools, &imprints, pieces_of, &mut pieces.list, &alias, &mut grown);
+        if grown.len() > first {
+            imprint_grown = grown[first..].to_vec();
+            grown.sort_unstable_by_key(|g| g.0);
         }
     }
     // two tools' faces on one surface crossing a third give the same new edge twice: one copy
@@ -2381,7 +2486,10 @@ fn nary_body(
                 Some(0) => Ok(None),
                 Some(1) => Ok(Some(false)),
                 Some(2) => Ok(Some(true)),
-                _ => full(ri, first[ri]),
+                _ => {
+                    decided!(crate::decisions::site("G10 n-ary verdict 3 (or no point)", 1));
+                    full(ri, first[ri])
+                }
             })
         }
     };
@@ -2571,6 +2679,10 @@ fn nary_body(
             let p = canon[p].map_or(p, |c| c.0);
             uses[p] = uses[p].saturating_add(1);
             if uses[p] > 2 {
+                decided!(crate::decisions::site(
+                    "D9 edge of >2 kept faces refused (n-ary)",
+                    1
+                ));
                 let pc = &list[p];
                 return Err(BoolError::ZeroThickness {
                     at: pc.curve.eval(pc.range.mid()),
@@ -2782,6 +2894,8 @@ fn nary_body(
     let mut old_v: Vec<Vec<Option<VertexId>>> = vec![Vec::new(); n];
     let mut new_v: Vec<Option<VertexId>> = vec![None; points.len()];
     let mut emap: Vec<Option<EdgeId>> = vec![None; list.len()];
+    // edges shorter than the balls at their ends: checked once built (`refuse_short_edges`)
+    let mut short: Vec<EdgeId> = Vec::new();
     for &(ri, flip) in &kept {
         let r = &regs[ri];
         let src = tools[r.side].face(r.face);
@@ -2843,6 +2957,10 @@ fn nary_body(
                         let (v0, v1) = (vertex(&mut out, pc.start), vertex(&mut out, pc.end));
                         let e = out.add_edge(pc.curve.clone(), pc.range, v0, v1, pc.name);
                         out.edges[e.index()].tol = pc.tol;
+                        // (a line's parameter is its length)
+                        if matches!(pc.curve, Curve::Line(_)) && pc.range.width() <= 2.0 * tol::LINEAR {
+                            short.push(e);
+                        }
                         emap[p] = Some(e);
                         e
                     }
@@ -2851,6 +2969,12 @@ fn nary_body(
             }
             out.add_loop(face, &uses);
         }
+    }
+    if !imprint_grown.is_empty() {
+        refuse_tolerances_meeting(&imprint_grown, &list, |p| emap[p].is_some())?;
+    }
+    if !short.is_empty() {
+        refuse_short_edges(&out, &short)?;
     }
     out.rebuild_shells();
     lap(&mut clock, 5);
@@ -2863,6 +2987,69 @@ fn nary_body(
         out.sole_survivors(&survivors);
     }
     Ok(out)
+}
+
+/// Each face's box grown to every face of `body` on its very plane (the one plane, to the bit:
+/// pieces of one face split by a boolean keep its surface), others' their own. Flushness judged
+/// over each face pair's own overlap is not transitive: a tool's face a hair off a wall was flush
+/// with a short face an earlier imprint left on the wall and not with the long one round it, its
+/// edges were imprinted on the short face only, and the crossings split only the short face's
+/// edges, leaving a slit (FaceWrongSide on the next boolean; research/booleans/drift.md §9).
+#[cold]
+#[inline(never)]
+fn plane_boxes(body: &Body, boxes: &[forge_math::Box3]) -> Vec<forge_math::Box3> {
+    // a plane by its normal (pointed one fixed way) and offset, to the bit
+    let key = |f: FaceId| match &body.face(f).surface {
+        forge_geom::Surface::Plane(p) => {
+            let n = p.normal_vec().get();
+            let flip = n.x < 0.0 || n.x == 0.0 && (n.y < 0.0 || n.y == 0.0 && n.z < 0.0);
+            let n = if flip { -n } else { n };
+            let d = n.dot(p.frame.origin.to_vec());
+            Some([n.x, n.y, n.z, d].map(f64::to_bits))
+        }
+        _ => None,
+    };
+    let mut keyed: Vec<([u64; 4], u32)> = body.face_ids().filter_map(|f| key(f).map(|k| (k, f.0))).collect();
+    keyed.sort_unstable();
+    let mut out = boxes.to_vec();
+    for run in keyed.chunk_by(|x, y| x.0 == y.0).filter(|r| r.len() > 1) {
+        let all = run
+            .iter()
+            .fold(forge_math::Box3::EMPTY, |b, &(_, f)| b.hull(&boxes[f as usize]));
+        for &(_, f) in run {
+            out[f as usize] = all;
+        }
+    }
+    out
+}
+
+/// Line edges of the result shorter than two tolerances (`short`), refused where `check` would
+/// find them degenerate (ends within LINEAR of each other: two vertices the pass did not merge) or
+/// off a plane they bound by more than their tolerance (a sliver's piece left bounding a face it
+/// crosses). Both came out of the n-ary pass as Oks (research/booleans/drift.md §9); the
+/// sequential boolean refuses or merges there. Cold: only where such an edge was built.
+#[cold]
+#[inline(never)]
+fn refuse_short_edges(out: &Body, short: &[EdgeId]) -> R<()> {
+    for &e in short {
+        let edge = out.edge(e);
+        let (a, b) = (edge.curve.eval(edge.range.lo), edge.curve.eval(edge.range.hi));
+        let refuse = a.distance(b) <= tol::LINEAR
+            || edge
+                .coedges
+                .iter()
+                .any(|&c| match &out.face(out.coedge_face(c)).surface {
+                    forge_geom::Surface::Plane(q) => {
+                        q.signed_distance(a).abs().max(q.signed_distance(b).abs()) > edge.tol.max(tol::LINEAR)
+                    }
+                    _ => false,
+                });
+        if refuse {
+            let at = Point3::new(0.5 * (a.x + b.x), 0.5 * (a.y + b.y), 0.5 * (a.z + b.z));
+            return Err(BoolError::unhandled(Unhandled::TolerancesMeet { at }));
+        }
+    }
+    Ok(())
 }
 
 /// The point where three surfaces meet, by Newton's method from `p` (None where they meet at a
@@ -2980,7 +3167,7 @@ fn holes_only(
                 // along e, at most), a line by its ends, else by its box's corners
                 let conic = |f: &forge_math::Frame, a: f64, b: f64| {
                     let (x, y) = (f.x().get(), f.y().get());
-                    let r = |e: forge_math::Vec3| ((a * x.dot(e)).powi(2) + (b * y.dot(e)).powi(2)).sqrt();
+                    let r = |e: forge_math::Vec3| ((a * x.dot(e)).ipow(2) + (b * y.dot(e)).ipow(2)).sqrt();
                     (mirror(face.surface.project(f.origin)), r(eu), r(ev))
                 };
                 match &pc.curve {
@@ -3129,7 +3316,8 @@ fn spans(
         at[fill[tc.seg]] = (tc.t, v, tc.tool, j);
         fill[tc.seg] += 1;
     }
-    let mut out: Vec<Span> = Vec::with_capacity(segs.len());
+    // (each crossing adds at most one span: room for all, so the list is never moved)
+    let mut out: Vec<Span> = Vec::with_capacity(segs.len() + triple.len());
     let mut first = Vec::with_capacity(segs.len() + 1);
     let mut ms: Vec<(f64, VKey, Side, usize)> = Vec::new();
     let mut bounds: Vec<usize> = Vec::new();
@@ -3591,4 +3779,24 @@ fn region_points(
         out.extend(step_in(body, f, c, r, fwd, 0.5, step.min(0.05)));
     }
     out
+}
+
+// The certificate's hook (verify/forge-certify), at the end so that with the `certify` feature
+// off every line above is the line it was: off, `nary_noted` is `nary_body`.
+#[cfg(not(feature = "certify"))]
+use self::nary_body as nary_noted;
+
+/// `nary_body`, noting that it gives no certificate.
+#[cfg(feature = "certify")]
+fn nary_noted(
+    tools: &[&Body],
+    ops: &[Op],
+    shapes: Option<&[Shape]>,
+    batch: Option<&dyn Batch>,
+    threads: usize,
+    root: Name,
+    undecided: &mut Option<Point3>,
+) -> R<Body> {
+    crate::certify::skipped("the n-ary boolean");
+    nary_body(tools, ops, shapes, batch, threads, root, undecided)
 }

@@ -13,11 +13,13 @@ per_doc!(
     [
         view: Option<View>,
         vers: gui_versions::VersState,
+        bend: super::gui_bendsim::BendView,
         back_image_was: Option<String>,
         view_file: Option<String>,
         fg: Option<crate::fg::Session>,
         last_built: Option<crate::gui::LastBuilt>,
         fg_view: Option<Loaded>,
+        fg_restage: Option<crate::gui::Restage>,
         fg_folded: Option<crate::mesh::PartMesh>,
         fg_flat: Option<crate::mesh::PartMesh>,
         fg_sketch: Option<crate::shell::fgsketch::Opened>,
@@ -44,7 +46,7 @@ per_doc!(
         ctx, egui, shell, device, queue, adapter, waker, captured, over_view, pointer_px,
         pixels_per_point, warm_textures, target_px, mark_held, gpu_failed, settings_was, docs,
         active, watch, doc_later, agent, apps, markup_job, format, markup_wait, markup_occ, markup_occ_rx,
-        speech,
+        speech, env_asked, studio, mach, window_out, photo, recording, audit_shapes,
     ]
 );
 

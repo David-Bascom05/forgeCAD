@@ -1,0 +1,10 @@
+{
+ "source": "Penn Tool Co",
+ "blocked": [
+  {
+   "url": "https://www.penntoolco.com/catalogsearch/result/?q=CNMG432",
+   "why": "HTTP 404; search is a JavaScript widget (searchspring), no turning product links in static home page"
+  }
+ ],
+ "records": []
+}

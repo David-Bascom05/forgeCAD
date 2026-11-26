@@ -59,7 +59,17 @@ fn edge_segments(curve: &Curve, range: forge_math::Interval, q: &Quality, fine: 
         Curve::Circle(c) => width / arc_step(c.radius, q),
         Curve::Ellipse(e) => width / arc_step(e.major, q),
         Curve::Parabola(c) => conic_segments(width, 1.0 / (2.0 * c.focal), 2.0 * c.focal, q),
-        Curve::Hyperbola(c) => conic_segments(width, c.a, c.b / c.a, q),
+        // in u = asinh t (`Curve::sample_param`): P(u) = a cosh u x + b sinh u y, |P''(u)| = |P(u) - o|
+        // is largest at the wider end, and the tangent turns at most a / b a unit of u
+        Curve::Hyperbola(c) => {
+            let (u0, u1) = (
+                forge_geom::curve::asinh(range.lo),
+                forge_geom::curve::asinh(range.hi),
+            );
+            let t = range.lo.abs().max(range.hi.abs());
+            let bend = (c.a * c.a * (1.0 + t * t) + c.b * c.b * t * t).sqrt();
+            conic_segments(u1 - u0, bend, c.b / c.a, q)
+        }
         // the chain already follows the curvature; split each link by the chord its sag allows
         Curve::Intersection(c) => width * (c.sag / q.chord).sqrt().max(1.0),
         Curve::Procedural(c) => c.segments(range, q.chord) as f64,
@@ -862,6 +872,10 @@ pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
     tessellate_with(body, q, false)
 }
 
+/// What drawing one body from a file may spend outside an import: eight files' reads' worth, as
+/// much as a top-level op (a boolean) is given.
+pub const MESH: u64 = 8 * forge_geom::budget::FILE;
+
 /// `tessellate`, but a body from a file (`Body::from_file`), whose edges may meet only within their
 /// tolerance and so cross where its faces are laid flat, has those faces drawn as they are: the mesh
 /// parts from the next face by that little there instead of failing. On a body made here a crossing
@@ -873,6 +887,10 @@ pub fn tessellate_tolerant(body: &Body, q: &Quality) -> Result<TriMesh, TessErro
     if body.dead > 0 {
         return tessellate_tolerant(&body.compact(), q);
     }
+    // a file's body is drawn within a budget of its own, MESH, or the import's where one is live.
+    // A file's (FILE) refused 102 of the Haas machine models' solids that mesh in under a second
+    // or a few (HFL-1313-3 #69702: 150M evaluations, 0.7 s; research/kernel-stress).
+    let _b = (!forge_geom::budget::limited()).then(|| forge_geom::budget::scoped(MESH));
     tessellate_with(body, q, true)
 }
 
@@ -989,7 +1007,7 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
         of: Vec::with_capacity(body.edges.len()),
         owner: vec![(u32::MAX, 0.0); vertex_index.len()],
     };
-    let (mut trig, mut pts) = (Vec::new(), Vec::new());
+    let (mut trig, mut pts, mut params) = (Vec::new(), Vec::new(), Vec::new());
     for e in body.edge_ids() {
         let edge = body.edge(e);
         let fine = edge
@@ -1007,8 +1025,15 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
         let mut s = Vec::with_capacity(n + 1);
         s.push((edge.range.lo, vertex_index[edge.start.index()]));
         edge.curve.sample_interior(edge.range, n, &mut trig, &mut pts);
+        if let Curve::Hyperbola(_) = edge.curve {
+            edge.curve.sample_params(edge.range, n, &mut params);
+        }
         for (i, &p) in pts.iter().enumerate() {
-            let t = edge.range.lo + edge.range.width() * ((i + 1) as f64 / n as f64);
+            let t = if let Curve::Hyperbola(_) = edge.curve {
+                params[i]
+            } else {
+                edge.range.lo + edge.range.width() * ((i + 1) as f64 / n as f64)
+            };
             let id = mesh.add_vertex(p);
             samples.owner.push((e.0, t));
             s.push((t, id));
@@ -1758,6 +1783,15 @@ fn mesh_face(
         global.iter().map(|&g| Some(mesh.positions[g as usize])).collect();
     if let Some(g) = &grid {
         node_index = g.place(surface, mesh);
+        // a staircase runs over placed nodes only; on a file's face it can reach one that is not
+        if g.cycles
+            .borrow()
+            .iter()
+            .flatten()
+            .any(|&(i, j)| node_index.get(g.id(i, j)).is_none_or(|&x| x == u32::MAX))
+        {
+            return Err(CdtError::Internal(Fault::StaircaseOffNodes));
+        }
         for cycle in g.cycles.borrow().iter() {
             known.extend(
                 cycle
@@ -2838,6 +2872,7 @@ fn strips(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use forge_math::ipow::Powi as _;
     use forge_math::rng::Rng;
     use forge_math::{Frame, Point3, Vec3};
     use forge_ops::{Profile, extrude};
@@ -2850,14 +2885,8 @@ mod tests {
         use forge_geom::curve::{Hyperbola, Parabola};
         use forge_math::Interval;
         let curves = [
-            Curve::Parabola(Parabola {
-                frame: Frame::WORLD,
-                focal: 0.5,
-            }),
-            Curve::Parabola(Parabola {
-                frame: Frame::WORLD,
-                focal: 40.0,
-            }),
+            Curve::Parabola(Parabola::new(Frame::WORLD, 0.5)),
+            Curve::Parabola(Parabola::new(Frame::WORLD, 40.0)),
             Curve::Hyperbola(Hyperbola {
                 frame: Frame::WORLD,
                 a: 3.0,
@@ -2880,7 +2909,12 @@ mod tests {
                     let n = edge_segments(c, range, &q, false);
                     let mut worst: f64 = 0.0;
                     for i in 0..n {
-                        let at = |k: usize| range.lo + range.width() * k as f64 / n as f64;
+                        // (the parameters the mesh samples: equal steps of asinh t on a hyperbola)
+                        let at = |k: usize| match k {
+                            0 => range.lo,
+                            k if k == n => range.hi,
+                            k => c.sample_param(range, n, k),
+                        };
                         let (a, b) = (c.eval(at(i)), c.eval(at(i + 1)));
                         let (u, w) = (c.deriv(at(i)).d1, c.deriv(at(i + 1)).d1);
                         let turn = dmath::atan2(u.cross(w).length(), u.dot(w));
@@ -3079,7 +3113,7 @@ mod tests {
                 let q = Quality { chord, max_angle };
                 let step = arc_step(r, &q);
                 // the sag of one step, computed stably
-                let sag = 2.0 * r * dmath::sin(0.25 * step).powi(2);
+                let sag = 2.0 * r * dmath::sin(0.25 * step).ipow(2);
                 assert!(sag <= chord * (1.0 + 1e-12), "{r} {chord}: {sag}");
                 assert!(step <= max_angle);
                 for fine in [false, true] {
@@ -3089,7 +3123,7 @@ mod tests {
                     });
                     let width = 1e-3f64.min(dmath::PI);
                     let n = edge_segments(&c, Interval::new(0.0, width), &q, fine);
-                    let sag = 2.0 * r * dmath::sin(0.25 * width / n as f64).powi(2);
+                    let sag = 2.0 * r * dmath::sin(0.25 * width / n as f64).ipow(2);
                     let allowed = if fine { 0.5 * chord } else { chord };
                     assert!(sag <= allowed * (1.0 + 1e-12), "{r} {chord} {fine}: {sag}");
                 }

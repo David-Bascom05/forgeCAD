@@ -20,7 +20,7 @@ impl Default for Limits {
             max_bytes: 2 << 30,
             max_values: 64 << 20,
             max_instances: 16 << 20,
-            max_evals: 1 << 25,
+            max_evals: forge_geom::budget::FILE,
         }
     }
 }
@@ -463,7 +463,14 @@ impl<'a> P<'a> {
             return self.err("the file ends inside a value");
         };
         let v = match c {
-            b'#' => Value::Ref(self.id()?),
+            // a reference past 32 bits names no instance (SolidWorks writes #18446744073709551615,
+            // -1, for one it lost: VF-2, VF-10, ST-30): null, so the one entity that needs it is
+            // refused and not the whole file
+            b'#' => match self.id() {
+                Ok(n) => Value::Ref(n),
+                Err(_) if self.b[self.i.saturating_sub(1)].is_ascii_digit() => Value::Null,
+                Err(e) => return Err(e),
+            },
             b'$' => {
                 self.i += 1;
                 Value::Null

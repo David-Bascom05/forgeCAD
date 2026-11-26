@@ -542,6 +542,16 @@ can ship, but only as a fallback to faster code."
   `EndToEndF` plus the R3 builder proof, which is back in scope after today's path's proofs.
 - An `Undecided` refusal now means both paths were undecided.
 
+**The refined F1 (the master, 2026-11-23).** The result, and each input, is faithful within a
+proven δ to an exact counterpart:
+- the exact body is its exact carriers plus its topology;
+- each f64 vertex maps to a connected exact cluster of diameter ≤ δ, since 4+ planes that are only
+  nearly concurrent really bound a micro-edge or micro-face there;
+- edges and faces are one-to-one outside the clusters;
+- ⟦b⟧ is the solid the exact planes bound under that topology;
+- a refusal happens only per decision, when a decision needs a cluster point that neither the screen
+  nor exact can separate. Nothing that builds today may start refusing.
+
 **Order of Lean work.**
 1. IEEE: proven screens for today's guess steps (LINEAR snapping, the touch, strays, pinched, and
    the retry and re-snap ladders as per-question screens).

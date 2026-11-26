@@ -1,0 +1,125 @@
+{
+ "vendor": "Mazak",
+ "model": "VCN-460",
+ "family": "VCN",
+ "source": [
+  "https://www.mazak.com/jp-en/products/detail/vertical/vcn460e/",
+  "https://www.mazak.com/jp-en/products/vcn"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "vmc3",
+ "architecture": null,
+ "control": {
+  "standard": "MAZATROL SmoothG (named in the machine-size row only)",
+  "options": [
+   "MAZATROL SmoothEz (family page says supported)"
+  ]
+ },
+ "travel_mm": {
+  "X": 560,
+  "Y": 460,
+  "Z": 510
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": [
+  150,
+  660
+ ],
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": [
+  900,
+  460
+ ],
+ "table_load_kg": 500,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 12000,
+  "rpm_min": null,
+  "taper_or_interface": "BT40",
+  "power_kw": {
+   "cont": 11,
+   "30min": null,
+   "peak/other": "18.5 kW (10% ED)"
+  },
+  "torque_nm": {
+   "cont": 57.3,
+   "max": 119
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 42,
+  "Y": 42,
+  "Z": 42,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 30,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": 80,
+  "max_tool_dia_empty_adjacent_mm": 125,
+  "max_tool_len_mm": 350,
+  "max_tool_kg": 8
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": 2074,
+  "D": 2901,
+  "H": 2812
+ },
+ "weight_kg": 4800,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "architecture",
+  "changer.chip_to_chip_s",
+  "changer.tool_to_tool_s",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.rpm_min",
+  "spindle_center_to_column_mm",
+  "table_height_from_floor_mm"
+ ],
+ "options": [
+  "Ultraspindle 60000/80000 min-1 compatible (family page)",
+  "VCN-460 HDCC variant (mineral-cast base/column) listed separately on family page, no spec link"
+ ],
+ "notes": "Rapids published as 42000 mm/min. Max workpiece 900 x 460 x 570 mm (family page). Torque max given as 119 N·m on detail page (HDCC page snippet says 119.4). Architecture, feeds, tool-change times not published on page. A search snippet claimed an 18000 min-1 option for VCN-460 HDCC/VCN-600, but the fetched pages did not show it: unverified."
+}

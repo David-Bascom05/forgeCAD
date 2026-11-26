@@ -483,179 +483,289 @@ fn check_known(body: &Body, known: &Known) -> Vec<Problem> {
     out
 }
 
-/// Whether coedge `c` is one of loop `lp`'s.
-fn in_loop(lp: &crate::body::Loop, c: CoedgeId) -> bool {
-    let n = lp.coedges().len() as u32;
-    n > 0 && (lp.coedge(0).0..lp.coedge(0).0 + n).contains(&c.0)
-}
-
 /// The links between entities (`WF` of verify/forge-topo-check/lean/TopoCheck/Spec.lean), and that
 /// every id is in range: each live face's loops are its own; each loop of a live face is listed by
 /// it once, and its coedges name it and are uses of their (live) edges; each live edge's uses
 /// are coedges of it in such loops, and its ends are vertices.
 fn check_links(body: &Body, out: &mut Vec<Problem>) {
-    let (nv, ne, nc, nl, nf) = (
-        body.vertices.len(),
-        body.edges.len(),
-        body.coedges.len(),
-        body.loops.len(),
-        body.faces.len(),
-    );
-    let mut listed = vec![0u32; nl];
-    for f in body.face_ids() {
-        let mut ok = true;
-        for &l in body.face(f).loops.iter() {
-            if l.index() >= nl || body.loops[l.index()].face != f {
-                ok = false;
-            } else {
-                listed[l.index()] += 1;
-            }
-        }
-        if !ok {
-            out.push(Problem::BackLink {
-                what: "face",
-                id: f.0,
-            });
-        }
-    }
-    for (i, e) in body.edges.iter().enumerate() {
-        if !e.alive {
-            continue;
-        }
-        let ok = e.start.index() < nv
-            && e.end.index() < nv
-            && e.coedges.iter().all(|&c| {
-                c.index() < nc && {
-                    let co = &body.coedges[c.index()];
-                    co.edge.index() == i
-                        && co.lp.index() < nl
-                        && listed[co.lp.index()] == 1
-                        && in_loop(&body.loops[co.lp.index()], c)
-                }
-            });
-        if !ok {
-            out.push(Problem::BackLink {
-                what: "edge",
-                id: i as u32,
-            });
-        }
-    }
-    for (i, lp) in body.loops.iter().enumerate() {
-        let f = lp.face.index();
-        // left over from an in-place edit (a dead face's, or one `remove_loop` took off): no part
-        // of the body, left for `compact`
-        if f < nf && (!body.faces[f].alive || listed[i] == 0) {
-            continue;
-        }
-        let ok = f < nf
-            && listed[i] == 1
-            && lp.coedges().all(|c| {
-                c.index() < nc && {
-                    let co = &body.coedges[c.index()];
-                    co.lp.index() == i
-                        && co.edge.index() < ne
-                        && body.edges[co.edge.index()].alive
-                        && body.edges[co.edge.index()].coedges.contains(&c)
-                }
-            });
-        if !ok {
-            out.push(Problem::BackLink {
-                what: "loop",
-                id: i as u32,
-            });
-        }
-    }
+    crate::topo::links(&View::of(body), out);
 }
 
 /// The shells: each lists its faces once, each live face is in the one shell it names, the faces
 /// at an edge share a shell, and a shell's faces are joined through its edges. A shell at fault
 /// is named once; `shells.len()` names a face whose shell is out of range.
 fn check_shell_faces(body: &Body, out: &mut Vec<Problem>) {
-    let (ns, nf) = (body.shells.len(), body.faces.len());
-    let mut bad = vec![false; ns + 1];
-    let mut listed = vec![0u32; nf];
-    for (s, sh) in body.shells.iter().enumerate() {
-        if sh.faces.is_empty() {
-            bad[s] = true;
-        }
-        for &f in &sh.faces {
-            if f.index() >= nf || !body.faces[f.index()].alive || body.faces[f.index()].shell.index() != s {
-                bad[s] = true;
-            } else {
-                listed[f.index()] += 1;
-            }
-        }
+    crate::topo_shell::shell_faces(&ShellView::of(body), out);
+}
+
+/// Every vertex is an end of an edge (a dead edge's ends are left over from an in-place edit,
+/// for `compact` to drop with it): `topo::strays`, the part Aeneas translates.
+fn check_strays(body: &Body, out: &mut Vec<Problem>) {
+    crate::topo::strays(&View::of(body), out);
+}
+
+impl crate::topo::Sink for Vec<Problem> {
+    #[inline]
+    fn stray(&mut self, v: usize) {
+        self.push(Problem::StrayVertex { vertex: VertexId(v as u32) });
     }
-    let at = |f: FaceId| body.face(f).shell.index().min(ns);
-    for f in body.face_ids() {
-        if listed[f.index()] != 1 {
-            bad[at(f)] = true;
-        }
+    #[inline]
+    fn edge_uses(&mut self, e: usize, n: usize) {
+        self.push(Problem::EdgeUses { edge: EdgeId(e as u32), uses: n });
     }
-    for e in body.edge_ids() {
-        let uses = &body.edge(e).coedges;
-        if let Some(&c0) = uses.first() {
-            let s0 = body.face(body.coedge_face(c0)).shell;
-            if uses.iter().any(|&c| body.face(body.coedge_face(c)).shell != s0) {
-                bad[at(body.coedge_face(c0))] = true;
-            }
-        }
+    #[inline]
+    fn edge_same_way(&mut self, e: usize) {
+        self.push(Problem::EdgeUsesSameWay { edge: EdgeId(e as u32) });
     }
-    for (s, &b) in bad.iter().enumerate() {
-        if b {
-            out.push(Problem::ShellFaces {
-                shell: ShellId(s as u32),
-            });
-        }
+    #[inline]
+    fn edge_degenerate(&mut self, e: usize) {
+        self.push(Problem::EdgeDegenerate { edge: EdgeId(e as u32) });
     }
-    // joined: every face of a sound shell reached from its first through edges (`seen` holds the
-    // shell a face was last reached from, so each shell's flood is its own)
-    let mut seen = vec![usize::MAX; nf];
-    let mut stack = Vec::new();
-    for (s, sh) in body.shells.iter().enumerate() {
-        if bad[s] {
-            continue;
-        }
-        stack.push(sh.faces[0]);
-        seen[sh.faces[0].index()] = s;
-        while let Some(f) = stack.pop() {
-            for &l in body.face(f).loops.iter() {
-                for c in body.lp(l).coedges() {
-                    for &u in body.edge(body.coedge(c).edge).coedges.iter() {
-                        let g = body.coedge_face(u);
-                        if seen[g.index()] != s {
-                            seen[g.index()] = s;
-                            stack.push(g);
-                        }
-                    }
-                }
-            }
-        }
-        if sh.faces.iter().any(|f| seen[f.index()] != s) {
-            out.push(Problem::ShellDisconnected {
-                shell: ShellId(s as u32),
-            });
+    #[inline]
+    fn face_no_loops(&mut self, f: usize) {
+        self.push(Problem::FaceNoLoops { face: FaceId(f as u32) });
+    }
+    #[inline]
+    fn loop_empty(&mut self, l: usize) {
+        self.push(Problem::LoopEmpty { lp: LoopId(l as u32) });
+    }
+    #[inline]
+    fn loop_broken(&mut self, l: usize, c: usize) {
+        self.push(Problem::LoopBroken { lp: LoopId(l as u32), after: CoedgeId(c as u32) });
+    }
+    #[inline]
+    fn shell_faces(&mut self, s: usize) {
+        self.push(Problem::ShellFaces { shell: ShellId(s as u32) });
+    }
+    #[inline]
+    fn shell_disconnected(&mut self, s: usize) {
+        self.push(Problem::ShellDisconnected { shell: ShellId(s as u32) });
+    }
+    #[inline]
+    fn back_link(&mut self, what: u8, id: usize) {
+        let what = match what {
+            0 => "face",
+            1 => "edge",
+            _ => "loop",
+        };
+        self.push(Problem::BackLink { what, id: id as u32 });
+    }
+}
+
+/// What `topo`'s tests read of a body: its arrays as slices, whose lengths the compiler keeps in
+/// registers (a `Body` holds cells, so through `&Body` it reloads them on every access).
+pub struct View<'a> {
+    nv: usize,
+    edges: &'a [crate::body::Edge],
+    coedges: &'a [crate::body::Coedge],
+    loops: &'a [crate::body::Loop],
+    faces: &'a [crate::body::Face],
+}
+
+impl<'a> View<'a> {
+    pub fn of(body: &'a Body) -> View<'a> {
+        View {
+            nv: body.vertices.len(),
+            edges: &body.edges,
+            coedges: &body.coedges,
+            loops: &body.loops,
+            faces: &body.faces,
         }
     }
 }
 
-/// Every vertex is an end of an edge (a dead edge's ends are left over from an in-place edit,
-/// for `compact` to drop with it).
-fn check_strays(body: &Body, out: &mut Vec<Problem>) {
-    let mut used = vec![false; body.vertices.len()];
-    for e in &body.edges {
-        for v in [e.start, e.end] {
-            if let Some(u) = used.get_mut(v.index()) {
-                *u = true;
-            }
+impl crate::topo::Topo for View<'_> {
+    #[inline]
+    fn n_vertices(&self) -> usize {
+        self.nv
+    }
+    #[inline]
+    fn n_edges(&self) -> usize {
+        self.edges.len()
+    }
+    #[inline]
+    fn edge_alive(&self, e: usize) -> bool {
+        self.edges[e].alive
+    }
+    #[inline]
+    fn edge_ends(&self, e: usize) -> (usize, usize) {
+        let e = &self.edges[e];
+        (e.start.index(), e.end.index())
+    }
+    #[inline]
+    fn edge_n_uses(&self, e: usize) -> usize {
+        self.edges[e].coedges.len()
+    }
+    #[inline]
+    fn edge_use(&self, e: usize, i: usize) -> usize {
+        self.edges[e].coedges[i].index()
+    }
+    #[inline]
+    fn n_coedges(&self) -> usize {
+        self.coedges.len()
+    }
+    #[inline]
+    fn coedge_edge(&self, c: usize) -> usize {
+        self.coedges[c].edge.index()
+    }
+    #[inline]
+    fn coedge_loop(&self, c: usize) -> usize {
+        self.coedges[c].lp.index()
+    }
+    #[inline]
+    fn n_loops(&self) -> usize {
+        self.loops.len()
+    }
+    #[inline]
+    fn loop_first(&self, l: usize) -> usize {
+        self.loops[l].span().0 as usize
+    }
+    #[inline]
+    fn loop_len(&self, l: usize) -> usize {
+        self.loops[l].span().1 as usize
+    }
+    #[inline]
+    fn loop_face(&self, l: usize) -> usize {
+        self.loops[l].face.index()
+    }
+    #[inline]
+    fn n_faces(&self) -> usize {
+        self.faces.len()
+    }
+    #[inline]
+    fn face_alive(&self, f: usize) -> bool {
+        self.faces[f].alive
+    }
+    #[inline]
+    fn face_n_loops(&self, f: usize) -> usize {
+        self.faces[f].loops.len()
+    }
+    #[inline]
+    fn face_loop(&self, f: usize, i: usize) -> usize {
+        self.faces[f].loops[i].index()
+    }
+}
+
+impl crate::topo_edges::EdgeTopo for View<'_> {
+    #[inline]
+    fn coedge_forward(&self, c: usize) -> bool {
+        self.coedges[c].forward
+    }
+    fn edge_degenerate(&self, e: usize) -> bool {
+        let edge = &self.edges[e];
+        if edge.start == edge.end {
+            edge.curve
+                .domain()
+                .period
+                .is_none_or(|p| (edge.range.width() - p).abs() > tol::ANGULAR * 10.0)
+        } else {
+            edge.curve.eval(edge.range.lo).distance(edge.curve.eval(edge.range.hi)) <= tol::LINEAR
         }
     }
-    for (v, &u) in used.iter().enumerate() {
-        if !u {
-            out.push(Problem::StrayVertex {
-                vertex: VertexId(v as u32),
-            });
-        }
+}
+
+/// `View` and the shells, for `topo::shell_faces` (a type of its own, so `View`, and the code of
+/// the tests that read only it, are as they were).
+pub struct ShellView<'a> {
+    view: View<'a>,
+    shells: &'a [crate::body::Shell],
+    /// The faces again, for their shells (through `view` the shell tests measure slower).
+    face_shells: &'a [crate::body::Face],
+}
+
+impl<'a> ShellView<'a> {
+    pub fn of(body: &'a Body) -> ShellView<'a> {
+        ShellView { view: View::of(body), shells: &body.shells, face_shells: &body.faces }
+    }
+}
+
+impl crate::topo::Topo for ShellView<'_> {
+    #[inline]
+    fn n_vertices(&self) -> usize {
+        self.view.n_vertices()
+    }
+    #[inline]
+    fn n_edges(&self) -> usize {
+        self.view.n_edges()
+    }
+    #[inline]
+    fn edge_alive(&self, e: usize) -> bool {
+        self.view.edge_alive(e)
+    }
+    #[inline]
+    fn edge_ends(&self, e: usize) -> (usize, usize) {
+        self.view.edge_ends(e)
+    }
+    #[inline]
+    fn edge_n_uses(&self, e: usize) -> usize {
+        self.view.edge_n_uses(e)
+    }
+    #[inline]
+    fn edge_use(&self, e: usize, i: usize) -> usize {
+        self.view.edge_use(e, i)
+    }
+    #[inline]
+    fn n_coedges(&self) -> usize {
+        self.view.n_coedges()
+    }
+    #[inline]
+    fn coedge_edge(&self, c: usize) -> usize {
+        self.view.coedge_edge(c)
+    }
+    #[inline]
+    fn coedge_loop(&self, c: usize) -> usize {
+        self.view.coedge_loop(c)
+    }
+    #[inline]
+    fn n_loops(&self) -> usize {
+        self.view.n_loops()
+    }
+    #[inline]
+    fn loop_first(&self, l: usize) -> usize {
+        self.view.loop_first(l)
+    }
+    #[inline]
+    fn loop_len(&self, l: usize) -> usize {
+        self.view.loop_len(l)
+    }
+    #[inline]
+    fn loop_face(&self, l: usize) -> usize {
+        self.view.loop_face(l)
+    }
+    #[inline]
+    fn n_faces(&self) -> usize {
+        self.view.n_faces()
+    }
+    #[inline]
+    fn face_alive(&self, f: usize) -> bool {
+        self.view.face_alive(f)
+    }
+    #[inline]
+    fn face_n_loops(&self, f: usize) -> usize {
+        self.view.face_n_loops(f)
+    }
+    #[inline]
+    fn face_loop(&self, f: usize, i: usize) -> usize {
+        self.view.face_loop(f, i)
+    }
+}
+
+impl crate::topo_shell::ShellTopo for ShellView<'_> {
+    #[inline]
+    fn face_shell(&self, f: usize) -> usize {
+        self.face_shells[f].shell.index()
+    }
+    #[inline]
+    fn n_shells(&self) -> usize {
+        self.shells.len()
+    }
+    #[inline]
+    fn shell_n_faces(&self, s: usize) -> usize {
+        self.shells[s].faces.len()
+    }
+    #[inline]
+    fn shell_face(&self, s: usize, i: usize) -> usize {
+        self.shells[s].faces[i].index()
     }
 }
 
@@ -687,16 +797,10 @@ pub fn stray_edges_from(body: &Body, first: usize) -> Vec<Problem> {
             }
             let s = &body.face(f).surface;
             let worst = pts.iter().map(|&p| s.distance(p)).fold(0.0, f64::max);
+            let band = edge.tol.max(tol::LINEAR);
             #[cfg(feature = "decisions")]
-            face_log::record(
-                body,
-                e,
-                f,
-                worst,
-                edge.tol.max(tol::LINEAR),
-                "check: a stray edge, 256 points",
-            );
-            if worst > edge.tol.max(tol::LINEAR) {
+            face_log::record(body, e, f, worst, band, "check: a stray edge, 256 points");
+            if worst > band && worst > band + rounding(&pts) {
                 out.push(Problem::EdgeOffFace {
                     edge: e,
                     face: f,
@@ -811,109 +915,126 @@ pub fn certify(body: &Body) -> Vec<Problem> {
 }
 
 fn check_shell_euler(body: &Body, out: &mut Vec<Problem>) {
-    // the distinct edges and vertices of each shell, counted by stamping each with the shell
-    // (the same counts as sorting and dedup, without the sorts)
-    let mut edge_at = vec![u32::MAX; body.edges.len()];
-    let mut vert_at = vec![u32::MAX; body.vertices.len()];
-    for (si, shell) in body.shells.iter().enumerate() {
-        let stamp = si as u32;
-        let (mut f, mut l, mut e, mut v) = (0i64, 0i64, 0i64, 0i64);
-        for &face in &shell.faces {
-            f += 1;
-            for &lp in &body.face(face).loops {
-                l += 1;
-                for c in body.lp(lp).coedges() {
-                    let ed = body.coedge(c).edge;
-                    if edge_at[ed.index()] != stamp {
-                        edge_at[ed.index()] = stamp;
-                        e += 1;
-                    }
-                    for x in [body.edge(ed).start, body.edge(ed).end] {
-                        if vert_at[x.index()] != stamp {
-                            vert_at[x.index()] = stamp;
-                            v += 1;
-                        }
-                    }
-                }
-            }
-        }
-        let value = v - e + 2 * f - l;
-        if value % 2 != 0 || value > 2 {
-            out.push(Problem::ShellEuler {
-                shell: crate::body::ShellId(si as u32),
-                value,
-            });
-        }
+    crate::topo_euler::shell_euler(&ShellView::of(body), out);
+}
+
+impl crate::topo_euler::EulerSink for Vec<Problem> {
+    #[inline]
+    fn shell_euler(&mut self, s: usize, value: i64) {
+        self.push(Problem::ShellEuler { shell: crate::body::ShellId(s as u32), value });
     }
 }
 
 /// Round each vertex, coedge to coedge: from one leaving it, back along its loop to the one
 /// arriving, then across to that one's partner, which leaves it again. One cycle is one fan.
 fn check_fans(body: &Body, out: &mut Vec<Problem>) {
-    let mut prev = Vec::new();
-    for (v, cs) in body.leaving().iter().enumerate() {
-        let fans = body.fans(cs, &mut prev);
-        if fans.len() > 1 {
-            out.push(Problem::VertexFans {
-                vertex: VertexId(v as u32),
-                fans: fans.len(),
-            });
-        }
+    crate::topo_fans::fans(&FanView { view: View::of(body), body }, out);
+}
+
+impl crate::topo_fans::FanSink for Vec<Problem> {
+    #[inline]
+    fn vertex_fans(&mut self, v: usize, n: usize) {
+        self.push(Problem::VertexFans { vertex: VertexId(v as u32), fans: n });
+    }
+}
+
+/// What `topo_fans`'s test reads: `View`, and the body for the corners (geometry).
+pub struct FanView<'a> {
+    view: View<'a>,
+    body: &'a Body,
+}
+
+impl crate::topo::Topo for FanView<'_> {
+    #[inline]
+    fn n_vertices(&self) -> usize {
+        self.view.n_vertices()
+    }
+    #[inline]
+    fn n_edges(&self) -> usize {
+        self.view.n_edges()
+    }
+    #[inline]
+    fn edge_alive(&self, e: usize) -> bool {
+        self.view.edge_alive(e)
+    }
+    #[inline]
+    fn edge_ends(&self, e: usize) -> (usize, usize) {
+        self.view.edge_ends(e)
+    }
+    #[inline]
+    fn edge_n_uses(&self, e: usize) -> usize {
+        self.view.edge_n_uses(e)
+    }
+    #[inline]
+    fn edge_use(&self, e: usize, i: usize) -> usize {
+        self.view.edge_use(e, i)
+    }
+    #[inline]
+    fn n_coedges(&self) -> usize {
+        self.view.n_coedges()
+    }
+    #[inline]
+    fn coedge_edge(&self, c: usize) -> usize {
+        self.view.coedge_edge(c)
+    }
+    #[inline]
+    fn coedge_loop(&self, c: usize) -> usize {
+        self.view.coedge_loop(c)
+    }
+    #[inline]
+    fn n_loops(&self) -> usize {
+        self.view.n_loops()
+    }
+    #[inline]
+    fn loop_first(&self, l: usize) -> usize {
+        self.view.loop_first(l)
+    }
+    #[inline]
+    fn loop_len(&self, l: usize) -> usize {
+        self.view.loop_len(l)
+    }
+    #[inline]
+    fn loop_face(&self, l: usize) -> usize {
+        self.view.loop_face(l)
+    }
+    #[inline]
+    fn n_faces(&self) -> usize {
+        self.view.n_faces()
+    }
+    #[inline]
+    fn face_alive(&self, f: usize) -> bool {
+        self.view.face_alive(f)
+    }
+    #[inline]
+    fn face_n_loops(&self, f: usize) -> usize {
+        self.view.face_n_loops(f)
+    }
+    #[inline]
+    fn face_loop(&self, f: usize, i: usize) -> usize {
+        self.view.face_loop(f, i)
+    }
+}
+
+impl crate::topo_fans::FanTopo for FanView<'_> {
+    #[inline]
+    fn coedge_forward(&self, c: usize) -> bool {
+        crate::topo_edges::EdgeTopo::coedge_forward(&self.view, c)
+    }
+    fn corners(&self, f: usize, v: usize) -> Vec<(usize, usize)> {
+        self.body
+            .corners(FaceId(f as u32), VertexId(v as u32))
+            .into_iter()
+            .map(|(a, b)| (a.index(), b.index()))
+            .collect()
     }
 }
 
 fn check_edges(body: &Body, out: &mut Vec<Problem>) {
-    for e in body.edge_ids() {
-        let edge = body.edge(e);
-        if edge.coedges.len() != 2 {
-            out.push(Problem::EdgeUses {
-                edge: e,
-                uses: edge.coedges.len(),
-            });
-            continue;
-        }
-        let (a, b) = (body.coedge(edge.coedges[0]), body.coedge(edge.coedges[1]));
-        if a.forward == b.forward {
-            out.push(Problem::EdgeUsesSameWay { edge: e });
-        }
-        let closed = edge.start == edge.end;
-        let degenerate = if closed {
-            edge.curve
-                .domain()
-                .period
-                .is_none_or(|p| (edge.range.width() - p).abs() > tol::ANGULAR * 10.0)
-        } else {
-            edge.curve
-                .eval(edge.range.lo)
-                .distance(edge.curve.eval(edge.range.hi))
-                <= tol::LINEAR
-        };
-        if degenerate {
-            out.push(Problem::EdgeDegenerate { edge: e });
-        }
-    }
+    crate::topo_edges::edges(&View::of(body), out);
 }
 
 fn check_loops(body: &Body, out: &mut Vec<Problem>) {
-    for f in body.face_ids() {
-        if body.face(f).loops.is_empty() {
-            out.push(Problem::FaceNoLoops { face: f });
-        }
-    }
-    for l in body.loop_ids() {
-        let lp = body.lp(l);
-        let n = lp.coedges().len();
-        if n == 0 {
-            out.push(Problem::LoopEmpty { lp: l });
-            continue;
-        }
-        for (i, c) in lp.coedges().enumerate() {
-            let next = lp.coedge((i + 1) % n);
-            if body.coedge_end(c) != body.coedge_start(next) {
-                out.push(Problem::LoopBroken { lp: l, after: c });
-            }
-        }
-    }
+    crate::topo_edges::loops(&View::of(body), out);
 }
 
 fn check_geometry(body: &Body, known: &Known, out: &mut Vec<Problem>) {
@@ -944,11 +1065,26 @@ fn check_geometry(body: &Body, known: &Known, out: &mut Vec<Problem>) {
     }
 }
 
-/// Edge `e` of face `f`, if it strays from the face by more than its tolerance.
+/// A few units in the last place of the largest coordinate of `points`: as fine as a distance
+/// measured there can be told apart. An edge's tolerance read from a file is its distance as
+/// measured where the part was; moved rigidly (a copy placed beside it, a part placed far out in
+/// an assembly) the same distance reads a few 1e-15 to 1e-13 over it, rounding and nothing else
+/// (KERNEL-STRESS's Haas sweep: EdgeOffFace on copies and on every boolean with them, 7 of
+/// GM2-5AX "lightweight v1"'s first 60 solids).
+fn rounding(points: &[forge_math::Point3]) -> f64 {
+    let far = points
+        .iter()
+        .map(|p| p.x.abs().max(p.y.abs()).max(p.z.abs()))
+        .fold(0.0, f64::max);
+    8.0 * f64::EPSILON * far
+}
+
+/// Edge `e` of face `f`, if it strays from the face by more than its tolerance (and the rounding
+/// of a distance measured at its coordinates: `rounding`).
 pub fn edge_off_face(body: &Body, e: EdgeId, f: FaceId) -> Option<Problem> {
-    let band = body.edge(e).tol.max(tol::LINEAR);
     let s = &body.face(f).surface;
     let points = body.edge_points(e, 16);
+    let band = body.edge(e).tol.max(tol::LINEAR);
     let mut worst = 0.0f64;
     // each point from the one before, where it stays on the face that far; else the search
     let mut near = None;
@@ -962,7 +1098,8 @@ pub fn edge_off_face(body: &Body, e: EdgeId, f: FaceId) -> Option<Problem> {
     }
     #[cfg(feature = "decisions")]
     face_log::record(body, e, f, worst, band, "check: edge_off_face, 16 points");
-    (worst > band).then_some(Problem::EdgeOffFace {
+    // (past the band, by more than its coordinates' rounding: asked only then)
+    (worst > band && worst > band + rounding(&points)).then_some(Problem::EdgeOffFace {
         edge: e,
         face: f,
         distance: worst,
@@ -981,6 +1118,22 @@ pub fn sides_of(body: &Body, faces: &[FaceId]) -> Vec<Problem> {
     let mut out = Vec::new();
     check_sides_of(body, faces, None, &mut out);
     out
+}
+
+/// A crossing drawn at eight chords a sample, asked again finer: a chord of a long arc sags further
+/// than eight times the default leaves it (a 60 mm radius over 0.94 rad sags 3 µm in 48 chords), and
+/// a corner of another loop within that of the arc is crossed by the chord, not by the arc (Haas
+/// HBF-12 #24138: a corner 1.3e-4 off an arc a boolean's unify had joined whole). A real crossing
+/// stays one however finely it is drawn: it is believed only if it is still there at 64 and 512
+/// times. Cold: only where the loops' chords already cross steeply.
+#[cold]
+#[inline(never)]
+fn crosses_finer(body: &Body, f: FaceId, band: f64) -> bool {
+    let surface = &body.face(f).surface;
+    [64, 512].iter().all(|&k| {
+        let loops = face_uv_loops_with(body, f, |e| (k * default_segments(e)).min(1 << 16));
+        loops_cross_steeply(&loops, &|uv| surface.eval(uv), band)
+    })
 }
 
 fn check_sides_of(body: &Body, faces: &[FaceId], known: Option<&Known>, out: &mut Vec<Problem>) {
@@ -1002,21 +1155,25 @@ fn check_sides_of(body: &Body, faces: &[FaceId], known: Option<&Known>, out: &mu
             .map(|&c| edge_length(body, body.coedge(c).edge))
             .fold(f64::INFINITY, f64::min);
         // drawn finely before it is believed: two chords of curved loops close by may cross where the loops do not
+        // a file's edges meet within their tolerance; ours are to meet (asked only of a crossing)
+        let band = || {
+            if body.from_file {
+                loops
+                    .iter()
+                    .flat_map(|l| l.coedges.iter())
+                    .map(|&c| body.edge(body.coedge(c).edge).tol)
+                    .fold(tol::LINEAR, f64::max)
+            } else {
+                0.0
+            }
+        };
         if loops_cross(&loops)
             && loops_cross_steeply(
                 fine.get_or_init(|| face_uv_loops_with(body, f, |e| 8 * default_segments(e))),
                 &|uv| surface.eval(uv),
-                // a file's edges meet within their tolerance; ours are to meet
-                if body.from_file {
-                    loops
-                        .iter()
-                        .flat_map(|l| l.coedges.iter())
-                        .map(|&c| body.edge(body.coedge(c).edge).tol)
-                        .fold(tol::LINEAR, f64::max)
-                } else {
-                    0.0
-                },
+                band(),
             )
+            && crosses_finer(body, f, band())
         {
             out.push(Problem::LoopsCross { face: f });
         }
@@ -1074,7 +1231,34 @@ fn check_sides_of(body: &Body, faces: &[FaceId], known: Option<&Known>, out: &mu
                             fine.get_or_init(|| face_uv_loops_with(body, f, |e| 8 * default_segments(e))),
                         )
                 };
-                if ![1.0, 0.1, 0.01].iter().any(|&k| inside(k * step)) {
+                // where no step finds the face, steps short of the edge's own far stretches too: a
+                // curve can double back past a tip within a hair of itself (a thin lens's two arms
+                // are one edge). Its drawing's chords, all but the two at the probe's sample.
+                let own = || match e.curve {
+                    forge_geom::Curve::Line(_)
+                    | forge_geom::Curve::Circle(_)
+                    | forge_geom::Curve::Ellipse(_) => f64::INFINITY,
+                    _ => {
+                        let n = default_segments(e);
+                        let at =
+                            |j: usize| e.curve.eval(e.range.lo + e.range.width() * (j as f64 / n as f64));
+                        let m = n / 2;
+                        let mut prev = at(0);
+                        let mut near = f64::INFINITY;
+                        for j in 0..n {
+                            let next = at(j + 1);
+                            if j + 1 != m && j != m {
+                                near = near.min(segment_distance(d.p, prev, next));
+                            }
+                            prev = next;
+                        }
+                        near
+                    }
+                };
+                if ![1.0, 0.1, 0.01].iter().any(|&k| inside(k * step)) && {
+                    let short = step.min(0.25 * own());
+                    ![1.0, 0.1, 0.01].iter().any(|&k| inside(k * short))
+                } {
                     out.push(Problem::FaceWrongSide { face: f, coedge: c });
                 }
             }
@@ -1353,9 +1537,23 @@ fn check_shells(body: &Body, known: &Known, out: &mut Vec<Problem>) {
     }
 }
 
+#[cfg(feature = "reference_sampling")]
 fn edge_length(body: &Body, e: EdgeId) -> f64 {
     let pts = body.edge_points(e, 16);
     pts.windows(2).map(|w| w[0].distance(w[1])).sum()
+}
+
+#[cfg(not(feature = "reference_sampling"))]
+fn edge_length(body: &Body, e: EdgeId) -> f64 {
+    let mut samples = body.edge_samples(e, 16);
+    let mut previous = samples.next().expect("the range includes sample zero");
+    samples
+        .map(|point| {
+            let length = previous.distance(point);
+            previous = point;
+            length
+        })
+        .sum()
 }
 
 fn check_names(body: &Body, out: &mut Vec<Problem>) {
@@ -1464,4 +1662,60 @@ pub mod face_log {
             }
         });
     }
+}
+
+/// The distance from `p` to the segment from `a` to `b`.
+fn segment_distance(p: Point3, a: Point3, b: Point3) -> f64 {
+    let ab = b - a;
+    let l2 = ab.dot(ab);
+    let t = if l2 > 0.0 {
+        ((p - a).dot(ab) / l2).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    (a + ab * t).distance(p)
+}
+
+/// Vertices farther from a plane they bound than the tolerances on record allow: a vertex lies
+/// within its tolerance of each edge's curve ending on it, and an edge within its own of each face
+/// it bounds, so a vertex is within its tolerance and the largest of its edges' on that face of
+/// the face's surface (research/booleans/drift.md). Planes only, where the distance is exact to
+/// rounding; each as (vertex, face, distance, allowed). Not part of `check`, which asks the two
+/// links themselves at sampled points: this is the bound they compose to, asked after every
+/// boolean in debug builds (a slip in the bookkeeping shows at the boolean that made it) and by
+/// the fuzzers.
+#[cold]
+#[inline(never)]
+pub fn vertices_off_planes(body: &Body) -> Vec<(VertexId, FaceId, f64, f64)> {
+    // (vertex, face, the largest tolerance of an edge of that face ending at the vertex)
+    let mut at: Vec<(VertexId, FaceId, f64)> = Vec::new();
+    for e in body.edge_ids() {
+        let edge = body.edge(e);
+        for &c in &edge.coedges {
+            let f = body.coedge_face(c);
+            if matches!(body.face(f).surface, forge_geom::Surface::Plane(_)) {
+                at.push((edge.start, f, edge.tol));
+                at.push((edge.end, f, edge.tol));
+            }
+        }
+    }
+    at.sort_by(|x, y| (x.0, x.1).cmp(&(y.0, y.1)).then(y.2.total_cmp(&x.2)));
+    at.dedup_by(|x, y| x.0 == y.0 && x.1 == y.1);
+    let mut out = Vec::new();
+    for (v, f, etol) in at {
+        let forge_geom::Surface::Plane(q) = &body.face(f).surface else {
+            continue;
+        };
+        let x = body.vertex(v);
+        let d = q.signed_distance(x.point).abs();
+        // (and the distance's own rounding: a few units in the last place of the coordinates)
+        let (p, o) = (x.point, q.frame.origin);
+        let ulps =
+            8.0 * f64::EPSILON * (p.x.abs() + p.y.abs() + p.z.abs() + o.x.abs() + o.y.abs() + o.z.abs());
+        let allowed = x.tol.max(tol::LINEAR) + etol.max(tol::LINEAR) + ulps;
+        if d > allowed {
+            out.push((v, f, d, allowed));
+        }
+    }
+    out
 }

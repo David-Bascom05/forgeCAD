@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/fans/fan_120x25.fg"}
+{"op":"SetParam","param":"A","value":{"value":126,"dim":"Length"}}
+{"op":"SetParam","param":"H","value":{"value":26.669999999999998,"dim":"Length"}}
+{"op":"SetParam","param":"tf","value":{"value":5.25,"dim":"Length"}}
+{"op":"Rename","from":"top","to":"top_r"}
+{"op":"ReplaceFeature","id":"struts","text":"struts = extrude(spokes, -t_strut)\n"}

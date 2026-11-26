@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/panels/probes/strike_probe.fg"}
+{"op":"SetParam","param":"t3","value":{"value":3.1710000000000003,"dim":"Length"}}
+{"op":"SetParam","param":"t2","value":{"value":1.974,"dim":"Length"}}
+{"op":"SetParam","param":"t1","value":{"value":1.596,"dim":"Length"}}
+{"op":"Rename","from":"ref","to":"ref_r"}
+{"op":"ReplaceFeature","id":"probe3","text":"sketch probe3(on: field.top) {\n  p = pt(px, py)\n  l = line((0, 0), (px, 0), construction: true)\n}\n"}

@@ -142,9 +142,13 @@ h = hull(ITEM, ITEM, ..)            convex outline, counter-clockwise: an item i
                                     the line to the next item (four discs of one r at a
                                     rectangle's corners inset by r: a rounded rectangle)
 o = poly([P, ..], closed: true)     side k runs from point k to point k+1
-s = spline([P, ..], closed: true)   the cubic through the points; cv: true, a B-spline the points
+s = spline([P, ..], closed: false)  the cubic through the points (centripetal, C2), open with
+                                    natural ends unless `closed: true` (periodic, through the
+                                    first point again); points apart (`SplinePointsMeet`).
+                                    cv: true, a B-spline the points
                                     pull as its control vertices (cubic, lower with under four
-                                    points, or five closed); `degree: n`, `knots: [k, ..]`
+                                    points, or five closed; closed unless `closed: false`);
+                                    `degree: n`, `knots: [k, ..]`
                                     (points + degree + 1 of them, never falling), `weights:
                                     [w, ..]` (one a point) make it one on control vertices,
                                     open (`cv` and `closed` follow: `cv: false` or `closed:
@@ -387,7 +391,7 @@ knob = ball(top.c, r)
 
 ```
 hole(at: POINT | [POINTS], d: D, depth: DEPTH, cbore: (D, depth), csink: (D, A), point: A,
-     thread: "M36x2" | (size, pitch), flip: false, on: PLANE, bodies: BODIES)
+     thread: "M36x2" | (size, pitch), fit: CLASS, flip: false, on: PLANE, bodies: BODIES)
 hole(at: .., screw: SIZE, convention: "iso"|"ansi", fit: "close"|"normal"|"loose"|"tap",
      seat: "cbore"|"csink", depth: DEPTH, point: A, ..)
 DEPTH: d | thru | next | upto(FACES | WORKPLANE | SKETCH, offset)
@@ -399,9 +403,11 @@ or points worked out here (work points, `mid(..)`), then `on:` is required; each
 the plane. Several points make one hole feature, the rest copies of the first. `point:` is a
 blind hole's drill point (the cone's included angle; none on `thru`). `thread:` records a thread
 (modeled by `thread(hole: ..)`). SIZE: `M6`, `M8x1`, `1/4-20`, `#10-24` from the tables: its fit's
-diameter, its seat's head; `fit: "tap"` the tap drill, its thread recorded. Options that cannot
-apply are errors, never dropped: `cbore` with `csink` or `seat`, `d` or `thread` with `screw`
-(`Conflict`); `fit`, `seat`, `convention` without `screw`, `point` on `thru` (`NotApplicable`);
+diameter, its seat's head; `fit: "tap"` the tap drill, its thread recorded. On a hole of its own
+`d`, `fit:` is its ISO 286 hole class (CLASS: "H7", "H6".."H11", "G7", "F7", "JS7", "K7", "N7",
+"P7" and the like): the hole's geometry is the nominal `d`; CAM reams it (a dowel's 6H7). Options
+that cannot apply are errors, never dropped: `cbore` with `csink` or `seat`, `d` or `thread` with
+`screw` (`Conflict`); `seat`, `convention` without `screw`, `point` on `thru` (`NotApplicable`);
 an unknown size (`UnknownSize`) or word (`UnknownWord`).
 
 ```
@@ -518,10 +524,12 @@ seats = subtract(lower, tools: [bolt, bolt2], keep: true)
 ```
 text(STRING, font: FILE, size: d, depth: d, on: PLANE, at: POINT, cut: false, wrap: R)
 import(FILE, op: "new"|"add"|"cut")
-entity(of: IMPORT, solid: N, id: N)   the face (or edges) a STEP file's entity #id of solid #solid became
+entity(of: IMPORT, solid: N, id: N)   the face (or edges) a STEP file's entity #id (a Parasolid
+                                      file's node index) of solid #solid became
 ```
 
-Files (.ttf/.otf fonts; .step/.stp/.brep/.igs/.iges solids) are found beside the part file;
+Files (.ttf/.otf fonts; .step/.stp/.brep/.igs/.iges and Parasolid .x_t/.x_b solids) are found
+beside the part file;
 a missing, wrong-kind or unreadable one is `File`. Text: the baseline from the point along the
 plane's x, the letters up its y, `depth` along its normal (cut: into the part); `wrap: R` sets
 it round a cylinder about the plane's normal. Members: `T.top` (embossed letter tops),
@@ -1199,7 +1207,9 @@ allowed; each top-level statement may make at most 100000 calls, nested at most 
 
 `expect volume|area = V +- T[%]`, `expect faces|edges|bodies|holes = N` (holes: round holes of the
 finished part), `expect section_area(V) = A` (the material cut by the plane z = V), `expect valid`. A failed line is
-`ExpectFailed` with the measured value and the limit. An expect whose limit is the measured value
+`ExpectFailed` with the measured value and the limit, said in words (`expected 12 faces, found 11`,
+`expected no interferences, found 1`, `expected clearance at least 2 mm, found 1.4 mm`) and the
+line as written in its detail (`expect faces = 12`). An expect whose limit is the measured value
 to the last digit is the lint `ExpectCopied`.
 
 The built part's measure (`fg run --json`: `part`) is its volume, area, centroid, faces, edges,

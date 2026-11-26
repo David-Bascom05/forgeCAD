@@ -1,0 +1,3 @@
+{"doc":"examples/thermoform/validation/eksi2017_hemisphere.fg"}
+{"op":"Rename","from":"hemi","to":"hemi_r"}
+{"op":"ReplaceFeature","id":"part","text":"part = thermoform(cav, t: 5, material: \"ABS\", tool: \"female\", flange: 20, margin: 5, shrink: ratio(0), vent: false, temperature: 140, pressure: ratio(0.091))\n"}

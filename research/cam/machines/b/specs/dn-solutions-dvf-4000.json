@@ -1,0 +1,129 @@
+{
+ "vendor": "DN Solutions",
+ "model": "DVF 4000",
+ "family": "DVF",
+ "source": [
+  "https://www.dn-solutions.com/us/product/5-axis-machining/horizontal-machining/dvf-4000.do"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "table-table",
+ "architecture": "5-axis vertical with B (tilt) and C (rotary) table axes per page rapid rows; carriers and tilt range not on page.",
+ "control": {
+  "standard": null,
+  "options": []
+ },
+ "travel_mm": {
+  "X": 620,
+  "Y": 440,
+  "Z": 430
+ },
+ "rotary": {
+  "A": null,
+  "B": {
+   "range_deg": null,
+   "rapid_rpm": 20,
+   "indexing_or_full": "full"
+  },
+  "C": {
+   "range_deg": null,
+   "rapid_rpm": 20,
+   "indexing_or_full": "full"
+  }
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": 200,
+ "rotary_table_dia_mm": 400,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 12000,
+  "rpm_min": null,
+  "taper_or_interface": "ISO #40",
+  "power_kw": {
+   "cont": 11,
+   "30min": null,
+   "peak/other": "18.5 kW"
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 118
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 36,
+  "Y": 36,
+  "Z": 36,
+  "A_or_B_rpm": 20,
+  "C_rpm": 20
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 30,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": 2205,
+  "D": 2750,
+  "H": 2760
+ },
+ "weight_kg": 7500,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.chip_to_chip_s",
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "changer.max_tool_dia_mm",
+  "changer.max_tool_kg",
+  "changer.max_tool_len_mm",
+  "changer.tool_to_tool_s",
+  "control.standard",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.rpm_min",
+  "spindle.torque_nm.cont",
+  "spindle_center_to_column_mm",
+  "spindle_nose_to_table_mm",
+  "table_height_from_floor_mm"
+ ],
+ "options": [
+  "15000 rpm spindle"
+ ],
+ "notes": "US page summary table (site files it under 5-axis 'horizontal-machining' URL path). Power printed '18.5/11 kW' read as max/cont. B/C ranges not published on page."
+}

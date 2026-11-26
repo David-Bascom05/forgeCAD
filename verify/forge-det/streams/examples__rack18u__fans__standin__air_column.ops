@@ -1,0 +1,5 @@
+{"doc":"examples/rack18u/fans/standin/air_column.fg"}
+{"op":"SetParam","param":"d_bore","value":{"value":119.7,"dim":"Length"}}
+{"op":"SetParam","param":"h","value":{"value":15.225000000000001,"dim":"Length"}}
+{"op":"SetParam","param":"xl","value":{"value":10.5,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}

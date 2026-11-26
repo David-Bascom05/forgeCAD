@@ -3,7 +3,9 @@
 //! turn, a file it makes opened. The chat is the app's: it follows the document open.
 
 use super::Gui;
-use crate::agent::claude::{self, ClaudeCode};
+use crate::agent::claude;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::agent::claude::ClaudeCode;
 use crate::agent::openai::{self, OpenAi};
 use crate::agent::{Backend, Doc, Out, Turns, keys, system_prompt, trash_path};
 use crate::shell::agent::{AgentAct, Entry, Event, counts, prompt, undo_label};
@@ -15,7 +17,11 @@ struct Followup {
     document: Option<String>,
     text: String,
     refs: Vec<String>,
-    picture: Option<Vec<u8>>,
+    pictures: Vec<crate::agent::Picture>,
+    /// Its message in the chat (sent, shown, waiting): taken out if it's dropped.
+    entry: Option<usize>,
+    /// Its card, not in the chat while it waits: added when it goes.
+    card: Option<Entry>,
     project: Option<PathBuf>,
     model: String,
 }
@@ -27,6 +33,8 @@ pub struct AgentHost {
     backend: Option<Box<dyn Backend>>,
     turn_active: bool,
     followups: std::collections::VecDeque<Followup>,
+    /// The card of the message being sent, when the chat hasn't it yet: added when it goes.
+    card: Option<Entry>,
     rx: Option<Receiver<Event>>,
     /// What the backend was made for: the folder, the settings.
     made_for: Option<(String, AgentSettings)>,
@@ -36,6 +44,8 @@ pub struct AgentHost {
     /// The document the agent was last told is open.
     told: Option<String>,
     loaded: bool,
+    /// The project whose last conversation was looked for, when its Agent tab first showed.
+    reopened_for: Option<PathBuf>,
     keyring: Option<Receiver<Result<Option<bool>, String>>>,
     /// CLI program override, and where it runs, unless a test says otherwise.
     pub program: Option<String>,
@@ -130,6 +140,7 @@ impl Gui {
                 AgentSettings::from_toml(&text).write_extra(&mut self.shell.settings.extra);
             }
         }
+        self.agent_reopen_last();
         let project = self.agent_root().map(|p| p.display().to_string());
         if project != self.shell.agent.project {
             self.shell.agent.resume_open = false;
@@ -183,6 +194,26 @@ impl Gui {
         for e in got {
             match e {
                 Event::FileChanged { path, before, text } => self.agent_file(path, before, text),
+                Event::Permission {
+                    id,
+                    tool,
+                    tool_use,
+                    summary,
+                    input,
+                    always,
+                    raw,
+                } => {
+                    let input = self.agent_edit_preview(&tool, &raw).unwrap_or(input);
+                    self.shell.agent.take(Event::Permission {
+                        id,
+                        tool,
+                        tool_use,
+                        summary,
+                        input,
+                        always,
+                        raw,
+                    })
+                }
                 Event::Done { .. } | Event::Problem { .. } => {
                     let error = match &e {
                         Event::Done { error, stopped } => error
@@ -207,8 +238,68 @@ impl Gui {
         self.take_bridge_requests();
     }
 
-    fn take_followups(&mut self) {
+    /// The tab's view of the queue: how many, and each one's words.
+    fn sync_queue(&mut self) {
         self.shell.agent.queued = self.agent.followups.len();
+        self.shell.agent.queue = self
+            .agent
+            .followups
+            .iter()
+            .map(|f| {
+                match f
+                    .card
+                    .as_ref()
+                    .or(f.entry.and_then(|k| self.shell.agent.entries.get(k)))
+                {
+                    Some(Entry::User { text, .. }) => text.clone(),
+                    _ => f.text.clone(),
+                }
+            })
+            .collect();
+    }
+
+    /// A queued message dropped, or taken back into the box to change and send again.
+    fn unqueue(&mut self, index: usize, edit: bool) {
+        let Some(f) = self.agent.followups.remove(index) else {
+            return;
+        };
+        let mut text = f.text.clone();
+        let mut refs = f.refs.clone();
+        if let Some(Entry::User { text: t, refs: r, .. }) = &f.card {
+            (text, refs) = (t.clone(), r.clone());
+        } else if let Some(k) = f.entry
+            && let Some(Entry::User { text: t, refs: r, .. }) = self.shell.agent.entries.get(k)
+        {
+            (text, refs) = (t.clone(), r.clone());
+            self.shell.agent.entries.remove(k);
+            for g in &mut self.agent.followups {
+                if let Some(j) = &mut g.entry
+                    && *j > k
+                {
+                    *j -= 1;
+                }
+            }
+        }
+        if edit {
+            let a = &mut self.shell.agent;
+            a.input = if a.input.trim().is_empty() {
+                text
+            } else {
+                format!("{text}\n{}", a.input)
+            };
+            for r in refs {
+                if !a.refs.contains(&r) {
+                    a.refs.push(r);
+                }
+            }
+            a.pictures.extend(f.pictures);
+            a.focus_input = true;
+        }
+        self.sync_queue();
+    }
+
+    fn take_followups(&mut self) {
+        self.sync_queue();
         if self.agent.turn_active
             || self.shell.agent.running
             || self.shell.agent.voice.busy()
@@ -220,7 +311,7 @@ impl Gui {
         let Some(next) = self.agent.followups.pop_front() else {
             return;
         };
-        self.shell.agent.queued = self.agent.followups.len();
+        self.sync_queue();
         if next.project != self.agent_root()
             || next.model != self.shell.agent.settings.label()
             || (next.document.is_some() && next.document != self.agent_path())
@@ -232,7 +323,8 @@ impl Gui {
             return;
         }
         self.shell.agent.running = true;
-        self.agent_send(&next.text, &next.refs, next.picture);
+        self.agent.card = next.card;
+        self.agent_send(&next.text, &next.refs, next.pictures);
     }
 
     fn cancel_followups(&mut self) {
@@ -241,7 +333,7 @@ impl Gui {
         self.shell.agent.markup.sending = false;
         let count = self.agent.followups.len();
         self.agent.followups.clear();
-        self.shell.agent.queued = 0;
+        self.sync_queue();
         if count > 0 {
             self.shell.agent.take(Event::Note {
                 text: format!("Cancelled {count} queued message(s)."),
@@ -252,6 +344,11 @@ impl Gui {
 
     /// Publish a terminal connection for this window without starting a model session.
     pub fn start_agent_bridge(&mut self) {
+        // a page has no terminal to connect (the agent runs in the desktop app): it failed there,
+        // and "Agent connection: operation not supported on this platform" stood in the status bar
+        if cfg!(target_arch = "wasm32") {
+            return;
+        }
         if self.agent.bridge.is_none() {
             match forge_agent::chat_bridge::Bridge::start(self.waker.clone()) {
                 Ok(bridge) => self.agent.bridge = Some(bridge),
@@ -313,10 +410,11 @@ impl Gui {
             text: text.clone(),
             refs: vec![],
             markup: None,
+            pictures: 0,
         });
         self.shell.agent.problem = None;
         self.shell.agent.running = true;
-        self.agent_send(&text, &[], None);
+        self.agent_send(&text, &[], vec![]);
         self.agent.bridge_active = Some((request.id, self.shell.agent.entries.len()));
         if !self.shell.agent.running {
             self.finish_bridge_request(Some(
@@ -396,6 +494,53 @@ impl Gui {
         }
     }
 
+    /// A picture pasted or dropped on the window: the Agent tab's, for its next message, when the
+    /// tab is the one showing. False when it isn't (or it's not a picture the models read).
+    pub fn agent_picture(&mut self, bytes: Vec<u8>) -> bool {
+        self.shell.agent.tab == crate::shell::agent::SideTab::Agent && self.shell.agent.add_picture(bytes)
+    }
+
+    /// An edit the agent asks to make, as its card shows it: the file as it is with the change
+    /// made, -/+ lines with a line around them, so the card says what changes where (a param's
+    /// name, not just "= 12" to "= 14"). None when it isn't an edit, or its file can't be read.
+    fn agent_edit_preview(&self, tool: &str, raw: &str) -> Option<String> {
+        use forge_agent::json::Json;
+        let input = Json::parse(raw).ok()?;
+        let path = input.get("file_path").and_then(Json::str)?;
+        let file = self.agent_edit_file(path);
+        let now = file
+            .as_ref()
+            .and_then(|f| forge_dirs::fs::read_to_string(f).ok())
+            .unwrap_or_default();
+        if file.is_none() && tool != "Write" {
+            return None;
+        }
+        let new = crate::shell::agent::edited(tool, &input, &now)?;
+        Some(crate::shell::agent::diff_text(&crate::shell::agent::diff(
+            &now, &new, 1,
+        )))
+    }
+
+    /// The file an edit names, here: as given if it's here, else from where the agent runs (its
+    /// paths are relative to that), else (the page, whose project is mounted elsewhere than it
+    /// is on the machine) the longest tail of it found under the project.
+    fn agent_edit_file(&self, path: &str) -> Option<PathBuf> {
+        let p = Path::new(path);
+        // has_root, not is_absolute: in a page (wasm32-unknown) no path is absolute
+        if p.has_root() && forge_dirs::fs::is_file(p) {
+            return Some(p.to_path_buf());
+        }
+        let bases = [self.agent.cwd.clone(), self.agent_root()];
+        let parts: Vec<_> = p.components().collect();
+        let tails = if !p.has_root() { 0..1 } else { 1..parts.len() };
+        bases.iter().flatten().find_map(|base| {
+            tails
+                .clone()
+                .map(|i| base.join(parts[i..].iter().collect::<PathBuf>()))
+                .find(|f| forge_dirs::fs::is_file(f))
+        })
+    }
+
     fn agent_root(&self) -> Option<PathBuf> {
         if let Some(file) = self.agent_path() {
             let file = Path::new(&file);
@@ -444,6 +589,7 @@ impl Gui {
             return;
         };
         chat.entries = self.shell.agent.entries.clone();
+        chat.turns = self.agent.turns.done.clone();
         if let Some((_, settings)) = &self.agent.made_for {
             chat.settings = settings.clone();
         }
@@ -463,6 +609,37 @@ impl Gui {
                 self.agent.save_error = None;
             }
         }
+    }
+
+    /// The first time the Agent tab shows for a project, its last conversation comes back (the
+    /// tab's + starts a new one), as `claude --continue` would.
+    fn agent_reopen_last(&mut self) {
+        if self.shell.agent.tab != crate::shell::agent::SideTab::Agent
+            || !self.shell.agent.entries.is_empty()
+            || self.agent.chat.is_some()
+            || self.agent_busy()
+        {
+            return;
+        }
+        let Some(root) = self.agent_root() else { return };
+        if self.agent.reopened_for.as_ref() == Some(&root) {
+            return;
+        }
+        self.agent.reopened_for = Some(root.clone());
+        let Some(base) = self.agent.conversation_dir() else {
+            return;
+        };
+        let Ok(list) = crate::agent::conversations::list(&base, &root) else {
+            return;
+        };
+        // the last saved; within one second (its stamp's grain), the last made (its id starts
+        // with its time, in nanoseconds)
+        let Some(last) = list.iter().max_by_key(|c| (c.updated, c.id.clone())) else {
+            return;
+        };
+        let id = last.id.clone();
+        self.agent_resume_conversation(&id);
+        self.shell.agent.resume_open = false;
     }
 
     fn agent_list_conversations(&mut self) {
@@ -528,6 +705,7 @@ impl Gui {
         let current = self.shell.agent.settings.clone();
         let interrupted = chat.interrupted;
         self.agent_reset();
+        self.agent.turns.restore(chat.turns.clone());
         self.shell.agent.restore_entries(chat.entries.clone());
         chat.settings.trusted = current.trusted;
         chat.settings.speech_key = current.speech_key;
@@ -540,15 +718,16 @@ impl Gui {
         self.agent.session = Some(std::sync::Arc::new(std::sync::Mutex::new(chat.session.clone())));
         self.agent.endpoint_history = Some(std::sync::Arc::new(std::sync::Mutex::new(chat.history.clone())));
         self.agent.resumed = true;
-        self.shell.agent.take(Event::Note {
-            text: if interrupted {
-                "Resumed an interrupted conversation. Project files are unchanged by resuming."
+        // a divider, not a note: said once, wherever it was resumed, and not saved with the chat
+        let when = crate::shell::agent::ago(chat.updated);
+        self.shell.agent.resumed = Some((
+            self.shell.agent.entries.len(),
+            if interrupted {
+                format!("Resumed · {when} · it stopped mid-turn")
             } else {
-                "Resumed conversation. Past changes are summaries; use Versions to restore a design."
-            }
-            .into(),
-            error: false,
-        });
+                format!("Resumed · {when}")
+            },
+        ));
         self.agent.chat = Some(chat);
         self.agent_capture_conversation(true);
     }
@@ -618,7 +797,7 @@ impl Gui {
 
     /// A file's change in a turn taken back or put back: through the document when it's open;
     /// a made file moved aside (never deleted) and its document closed, or moved back and opened.
-    fn agent_flip(&mut self, turn: usize, index: usize, undo: bool) -> Result<(), String> {
+    pub fn agent_flip(&mut self, turn: usize, index: usize, undo: bool) -> Result<(), String> {
         let Some(f) = self
             .agent
             .turns
@@ -631,6 +810,35 @@ impl Gui {
         };
         if f.undone == undo {
             return Ok(());
+        }
+        // a turn from a saved conversation: only over the file as it would leave it, never over
+        // what's been done since
+        if f.restored {
+            let want = if undo { Some(&f.after) } else { f.before.as_ref() };
+            // the file as the person has it: its document when it's open (in this tab or
+            // another, which comes up), else what's on disk
+            if self.agent_path().as_deref() != Some(f.path.as_str())
+                && let Some(i) = self.agent_tab_of(&f.path)
+            {
+                self.activate(i);
+            }
+            let open = (self.agent_path().as_deref() == Some(f.path.as_str()))
+                .then(|| doc(&mut self.shell.drawing, &mut self.fg).map(|d| d.text().to_string()))
+                .flatten();
+            let now = open.or_else(|| forge_dirs::fs::read_to_string(&f.path).ok());
+            let fits = match (want, &now) {
+                (Some(w), Some(n)) => w == n,
+                // a file the turn made, undone: it's gone, as Redo wants
+                (None, None) => true,
+                _ => false,
+            };
+            if !fits {
+                return Err(format!(
+                    "{} has changed since this turn: not {}. Versions can take it back to any saved state.",
+                    name_of(&f.path),
+                    if undo { "undone" } else { "redone" }
+                ));
+            }
         }
         let active = self.agent_path();
         let set = |g: &mut Gui, trash: Option<PathBuf>| {
@@ -701,8 +909,24 @@ impl Gui {
                     text,
                     refs,
                     markup: true,
-                } => self.markup_job = Some((text, refs)),
-                AgentAct::Send { text, refs, .. } => self.agent_send(&text, &refs, None),
+                    pictures,
+                    ..
+                } => self.markup_job = Some((text, refs, pictures)),
+                AgentAct::Send {
+                    text,
+                    refs,
+                    pictures,
+                    shown,
+                    ..
+                } => {
+                    self.agent.card = (!shown).then(|| Entry::User {
+                        text: text.clone(),
+                        refs: refs.clone(),
+                        markup: None,
+                        pictures: pictures.len(),
+                    });
+                    self.agent_send(&text, &refs, pictures)
+                }
                 AgentAct::ShowMarkup(k) => self.markup_show(k),
                 AgentAct::Trust { dir, yes } => {
                     self.shell.agent.trust_ask = None;
@@ -718,8 +942,8 @@ impl Gui {
                     } else if yes {
                         self.shell.agent.settings.trusted.push(dir);
                         self.agent_save_settings();
-                        if let Some((text, refs, picture)) = pending {
-                            self.agent_send(&text, &refs, picture);
+                        if let Some((text, refs, pictures)) = pending {
+                            self.agent_send(&text, &refs, pictures);
                         }
                     } else {
                         self.shell.agent.take(Event::Done {
@@ -749,6 +973,22 @@ impl Gui {
                         });
                     }
                 }
+                AgentAct::Answer(id, answer) => {
+                    if let Some(b) = &mut self.agent.backend {
+                        b.answer(&id, answer);
+                    }
+                }
+                AgentAct::Mode(m) => {
+                    if let Some(b) = &mut self.agent.backend {
+                        b.set_mode(m);
+                    }
+                }
+                AgentAct::OwnMode(m) => {
+                    if let Some(b) = &mut self.agent.backend {
+                        b.set_own_mode(&m);
+                    }
+                }
+                AgentAct::Unqueue { index, edit } => self.unqueue(index, edit),
                 AgentAct::ListConversations => self.agent_list_conversations(),
                 AgentAct::ResumeConversation(id) => self.agent_resume_conversation(&id),
                 AgentAct::NewChat => {
@@ -795,18 +1035,36 @@ impl Gui {
         }
     }
 
-    pub(crate) fn agent_send(&mut self, text: &str, refs: &[String], picture: Option<Vec<u8>>) {
+    pub(crate) fn agent_send(&mut self, text: &str, refs: &[String], pictures: Vec<crate::agent::Picture>) {
         if self.agent.turn_active {
             self.agent.followups.push_back(Followup {
                 document: self.agent_path(),
                 text: text.into(),
                 refs: refs.to_vec(),
-                picture,
+                pictures,
+                // its card in the chat already (markup's), else kept to add when it goes
+                entry: self
+                    .agent
+                    .card
+                    .is_none()
+                    .then(|| {
+                        self.shell
+                            .agent
+                            .entries
+                            .iter()
+                            .rposition(|e| matches!(e, Entry::User { .. }))
+                    })
+                    .flatten(),
+                card: self.agent.card.take(),
                 project: self.agent_root(),
                 model: self.shell.agent.settings.label(),
             });
-            self.shell.agent.queued = self.agent.followups.len();
+            self.sync_queue();
             return;
+        }
+        // it goes now: its card, if the chat hasn't it yet
+        if let Some(c) = self.agent.card.take() {
+            self.shell.agent.entries.push(c);
         }
         let fail = |g: &mut Gui, text: String, fix: Option<String>| {
             g.shell.agent.take(Event::Problem { text, fix });
@@ -822,7 +1080,7 @@ impl Gui {
             && !trusted(&dir, &self.shell.agent.settings.trusted)
         {
             self.shell.agent.trust_ask = Some(dir);
-            self.shell.agent.pending = Some((text.to_string(), refs.to_vec(), picture));
+            self.shell.agent.pending = Some((text.to_string(), refs.to_vec(), pictures));
             return;
         }
         // the agent reads the file: what's on screen is what it gets
@@ -909,8 +1167,23 @@ impl Gui {
         }
         self.agent.turns.start(undo_label(text));
         self.apps.view_set = false;
-        let mut msg = prompt(text, refs);
-        if self.agent.told.as_deref() != Some(path.as_str()) {
+        // a backend's slash command (/compact, a skill) goes as typed, nothing added: Claude Code
+        // takes a message as a command only when it's the whole of it. What it'd be told waits for
+        // the next message.
+        let command = text.starts_with('/');
+        let mut msg = if command {
+            text.to_string()
+        } else {
+            prompt(text, refs)
+        };
+        if !command
+            && document.is_some()
+            && self.shell.drawing.is_none()
+            && let Some(note) = self.shell.fg.as_ref().and_then(build_note)
+        {
+            msg.push_str(&format!("\n\n({note})"));
+        }
+        if !command && self.agent.told.as_deref() != Some(path.as_str()) {
             msg = if document.is_some() {
                 format!("(The open file is now {path}.)\n\n{msg}")
             } else {
@@ -924,7 +1197,7 @@ impl Gui {
         if let Some(t) = &self.agent.app_tools {
             t.set_dir(Path::new(&dir));
         }
-        if self.agent.resumed {
+        if !command && self.agent.resumed {
             msg = format!(
                 "(This conversation was resumed. Inspect the current project before editing; files may have changed. Current context: {path}.)\n\n{msg}"
             );
@@ -935,7 +1208,7 @@ impl Gui {
         self.agent.turn_active = true;
         self.shell.agent.running = true;
         if let Some(b) = &mut self.agent.backend {
-            b.send(msg, picture);
+            b.send(msg, pictures);
         }
         self.agent_capture_conversation(true);
     }
@@ -987,7 +1260,15 @@ impl Gui {
             }
             self.agent.app_tools = Some(tools);
         }
-        self.agent.backend = Some(match s.kind {
+        let mut backend: Box<dyn crate::agent::Backend> = match s.kind {
+            // in the page: the person's own Claude Code, through `forgecad web --agent`
+            #[cfg(target_arch = "wasm32")]
+            Kind::ClaudeCode if crate::agent::bridge::ready() => {
+                Box::new(crate::agent::bridge::Bridge::new(out, file))
+            }
+            #[cfg(target_arch = "wasm32")]
+            Kind::ClaudeCode => Box::new(crate::agent::bridge::Unbridged { out }),
+            #[cfg(not(target_arch = "wasm32"))]
             Kind::ClaudeCode => {
                 let c = ClaudeCode::new(
                     claude::Config {
@@ -1054,8 +1335,48 @@ impl Gui {
                 self.agent.endpoint_history = Some(backend.history_handle());
                 Box::new(backend)
             }
-        });
+        };
+        if self.shell.agent.mode_chosen {
+            backend.set_mode(self.shell.agent.mode);
+        }
+        self.agent.backend = Some(backend);
     }
+}
+
+/// Issues told with a message, at most; the rest are counted.
+const NOTE_ISSUES: usize = 3;
+
+/// The open file as it builds now, for the agent with each message: its errors and warnings, the
+/// first few by line. None while it hasn't built.
+pub fn build_note(fg: &crate::shell::fg::FgPanel) -> Option<String> {
+    if fg.file.is_empty() {
+        return None;
+    }
+    let (errors, warnings) = crate::shell::fg::issue_counts(&fg.issues);
+    let name = name_of(&fg.file);
+    if errors + warnings == 0 {
+        return Some(format!("{name} builds now with no errors or warnings"));
+    }
+    let shown: Vec<String> = fg
+        .issues
+        .iter()
+        .filter(|i| !crate::shell::fg::is_note(i))
+        .take(NOTE_ISSUES)
+        .map(|i| format!("line {}: {}", i.line, i.text.lines().next().unwrap_or("")))
+        .collect();
+    let more = (errors + warnings).saturating_sub(shown.len());
+    let plural = |n: usize, w: &str| format!("{n} {w}{}", if n == 1 { "" } else { "s" });
+    Some(format!(
+        "{name} now has {}, {}: {}{}",
+        plural(errors, "error"),
+        plural(warnings, "warning"),
+        shown.join("; "),
+        if more > 0 {
+            format!("; and {more} more")
+        } else {
+            String::new()
+        }
+    ))
 }
 
 /// The document open: the drawing, else the part or assembly.

@@ -13,27 +13,29 @@
 //! Sources compiled only behind a cargo feature that no shipped build turns on (`GATED`) are
 //! scanned only when this test is built with that feature: the default run covers the shipped
 //! kernel, and `cargo test -p forge-model --test hidden_inputs --features decide_once` covers
-//! the decide-once boolean too. That second run may fail for now (its sources are not all
-//! reviewed yet), but it is required to pass before `decide_once` is ever turned on by default
-//! or in any build that ships: `gated_files_are_gated` keeps the list honest.
+//! the decide-once boolean too (its sources reviewed, with forge-bool-core's). It is required to
+//! pass before `decide_once` is ever turned on by default or in any build that ships:
+//! `gated_files_are_gated` keeps the list honest.
 
+#[path = "support/cfg_test_items.rs"]
+mod cfg_test_items;
+
+use cfg_test_items::live_lines;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-const CRATES: [&str; 12] = [
-    "forge-par",
-    "forge-geom",
-    "forge-topo",
-    "forge-bool",
-    "forge-ops",
-    "forge-model",
-    "forge-sheet",
-    "forge-thermo",
-    "forge-math",
-    "forge-gpu",
-    "forge-mesh",
-    "forge-harness",
-];
+/// Every crate of the kernel (each directory of kernel/ with a src/): a new crate is scanned
+/// from its first commit.
+fn crates() -> Vec<String> {
+    let mut out: Vec<String> = std::fs::read_dir(kernel())
+        .expect("kernel/")
+        .flatten()
+        .filter(|e| e.path().join("src").is_dir())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    out.sort();
+    out
+}
 
 /// What to look for, by name; a line can match several.
 fn kinds(line: &str) -> Vec<&'static str> {
@@ -150,9 +152,9 @@ fn gated_files_are_gated() {
 /// `crate/path.rs|kind|trimmed line` -> how many such lines.
 fn scan() -> BTreeMap<String, usize> {
     let mut out = BTreeMap::new();
-    for c in CRATES {
+    for c in crates() {
         let mut files = vec![];
-        rs_files(&kernel().join(c).join("src"), &mut files);
+        rs_files(&kernel().join(&c).join("src"), &mut files);
         files.sort();
         for f in files {
             let rel = f
@@ -164,18 +166,60 @@ fn scan() -> BTreeMap<String, usize> {
                 continue;
             }
             let text = std::fs::read_to_string(&f).expect("read");
-            // test modules sit at the end of a file: stop at `#[cfg(test)]`
-            for line in text
-                .lines()
-                .take_while(|l| !l.trim_start().starts_with("#[cfg(test)]"))
-            {
-                for k in kinds(line) {
-                    *out.entry(format!("{rel}|{k}|{}", line.trim())).or_default() += 1;
-                }
-            }
+            scan_text(&rel, &text, &mut out);
         }
     }
     out
+}
+
+/// One file's entries: every line but those of `#[cfg(test)]` items.
+fn scan_text(rel: &str, text: &str, out: &mut BTreeMap<String, usize>) {
+    for line in live_lines(text) {
+        for k in kinds(line) {
+            *out.entry(format!("{rel}|{k}|{}", line.trim())).or_default() += 1;
+        }
+    }
+}
+
+/// A `#[cfg(test)]` item mid-file hides only itself: an env read after it is found (and, not
+/// being listed, would fail `every_hidden_input_is_reviewed`), and nothing inside it is.
+#[test]
+fn a_test_item_mid_file_hides_only_itself() {
+    let text = r##"pub fn a() -> f64 { 1.0 }
+
+#[cfg(test)]
+fn helper() -> usize {
+    let s = "}"; let c = '{'; let r = r#"{{"#; // }
+    /* { */ std::env::var("INSIDE").map_or(0, |v| v.len())
+}
+
+#[cfg(test)]
+mod tests;
+
+pub fn b() -> bool {
+    std::env::var("AFTER").is_ok()
+}
+
+#[cfg(test)]
+mod more {
+    #[test]
+    fn t() { let _ = std::env::var("IN_MOD"); }
+}
+
+pub fn c<'a>(x: &'a str) -> &'a str { let _ = std::env::var("LAST"); x }
+"##;
+    let mut found = BTreeMap::new();
+    scan_text("fixture/src/lib.rs", text, &mut found);
+    let keys: Vec<&String> = found.keys().collect();
+    let has = |p: &str| keys.iter().any(|k| k.contains(p));
+    assert!(has("env::var(\"AFTER\")"), "{keys:?}");
+    assert!(has("env::var(\"LAST\")"), "{keys:?}");
+    assert!(!has("INSIDE") && !has("IN_MOD"), "{keys:?}");
+    let (_, list) = listed();
+    assert!(
+        found.keys().all(|k| !list.contains_key(k)),
+        "the fixture is not listed"
+    );
 }
 
 const LIST: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tools/proof/hidden-inputs.txt");

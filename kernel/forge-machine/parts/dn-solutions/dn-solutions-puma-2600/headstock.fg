@@ -1,0 +1,14 @@
+# dn-solutions-puma-2600 headstock: the headstock behind the chuck (estimate).
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared x0 = -222
+shared y0 = -222
+shared z0 = -610
+shared L = 444
+shared W = 444
+shared H = 500
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (L, W))
+}
+body = extrude(plan, H)

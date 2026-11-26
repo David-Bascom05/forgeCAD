@@ -1,0 +1,23 @@
+name = "forgemachine"
+version = "0.1.0"
+defaultTargets = ["ForgeMachine"]
+# Mathlib and its build are shared with verify/forge-cam: run `lake exe cache get` there first.
+packagesDir = "../forge-cam/.lake/packages"
+
+[leanOptions]
+relaxedAutoImplicit = false
+autoImplicit = false
+
+# The G-code interpreter's spec (kernel/forge-machine/src/gcode.rs) and its tie to forge-cam's
+# G6 model of the post (ForgeCam.Post).
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "v4.36.0"
+
+[[require]]
+name = "forgecam"
+path = "../forge-cam"
+
+[[lean_lib]]
+name = "ForgeMachine"

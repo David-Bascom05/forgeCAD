@@ -1,0 +1,7 @@
+{"doc":"examples/rack18u/asm/order/build/RACK-311_hinge_bracket.fg"}
+{"op":"SetParam","param":"t3","value":{"value":3.1710000000000003,"dim":"Length"}}
+{"op":"SetParam","param":"t2","value":{"value":1.974,"dim":"Length"}}
+{"op":"SetParam","param":"t1","value":{"value":1.596,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"MoveFeature","id":"screws","before":null}
+{"op":"ReplaceFeature","id":"outer","text":"sketch outer(on: vert.bottom) {\n  for i in 0..4 {\n    p = pt(zb_scr0 + (i if i < n_side else i - n_side) * (zb_scr1 - zb_scr0), (i_scr if i < n_side else -i_scr) - w / 2)\n  }\n  up = line((0, 0), (xl, 0), construction: true)\n}\n"}

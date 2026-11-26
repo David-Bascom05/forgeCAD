@@ -1,0 +1,114 @@
+{
+ "vendor": "DN Solutions",
+ "model": "Lynx 2100LA",
+ "family": "Lynx 2100 series",
+ "source": [
+  "https://www.dn-solutions.com/us/product/turning-center/2-axis-horizontal/lynx-2100-a.do"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "lathe",
+ "architecture": "Horizontal slant-bed CNC lathe, single spindle, turret on X/Z cross slide (bed angle and carrying arrangement not on fetched page).",
+ "control": {
+  "standard": null,
+  "options": []
+ },
+ "travel_mm": {
+  "X": 205,
+  "Z": 560
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": 350,
+ "max_turning_length_mm": 550,
+ "chuck_size_in": 6,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 6000,
+  "rpm_min": null,
+  "taper_or_interface": null,
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": 15
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 127
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": null,
+ "milling_head": null,
+ "turret_stations": 12,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 30,
+  "Z": 36
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": null,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": 1595,
+  "D": 2540,
+  "H": 1693
+ },
+ "weight_kg": 3400,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "bar_capacity_mm",
+  "control.standard",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.rpm_min",
+  "spindle.taper_or_interface",
+  "spindle.torque_nm.cont",
+  "spindle_nose_type",
+  "sub_spindle",
+  "swing_over_bed_mm",
+  "table_height_from_floor_mm",
+  "tailstock",
+  "turret_index_s"
+ ],
+ "options": [
+  "Lynx 2100LB: 8 in chuck, 4500 r/min, 169 N·m"
+ ],
+ "notes": "Only the DN Solutions US product page summary table (maker site). Page labels Length/Height/Width; D=Length. Full catalogue is behind an email-registration gate on dn-solutions.com and was not downloaded. Not applicable to this machine kind (left null, not listed in unknown): spindle_nose_to_table_mm, spindle_center_to_column_mm, spindle_center_to_pallet_top_mm, table_mm, table_load_kg, rotary_table_dia_mm, pallet, changer, milling_head, rotary, travel_mm.Y, rapid_m_min.Y, rapid_m_min.A_or_B_rpm, rapid_m_min.C_rpm, live_tool."
+}

@@ -1,0 +1,5 @@
+{"doc":"examples/rack18u/hw/latch_spring_h7_49.fg"}
+{"op":"SetParam","param":"H","value":{"value":7.8645000000000005,"dim":"Length"}}
+{"op":"SetParam","param":"dw","value":{"value":1.26,"dim":"Length"}}
+{"op":"SetParam","param":"D","value":{"value":11.340000000000002,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}

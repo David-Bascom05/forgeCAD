@@ -1,0 +1,7 @@
+{"doc":"examples/machined/mold_core.fg"}
+{"op":"SetParam","param":"w","value":{"value":84,"dim":"Length"}}
+{"op":"SetParam","param":"d","value":{"value":63,"dim":"Length"}}
+{"op":"SetParam","param":"t","value":{"value":10.5,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"MoveFeature","id":"round","before":null}
+{"op":"ReplaceFeature","id":"foot","text":"foot = fillet(edges(between: (plate, block)), r)\n"}

@@ -1,0 +1,6 @@
+{"doc":"examples/sheetmetal/rack_face.fg"}
+{"op":"SetParam","param":"t","value":{"value":1.5750000000000002,"dim":"Length"}}
+{"op":"SetParam","param":"r","value":{"value":1.5750000000000002,"dim":"Length"}}
+{"op":"SetParam","param":"k","value":{"value":0.441,"dim":"Ratio"}}
+{"op":"Rename","from":"front","to":"front_r"}
+{"op":"ReplaceFeature","id":"left_holes","text":"left_holes = cutout(lh, wall: left_ear)\n"}

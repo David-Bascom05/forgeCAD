@@ -1,0 +1,5 @@
+{"doc":"examples/machined/hub.fg"}
+{"op":"SetParam","param":"ri","value":{"value":14.897400000000001,"dim":"Length"}}
+{"op":"SetParam","param":"ro","value":{"value":18.900000000000002,"dim":"Length"}}
+{"op":"SetParam","param":"l","value":{"value":84,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}

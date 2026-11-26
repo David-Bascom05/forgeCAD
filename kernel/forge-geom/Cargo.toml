@@ -13,6 +13,22 @@ forge-math = { path = "../forge-math" }
 # the boolean's decision log (forge-bool's `decisions`): the hair-root choice recorded where a
 # collector asks (`intersect::hair_log`)
 decisions = []
+# certified surface-surface tracing (src/certify.rs, research/kernel-audit/certified-tracing.md):
+# every analytic pair's march checked by interval Krawczyk steps and exclusion, re-traced finer
+# once, else refused; off, nothing is compiled
+certified_trace = []
+# the tangent-node mend (src/node.rs) switched off, the trace kept as traced: for the mutation job
+# only (forge-lang's `node-mend-off`, .github/workflows/node-mutation.yml), which checks that
+# fg_mcp's plate is refused again
+node-mend-off = []
+# an ellipse's closest point by the old sampling (64 samples of the distance's slope, each sign
+# change bisected), not the exact critical points (curve.rs `ellipse_square`): kept one train, for
+# the differential test and to go back
+ellipse-foot-sampled = []
 
 [lints]
 workspace = true
+
+[[example]]
+name = "certify_sweep"
+required-features = ["certified_trace"]

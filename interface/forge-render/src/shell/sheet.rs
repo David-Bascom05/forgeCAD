@@ -89,7 +89,7 @@ pub fn title(c: SheetCmd) -> (&'static str, &'static str) {
         SheetCmd::CornerSeam => ("Corner Seam", "seam"),
         SheetCmd::CornerRelief => ("Corner Relief", "corner"),
         SheetCmd::CornerRound => ("Corner Round", "round"),
-        SheetCmd::Punch => ("PunchTool", "punch"),
+        SheetCmd::Punch => ("Punch Tool", "punch"),
         SheetCmd::Hardware => ("Insert Hardware", "pem"),
         SheetCmd::Unfold => ("Unfold", "flat"),
         _ => ("Sheet Metal", "sheet"),
@@ -1873,14 +1873,8 @@ impl SheetUi {
                 self.dxf_open = Some(DxfChoice::new(&s.id, path));
             }
             SheetCmd::BendTable => self.bend_table = !self.bend_table,
-            SheetCmd::BendSim => {
-                self.bend_sim = match self.bend_sim {
-                    Some(_) => None,
-                    None => Some(Box::new(super::bendsim::BendSimUi::open(
-                        &fg.source, &fg.path, "std-eu",
-                    ))),
-                }
-            }
+            // the Bend Simulation environment's (shell/env): entered by the host
+            SheetCmd::BendSim => {}
             SheetCmd::ShowExtents => self.extents = !self.extents,
             SheetCmd::ShowBends => self.bend_lines = !self.bend_lines,
             SheetCmd::Vendor => self.vendor.open = !self.vendor.open,

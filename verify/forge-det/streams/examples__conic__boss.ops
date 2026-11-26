@@ -1,0 +1,7 @@
+{"doc":"examples/conic/boss.fg"}
+{"op":"SetParam","param":"P","value":{"value":63,"dim":"Length"}}
+{"op":"SetParam","param":"T","value":{"value":8.4,"dim":"Length"}}
+{"op":"SetParam","param":"R","value":{"value":10.5,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"MoveFeature","id":"root","before":null}
+{"op":"ReplaceFeature","id":"top","text":"top = fillet(edges(between: (boss.side(pad.c), boss.end)), r, conic: rho)\n"}

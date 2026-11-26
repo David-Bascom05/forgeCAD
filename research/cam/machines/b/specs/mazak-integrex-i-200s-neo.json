@@ -1,0 +1,147 @@
+{
+ "vendor": "Mazak",
+ "model": "INTEGREX i-200S NEO",
+ "family": "INTEGREX i NEO",
+ "source": [
+  "https://www.mazak.com/us-en/detail/japan/integrex-h/i200snen/",
+  "https://www.mazak.com/uk-en/detail/japan/integrex-h/i200snen/",
+  "https://www.mazak.com/us-en/products/integrex-i-neo/"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "mill-turn",
+ "architecture": "Horizontal multi-tasking: main spindle + opposed second spindle (S), B-axis milling head (-30 to +210 deg) on X/Y/Z; lower turret not listed for S model. Which unit carries each linear axis not on page.",
+ "control": {
+  "standard": null,
+  "options": []
+ },
+ "travel_mm": {
+  "X": 535,
+  "Y": 210,
+  "Z": 900
+ },
+ "rotary": {
+  "A": null,
+  "B": {
+   "range_deg": [
+    -30,
+    210
+   ],
+   "rapid_rpm": null,
+   "indexing_or_full": "full; min increment 0.0001 deg"
+  },
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": 600,
+ "max_turning_length_mm": 850,
+ "chuck_size_in": 8,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 5000,
+  "rpm_min": null,
+  "taper_or_interface": null,
+  "power_kw": {
+   "cont": 15,
+   "30min": null,
+   "peak/other": "22 kW (40% ED)"
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": null
+  },
+  "curve_points": null
+ },
+ "sub_spindle": {
+  "chuck_size_in": 8,
+  "rpm_max": 5000,
+  "power_kw_cont": 15,
+  "power_kw_40ED": 18.5
+ },
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": {
+  "rpm_max": 12000,
+  "taper": "HSK-T63 / HSK-A63",
+  "power_kw_cont": 15,
+  "power_kw_40ED": 18.5,
+  "torque_nm_cont": 46.1,
+  "torque_nm_40ED": 57.3,
+  "B_range_deg": [
+   -30,
+   210
+  ]
+ },
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 48,
+  "Y": 40,
+  "Z": 40,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 36,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": 90,
+  "max_tool_dia_empty_adjacent_mm": 130,
+  "max_tool_len_mm": 300,
+  "max_tool_kg": 5
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": 3505,
+  "D": 2735,
+  "H": 2445
+ },
+ "weight_kg": 11130,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "bar_capacity_mm",
+  "changer.chip_to_chip_s",
+  "changer.tool_to_tool_s",
+  "control.standard",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rotary.C",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.rpm_min",
+  "spindle.taper_or_interface",
+  "spindle.torque_nm.cont",
+  "spindle.torque_nm.max",
+  "spindle_nose_type",
+  "tailstock"
+ ],
+ "options": [
+  "Bed length type 850U shown"
+ ],
+ "notes": "Metric values from the Mazak UK page (read through a page summarizer that refused verbatim reproduction, so lower fidelity); US page gives inch values: max machining dia Φ24 in (=609.6 mm, vs 600 mm on UK page), length 33 in, X 21 / Y 8 / Z 35 in, rapids X 1890 / Y,Z 1575 ipm, tools 4/5 in, 12 in, 11 lb, 138 x 108 x 96 in, 24537 lb. Main/second spindle torque, spindle nose, bar capacity, C-axis spec, tool change time not on page."
+}

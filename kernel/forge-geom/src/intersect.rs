@@ -384,7 +384,16 @@ pub fn curve_surface_in(
 fn line_in_range(l: &Line, range: Interval, s: &Surface) -> CurveSurface {
     // a plane: its one hit made in place (line_plane's values, without its list)
     if let Surface::Plane(p) = s {
-        return match line_plane_t(l, p) {
+        let meet = match line_plane_t(l, p) {
+            // (within ANGULAR of parallel: decided at the line's origin, sound only near it;
+            // parallel to the bit, as an axis edge against an axis plane, its distance moves by
+            // rounding alone, ~1e-16 of the range, and the origin's answer stands)
+            m @ (PlaneMeet::On | PlaneMeet::Apart) if p.normal_vec().dot(l.dir) != 0.0 => {
+                near_parallel_in(l, range, p, m)
+            }
+            m => m,
+        };
+        return match meet {
             PlaneMeet::On => CurveSurface::OnSurface,
             PlaneMeet::At(t) if range.contains(t) => CurveSurface::Hits(vec![CurveHit {
                 t,
@@ -407,6 +416,41 @@ fn line_in_range(l: &Line, range: Interval, s: &Surface) -> CurveSurface {
                 .collect(),
         ),
     }
+}
+
+/// A line within ANGULAR of parallel to a plane, over `range`: `line_plane_t` decided On or Apart
+/// at the line's origin, which a long range can carry more than LINEAR off (B1,
+/// research/kernel-audit/tilt-wrong-ok.md: an edge 1.6e7 long at 5e-12 rad to a wall). The signed
+/// distance is affine along the line: decided at the range's ends instead, On where both are
+/// within LINEAR, a crossing where they change sign (as off parallel), else Apart. `m`, the
+/// origin's answer, stands only for an unbounded range.
+#[cold]
+#[inline(never)]
+fn near_parallel_in(l: &Line, range: Interval, p: &Plane, m: PlaneMeet) -> PlaneMeet {
+    if !range.lo.is_finite() || !range.hi.is_finite() {
+        return m;
+    }
+    let (d0, d1) = (
+        p.signed_distance(l.eval(range.lo)),
+        p.signed_distance(l.eval(range.hi)),
+    );
+    if d0.abs() <= tol::LINEAR && d1.abs() <= tol::LINEAR {
+        return PlaneMeet::On;
+    }
+    if (d0 < -tol::LINEAR && d1 > tol::LINEAR) || (d0 > tol::LINEAR && d1 < -tol::LINEAR) {
+        // the zero of the affine distance, between the ends
+        return PlaneMeet::At(range.lo + range.width() * (d0 / (d0 - d1)));
+    }
+    if (d0 > tol::LINEAR && d1 > tol::LINEAR) || (d0 < -tol::LINEAR && d1 < -tol::LINEAR) {
+        return PlaneMeet::Apart;
+    }
+    // one end within LINEAR, the other beyond: a sign change (an end on the plane included) is
+    // the crossing, inside the range, as off parallel; else none in the range (an end within
+    // LINEAR on the far side's sign is no crossing, as off parallel, where t falls outside)
+    if (d0 <= 0.0 && d1 > 0.0) || (d0 >= 0.0 && d1 < 0.0) {
+        return PlaneMeet::At(range.lo + range.width() * (d0 / (d0 - d1)));
+    }
+    PlaneMeet::Apart
 }
 
 /// (frame, A, b, c) of Q(p) = p.A.p + b.p + c.
@@ -464,6 +508,16 @@ fn conic_quadric(f: &Frame, a: f64, b: f64, range: Interval, s: &Surface) -> Opt
         major: a,
         minor: b,
     });
+    // a conic in a plane's own plane, to within LINEAR everywhere: what the probes below would
+    // find, bounded in closed form (each point o + a cos t x + b sin t y lies within
+    // |n·(o − p0)| + a |n·x| + b |n·y| of the plane), so none need taking
+    if let Surface::Plane(pl) = s {
+        let n = pl.frame.z();
+        let reach = n.dot(f.origin - pl.frame.origin).abs() + a * n.dot(f.x()).abs() + b * n.dot(f.y()).abs();
+        if reach <= tol::LINEAR {
+            return Some(CurveSurface::OnSurface);
+        }
+    }
     let probes = 9;
     let on = (0..probes).all(|i| {
         s.distance(curve.eval(range.lo + range.width() * i as f64 / (probes - 1) as f64)) <= tol::LINEAR
@@ -762,12 +816,16 @@ pub(crate) fn subdivide_stretches(
     subdivide_pieces(c, range, s, near, stack)
 }
 
+/// A piece of the range being searched, `(lo, hi, speed bound, g at lo, g at hi)`, its ends' g
+/// where the search already has them.
+type Piece = (f64, f64, f64, Option<f64>, Option<f64>);
+
 fn subdivide_pieces(
     c: &Curve,
     range: Interval,
     s: &Surface,
     near: Option<Box3>,
-    mut stack: Vec<(f64, f64, f64)>,
+    stack: Vec<(f64, f64, f64)>,
 ) -> CurveSurface {
     let g = |t: f64| s.implicit(c.eval(t));
     let off = |p: Point3| {
@@ -780,36 +838,49 @@ fn subdivide_pieces(
     // the Lipschitz bound until its pieces are that small: past a budget, a piece 1/4096 of the
     // range is kept only where the surface's sign changes across it
     let (mut budget, coarse) = (100_000usize, range.width() / 4096.0);
-    let mut leaves: Vec<(f64, f64)> = Vec::new();
-    while let Some((a, b, lip)) = stack.pop() {
+    // each piece with g at its ends where already known: a kept piece's middle is its halves'
+    // shared end, so the leaves' ends below are mostly values the search worked out on its way
+    // down (the same g, at the same t: the same value), not to be worked out again
+    let known = |t: f64, v: Option<f64>| v.unwrap_or_else(|| g(t));
+    let mut stack: Vec<Piece> = stack
+        .into_iter()
+        .map(|(a, b, lip)| (a, b, lip, None, None))
+        .collect();
+    let mut leaves: Vec<(f64, f64, Option<f64>, Option<f64>)> = Vec::new();
+    while let Some((a, b, lip, ga, gb)) = stack.pop() {
         let m = 0.5 * (a + b);
         let p = c.eval(m);
         let reach = lip * 0.5 * (b - a) + tol::LINEAR;
-        if off(p) > reach || s.implicit(p).abs() > reach {
+        if off(p) > reach {
+            continue;
+        }
+        let gm = s.implicit(p);
+        if gm.abs() > reach {
             continue;
         }
         budget = budget.saturating_sub(1);
         if budget == 0 && b - a <= coarse && b - a > tol::LINEAR / lip {
-            if (g(a) < 0.0) != (g(b) < 0.0) {
-                leaves.push((a, b));
+            let (va, vb) = (known(a, ga), known(b, gb));
+            if (va < 0.0) != (vb < 0.0) {
+                leaves.push((a, b, Some(va), Some(vb)));
             }
             continue;
         }
         if b - a <= tol::LINEAR / lip {
-            leaves.push((a, b));
+            leaves.push((a, b, ga, gb));
             if leaves.len() > 20_000 {
                 return CurveSurface::Overlap;
             }
             continue;
         }
         // right half first so the left half pops first: leaves come out in order
-        stack.push((m, b, lip));
-        stack.push((a, m, lip));
+        stack.push((m, b, lip, Some(gm), gb));
+        stack.push((a, m, lip, ga, Some(gm)));
     }
     let mut hits = Vec::new();
     let mut i = 0;
     while i < leaves.len() {
-        let (lo, mut hi) = leaves[i];
+        let (lo, mut hi) = (leaves[i].0, leaves[i].1);
         let mut j = i + 1;
         while j < leaves.len() && leaves[j].0 <= hi {
             hi = leaves[j].1;
@@ -818,13 +889,14 @@ fn subdivide_pieces(
         // sign changes across the group's leaf boundaries
         let mut marks: Vec<f64> = vec![lo];
         marks.extend(leaves[i..j].iter().map(|l| l.1));
-        let vals: Vec<f64> = marks.iter().map(|&t| g(t)).collect();
+        let mut vals: Vec<f64> = vec![known(lo, leaves[i].2)];
+        vals.extend(leaves[i..j].iter().map(|l| known(l.1, l.3)));
         let changes: Vec<usize> = (1..vals.len())
             .filter(|&k| (vals[k - 1] < 0.0) != (vals[k] < 0.0))
             .collect();
         if changes.len() % 2 == 1 {
             let k = changes[0];
-            let t = bisect_sign(&g, marks[k - 1], marks[k]);
+            let t = bisect_sign_from(&g, marks[k - 1], marks[k], vals[k - 1], vals[k]);
             hits.push(CurveHit {
                 t,
                 point: c.eval(t),
@@ -881,10 +953,16 @@ fn chain_pieces(ic: &crate::intcurve::IntCurve, range: Interval, s: &Surface) ->
     out
 }
 
-fn bisect_sign(g: &impl Fn(f64) -> f64, mut a: f64, mut b: f64) -> f64 {
+/// Where `g` changes sign between `a` and `b`.
+#[cfg(test)]
+fn bisect_sign(g: &impl Fn(f64) -> f64, a: f64, b: f64) -> f64 {
+    bisect_sign_from(g, a, b, g(a), g(b))
+}
+
+/// Where `g` changes sign between `a` and `b`, given its values there.
+fn bisect_sign_from(g: &impl Fn(f64) -> f64, mut a: f64, mut b: f64, mut fa: f64, mut fb: f64) -> f64 {
     // Illinois: secant steps, the kept end's value halved when an end stays twice. Over a leaf a
     // surface's value along a curve is all but straight, so two or three steps reach rounding.
-    let (mut fa, mut fb) = (g(a), g(b));
     // an end on the surface is the crossing: a chain's sample that lies on it, say
     if fb.abs() <= 1e-13 {
         return b;
@@ -1138,10 +1216,30 @@ pub fn plane_cone(p: &Plane, c: &Cone) -> SurfaceSurface {
     }
     let e1z = e1.z;
 
+    // The cone's unit normal along its generator going up in local direction (dx, dy) from the axis:
+    // ∝ (cos θ, sin θ, -tan a) for the gradient of x² + y² - tan² a (z - apex)², at that azimuth.
+    let generator_normal = |dx: f64, dy: f64| {
+        let r = (dx * dx + dy * dy).sqrt().max(f64::MIN_POSITIVE);
+        Vec3::new(dx / r, dy / r, -k).normalize().map(|u| u.get())
+    };
+    // A plane within LINEAR of the apex crossing the cone is read as through it (two generators) only
+    // where that reading lies within LINEAR of the true section: the generators lie on the cone and
+    // within apex_dist of the plane, so within apex_dist / sin γ of its curve, γ the angle between
+    // the plane and the cone along them. Near tangent (γ small) the true section, a thin hyperbola,
+    // runs far from them (apex_planes 8, 14, 46: 3e-4, 9e-3, 8e-2): the general case below takes it.
+    let snaps = |dirs: &[Vec3]| {
+        dirs.iter().all(|d| {
+            generator_normal(d.x, d.y)
+                .is_some_and(|nc| apex_dist.abs() <= tol::LINEAR * n.get().cross(nc).length())
+        })
+    };
     if apex_dist.abs() <= tol::LINEAR {
         // Through the apex: generators where the in-plane direction makes the half-angle with the axis.
         let apex_w = to_world(apex);
         let cos_phi = c.cos_a() / e1z.max(f64::MIN_POSITIVE);
+        // (the apex alone, or one generator the plane touches along: as read, a tolerance site still
+        // open, G11c: whether the plane's gap to the cone stays within LINEAR over the faces' extent
+        // is not known here)
         if cos_phi > 1.0 + tol::ANGULAR {
             return SurfaceSurface::Points(vec![apex_w]);
         }
@@ -1149,17 +1247,23 @@ pub fn plane_cone(p: &Plane, c: &Cone) -> SurfaceSurface {
             let dir = f.unit_to_world(UnitVec3::new_unchecked(e1));
             return SurfaceSurface::Curves(vec![(Curve::Line(Line::new(apex_w, dir)), Contact::Touching)]);
         }
-        let sin_phi = (1.0 - cos_phi * cos_phi).sqrt();
-        let lines = [-1.0, 1.0].map(|side| {
-            let d = (e1 * cos_phi + e2 * (side * sin_phi))
-                .normalize()
-                .expect("unit combination");
-            (
-                Curve::Line(Line::new(apex_w, f.unit_to_world(d))),
-                Contact::Crossing,
-            )
-        });
-        return SurfaceSurface::Curves(lines.to_vec());
+        {
+            let sin_phi = (1.0 - cos_phi * cos_phi).sqrt();
+            let dirs = [-1.0, 1.0].map(|side| {
+                (e1 * cos_phi + e2 * (side * sin_phi))
+                    .normalize()
+                    .expect("unit combination")
+            });
+            if snaps(&[dirs[0].get(), dirs[1].get()]) {
+                let lines = dirs.map(|d| {
+                    (
+                        Curve::Line(Line::new(apex_w, f.unit_to_world(d))),
+                        Contact::Crossing,
+                    )
+                });
+                return SurfaceSurface::Curves(lines.to_vec());
+            }
+        }
     }
 
     // Origin of plane coordinates: the plane point nearest the apex.
@@ -1260,6 +1364,132 @@ mod tests {
     use crate::testing::*;
     use forge_math::rng::Rng;
     use forge_math::{Point2, dmath};
+
+    /// The subdivision reuses g at a leaf's ends from the search's own evaluations, which is
+    /// right only if a traced curve's point at t is the same whichever evaluation of the curve it
+    /// is: a procedural face's curve sets its parameter hints on its first evaluation, and its
+    /// very first one, before them, could take another way. Pinned on fresh curves (each t the
+    /// curve's first evaluation ever) round a screw face cut by a plane: the first point is the
+    /// later one, bit for bit, and the search's answer on a fresh curve is a warmed curve's.
+    #[test]
+    fn a_traced_curves_first_evaluation_is_its_later_ones() {
+        use crate::screw::{Screw, Section};
+        let sec = |a: (f64, f64), b: (f64, f64)| Section::Line {
+            a: Point2::new(a.0, a.1),
+            b: Point2::new(b.0, b.1),
+        };
+        let loop_ = [
+            sec((8.0, -1.0), (11.0, -1.0)),
+            sec((11.0, -1.0), (11.0, 1.0)),
+            sec((11.0, 1.0), (8.0, 1.0)),
+            sec((8.0, 1.0), (8.0, -1.0)),
+        ];
+        let faces = Screw::loop_faces(
+            Frame::WORLD,
+            &loop_,
+            0.0,
+            0.8,
+            Interval::new(0.0, 4.0 * dmath::PI),
+        )
+        .expect("a screw");
+        let cut = Surface::Plane(Plane::new(Frame::from_z(
+            Point3::new(0.0, 0.0, 3.0),
+            Vec3::new(0.2, 0.1, 1.0).normalize().unwrap(),
+        )));
+        let region = Box3::from_points([Point3::new(-15.0, -15.0, -5.0), Point3::new(15.0, 15.0, 15.0)]);
+        let across = Surface::Plane(Plane::new(Frame::from_z(Point3::new(0.0, 0.0, 0.0), UnitVec3::X)));
+        let mut seen = 0;
+        for face in faces {
+            let s = face.surface();
+            let fresh = || crate::intcurve::trace(&s, &cut, region).unwrap_or_default();
+            let n = fresh().len();
+            for k in 0..n {
+                let hi = fresh()[k].domain_hi();
+                for i in 0..8 {
+                    let t = hi * (i as f64 + 0.37) / 8.0;
+                    let c = Curve::Intersection(std::sync::Arc::new(fresh().swap_remove(k)));
+                    let first = across.implicit(c.eval(t));
+                    let again = across.implicit(c.eval(t));
+                    assert_eq!(first.to_bits(), again.to_bits(), "curve {k} t {t}");
+                    seen += 1;
+                }
+                let range = Interval::new(0.0, hi);
+                let cold = Curve::Intersection(std::sync::Arc::new(fresh().swap_remove(k)));
+                let warm = Curve::Intersection(std::sync::Arc::new(fresh().swap_remove(k)));
+                let _ = warm.eval(0.5 * hi);
+                let key = |r: CurveSurface| match r {
+                    CurveSurface::Hits(h) => h.iter().map(|h| (h.t.to_bits(), h.point)).collect::<Vec<_>>(),
+                    _ => Vec::new(),
+                };
+                assert_eq!(
+                    key(curve_surface(&cold, range, &across)),
+                    key(curve_surface(&warm, range, &across)),
+                    "curve {k}"
+                );
+            }
+        }
+        assert!(seen > 0, "the cut found no curve");
+    }
+
+    /// A line within ANGULAR of parallel to a plane, over a long range: decided over the range,
+    /// not at its origin (B1, research/kernel-audit/tilt-wrong-ok.md).
+    #[test]
+    fn near_parallel_line_over_a_long_range() {
+        // the wall y = 0; the edge from (0, -2e-5) to (1.6e7, 6e-5): 5e-12 rad, crossing at x = 4e6
+        let wall = Plane::new(Frame::from_z(
+            Point3::ORIGIN,
+            UnitVec3::new_unchecked(Vec3::new(0.0, 1.0, 0.0)),
+        ));
+        let (a, b) = (Point3::new(0.0, -2e-5, 0.0), Point3::new(1.6e7, 6e-5, 0.0));
+        let line = Line {
+            origin: a,
+            dir: (b - a).normalize().unwrap(),
+        };
+        let range = Interval::new(0.0, a.distance(b));
+        match curve_surface(&Curve::Line(line), range, &Surface::Plane(wall)) {
+            CurveSurface::Hits(h) => {
+                assert_eq!(h.len(), 1, "{h:?}");
+                assert!((h[0].point.x - 4e6).abs() < 1.0, "{h:?}");
+            }
+            other => panic!("{other:?}"),
+        }
+        // within LINEAR at both ends: on it; beyond LINEAR on one side at both: apart
+        let on = Line {
+            origin: Point3::new(0.0, -0.5e-5, 0.0),
+            dir: (Point3::new(1.6e7, 0.5e-5, 0.0) - Point3::new(0.0, -0.5e-5, 0.0))
+                .normalize()
+                .unwrap(),
+        };
+        assert!(matches!(
+            curve_surface(&Curve::Line(on), range, &Surface::Plane(wall)),
+            CurveSurface::OnSurface
+        ));
+        let off = Line {
+            origin: Point3::new(0.0, 2e-5, 0.0),
+            dir: (Point3::new(1.6e7, 9e-5, 0.0) - Point3::new(0.0, 2e-5, 0.0))
+                .normalize()
+                .unwrap(),
+        };
+        assert!(
+            matches!(curve_surface(&Curve::Line(off), range, &Surface::Plane(wall)), CurveSurface::Hits(h) if h.is_empty())
+        );
+        // one end within LINEAR (0.5e-5), the other beyond on the other side (-5.5e-5), the
+        // origin 2e-5 off: the crossing near the first end is kept (once the origin's Apart)
+        let (a, b) = (Point3::new(-4e6, 2e-5, 0.0), Point3::new(1.2e7, -6e-5, 0.0));
+        let near_end = Line {
+            origin: a,
+            dir: (b - a).normalize().unwrap(),
+        };
+        let from = a.distance(Point3::new(-1e6, 0.5e-5, 0.0));
+        let r = Interval::new(from, a.distance(b) - 1e6);
+        match curve_surface(&Curve::Line(near_end), r, &Surface::Plane(wall)) {
+            CurveSurface::Hits(h) => {
+                assert_eq!(h.len(), 1, "{h:?}");
+                assert!(h[0].point.y.abs() < 1e-9, "{h:?}");
+            }
+            other => panic!("{other:?}"),
+        }
+    }
 
     /// A spindle's quartic also holds its other sheet (apple for lemon): a line hits only the used one.
     #[test]
@@ -1643,6 +1873,32 @@ mod tests {
         } else {
             panic!("{res:?}");
         }
+    }
+
+    #[test]
+    fn a_plane_near_the_apex_and_near_tangent_is_not_read_as_through_it() {
+        // (apex_planes 8, 14, 46) a plane LINEAR / 2 off the apex, crossing the cone at 1e-3 rad
+        // along its generators: as two generators through the apex they sit d / sin γ ≈ 5e-3 from
+        // the true section, a thin hyperbola, so the hyperbola is what comes back
+        let cone = Cone::new(Frame::WORLD, 1.0, dmath::FRAC_PI_2 / 2.0).unwrap(); // apex at z = -1
+        let apex = cone.apex();
+        let tangent = Vec3::new(1.0, 0.0, -1.0).normalize().unwrap().get();
+        let n = (tangent + Vec3::new(0.0, 1e-3, 0.0)).normalize().unwrap();
+        let plane = Plane::new(Frame::from_z(apex + n.get() * (0.5 * tol::LINEAR), n));
+        let res = plane_cone(&plane, &cone);
+        assert!(
+            matches!(&res, SurfaceSurface::Curves(c) if matches!(c[0].0, Curve::Hyperbola(_))),
+            "{res:?}"
+        );
+        check_curves(&Surface::Plane(plane), &Surface::Cone(cone), &res);
+        // crossing clearly, as near the apex: still two generators
+        let n = Vec3::new(0.0, 1.0, 0.0).normalize().unwrap();
+        let plane = Plane::new(Frame::from_z(apex + n.get() * (0.5 * tol::LINEAR), n));
+        let res = plane_cone(&plane, &cone);
+        assert!(
+            matches!(&res, SurfaceSurface::Curves(c) if c.len() == 2 && matches!(c[0].0, Curve::Line(_))),
+            "{res:?}"
+        );
     }
 
     #[test]

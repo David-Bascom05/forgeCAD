@@ -1,0 +1,32 @@
+# haas-umc-750 head (measured on Haas's model)
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared ax = 381
+shared ay = 254
+shared nz = 611
+shared nr = 69
+shared nh = 44
+shared x0 = 218
+shared y0 = -34
+shared z0 = 655
+shared lx = 277
+shared ly = 428
+shared lz = 144
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (lx, ly))
+}
+housing = extrude(plan, lz)
+sketch nk(on: offset(xy, nz)) {
+  c = circle((ax, ay), nr)
+}
+nose = extrude(nk.c, nh)
+shared mx1 = 203
+shared my1 = -34
+shared mz1 = 801
+shared ml1 = 356
+shared mw1 = 540
+shared mh1 = 1341
+sketch more1(on: offset(xy, mz1)) {
+  outline = rect(corner: (mx1, my1), size: (ml1, mw1))
+}
+block1 = extrude(more1, mh1)

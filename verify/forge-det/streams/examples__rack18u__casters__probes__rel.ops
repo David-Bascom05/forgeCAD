@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/casters/probes/rel.fg"}
+{"op":"SetParam","param":"g.turn","value":{"value":42,"dim":"Angle"}}
+{"op":"SetParam","param":"s.along","value":{"value":0.5,"dim":"Length"}}
+{"op":"Rename","from":"base","to":"base_r"}
+{"op":"MoveFeature","id":"m2","before":null}
+{"op":"ReplaceFeature","id":"m3","text":"m3 = linear(g.turn, s.along, ratio: 0.2)\n"}

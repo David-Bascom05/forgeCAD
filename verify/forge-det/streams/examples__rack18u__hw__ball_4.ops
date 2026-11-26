@@ -1,0 +1,5 @@
+{"doc":"examples/rack18u/hw/ball_4.fg"}
+{"op":"SetParam","param":"db","value":{"value":4.2,"dim":"Length"}}
+{"op":"SetParam","param":"rb","value":{"value":2.1,"dim":"Length"}}
+{"op":"SetParam","param":"zref","value":{"value":2.1,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}

@@ -1,6 +1,7 @@
 //! A plain list of placed parts, and what of it a frame draws: frustum culling and level of detail.
 
 use crate::camera::View;
+use forge_math::ipow::Powi as _;
 
 /// Rows of a rigid transform: row major, translation in the last column.
 pub type Rows = [[f32; 4]; 3];
@@ -55,6 +56,12 @@ pub struct Scene {
     gone: Vec<bool>,
     /// Drawn only as a ghost (`Overlay::face_ghosts`): left out of the draws and picks.
     ghost: Vec<bool>,
+    /// Ghosts still cast their shadows (a body seen through, or cut away from the view, is still
+    /// there: the bend simulation's press). Off: a ghost casts none (Compare's other side).
+    pub ghost_shadows: bool,
+    /// Every placement left out of the draws and picks for now, the scene kept as it is (the
+    /// CAM simulation draws the part itself, in each setup's frame).
+    pub hidden: bool,
     /// Every placement's rows as the GPU holds them, and the bytes changed since the last upload.
     pub rows_bytes: Vec<u8>,
     dirty: Option<(usize, usize)>,
@@ -90,7 +97,7 @@ impl Scene {
         list.clear();
         draws.clear();
         let mut by_part: Vec<(u32, u32)> = (0..self.placements.len())
-            .filter(|&i| !self.gone[i] && !self.ghost[i])
+            .filter(|&i| !self.hidden && !self.gone[i] && (!self.ghost[i] || self.ghost_shadows))
             .map(|i| (self.placements[i].part, i as u32))
             .collect();
         by_part.sort_unstable();
@@ -163,6 +170,8 @@ impl Scene {
             boxes: Vec::new(),
             gone: placements.iter().map(|p| squashed(&p.rows)).collect(),
             ghost: vec![false; placements.len()],
+            ghost_shadows: false,
+            hidden: false,
             placements,
             rows_bytes,
             dirty: None,
@@ -196,6 +205,11 @@ impl Scene {
     pub fn set_part(&mut self, part: u32, center: [f32; 3], radius: f32, chords: Vec<f32>) {
         self.centers[part as usize] = center;
         self.chords[part as usize] = chords;
+        // a box kept from the old shape would frame the old part (a sheet's flat pattern framed as
+        // its folded part): the new sphere's cube until the caller gives the tight box
+        if let Some(b) = self.boxes.get_mut(part as usize) {
+            *b = (center.map(|c| c - radius), center.map(|c| c + radius));
+        }
         for i in 0..self.placements.len() {
             if self.placements[i].part == part {
                 let rows = self.placements[i].rows;
@@ -273,6 +287,14 @@ impl Scene {
         self.boxes = boxes;
     }
 
+    /// One part's box after its shape changed (after `set_part`); ignored when the scene keeps no
+    /// boxes.
+    pub fn set_part_box(&mut self, part: u32, b: crate::explode::Aabb) {
+        if let Some(x) = self.boxes.get_mut(part as usize) {
+            *x = b;
+        }
+    }
+
     /// The box of what's shown, by the parts' boxes (none without them, or with nothing shown).
     pub fn shown_box(&self) -> Option<crate::explode::Aabb> {
         if self.boxes.is_empty() {
@@ -296,11 +318,33 @@ impl Scene {
         all
     }
 
+    /// The corners of each shown part's own box, placed: a framing's subject, tighter than the
+    /// box round them all (an arm bent into an L fills little of its box).
+    pub fn shown_corners(&self) -> Vec<[f32; 3]> {
+        let mut out = vec![];
+        for p in &self.placements {
+            if squashed(&p.rows) {
+                continue;
+            }
+            let Some((lo, hi)) = self.boxes.get(p.part as usize) else {
+                continue;
+            };
+            for k in 0..8 {
+                let q = [0, 1, 2].map(|i| if k >> i & 1 == 1 { hi[i] } else { lo[i] });
+                out.push([0, 1, 2].map(|i| {
+                    let r = p.rows[i];
+                    r[0] * q[0] + r[1] * q[1] + r[2] * q[2] + r[3]
+                }));
+            }
+        }
+        out
+    }
+
     /// A sphere holding the whole scene.
     pub fn bounds(&self) -> ([f32; 3], f32) {
         if let Some((lo, hi)) = self.shown_box() {
             let c = [0, 1, 2].map(|k| (lo[k] + hi[k]) * 0.5);
-            let r = (0..3).map(|k| (hi[k] - lo[k]).powi(2)).sum::<f32>().sqrt() * 0.5;
+            let r = (0..3).map(|k| (hi[k] - lo[k]).ipow(2)).sum::<f32>().sqrt() * 0.5;
             return (c, r.max(1e-3));
         }
         let n = self.x.len().max(1) as f32;
@@ -342,7 +386,7 @@ impl Scene {
             (Some(a), Some((b, true))) => away(a, x, y, z, r) || away(b, x, y, z, r),
         };
         for i in 0..self.x.len() {
-            if self.gone[i] || self.ghost[i] {
+            if self.hidden || self.gone[i] || self.ghost[i] {
                 continue;
             }
             let (x, y, z, r) = (self.x[i], self.y[i], self.z[i], -self.r[i]);

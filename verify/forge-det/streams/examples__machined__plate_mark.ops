@@ -1,0 +1,7 @@
+{"doc":"examples/machined/plate_mark.fg"}
+{"op":"SetParam","param":"L","value":{"value":42,"dim":"Length"}}
+{"op":"SetParam","param":"W","value":{"value":31.5,"dim":"Length"}}
+{"op":"SetParam","param":"t","value":{"value":5.25,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"MoveFeature","id":"groove","before":null}
+{"op":"ReplaceFeature","id":"mark","text":"sketch mark(on: plate.end) {\n  c = line((m + groove_w / 2, W / 2), (L - m - groove_w / 2, W / 2))\n}\n"}

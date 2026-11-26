@@ -1,0 +1,6 @@
+{"doc":"examples/sheetmetal/probes/tray_misread.fg"}
+{"op":"SetParam","param":"t","value":{"value":1.5750000000000002,"dim":"Length"}}
+{"op":"SetParam","param":"r","value":{"value":1.5750000000000002,"dim":"Length"}}
+{"op":"SetParam","param":"k","value":{"value":0.441,"dim":"Ratio"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"ReplaceFeature","id":"left_holes","text":"left_holes = cutout(lh, wall: left)\n"}

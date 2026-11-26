@@ -1,0 +1,138 @@
+{
+ "vendor": "FANUC",
+ "model": "Robodrill a-D21MiB5",
+ "family": "ROBODRILL α-DiB5 Plus (BT30 drill/tap/mill centre)",
+ "source": [
+  "https://www.fanucamerica.com/products/robodrill/a-d21mib5-plus",
+  "https://www.fanucamerica.com/uploads/files/data-sheets/robodrill-a-d21mib5-plus.pdf",
+  "https://www.fanucamerica.com/uploads/files/data-sheets/robodrill-alphadib-plus-series-brochure.pdf",
+  "https://www.fanucamerica.com/products/robodrill/a-d21mib5-adv-plus",
+  "https://www.fanucamerica.com/uploads/files/data-sheets/robodrill-a-d21mib5-adv-plus.pdf"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "vmc3",
+ "architecture": "Vertical BT30 spindle, 3 linear axes (4th/5th via optional DDRiB / DDR-TiB rotary tables; controller up to 5 simultaneous axes). Which unit carries X/Y/Z is not stated in the fetched pages (memory says X/Y table with Z head on fixed column, unverified).",
+ "control": {
+  "standard": "FANUC Series 31i-B5 Plus (ROBODRILL 31iMB5 Plus), 10.4in LCD",
+  "options": [
+   "iHMI",
+   "ROBOT INTERFACE 2"
+  ]
+ },
+ "travel_mm": {
+  "X": 500,
+  "Y": 400,
+  "Z": 330
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": [
+  150,
+  480
+ ],
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": [
+  650,
+  400
+ ],
+ "table_load_kg": 300,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 10000,
+  "rpm_min": null,
+  "taper_or_interface": "7/24 No.30 (BT30); BBT30 dual contact listed as standard in brochure's standard spec list ('Double contact tooling (BBT30/NBT30)'), datasheet marks BBT30 row",
+  "power_kw": {
+   "cont": 4.0,
+   "30min": null,
+   "peak/other": "14.2 kW (1 min) at 10,000 rpm spindle"
+  },
+  "torque_nm": {
+   "cont": 13.6,
+   "max": 80
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 54,
+  "Y": 54,
+  "Z": 54,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": 30,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 21,
+  "options": [],
+  "tool_to_tool_s": 0.9,
+  "chip_to_chip_s": 1.6,
+  "max_tool_dia_mm": 80,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": 250,
+  "max_tool_kg": 3
+ },
+ "coolant": {
+  "through_spindle": "optional",
+  "notes": "Center through spindle 7 MPa optional; coolant tanks 100/200/140 L, CTS tanks 240/200 L"
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": 2000,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.rpm_min",
+  "spindle_center_to_column_mm",
+  "table_height_from_floor_mm"
+ ],
+ "options": [
+  "24,000 rpm spindle (35 N·m / 26 kW 1-min; 7.5 N·m / 5.5 kW cont)",
+  "high-torque 10,000 rpm",
+  "high-acceleration 10,000 / 24,000 rpm",
+  "tapping spindle 12,000 rpm",
+  "low-vibration high-speed 24,000 rpm",
+  "high-power spindle",
+  "high column +100/+200/+300 mm (with HC100 nose-to-table 250-580)",
+  "DDRiB rotary (center height 150, 80 kg body, ±0.0028 deg indexing) / DDR-TiB trunnion (swing dia 310 X300, 410 X500/X700; 200 or 100 rpm; 100-200 kg load)",
+  "CTS 7 MPa",
+  "ADV Plus variant: Z 400 mm, table 650x400, 400 kg table load, 4 kg max tool, 30 kg total tool mass, nose-to-table 280-680 with HC200, tool-to-tool 0.7 s, cut-to-cut 1.3 s, mass 2.2 t / 2.4 t with DDR-TiB"
+ ],
+ "notes": "Standard (Plus) recorded in fields; 'α' written as 'a' in model. Spindle: datasheet lists 10000 | 24000 rpm — web product card shows 24,000 'High Speed'; brochure's standard list has 10,000 rpm base with 24,000 as option, so 10,000 recorded. Nose-to-table 150-480 from fanucamerica.com web spec; Europe datasheet gives 250-580 'with HC100' (high column). Cut-to-cut 1.6 s (2 kg tool) per datasheet table; brochure prose says 1.5 s standard / 1.3 s ADV. Positioning <0.006 mm (ISO230-2:1988), repeatability <0.004 mm. Machine mass with DDR-TiB 2200 kg. Overall W/D/H only in a dimension drawing in the brochure that did not extract cleanly; not recorded. Air 160 L/min at 0.35-0.55 MPa. ADV Plus brochure: Z acceleration 2.2 G mentioned for the larger D28 Y500 model only. Europe datasheets © FANUC Europe 2022/2023 hosted on fanucamerica.com."
+}

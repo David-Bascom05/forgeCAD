@@ -5,6 +5,7 @@ use forge_lang::edit::apply_checked;
 use forge_lang::error::{Literal, Op, ParamKey};
 use forge_lang::values::{Dim, Src};
 use forge_lang::{Options, Run};
+use forge_math::ipow::Powi as _;
 use std::path::{Path, PathBuf};
 
 fn dir(name: &str) -> PathBuf {
@@ -260,7 +261,7 @@ fn e9_a_used_files_components_and_with_place_parts() {
     let disc = std::f64::consts::PI * 25.0;
     assert!((vol("lib.fg|cup(d=3)") - disc * 10.0).abs() < 1e-6);
     assert!((vol("lib.fg|cup()") - disc * 16.0).abs() < 1e-6);
-    assert!((vol("lib.fg|with:W=12") - 12.0f64.powi(3)).abs() < 1e-6);
+    assert!((vol("lib.fg|with:W=12") - 12.0f64.ipow(3)).abs() < 1e-6);
     // a param the file has not, or a component it has not, is refused typed
     let r = run_in(&d, "c = part(\"lib.fg\", with: {Q: 1})\n", true);
     assert!(
@@ -527,8 +528,17 @@ fn a_fan_out_of_components_runs_out_of_fuel() {
     src.push_str("top = part(l0)\n");
     let t = std::time::Instant::now();
     let r = forge_lang::run(&src, Options::default(), Default::default()).0;
-    assert!(r.errors.iter().any(|e| e.kind() == "Fuel"), "{:?}", kinds(&r));
-    assert!(t.elapsed().as_secs() < 60, "{:?}", t.elapsed());
+    eprintln!("fan-out: {:?}", t.elapsed());
+    // the work, not the clock (a loaded machine moves the time, printed for a person): of the
+    // 10^7 components the tree asks for, the run made the budget's and stopped there
+    assert!(
+        r.errors
+            .iter()
+            .any(|e| matches!(e, forge_lang::error::Error::Fuel { budget, .. }
+            if *budget == forge_lang::eval::TOTAL_COMPONENTS)),
+        "{:?}",
+        kinds(&r)
+    );
 }
 
 /// X1 (reach): after Extract, a SetParam on a param the file part reads reaches its values.

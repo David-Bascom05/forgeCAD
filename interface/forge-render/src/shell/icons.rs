@@ -6,6 +6,7 @@ use std::sync::OnceLock;
 
 const DATA: &str = include_str!("icons.txt");
 const SHEET: &str = include_str!("sheet_icons.txt");
+const CAM: &str = include_str!("cam_icons.txt");
 
 type Lines = Vec<Vec<(f32, f32)>>;
 
@@ -14,6 +15,7 @@ fn all() -> &'static HashMap<&'static str, Lines> {
     ICONS.get_or_init(|| {
         DATA.lines()
             .chain(SHEET.lines())
+            .chain(CAM.lines())
             .filter(|l| !l.starts_with('#'))
             .filter_map(|l| l.split_once(' '))
             .map(|(name, d)| (name, flatten(d)))
@@ -154,6 +156,7 @@ fn arc(line: &mut Vec<(f32, f32)>, a: (f32, f32), r: (f32, f32), large: bool, sw
 #[cfg(test)]
 mod tests {
     use super::*;
+    use forge_math::ipow::Powi as _;
 
     #[test]
     fn every_icon_parses_and_stays_near_its_grid() {
@@ -172,7 +175,7 @@ mod tests {
     #[test]
     fn a_circle_is_a_circle() {
         for p in flatten("M4 12A8 8 0 1 0 20 12A8 8 0 1 0 4 12").iter().flatten() {
-            assert!((((p.0 - 12.0).powi(2) + (p.1 - 12.0).powi(2)).sqrt() - 8.0).abs() < 1e-3);
+            assert!((((p.0 - 12.0).ipow(2) + (p.1 - 12.0).ipow(2)).sqrt() - 8.0).abs() < 1e-3);
         }
     }
 }

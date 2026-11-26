@@ -54,7 +54,8 @@ fn table() -> &'static Vec<(String, String, String, String)> {
 pub(super) fn scope(s: &Shell) -> &'static str {
     if s.drawing.is_some() {
         "drawing"
-    } else if s.is_asm() && s.tab == 0 {
+    } else if (s.is_asm() && s.tab == 0) || s.tab == super::super::ASM_TAB {
+        // the Assemble tab's own words (its Copy copies components, not the 3D Model's bodies)
         "asm"
     } else {
         match s.tab {
@@ -66,6 +67,10 @@ pub(super) fn scope(s: &Shell) -> &'static str {
             FLAT_TAB => "flat",
             THERMO_TAB => "thermo",
             super::super::WELD_TAB => "weld",
+            super::super::env::ENV_TAB => "env",
+            super::super::env::BENDSIM_TAB => "bendsim",
+            super::super::env::RENDER_TAB => "render",
+            super::super::CAM_TAB => "cam",
             _ => "tools",
         }
     }
@@ -87,12 +92,43 @@ pub(in crate::shell) fn key_of(s: &Shell, id: &str) -> Option<String> {
 }
 
 /// Why a tool is off, in words.
+/// A reason as a sentence: its first letter a capital.
+fn sentence(s: &str) -> String {
+    let mut c = s.chars();
+    c.next()
+        .map_or(String::new(), |f| f.to_uppercase().chain(c).collect())
+}
+
 fn why(s: &Shell, scope: &str, name: &str) -> String {
     if let Some(w) = why_off(name) {
         return w.to_string();
     }
+    if scope == "env"
+        && let Some(w) = s.env_why_off(name)
+    {
+        return w;
+    }
+    // the Machine Builder's own tools: off for its own reasons, never for want of a part
+    if s.env == Some(super::super::env::EnvId::MachineBuilder)
+        && let Some(m) = &s.machine
+        && let Some(w) = super::super::machine::why_off(m, name)
+    {
+        return w;
+    }
     if s.no_document() && scope != "thermo" {
         return "open or create a part first (File > New, or Open)".into();
+    }
+    if s.tab == super::super::ASM_TAB {
+        match name {
+            "Pattern" | "Mirror" | "Copy" => {
+                return "choose a top-level part in the browser first".into();
+            }
+            "Keep Position" | "Return to Design" => {
+                return "drag a part first (Free Move or Free Rotate): these keep or drop where it went"
+                    .into();
+            }
+            _ => {}
+        }
     }
     match scope {
         "sketch" if s.sketch.is_none() => {
@@ -165,6 +201,15 @@ impl Shell {
         let t = self.theme;
         ui.set_max_width(300.0);
         let (line, key) = tip(scope, tool.name).unwrap_or(("", ""));
+        // a Manufacture tool that is off: why, first
+        if tool.action.is_none()
+            && let Some(why) = self
+                .cam
+                .as_ref()
+                .and_then(|w| super::super::cam::disabled_why(w, tool.name))
+        {
+            ui.label(RichText::new(why).font(sans(12.0)).color(t.warn));
+        }
         let key = key_of(self, key);
         ui.horizontal(|ui| {
             ui.label(RichText::new(tool.name).font(semi(13.0)).color(t.ink));
@@ -178,9 +223,11 @@ impl Shell {
         }
         if tool.action.is_none() {
             ui.label(
-                RichText::new(format!("Off: {}", why(self, scope, tool.name)))
+                // the reason alone, as a sentence (UX-LEAD: no "Off:" before it)
+                RichText::new(sentence(&why(self, scope, tool.name)))
                     .font(sans(12.0))
-                    .color(t.error),
+                    // guidance, not an error (UX-LEAD): amber, as a warning is
+                    .color(t.warn),
             );
         }
         if !long {
@@ -241,7 +288,17 @@ mod tests {
             FLAT_TAB,
             THERMO_TAB,
             super::super::super::WELD_TAB,
+            super::super::super::env::ENV_TAB,
+            super::super::super::env::BENDSIM_TAB,
+            super::super::super::env::RENDER_TAB,
         ] {
+            use super::super::super::env::{BENDSIM_TAB, EnvId, RENDER_TAB};
+            s.env = match tab {
+                THERMO_TAB => Some(EnvId::Thermoform),
+                BENDSIM_TAB => Some(EnvId::BendSim),
+                RENDER_TAB => Some(EnvId::RenderStudio),
+                _ => None,
+            };
             s.tab = tab;
             let scope = scope(&s);
             let names: Vec<&str> = if tab == 1 {
@@ -259,8 +316,13 @@ mod tests {
                     .collect()
             };
             assert!(!names.is_empty(), "tab {tab}");
+            // the Capture group is on every tab: its tips are written once, as "capture"
+            let capture: Vec<&str> = super::super::super::capture::group(&s)
+                .map(|g| g.big.iter().chain(&g.small).map(|t| t.name).collect())
+                .unwrap_or_default();
             for n in names {
-                if !table().iter().any(|r| r.0 == scope && r.1 == n) {
+                let s0 = if capture.contains(&n) { "capture" } else { scope };
+                if !table().iter().any(|r| r.0 == s0 && r.1 == n) {
                     missing.push(format!("{scope},{n}"));
                 }
             }

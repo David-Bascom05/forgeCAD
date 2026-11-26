@@ -7,10 +7,10 @@
 //! cell is cleared when that bound reaches the limit, and that clears its whole stretch of the
 //! motion: nothing between samples is skipped. A witness (a real point of the piece at a real
 //! instant) under the limit is a proven violation. Cells are split until one of the two holds or
-//! they are smaller than the resolution, where the bound is within it of the truth.
+//! they are smaller than the resolution, where the bound is within it of the truth: a search whose
+//! least bound ends within the resolution under the limit, with no violation found, is `Near`.
 use forge_math::Interval;
-use std::cmp::Ordering;
-use std::collections::BinaryHeap;
+use forge_math::ipow::Powi as _;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Cell {
@@ -50,7 +50,7 @@ pub trait Problem {
     /// distance at its centre less its half-diagonal (the distance is 1-Lipschitz).
     fn lower(&self, e: &[Interval; 3]) -> (f64, f64) {
         let mid = e.map(|i| i.mid());
-        let hd = ((e.iter().map(|i| (0.5 * i.width()).powi(2)).sum::<f64>()).sqrt() + SLACK).next_up();
+        let hd = ((e.iter().map(|i| (0.5 * i.width()).ipow(2)).sum::<f64>()).sqrt() + SLACK).next_up();
         (self.sd_bounds(mid).0 - hd, hd)
     }
     /// How much each coordinate of the image counts when choosing what to split.
@@ -61,39 +61,20 @@ pub trait Problem {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Verdict {
-    /// Proven: the distance is at least `lower` >= limit - res at every point of the piece at every
+    /// Proven: the distance is at least `lower` >= limit at every point of the piece at every
     /// instant of the motion; `upper` is at least a real point's distance.
     Clear { lower: f64, upper: f64 },
+    /// Proven within the resolution, not past the limit: the distance is at least `lower`, with
+    /// limit - res <= lower < limit, at every point of the piece at every instant of the motion,
+    /// and no point was found under the limit. A caller warns of it (not a pass, not a hit);
+    /// `upper` is at least a real point's distance.
+    Near { lower: f64, upper: f64 },
     /// Proven: a real point of the piece, at a real instant (parameters `q`, image `at`), whose
     /// distance is at most `d` < limit (the error budget included).
     Hit { d: f64, q: [f64; 4], at: [f64; 3] },
     /// Neither proven (the budget ran out, or cells under the resolution held no witness below the
     /// limit); `lower` is what was proven. A caller refuses it.
     Undecided { lower: f64 },
-}
-
-#[derive(Clone, Copy, Debug)]
-struct Item {
-    lb: f64,
-    cell: Cell,
-}
-
-impl PartialEq for Item {
-    fn eq(&self, o: &Item) -> bool {
-        self.lb.total_cmp(&o.lb) == Ordering::Equal
-    }
-}
-impl Eq for Item {}
-impl PartialOrd for Item {
-    fn partial_cmp(&self, o: &Item) -> Option<Ordering> {
-        Some(self.cmp(o))
-    }
-}
-impl Ord for Item {
-    fn cmp(&self, o: &Item) -> Ordering {
-        // the least bound first
-        o.lb.total_cmp(&self.lb)
-    }
 }
 
 /// Cells spent by every search on this thread (for tracing).
@@ -121,6 +102,53 @@ fn bound<P: Problem>(pb: &P, c: &Cell) -> (f64, f64) {
     ((lb - sd_err(magnitude(&e))).next_down(), size)
 }
 
+/// The problem as forge-bb searches it: its cells' certified bounds, its witnesses (with their
+/// proven distances), and its split along the parameter that moves the image most.
+struct Brake<'a, P: Problem>(&'a P);
+
+impl<P: Problem> forge_bb::Search for Brake<'_, P> {
+    type Cell = Cell;
+    type Witness = ([f64; 4], [f64; 3]);
+    #[inline]
+    fn may_hold(&self, c: &Cell) -> bool {
+        self.0.may_hold(c)
+    }
+    #[inline]
+    fn bound(&self, c: &Cell) -> (f64, f64) {
+        bound(self.0, c)
+    }
+    #[inline]
+    fn witness(&self, c: &Cell) -> Option<(f64, Self::Witness)> {
+        let q = self.0.witness(c)?;
+        let at = self.0.image(q);
+        // at most this, past the error budget: a hit only if that is under the limit
+        let m = at.iter().map(|x| x.abs()).fold(0.0, f64::max);
+        let d = (self.0.sd_bounds(at).1 + sd_err(m)).next_up();
+        Some((d, (q, at)))
+    }
+    #[inline]
+    fn split(&self, c: &Cell) -> [Cell; 2] {
+        let k = split_dim(self.0, c);
+        let (a, b) = c.p[k].split();
+        let (mut ca, mut cb) = (*c, *c);
+        ca.p[k] = a;
+        cb.p[k] = b;
+        [ca, cb]
+    }
+}
+
+impl From<forge_bb::Verdict<([f64; 4], [f64; 3])>> for Verdict {
+    #[inline]
+    fn from(v: forge_bb::Verdict<([f64; 4], [f64; 3])>) -> Verdict {
+        match v {
+            forge_bb::Verdict::Clear { lower, upper } => Verdict::Clear { lower, upper },
+            forge_bb::Verdict::Near { lower, upper } => Verdict::Near { lower, upper },
+            forge_bb::Verdict::Hit { d, witness: (q, at) } => Verdict::Hit { d, q, at },
+            forge_bb::Verdict::Undecided { lower } => Verdict::Undecided { lower },
+        }
+    }
+}
+
 /// Searches `roots` for the least distance to the problem's target against `limit`, to
 /// resolution `res`, spending at most `budget` cells. `measure`: go on past the limit until the
 /// least distance itself is known within `res`; else stop as soon as the limit is proven.
@@ -136,7 +164,8 @@ pub fn certify<P: Problem>(
 }
 
 /// `certify`, measuring no further than `cut`: a distance known to be at least `cut` is not
-/// measured more finely (another piece is already nearer).
+/// measured more finely (another piece is already nearer). The search is forge-bb's: a near
+/// verdict is pressed further before it is returned (`forge_bb::certify`).
 pub fn certify_below<P: Problem>(
     pb: &P,
     roots: &[Cell],
@@ -146,96 +175,23 @@ pub fn certify_below<P: Problem>(
     measure: bool,
     cut: f64,
 ) -> Verdict {
-    let mut spent = 0usize;
-    let v = search(pb, roots, limit, res, budget, measure, cut, &mut spent);
+    let policy = forge_bb::Policy {
+        limit,
+        res,
+        budget,
+        measure: if measure {
+            forge_bb::Measure::To { cut }
+        } else {
+            forge_bb::Measure::Decide
+        },
+        near: forge_bb::OnNear::Press { refine: REFINE },
+    };
+    let (v, spent) = forge_bb::certify(&Brake(pb), roots, &policy);
     CELLS.fetch_add(spent, std::sync::atomic::Ordering::Relaxed);
-    v
+    v.into()
 }
 
-#[allow(clippy::too_many_arguments)]
-fn search<P: Problem>(
-    pb: &P,
-    roots: &[Cell],
-    limit: f64,
-    res: f64,
-    budget: usize,
-    measure: bool,
-    cut: f64,
-    spent: &mut usize,
-) -> Verdict {
-    let mut heap = BinaryHeap::new();
-    for c in roots {
-        if pb.may_hold(c) {
-            let (lb, _) = bound(pb, c);
-            heap.push(Item { lb, cell: *c });
-        }
-    }
-    let mut lower = f64::INFINITY;
-    let mut upper = f64::INFINITY;
-    while let Some(Item { lb, cell }) = heap.pop() {
-        // the least bound left settles it: so does every other
-        // measured to `res`, or to a fifth of the margin over the limit when that is more
-        let tol = res.max(0.2 * (upper - limit));
-        if (!measure && lb >= limit) || (measure && lb >= limit && lb >= upper.min(cut) - tol) {
-            lower = lower.min(lb);
-            break;
-        }
-        *spent += 1;
-        // measuring past a proven pass gets a tenth of the budget
-        if measure && lb >= limit && *spent > budget / 10 {
-            return Verdict::Clear {
-                lower: lower.min(lb),
-                upper: upper.max(lower.min(lb)),
-            };
-        }
-        if *spent > budget {
-            lower = lower.min(lb);
-            // what is left is proven clear of the limit: a pass, measured less finely
-            if lower >= limit - res {
-                return Verdict::Clear {
-                    lower,
-                    upper: upper.max(lower),
-                };
-            }
-            return Verdict::Undecided { lower };
-        }
-        if let Some(q) = pb.witness(&cell) {
-            let at = pb.image(q);
-            // at most this, past the error budget: a hit only if that is under the limit
-            let m = at.iter().map(|x| x.abs()).fold(0.0, f64::max);
-            let d = (pb.sd_bounds(at).1 + sd_err(m)).next_up();
-            if d < limit {
-                return Verdict::Hit { d, q, at };
-            }
-            upper = upper.min(d);
-        }
-        let (_, hd) = bound(pb, &cell);
-        if hd <= 0.5 * res {
-            lower = lower.min(lb);
-            continue;
-        }
-        let k = split_dim(pb, &cell);
-        let (a, b) = cell.p[k].split();
-        for half in [a, b] {
-            let mut c = cell;
-            c.p[k] = half;
-            if pb.may_hold(&c) {
-                let (lb, _) = bound(pb, &c);
-                heap.push(Item { lb, cell: c });
-            }
-        }
-    }
-    // every cell is settled: clear only if each was proven to within the resolution, else
-    // undecided (a leaf under it with no witness below the limit decides nothing)
-    if lower >= limit - res {
-        Verdict::Clear {
-            lower,
-            upper: upper.max(lower),
-        }
-    } else {
-        Verdict::Undecided { lower }
-    }
-}
+pub use forge_bb::REFINE;
 
 /// The parameter whose width moves the image most: the spatial ones count as their width, the
 /// motion by how far the cell's centre travels across it.
@@ -252,7 +208,7 @@ fn split_dim<P: Problem>(pb: &P, c: &Cell) -> usize {
         let (a, b) = (pb.image(lo), pb.image(hi));
         let wt = pb.weights();
         let mv = (0..3)
-            .map(|i| (wt[i] * (a[i] - b[i])).powi(2))
+            .map(|i| (wt[i] * (a[i] - b[i])).ipow(2))
             .sum::<f64>()
             .sqrt();
         // a parameter that moves nothing at the centre may still curve: count its width a little
@@ -267,6 +223,38 @@ fn split_dim<P: Problem>(pb: &P, c: &Cell) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// One forge-bb search of a problem, as `certify_below` makes it, without the pressing on.
+    #[allow(clippy::too_many_arguments)]
+    fn search<P: Problem>(
+        pb: &P,
+        roots: &[Cell],
+        limit: f64,
+        res: f64,
+        budget: usize,
+        measure: bool,
+        cut: f64,
+        extend: bool,
+        spent: &mut usize,
+        ended: &mut bool,
+    ) -> Verdict {
+        let p = forge_bb::Policy {
+            limit,
+            res,
+            budget,
+            measure: if measure {
+                forge_bb::Measure::To { cut }
+            } else {
+                forge_bb::Measure::Decide
+            },
+            near: if extend {
+                forge_bb::OnNear::Press { refine: REFINE }
+            } else {
+                forge_bb::OnNear::Report
+            },
+        };
+        forge_bb::search(&Brake(pb), roots, &p, spent, ended).into()
+    }
 
     /// A unit segment moving along x by s, against a ball of radius 1 at (3, 0, 0).
     struct Seg1;
@@ -284,7 +272,7 @@ mod tests {
             [q[0] + q[3], q[1], 0.0]
         }
         fn sd(&self, p: [f64; 3]) -> f64 {
-            ((p[0] - 3.0).powi(2) + p[1].powi(2) + p[2].powi(2)).sqrt() - 1.0
+            ((p[0] - 3.0).ipow(2) + p[1].ipow(2) + p[2].ipow(2)).sqrt() - 1.0
         }
     }
 
@@ -328,7 +316,7 @@ mod tests {
     fn just_inside_and_just_outside_the_limit() {
         // the true least distance is 1 - s1: limit 0.5, resolution 1e-4
         match certify(&Seg1, &[root(0.498)], 0.5, 1e-4, 1_000_000, false) {
-            Verdict::Clear { lower, .. } => assert!((0.5 - 1e-4..=0.502).contains(&lower), "{lower}"),
+            Verdict::Clear { lower, .. } => assert!((0.5..=0.502).contains(&lower), "{lower}"),
             v => panic!("{v:?}"),
         }
         match certify(&Seg1, &[root(0.502)], 0.5, 1e-4, 1_000_000, false) {
@@ -373,6 +361,168 @@ mod tests {
             certify(&Blind, &[root(0.3)], 0.5, 1e-3, 1_000_000, false),
             Verdict::Clear { .. }
         ));
+    }
+
+    #[test]
+    fn measuring_past_a_pass_clears_nothing_left_unproven() {
+        // one point 0.1 from the ball, a leaf at once, that nothing can prove (no witness); then
+        // the segment far from it, whose bound is past the limit: measuring it out of budget
+        // must not call the first clear
+        let near = Cell {
+            p: [
+                Interval::point(1.0),
+                Interval::point(0.0),
+                Interval::point(0.0),
+                Interval::point(0.9),
+            ],
+            tag: 0,
+        };
+        match certify(&Blind, &[near, root(0.0)], 0.5, 0.01, 5, true) {
+            Verdict::Undecided { lower } => assert!(lower < 0.5 - 0.01, "{lower}"),
+            v => panic!("{v:?}"),
+        }
+        // the far one alone, measured: still a pass
+        assert!(matches!(
+            certify(&Blind, &[root(0.0)], 0.5, 0.01, 5, true),
+            Verdict::Clear { .. }
+        ));
+    }
+
+    #[test]
+    fn within_the_resolution_is_near_never_clear() {
+        // the true least distance 1 - 0.5003 = 0.4997: under the limit 0.5 by less than the
+        // resolution 1e-3, and nothing can name a point below it: near, with the bound proven
+        match certify(&Blind, &[root(0.5003)], 0.5, 1e-3, 1_000_000, false) {
+            Verdict::Near { lower, upper } => {
+                assert!(
+                    (0.5 - 1e-3..0.5).contains(&lower) && lower <= 0.4997 + 1e-9,
+                    "{lower}"
+                );
+                assert!(upper >= lower, "{upper}");
+            }
+            v => panic!("{v:?}"),
+        }
+        // measured, and out of budget: the same rule at every exit
+        assert!(matches!(
+            certify(&Blind, &[root(0.5003)], 0.5, 1e-3, 1_000_000, true),
+            Verdict::Near { .. }
+        ));
+        // a clear verdict is past the limit, always
+        for (s1, res, budget, measure) in [
+            (0.3, 1e-3, 1_000_000, false),
+            (0.498, 1e-4, 1_000_000, false),
+            (0.4999, 1e-3, 1_000_000, true),
+            (0.3, 1e-3, 5, true),
+        ] {
+            if let Verdict::Clear { lower, .. } = certify(&Blind, &[root(s1)], 0.5, res, budget, measure) {
+                assert!(lower >= 0.5, "{s1}: {lower}");
+            }
+        }
+    }
+
+    /// A segment across the ball's near side, at x = 3 - 1 - gap: its least distance `gap`, at
+    /// y = 0, a smooth minimum (a coarse cell's bound falls short of it by its half-diagonal).
+    fn across(gap: f64) -> Cell {
+        Cell {
+            p: [
+                Interval::point(2.0 - gap),
+                Interval::new(-1.0, 1.0),
+                Interval::point(0.0),
+                Interval::point(0.0),
+            ],
+            tag: 0,
+        }
+    }
+
+    #[test]
+    fn a_near_pair_is_refined() {
+        // 0.002 past the limit: at the resolution 0.05 the search stops near; searched again
+        // finer it is proven clear
+        let mut spent = 0;
+        let v = search(
+            &Blind,
+            &[across(0.502)],
+            0.5,
+            0.05,
+            1_000_000,
+            false,
+            f64::INFINITY,
+            true,
+            &mut spent,
+            &mut false,
+        );
+        assert!(matches!(v, Verdict::Near { .. }), "{v:?}");
+        match certify(&Blind, &[across(0.502)], 0.5, 0.05, 1_000_000, false) {
+            Verdict::Clear { lower, .. } => assert!((0.5..=0.502).contains(&lower), "{lower}"),
+            v => panic!("{v:?}"),
+        }
+        // 0.0003 under the limit, nothing to name: near at every resolution, the bound proven
+        // and the best of them kept
+        match certify(&Blind, &[across(0.4997)], 0.5, 0.05, 1_000_000, false) {
+            Verdict::Near { lower, .. } => {
+                assert!((0.5 - 0.05 / 64.0..=0.4997 + 1e-9).contains(&lower), "{lower}")
+            }
+            v => panic!("{v:?}"),
+        }
+        // with a witness, the finer search finds the point under the limit
+        assert!(matches!(
+            certify(&Seg1, &[across(0.4997)], 0.5, 0.05, 1_000_000, false),
+            Verdict::Hit { .. }
+        ));
+        // clear at once: no second search
+        let mut once = 0;
+        let v1 = search(
+            &Blind,
+            &[across(0.7)],
+            0.5,
+            0.05,
+            1_000_000,
+            false,
+            f64::INFINITY,
+            true,
+            &mut once,
+            &mut false,
+        );
+        assert!(matches!(v1, Verdict::Clear { .. }));
+        let v2 = certify(&Blind, &[across(0.7)], 0.5, 0.05, 1_000_000, false);
+        assert_eq!(v1, v2);
+    }
+
+    #[test]
+    fn a_search_the_budget_ends_near_goes_on_once() {
+        // budgets the search runs out of while near: it goes on as a search with twice the budget
+        // would, and some of those come out clear
+        let run = |budget: usize, measure: bool, extend: bool| {
+            let (mut n, mut ended) = (0, false);
+            let v = search(
+                &Blind,
+                &[across(0.53)],
+                0.5,
+                0.05,
+                budget,
+                measure,
+                f64::INFINITY,
+                extend,
+                &mut n,
+                &mut ended,
+            );
+            (v, n, ended)
+        };
+        let (mut went_on, mut cleared) = (0, 0);
+        for budget in 2..400 {
+            for measure in [false, true] {
+                let (w, _, ended) = run(budget, measure, false);
+                let v = run(budget, measure, true);
+                if matches!(w, Verdict::Near { .. }) && ended {
+                    assert_eq!(v, run(2 * budget, measure, false), "{budget} {measure}");
+                    went_on += 1;
+                    cleared += matches!(v.0, Verdict::Clear { .. }) as usize;
+                } else {
+                    assert_eq!(v.0, w, "{budget} {measure}");
+                }
+            }
+        }
+        assert!(went_on > 0 && cleared > 0, "{went_on} {cleared}");
     }
 
     #[test]

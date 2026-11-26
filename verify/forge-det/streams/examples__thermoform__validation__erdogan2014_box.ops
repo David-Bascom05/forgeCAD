@@ -1,0 +1,4 @@
+{"doc":"examples/thermoform/validation/erdogan2014_box.fg"}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"MoveFeature","id":"floor","before":null}
+{"op":"ReplaceFeature","id":"part","text":"part = thermoform(cav, t: 2, material: \"HIPS\", tool: \"female\", flange: 65, shrink: ratio(0), vent: false, temperature: 180, pressure: ratio(0.09))\n"}

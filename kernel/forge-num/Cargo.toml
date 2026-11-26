@@ -1,0 +1,23 @@
+[package]
+name = "forge-num"
+description = "ForgeCAD's shared numeric core, written for Aeneas: exact naturals and integers (an i128 fast path), exact dyadics, the exact-real sign, outward intervals"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+# CAM's outward intervals and exact reals (ival, real): only their clients enable it, so a build
+# without CAM (the kernel's binaries) compiles forge-num as numbers alone. With them in, the crate's
+# std Vec growth serves several element types and loses its u32 specialisation, which every crate's
+# `Vec<u32>::push` shares (shared generics): kernel regen lines paid ~10 Ir a push for nothing.
+real = []
+# CAM's interval rules without the exact-zero rule (an exact zero operand rounded outward like any
+# other): the rules as they were, kept one train for comparison. A build feature, never a runtime
+# switch.
+ival-strict = ["real"]
+
+[dependencies]
+
+[lints]
+workspace = true

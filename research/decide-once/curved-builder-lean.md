@@ -100,3 +100,19 @@ The proof is stated over these artifacts; it never reruns the floats. What the b
 4. The assembly: the builder's recorded decisions give `FacetData`, F1–F4 and F6's hypotheses, and so route B's theorem.
 
 R1/Faithful follows, but only for the parts curved Rust builds (master, 2026-11-23).
+
+## S4 as proven (AngleOrder.lean, 83b5f267), with its three direction cases
+
+`before_iff_arg`: angle_cmp (half-plane class, then the sign of cross2) holds exactly when
+`arg u < arg v`, for nonzero 2D vectors. Each case of `uv_dir` (boolean.rs B:5101) feeds it
+2D vectors:
+
+| case | the way's 2D vector | screens |
+|---|---|---|
+| regular point | `(a, b)` from the 2×2 Gram solve (`solve2`), `a` negated when the face is not same_sense | the Gram determinant's enclosure excludes 0; enclosures of `(a, b)`. A singular Gram away from an apex or pole is a typed refusal, not `round_point` |
+| sphere pole | `(dir·e1, dir·(n × e1))` in an orthonormal tangent frame | the pole is keyed (the frame's ±z); `n` is the exact pole normal, which replaces the 1e-6 offset |
+| cone apex (`round_point`) | `(cos u, ±sin u)`: the ruling's direction round the axis | the apex is keyed (the cone frame's origin); the ruling's `u` is constant along it, so the 1e-3 step's projection is exact up to its screen; the sign comes from the cone's orientation and same_sense |
+
+In every case a cross product whose enclosure holds 0 is a tangent tie. Today's `by_chords`
+becomes that branch: the per-question exact curvature order, or a typed refusal. The class signs
+need `y` (and `x` on the axis) decided; an exact 0 there is a keyed fact.

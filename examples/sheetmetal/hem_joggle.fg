@@ -1,0 +1,22 @@
+# A 300 x 40 strip, 1 steel: an open hem on one long edge, a 6 mm joggle (a Z) on the other.
+# frame: the strip's top skin on xy, x along it, y across; the hem on y = 0, the Z on y = 40.
+# It shows the special tooling on a three-station press: the Z made in one stroke on WILA's offset
+# holders and Z6 inserts, the hem pre-bent on a Trumpf acute punch in a 30 degree V, then
+# flattened on WILA's flattening pair:
+#   bendsim press trumpf-trubend-5130 punches trumpf/OW222-K,wila/BIU-041,wila/HU-001+INZU-002-Z6 dies trumpf/EV002_30deg,wila/OZU-384,wila/HU-006+INZU-002-Z6 stations auto
+shared t = 1
+shared r = 1
+shared k = ratio(0.4)
+shared length = 300             # along
+shared width = 40               # across
+shared web_h = 7                # the web, outside: a 6 mm offset with the far wall folded down
+shared far_l = 30               # the joggle's far wall
+shared leg = 10                 # the hem's leg
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (length, width))
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k))
+lip = hem(base.edge(plan.outline[0]), kind: "open", gap: t, length: leg)
+web = flange(base.edge(plan.outline[2]), height: web_h)
+far = flange(web.tip, height: far_l, side: "down")

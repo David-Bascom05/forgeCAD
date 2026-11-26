@@ -1,0 +1,26 @@
+# What the repository may hold, by size and type (tools/ci/model-licences.py): no raw vendor archive
+# (zip, 7z, rar) and no file over 20 MB. Models need no licence record. Every push and pull
+# request: one git ls-files and a stat per file.
+name: model-licences
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: no raw archive, no file over 20 MB
+        run: python3 tools/ci/model-licences.py .

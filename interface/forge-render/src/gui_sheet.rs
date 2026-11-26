@@ -8,6 +8,11 @@ use crate::shell::{FLAT_TAB, SHEET_TAB};
 impl Gui {
     /// A Sheet Metal or Flat Pattern tab command.
     pub fn sheet_cmd(&mut self, c: SheetCmd) {
+        // the Flat Pattern and Bend Simulation are environments (shell/env)
+        if c == SheetCmd::BendSim {
+            self.env_enter(crate::shell::env::EnvId::BendSim);
+            return;
+        }
         let Some(fg) = &self.shell.fg else {
             self.shell.status = "Sheet metal: open or make a Forge part first".into();
             return;
@@ -26,9 +31,11 @@ impl Gui {
                     self.shell.tab = 0;
                 }
                 if c == SheetCmd::FlatPattern {
+                    self.shell.env = Some(crate::shell::env::EnvId::FlatPattern);
                     self.shell.tab = FLAT_TAB;
                 }
                 if c == SheetCmd::Folded {
+                    self.shell.env = None;
                     self.shell.tab = SHEET_TAB;
                 }
                 if let Some(d) = &self.shell.sheet.dlg
@@ -98,7 +105,7 @@ impl Gui {
                         got
                     };
                     if let Some(d) = &mut self.shell.sheet.dlg {
-                        d.error = got.err().map(|e| format!("{}: {}", e.kind(), e.text()));
+                        d.error = got.err().map(|e| e.text());
                     }
                     self.fg_text();
                 }
@@ -115,7 +122,7 @@ impl Gui {
                     let Some(s) = &mut self.fg else { continue };
                     self.shell.status = match s.apply_all(ops) {
                         Ok(()) => "Sheet metal defaults set".into(),
-                        Err(e) => format!("refused: {}: {}", e.kind(), e.text()),
+                        Err(e) => format!("refused: {}", e.text()),
                     };
                     self.fg_text();
                 }
@@ -180,7 +187,7 @@ impl Gui {
         };
         let Some(s) = &mut self.fg else { return };
         if let Err(e) = s.apply_all(ops) {
-            d.error = Some(format!("{}: {}", e.kind(), e.text()));
+            d.error = Some(e.text());
             self.shell.sheet.dlg = Some(d);
             return;
         }

@@ -1,0 +1,5 @@
+{"doc":"examples/rack18u/frame/joints.fg"}
+{"op":"SetParam","param":"t3","value":{"value":3.1710000000000003,"dim":"Length"}}
+{"op":"Rename","from":"base_pan","to":"base_pan_r"}
+{"op":"MoveFeature","id":"j_rr2","before":null}
+{"op":"ReplaceFeature","id":"j_lr","text":"j_lr = fastened(rail_lr.web_bot[0], car_tl.rail[k_last - kr])\n"}

@@ -1,6 +1,7 @@
 //! Measure in the app driven as a person drives it: the pointer moved and clicked on the view
 //! (no picks set by hand), orbiting, other tabs, Esc. GPU tests: skipped where there is none.
 
+use forge_math::ipow::Powi as _;
 use forge_render::gui::{Gui, Headless};
 use forge_render::render::Entity;
 use forge_render::shell::Action;
@@ -396,7 +397,7 @@ fn in_the_rack_occurrences_are_measured_where_they_stand() {
     let t = measured(&mut h, "rail_lf/vertex:0", Some("rail_rr/vertex:0"));
     close(
         value(&t, "Minimum distance"),
-        ((rr.0 - lf.0).powi(2) + (rr.1 - lf.1).powi(2)).sqrt(),
+        ((rr.0 - lf.0).ipow(2) + (rr.1 - lf.1).ipow(2)).sqrt(),
     );
     // the pans: the top pan's outer face at 906 (SPEC 5.2), so the gap is 906 less both pans
     let hb = value(&measured(&mut h, "base_pan/body", None), "Box Z");

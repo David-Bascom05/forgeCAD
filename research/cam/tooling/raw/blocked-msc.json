@@ -1,0 +1,10 @@
+{
+ "source": "MSC Industrial",
+ "blocked": [
+  {
+   "url": "https://www.mscdirect.com/",
+   "why": "HTTP 403 (Access Denied) on home page and search"
+  }
+ ],
+ "records": []
+}

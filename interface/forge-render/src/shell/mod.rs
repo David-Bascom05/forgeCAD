@@ -11,6 +11,10 @@ pub mod asmpart;
 pub mod asmtools;
 mod banner;
 pub mod bendsim;
+mod bendsim_cards;
+mod bendsim_env;
+pub mod cam;
+pub mod capture;
 pub mod content;
 pub mod dialog;
 pub mod docs;
@@ -23,7 +27,8 @@ pub mod dwgdoc;
 mod dwgdoc_edit_ui;
 mod dwgdoc_ui;
 pub mod dwgprops;
-mod empty;
+pub(crate) mod empty;
+pub mod env;
 pub mod fg;
 pub mod fgasm;
 pub mod fgdialog;
@@ -36,6 +41,12 @@ pub mod harness_look;
 pub mod harness_ui;
 pub mod icons;
 pub mod inspect;
+pub mod lib_form;
+pub mod machine;
+pub mod machine_brake;
+mod machine_parts;
+pub mod machine_tooling;
+pub mod machine_workholding;
 pub mod markup;
 pub mod materials;
 mod measure_ui;
@@ -43,15 +54,19 @@ pub mod occedit;
 pub mod panel;
 pub(crate) mod placed;
 mod ribbon;
+pub mod robot;
 pub mod settings;
 pub mod sheet;
 mod sheetui;
 pub mod sketching;
+pub mod studio_env;
+pub mod studio_model;
 pub mod theme;
 pub mod thermo;
 pub mod thermo_material;
 pub mod thermo_ui;
 mod tree;
+pub mod ux;
 pub mod vendorui;
 pub mod versions;
 mod visual_style;
@@ -77,6 +92,12 @@ pub const ASM_TAB: usize = 8;
 pub const HARNESS_TAB: usize = 9;
 /// A part's Weldments tab: structural members, their ends and plates, the cut list.
 pub const WELD_TAB: usize = 10;
+/// A machining document's Manufacture tab: setups, operations, posts (`cam/`).
+pub const CAM_TAB: usize = 11;
+
+/// The narrowest the view is beside an environment's properties column; narrower, the two take
+/// turns (UX-LEAD: about 320 px).
+const VIEW_MIN_W: f32 = 320.0;
 
 const TITLE_H: f32 = 36.0;
 const TABS_H: f32 = 34.0;
@@ -171,8 +192,21 @@ pub enum Action {
     DialogCancel,
     /// A Forge file's ribbon command.
     Fg(FgCmd),
+    /// Into an environment (`env/`), from its tile, a deep link or the agent; out of the one in
+    /// (its Finish); one of its own ribbon commands.
+    EnterEnv(env::EnvId),
+    ExitEnv,
+    Env(env::EnvId, u16),
+    /// Photo, Record and their settings (`capture.rs`), on every environment's ribbon.
+    Capture(capture::Capture),
+    /// The Manufacture workspace's command.
+    Cam(cam::Ask),
     /// The Manage tab's Versions group: the Versions tab, opened at what was asked.
     Versions(versions::VersionsCmd),
+    /// The Machine Builder workspace (shell/machine.rs), opened or closed.
+    MachineBuilder,
+    /// A Machine Builder command (its ribbon groups, the environment).
+    Machine(machine::MachineCmd),
     /// Measure, Section, iProperties and the centre of gravity.
     Inspect(inspect::InspectCmd),
     /// A sheet metal command, from the Sheet Metal or Flat Pattern tab.
@@ -314,6 +348,16 @@ pub struct Shell {
     pub tab: usize,
     pub name: String,
     pub status: String,
+    /// The status line's two layers: what a standing state last wrote there (`state_status`),
+    /// and a command's own words over it, with when they came. An event is never written over
+    /// by a state the next frame: it shows ~4 s or until the next press, then the state is back.
+    status_state: String,
+    status_event: Option<(String, f64)>,
+    /// A link's file the page opens once the project's files are in (`?open=`): the empty view
+    /// says so, with a spinner, until then.
+    pub waiting: Option<String>,
+    /// The status line as last drawn: cut between its parts to fit (the tests read it).
+    pub status_shown: String,
     pub view: ViewState,
     pub out: Vec<Action>,
     /// Where the viewport is, in logical pixels, snapped to device pixels.
@@ -328,6 +372,11 @@ pub struct Shell {
     pub cube_region: Option<[i8; 3]>,
     /// The part's picture, drawn by the renderer this same frame.
     pub view_tex: Option<egui::TextureId>,
+    /// Laid over `view_tex` when an environment draws the view itself: its view cube.
+    pub view_over_tex: Option<egui::TextureId>,
+    /// How much of `view_over_tex` shows (1: all): the Render Studio's fade from its raster
+    /// stand-in to the traced picture.
+    pub view_over_alpha: f32,
     /// The view cube's words, in the view's device pixels: real type over its picture.
     pub cube_labels: Vec<crate::viewcube::Label>,
     pub cube_place: Option<crate::viewcube::Place>,
@@ -353,6 +402,14 @@ pub struct Shell {
     pub sketch_pick: bool,
     /// What's on the model and takes the pointer from the view.
     pub view_blocks: Vec<Rect>,
+    /// A window too narrow for the view beside an environment's properties column (the view
+    /// would get under `VIEW_MIN_W`): the two take turns in the view's place (UX-LEAD).
+    pub props_alternate: bool,
+    /// Taking turns: the column is the one shown (else the view). A new sheet in the column
+    /// shows it again.
+    pub column_shown: bool,
+    /// The view is behind the column this frame: not drawn over, not clicked, its tools hidden.
+    pub view_hidden: bool,
     /// The browser's width as dragged; None for the mode's default.
     pub side_px: Option<f32>,
     /// Place from Content Center: the standard parts library's dialog.
@@ -366,6 +423,15 @@ pub struct Shell {
     pub file_menu: bool,
     /// The sheet metal environment: its tabs, dialogs and flat pattern.
     pub sheet: sheet::SheetUi,
+    /// The environment the document is in (`env/`), if any.
+    pub env: Option<env::EnvId>,
+    /// The Render Studio's choices (`studio_env.rs`): appearances, light, camera, output.
+    pub studio: studio_env::StudioUi,
+    /// Photo and Record's settings and progress (`capture.rs`).
+    pub capture: capture::CaptureUi,
+    /// This frame, the environment draws the view itself: the view's own chrome (its toolbar,
+    /// the cube's words, the navigation bar) stands down.
+    pub view_owned: bool,
     style_set: Option<bool>,
     /// Measure, the section views, iProperties (`inspect.rs`).
     pub inspect: inspect::Inspect,
@@ -375,12 +441,22 @@ pub struct Shell {
     pub new_drawing: Option<drawing::NewDrawing>,
     /// A DWG file is open: AutoCAD's layout instead of the model's (`dwgdoc.rs`).
     pub dwgdoc: Option<dwgdoc::DwgDoc>,
+    /// A robot document is open: its panel beside its source (`robot_ui.rs`).
+    pub robot: Option<robot::RobotPanel>,
+    /// A machining document is open: the Manufacture workspace over its part (`cam/`).
+    pub cam: Option<cam::CamWs>,
+    /// A machining document's toolpath and stock simulation (`gui_camsim_panel.rs`).
+    pub camsim: Option<Box<crate::gui_camsim_panel::CamSimUi>>,
+    /// The simulation being made off the window's thread, and the workspace focus it last took.
+    pub camsim_job: crate::gui_camsim_panel::SimJob,
     /// What's set in Settings, and its window.
     pub settings: settings::Settings,
     pub prefs: settings::Window,
     /// The left panel's Agent tab (`agent.rs`).
     pub agent: agent::AgentTab,
     pub versions: versions::Versions,
+    /// The Machine Builder workspace, while it is open.
+    pub machine: Option<machine::MachineUi>,
     /// The open documents' tabs, and which is in the window.
     pub doc_tabs: Vec<docs::DocTab>,
     pub active_doc: usize,
@@ -397,11 +473,16 @@ pub struct Shell {
 
 impl Default for Shell {
     fn default() -> Shell {
+        capture::install();
         Shell {
             theme: theme::DARK,
             tab: 0,
             name: String::new(),
+            waiting: None,
+            status_shown: String::new(),
             status: String::new(),
+            status_state: String::new(),
+            status_event: None,
             view: ViewState::default(),
             out: Vec::new(),
             view_rect: Rect::ZERO,
@@ -410,6 +491,8 @@ impl Default for Shell {
             cube_menu_fresh: false,
             cube_region: None,
             view_tex: None,
+            view_over_tex: None,
+            view_over_alpha: 1.0,
             cube_labels: Vec::new(),
             cube_place: None,
             camera: None,
@@ -424,6 +507,9 @@ impl Default for Shell {
             origin_hover: None,
             origin_selected: None,
             view_blocks: Vec::new(),
+            props_alternate: false,
+            column_shown: true,
+            view_hidden: false,
             side_px: None,
             content: Default::default(),
             fg: None,
@@ -431,15 +517,24 @@ impl Default for Shell {
             overlays: [PART_OVERLAYS, ASM_OVERLAYS],
             file_menu: false,
             sheet: sheet::SheetUi::new(),
+            env: None,
+            studio: Default::default(),
+            capture: Default::default(),
+            view_owned: false,
             style_set: None,
             inspect: Default::default(),
             drawing: None,
             new_drawing: None,
             dwgdoc: None,
+            robot: None,
+            cam: None,
+            camsim: None,
+            camsim_job: Default::default(),
             settings: Default::default(),
             prefs: Default::default(),
             agent: Default::default(),
             versions: Default::default(),
+            machine: None,
             doc_tabs: Vec::new(),
             active_doc: 0,
             close_ask: None,
@@ -515,7 +610,7 @@ impl Shell {
 
     /// The view's switches, top left over a Forge file's view: on ones filled.
     fn view_toolbar(&mut self, ctx: &egui::Context) {
-        if self.fg.is_none() || self.view_rect.width() < 200.0 {
+        if self.fg.is_none() || self.view_rect.width() < 200.0 || self.view_owned {
             return;
         }
         let t = self.theme;
@@ -523,6 +618,12 @@ impl Shell {
         let o = self.overlays();
         let mut flip = None;
         let mut places = Vec::new();
+        // short of the view cube: a narrow view (a small window, the properties column open)
+        // shows the switches that fit left of it (all of them stay in Settings)
+        let ppp = ctx.pixels_per_point();
+        let limit = self
+            .cube_place
+            .map_or(self.view_rect.right(), |c| self.view_rect.min.x + c.at.0 / ppp - 8.0);
         let r = egui::Area::new(egui::Id::unique("view-toolbar"))
             .fixed_pos(at)
             .order(egui::Order::Middle)
@@ -532,6 +633,9 @@ impl Shell {
                     for (name, word) in OVERLAY_SWITCHES {
                         let on = o.get(name);
                         let g = ui.fonts_mut(|f| f.layout_no_wrap(word.to_string(), sans(12.0), t.ink));
+                        if ui.cursor().min.x + g.size().x + 18.0 > limit {
+                            break;
+                        }
                         let (r, resp) = ui.allocate_exact_size(vec2(g.size().x + 18.0, 24.0), Sense::click());
                         resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::CheckBox, true, on, word));
                         let p = ui.painter();
@@ -563,6 +667,24 @@ impl Shell {
         if let Some(name) = flip {
             self.overlays_mut().flip(name);
         }
+    }
+
+    /// A standing state's words in the status line (the sketch's degrees of freedom, an
+    /// environment's summary), written each frame: they show unless a command spoke since,
+    /// whose words are kept a while first (UX-LEAD: a reply is never swallowed by a state).
+    pub fn state_status(&mut self, ctx: &egui::Context, state: String) {
+        let now = ctx.input(|i| i.time);
+        let pressed = ctx.input(|i| i.pointer.any_pressed() || i.events.iter().any(|e| matches!(e, egui::Event::Key { pressed: true, .. })));
+        if self.status != self.status_state && !self.status.trim().is_empty() {
+            self.status_event = Some((self.status.clone(), now));
+        } else if pressed || self.status_event.as_ref().is_some_and(|(_, at)| now - at > 4.0) {
+            self.status_event = None;
+        }
+        if self.status_event.is_some() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(500));
+        }
+        self.status = self.status_event.as_ref().map_or(state, |(w, _)| w.clone());
+        self.status_state = self.status.clone();
     }
 
     pub fn place(&self, name: &str) -> Option<Rect> {
@@ -685,8 +807,14 @@ impl Shell {
             let d = self.settings.tip_delay;
             ctx.all_styles_mut(|s| s.interaction.tooltip_delay = d);
         }
+        // a hover's text wraps inside the window (egui's 500 is wider than a 480 px one)
+        let tip_w = (ctx.content_rect().width() - 16.0).clamp(200.0, 500.0);
+        if ctx.global_style().spacing.tooltip_width != tip_w {
+            ctx.all_styles_mut(|s| s.spacing.tooltip_width = tip_w);
+        }
         self.places.clear();
         self.view_blocks.clear();
+        self.env_sync();
         self.doc_keys(ui);
         self.voice_keys(&ctx);
         let s = ctx.content_rect();
@@ -712,9 +840,20 @@ impl Shell {
         let side = Rect::from_min_max(pos2(0.0, top), pos2(side_w, bottom));
         let ppp = ctx.pixels_per_point();
         let snap = |v: f32| (v * ppp).round() / ppp;
+        // an environment's docked properties take the right of the window
+        let props_w = self.env_properties_width();
+        // too narrow for both (a phone-wide window): the column and the view take turns in the
+        // view's place, the view keeping the whole of it (framed for its own rect whichever shows)
+        let room = s.width() - side_w - 1.0;
+        self.props_alternate = props_w > 0.0 && room - props_w < VIEW_MIN_W;
+        if !self.props_alternate {
+            self.column_shown = true;
+        }
+        self.view_hidden = self.props_alternate && self.column_shown;
+        let view_right = if self.props_alternate { s.width() } else { s.width() - props_w };
         self.view_rect = Rect::from_min_max(
             pos2(snap(side_w + 1.0), snap(top)),
-            pos2(snap(s.width()), snap(bottom)),
+            pos2(snap(view_right), snap(bottom)),
         );
 
         p.rect_filled(
@@ -722,11 +861,23 @@ impl Shell {
             0.0,
             egui::Color32::from_rgb((t.view >> 16) as u8, (t.view >> 8) as u8, t.view as u8),
         );
-        if let Some(tex) = self.view_tex {
+        if let Some(tex) = self.view_tex.filter(|_| !self.view_hidden) {
             let whole = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
             p.image(tex, self.view_rect, whole, Color32::WHITE);
+            // what an environment lays over a picture of its own (the Render Studio's view cube)
+            if let Some(over) = self.view_over_tex {
+                let a = (self.view_over_alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
+                p.image(over, self.view_rect, whole, Color32::from_white_alpha(a));
+            }
         }
-        self.cube_words(ui, ppp);
+        // behind the column: nothing of the view's is drawn, and it takes no clicks
+        self.view_owned = self.view_hidden;
+        if !self.view_hidden {
+            self.env_draw(ui);
+        }
+        if !self.view_owned {
+            self.cube_words(ui, ppp);
+        }
         // nothing open: where to start
         if self.fg.is_none() && self.cube_place.is_none() {
             self.empty_state(ui);
@@ -737,16 +888,33 @@ impl Shell {
         self.tabs_row(ui, s.width());
         self.ribbon(ui, s.width());
         self.side(ui, side);
+        if props_w > 0.0 && self.view_hidden {
+            // the column in the view's place, the whole of it
+            let r = Rect::from_min_max(pos2(self.view_rect.left(), top), pos2(s.width(), bottom));
+            self.view_blocks.push(self.view_rect);
+            self.env_properties(ui, r);
+        } else if props_w > 0.0 && !self.props_alternate {
+            let r = Rect::from_min_max(pos2(s.width() - props_w, top), pos2(s.width(), bottom));
+            self.env_properties(ui, r);
+        } else if self.props_alternate {
+            // the view shown: the way back to the column, named as its tab is
+            self.column_chip(ui);
+        }
         self.side_splitter(ui, side, s.width());
         self.docs_and_status(ui, s, bottom);
-        self.navbar(&ctx);
+        if !self.view_owned {
+            self.navbar(&ctx);
+        }
         self.window_ui(&ctx);
+        self.camsim_ui(&ctx);
         // a dialog holds its numbers while it's up; a sketch has its own
         if self.fg.as_ref().is_some_and(|p| p.tool.is_none()) && self.sketch.is_none() {
             self.fg_dim_ui(&ctx);
         }
         self.thermo_probes(&ctx);
         self.thermo_ui(&ctx);
+        self.env_panels(&ctx);
+        self.cam_ui(&ctx);
         self.harness_ui(&ctx);
         self.fg_dialog(&ctx);
         self.fg_sketches_ui(&ctx);
@@ -758,10 +926,12 @@ impl Shell {
         self.fg_issues_window(&ctx);
         self.cutlist_window(&ctx);
         self.sheet_ui(&ctx);
+        self.machine_ui(&ctx);
         self.build_banner(ui);
         self.view_toolbar(&ctx);
         self.sketch_ui(&ctx);
         self.mode_bar(&ctx);
+        capture::panels(self, &ctx);
         self.resize_edges(ui, s);
         self.menus(&ctx);
         self.settings_window(&ctx);
@@ -771,6 +941,31 @@ impl Shell {
 
     /// The cube's words, painted on its faces: each glyph's corners go through the face's own
     /// projection, so a word foreshortens with its face.
+    /// Taking turns, the view shown: a chip at its bottom left back to the column, named by the
+    /// column's tab ("Simulation").
+    fn column_chip(&mut self, ui: &mut Ui) {
+        // (words only: the arrows are not in the UI's font)
+        let label = self.env_properties_label().unwrap_or_else(|| "Properties".into());
+        let t = self.theme;
+        let g = ui.fonts_mut(|f| f.layout_no_wrap(label.clone(), sans(13.0), t.ink));
+        // the bottom left: the top is the view's own chips and its cube, which fill a narrow view
+        let r = Rect::from_min_size(
+            pos2(self.view_rect.left() + 8.0, self.view_rect.bottom() - 36.0),
+            vec2(g.size().x + 20.0, 28.0),
+        );
+        let resp = ui.interact(r, ui.scope_id().with("column-chip"), Sense::click());
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &label));
+        let p = ui.painter();
+        p.rect_filled(r, 6.0, if resp.hovered() { t.raised } else { t.surface });
+        p.rect_stroke(r, 6.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
+        p.galley(pos2(r.left() + 10.0, r.center().y - g.size().y * 0.5), g, t.ink);
+        self.view_blocks.push(r);
+        self.note("view:column", r);
+        if resp.clicked() {
+            self.column_shown = true;
+        }
+    }
+
     fn cube_words(&self, ui: &mut Ui, ppp: f32) {
         let t = self.theme;
         let (Some((camera, _)), Some(place)) = (self.camera, self.cube_place) else {
@@ -897,12 +1092,19 @@ impl Shell {
         );
         self.note("title:name", r);
 
+        // a page has no window of its own to minimize, maximize or close: none drawn there
+        // (they were, and did nothing)
         let wins = [
             ("minimize", "minimize", "Minimize", Action::Minimize),
             ("maximize", "maximize", "Maximize", Action::Maximize),
             ("close", "close", "Close", Action::Close),
         ];
-        for (k, (name, icon, tip, action)) in wins.into_iter().enumerate() {
+        let wins = if cfg!(target_arch = "wasm32") {
+            &[][..]
+        } else {
+            &wins[..]
+        };
+        for (k, &(name, icon, tip, action)) in wins.iter().enumerate() {
             let r = Rect::from_min_size(pos2(w - 110.0 + k as f32 * 36.0, 3.0), vec2(34.0, 30.0));
             if self.icon_button(ui, name, r, icon, tip, Color32::WHITE).clicked() {
                 self.out.push(action);
@@ -954,6 +1156,9 @@ impl Shell {
         } else {
             self.tab_order()
         };
+        // each tab's name and width, then those that fit; the rest behind a "»" at the row's end
+        // (a narrow window cut View, Manage and Environments off: the UI audit's 480 px pass)
+        let mut entries: Vec<(usize, String, f32)> = Vec::new();
         for k in order {
             // the Model tab in an assembly too (one document); Thermoform where there is one
             if k == THERMO_TAB && !self.thermo_tab() {
@@ -962,34 +1167,60 @@ impl Shell {
             if k == HARNESS_TAB && !self.harness_tab() {
                 continue;
             }
-            let name = match k {
-                k if dwg => &dwgdoc::TABS[k],
-                k if drawing => &drawing::TABS[k],
-                SHEET_TAB => &"Sheet Metal",
-                THERMO_TAB => &"Thermoform",
-                FLAT_TAB => &"Flat Pattern",
-                ASM_TAB => &"Assemble",
-                HARNESS_TAB => &"Harness",
-                WELD_TAB => &"Weldments",
-                k => &TABS[k],
+            let name: String = match k {
+                k if dwg => dwgdoc::TABS[k].to_string(),
+                k if drawing => drawing::TABS[k].to_string(),
+                SHEET_TAB => "Sheet Metal".into(),
+                THERMO_TAB => "Thermoform".into(),
+                FLAT_TAB => "Flat Pattern".into(),
+                ASM_TAB => "Assemble".into(),
+                HARNESS_TAB => "Harness".into(),
+                WELD_TAB => "Weldments".into(),
+                CAM_TAB => "Manufacture".into(),
+                k if k < TABS.len() => TABS[k].to_string(),
+                k => self.env_tab_name(k).unwrap_or("?").to_string(),
             };
-            let on = k == self.tab;
-            let w = ui
-                .fonts_mut(|f| f.layout_no_wrap(name.to_string(), sans(13.0), t.ink))
+            let tw = ui
+                .fonts_mut(|f| f.layout_no_wrap(name.clone(), sans(13.0), t.ink))
                 .size()
                 .x
                 + 28.0;
+            entries.push((k, name, tw));
+        }
+        const MORE_W: f32 = 34.0;
+        let room = w - 8.0 - x;
+        let all: f32 = entries.iter().map(|e| e.2 + 2.0).sum();
+        let mut shown: Vec<usize> = (0..entries.len()).collect();
+        if all > room {
+            shown.clear();
+            let mut used = 0.0;
+            for (i, e) in entries.iter().enumerate() {
+                if used + e.2 + 2.0 > room - MORE_W {
+                    break;
+                }
+                used += e.2 + 2.0;
+                shown.push(i);
+            }
+            // the tab that's on is always seen: in the last place that fits, if it must
+            if let Some(on) = entries.iter().position(|e| e.0 == self.tab)
+                && !shown.contains(&on)
+            {
+                while !shown.is_empty() && used + entries[on].2 + 2.0 > room - MORE_W {
+                    let last = shown.pop().unwrap_or(0);
+                    used -= entries[last].2 + 2.0;
+                }
+                shown.push(on);
+            }
+        }
+        let hidden: Vec<usize> = (0..entries.len()).filter(|i| !shown.contains(i)).collect();
+        for &i in &shown {
+            let (k, name, w) = (entries[i].0, entries[i].1.as_str(), entries[i].2);
+            let on = k == self.tab;
             let r = Rect::from_min_size(pos2(x, y + 4.0), vec2(w, 30.0));
             let resp = ui.interact(r, ui.scope_id().with(("tab", k)), Sense::click());
-            resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, on, *name));
+            resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, on, name));
             if resp.clicked() {
-                self.tab = k;
-                // Assemble's tools on a file with no components yet: placing one makes it an assembly
-                if k == ASM_TAB
-                    && let Some(f) = &mut self.fg
-                {
-                    f.asm.get_or_insert_with(Default::default);
-                }
+                self.choose_tab(k);
             }
             if on {
                 p.rect_filled(r, up, t.raised);
@@ -1003,24 +1234,106 @@ impl Shell {
             } else {
                 (sans(13.0), if resp.hovered() { t.ink } else { t.ink2 })
             };
-            p.text(r.center(), Align2::CENTER_CENTER, *name, font, ink);
+            p.text(r.center(), Align2::CENTER_CENTER, name, font, ink);
             self.note(format!("tab:{name}"), r);
             x += w + 2.0;
+        }
+        if hidden.is_empty() {
+            return;
+        }
+        let more = Rect::from_min_size(pos2(x, y + 4.0), vec2(MORE_W, 30.0));
+        let open_id = egui::Id::unique("tabs-more-open");
+        let open = ui.data(|d| d.get_temp::<bool>(open_id)).unwrap_or(false);
+        let resp = ui
+            .interact(more, ui.scope_id().with("tabs-more"), Sense::click())
+            .on_hover_text("More tabs");
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "More tabs"));
+        if open || resp.hovered() {
+            p.rect_filled(more, up, t.hover);
+        }
+        p.text(more.center(), Align2::CENTER_CENTER, "\u{00bb}", sans(15.0), t.ink);
+        self.note("tabs:more", more);
+        if resp.clicked() {
+            ui.data_mut(|d| d.insert_temp(open_id, !open));
+        }
+        if !open {
+            return;
+        }
+        let at = pos2((more.right() - 180.0).max(4.0), more.bottom() + 2.0);
+        let mut chose = None;
+        let (placed, mut sizing) = (self.places.len(), false);
+        let menu = egui::Area::new(egui::Id::unique("tabs-more-menu"))
+            .fixed_pos(at)
+            .order(egui::Order::Foreground)
+            .fade_in(false)
+            .show(ui.ctx(), |ui| {
+                egui::Frame::new()
+                    .fill(t.raised)
+                    .stroke(Stroke::new(1.0, t.line))
+                    .corner_radius(6.0)
+                    .inner_margin(4.0)
+                    .show(ui, |ui| {
+                        sizing = ui.is_sizing_pass();
+                        ui.set_min_width(172.0);
+                        for &i in &hidden {
+                            let (k, name) = (entries[i].0, entries[i].1.as_str());
+                            let b = ui.add(
+                                egui::Button::new(egui::RichText::new(name).font(sans(13.0)).color(t.ink))
+                                    .frame(false)
+                                    .min_size(vec2(164.0, 26.0)),
+                            );
+                            self.places.push((format!("tab:{name}"), b.rect));
+                            if b.clicked() {
+                                chose = Some(k);
+                            }
+                        }
+                    });
+            });
+        // egui's first, invisible frame of a new menu lays it out elsewhere: no places from it
+        if sizing {
+            self.places.truncate(placed);
+        }
+        let pressed = ui.input(|i| i.pointer.any_pressed());
+        let inside = ui
+            .input(|i| i.pointer.interact_pos())
+            .is_some_and(|q| menu.response.rect.contains(q) || more.contains(q));
+        if let Some(k) = chose {
+            self.choose_tab(k);
+        }
+        if chose.is_some() || (pressed && !inside) || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            ui.data_mut(|d| d.insert_temp(open_id, false));
+        }
+    }
+
+    /// A tab chosen: Assemble's tools on a file with no components yet make it ready to place.
+    fn choose_tab(&mut self, k: usize) {
+        self.tab = k;
+        if k == ASM_TAB
+            && let Some(f) = &mut self.fg
+        {
+            f.asm.get_or_insert_with(Default::default);
         }
     }
 
     /// The tabs shown, in order: a sheet metal part's Sheet Metal first, the flat pattern's tab
     /// alone with Inspect, View and Manage.
+    /// In an environment, its own tabs then Inspect, View and Manage; else the design's, then
+    /// Environments (Thermoform, Flat Pattern and the rest are entered from there).
     pub fn tab_order(&self) -> Vec<usize> {
+        if let Some(v) = self.env_tabs() {
+            return v;
+        }
         let fg = self.fg.is_some() && !self.is_asm();
-        if fg && self.sheet.flat_env {
+        if self.cam.is_some() {
+            vec![CAM_TAB, 2, 3, 4]
+        } else if fg && self.sheet.flat_env {
             vec![FLAT_TAB, 2, 3, 4]
         } else if fg && self.sheet.env {
-            vec![SHEET_TAB, 0, 1, ASM_TAB, 2, 3, 4]
+            vec![SHEET_TAB, 0, 1, ASM_TAB, 2, 3, 4, env::ENV_TAB]
         } else if self.fg.is_some() {
-            vec![0, 1, ASM_TAB, WELD_TAB, HARNESS_TAB, THERMO_TAB, 2, 3, 4]
+            vec![0, 1, ASM_TAB, WELD_TAB, HARNESS_TAB, 2, 3, 4, env::ENV_TAB]
         } else {
-            vec![0, 1, THERMO_TAB, 2, 3, 4]
+            vec![0, 1, 2, 3, 4, env::ENV_TAB]
         }
     }
 
@@ -1043,6 +1356,7 @@ impl Shell {
             self.agent_ui(ui, tree);
         } else if self.agent.tab == agent::SideTab::Versions {
             self.versions_ui(ui, tree);
+        } else if self.env_browser(ui, tree) {
         } else if self.is_asm() && self.fg.as_ref().is_some_and(|f| f.asm.is_some()) {
             self.asm_tree(ui, tree);
         } else if self.fg.is_some() {
@@ -1085,22 +1399,142 @@ impl Shell {
         let st = Rect::from_min_size(pos2(0.0, bottom + DOCS_H), vec2(s.width(), STATUS_H));
         p.rect_filled(st, 0.0, t.bar);
         let x = self.voice_status(ui, 6.0, st);
-        let said = p.text(
-            pos2(x + 4.0, st.center().y),
-            Align2::LEFT_CENTER,
-            if self.status.is_empty() && self.unshown {
-                "This part built but some of it can't be drawn: fix or delete what the tree marks"
-            } else {
-                &self.status
-            },
-            sans(12.0),
-            Color32::WHITE,
-        );
+        // an environment owns the status bar too
+        let env_line = self.env_status();
+        let status = shown(&self.status);
         // markup for the agent, on or off
         let mr = Rect::from_min_size(
             pos2(s.width() - 330.0, st.top() + 2.0),
             vec2(78.0, STATUS_H - 4.0),
         );
+        let full = if let Some(l) = &env_line {
+            l.as_str()
+        } else if self.status.is_empty() && self.unshown {
+            "This part built but some of it can't be drawn: fix or delete what the tree marks"
+        } else {
+            &*status
+        };
+        // a file's path said by its name, in the shell's line or an environment's (Manufacture's
+        // "Wrote …"); the whole line, paths and all, on hover. The names are kept: only folders go
+        let briefed = brief(full);
+        let pathed = briefed != full;
+        let words = briefed.as_str();
+        // a refusal's fix a click away (Manufacture: the unplaced setup's dialog): always seen,
+        // right after the words, which are cut to leave it room short of Markup
+        let fix = if self.tab == CAM_TAB {
+            self.cam.as_ref().and_then(cam::status_fix)
+        } else {
+            None
+        };
+        let fix_g = fix.as_ref().map(|(label, _)| {
+            ui.fonts_mut(|f| f.layout_no_wrap(label.to_string(), sans(12.0), Color32::WHITE))
+        });
+        let fix_w = fix_g.as_ref().map_or(0.0, |g| 12.0 + g.size().x + 16.0);
+        // the words on one row, short of the fix and Markup (in a narrow window they ran on under
+        // Markup and the issues): cut between their parts (" · "), the details last, then "…"
+        let room = (mr.left() - theme::S2 - fix_w - (x + 4.0)).max(0.0);
+        // too little room for any of the words beside a fix (a narrow window): the fix alone, the
+        // words on its hover (a lone "…" said nothing)
+        let wordless = fix.is_some() && room < 60.0;
+        let width = |t: &str| {
+            ui.fonts_mut(|f| f.layout_no_wrap(t.to_string(), sans(12.0), Color32::WHITE))
+                .size()
+                .x
+        };
+        let parts: Vec<&str> = words.split(" \u{b7} ").collect();
+        let mut fits = words.to_string();
+        if width(words) > room {
+            fits = String::new();
+            for k in (1..parts.len()).rev() {
+                let t = format!("{} \u{b7} \u{2026}", parts[..k].join(" \u{b7} "));
+                if width(&t) <= room {
+                    fits = t;
+                    break;
+                }
+            }
+            if fits.is_empty() {
+                fits = words.to_string();
+            }
+        }
+        if wordless {
+            fits = String::new();
+        }
+        let mut job = egui::text::LayoutJob::simple_singleline(fits.clone(), sans(12.0), Color32::WHITE);
+        job.wrap = egui::text::TextWrapping {
+            max_width: room,
+            max_rows: 1,
+            break_anywhere: true,
+            overflow_character: Some('\u{2026}'),
+        };
+        let g = ui.fonts_mut(|f| f.layout_job(job));
+        let said = Rect::from_min_size(pos2(x + 4.0, st.center().y - g.size().y * 0.5), g.size());
+        let cut = g.elided || fits != words;
+        self.status_shown = if g.elided { format!("{fits} (cut)") } else { fits };
+        p.galley(said.min, g, Color32::WHITE);
+        // on hover: the whole line when cut, and a release refusal's detail (its rule, the syntax)
+        let detail = if self.tab == CAM_TAB {
+            self.cam.as_ref().and_then(cam::release_words).map(|b| b.detail)
+        } else {
+            None
+        };
+        // (a line whose paths were shortened to their names: the whole, paths and all)
+        let whole = if pathed { full } else { words };
+        let hover = match (cut || pathed, detail) {
+            (true, Some(d)) => Some(format!("{whole}\n\n{d}")),
+            (false, Some(d)) => Some(d),
+            (true, None) => Some(whole.to_string()),
+            (false, None) => None,
+        };
+        if let Some(h) = &hover
+            && !wordless
+        {
+            ui.interact(said, ui.scope_id().with("status-line"), Sense::hover())
+                .on_hover_text(h);
+        }
+        self.note("status:said", said);
+        if let (Some((label, action)), Some(g)) = (fix, fix_g) {
+            // alone (no words beside it), the issues' amber warning first: it reads as the fix
+            // for a problem, not a plain command
+            let icon_w = if wordless { 18.0 } else { 0.0 };
+            let left = if wordless { x + 4.0 } else { said.right() + 12.0 };
+            let fr = Rect::from_min_size(
+                pos2(left, st.top() + 2.0),
+                vec2(icon_w + g.size().x + 16.0, STATUS_H - 4.0),
+            );
+            let mut r = ui.interact(fr, ui.scope_id().with("status-fix"), Sense::click());
+            if wordless && let Some(h) = &hover {
+                r = r.on_hover_text(h);
+            }
+            r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
+            // an export the host has not answered: Try again's hover
+            if let Some(tip) = self.cam.as_ref().and_then(cam::status_fix_tip) {
+                r = r.on_hover_text(tip);
+            }
+            p.rect_filled(
+                fr,
+                3.0,
+                Color32::from_white_alpha(if r.hovered() { 56 } else { 36 }),
+            );
+            if wordless {
+                icons::draw(
+                    &p,
+                    pos2(fr.left() + 6.0, fr.center().y - 7.0),
+                    14.0,
+                    "warning",
+                    1.5,
+                    fg::WARN,
+                );
+            }
+            p.galley(
+                pos2(fr.left() + icon_w + 8.0, fr.center().y - g.size().y * 0.5),
+                g,
+                Color32::WHITE,
+            );
+            self.note("status:fix", fr);
+            if r.clicked() {
+                self.out.push(action);
+            }
+        }
         let m_resp = ui
             .interact(mr, ui.scope_id().with("status-markup"), Sense::click())
             .on_hover_text("Draw on the window for the agent (K)");
@@ -1146,7 +1580,7 @@ impl Shell {
                 ui.interact(said, ui.scope_id().with("status-times"), Sense::hover())
                     .on_hover_text(&a.timings);
             }
-            let (errors, warnings) = fg::issue_counts(&fg.issues);
+            let (errors, warnings) = fg.counts();
             let text = format!(
                 "{} · {}",
                 fg::plural(errors, "error"),
@@ -1154,11 +1588,18 @@ impl Shell {
             );
             let g = ui.fonts_mut(|f| f.layout_no_wrap(text.clone(), sans(12.0), Color32::WHITE));
             let right = Self::units_chip(&units, ui, &p, st) - theme::S2;
+            // an assembly's last checks still shown while the new ones run: a spinner before the
+            // count, so it does not read as settled
+            let checking = fg.issues.iter().any(|i| i.stale);
+            let spin = if checking { 18.0 } else { 0.0 };
             let r = Rect::from_min_max(
-                pos2(right - g.size().x - 22.0, st.top() + 2.0),
+                pos2(right - g.size().x - 22.0 - spin, st.top() + 2.0),
                 pos2(right, st.bottom() - 2.0),
             );
-            let resp = ui.interact(r, ui.scope_id().with("status-issues"), Sense::click());
+            let mut resp = ui.interact(r, ui.scope_id().with("status-issues"), Sense::click());
+            if checking {
+                resp = resp.on_hover_text("Checking the assembly's overlaps since your last edit");
+            }
             // a chip at rest too, so it reads as the button it is
             let lit = resp.hovered() || fg.issues_list;
             p.rect_filled(r, theme::R1, Color32::from_white_alpha(if lit { 32 } else { 14 }));
@@ -1177,8 +1618,12 @@ impl Shell {
                 1.5,
                 ink,
             );
+            if checking {
+                let at = Rect::from_center_size(pos2(r.left() + 20.0 + 6.0, r.center().y), vec2(12.0, 12.0));
+                egui::Spinner::new().size(12.0).color(Color32::WHITE).paint_at(ui, at);
+            }
             p.galley(
-                pos2(r.left() + 20.0, r.center().y - g.size().y * 0.5),
+                pos2(r.left() + 20.0 + spin, r.center().y - g.size().y * 0.5),
                 g,
                 Color32::WHITE,
             );
@@ -1211,6 +1656,7 @@ impl Shell {
 
     /// Esc backs out one level, wherever one is: never two, and never none.
     fn escape_one_level(&mut self, ctx: &egui::Context) {
+        fgasm::escape_clear(ctx);
         if !ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             return;
         }
@@ -1224,11 +1670,63 @@ impl Shell {
             self.file_menu = false;
             self.cube_menu = None;
             self.marking = None;
+        // Settings, the modal over everything (not while it takes a key for a command)
+        } else if self.prefs.open && self.prefs.capture.is_none() {
+            self.prefs.open = false;
+        } else if let Some(b) = self.sheet.bend_sim.as_mut().filter(|b| b.pending_replace.is_some()) {
+            // the bend simulation's re-plan question: Esc is Keep mine (UX-LEAD)
+            b.pending_replace = None;
+        } else if let Some(w) = self.cam.as_mut().filter(|w| w.escape_level()) {
+            // the Manufacture workspace: its dialog, else its floating window
+            w.escape();
         } else if let Some(p) = self.fg.as_mut().filter(|p| p.renaming.is_some()) {
             p.renaming = None;
         } else if let Some(p) = self.fg.as_mut().filter(|p| p.tool.is_some()) {
-            p.tool = None;
-            self.status.clear();
+            // Esc in a number a digit started puts its old value back; else the dialog closes
+            if !p.tool.as_mut().is_some_and(|t| fgdialog::digit_escape(ctx, t)) {
+                p.tool = None;
+                self.status.clear();
+            }
+        // the dialogs up over the view, each as its Cancel or × (Esc closed none of them)
+        } else if self.content.open {
+            self.content.open = false;
+        // the windows over the view that had no Esc (the UI audit): after a feature's dialog
+        } else if let Some(b) = &mut self.inspect.browser {
+            // the narrow browser's details step back to its list first
+            if b.narrow_detail {
+                b.narrow_detail = false;
+            } else {
+                self.inspect.browser = None;
+            }
+        } else if self.capture.settings_open {
+            self.capture.settings_open = false;
+        } else if self.inspect.props.is_some() {
+            self.inspect.props = None;
+        } else if self.inspect.section_open {
+            self.inspect.section_open = false;
+        } else if let Some(a) = self.fg.as_mut().and_then(|p| p.asm.as_mut()).filter(|a| a.explode_open) {
+            a.explode_open = false;
+        } else if self.versions.dialog.is_some() {
+            self.versions.dialog = None;
+        } else if self.versions.release.is_some() {
+            self.versions.release = None;
+        } else if self.new_drawing.is_some() {
+            self.new_drawing = None;
+        } else if self.sheet.vendor.dfm_open {
+            // the DFM report opens over the Vendor window: it goes first
+            self.sheet.vendor.dfm_open = false;
+        } else if self.sheet.vendor.open {
+            self.sheet.vendor.open = false;
+        } else if let Some(p) = self.fg.as_mut().filter(|p| p.params_open) {
+            p.params_open = false;
+        } else if let Some(p) = self.fg.as_mut().filter(|p| p.cutlist_open) {
+            p.cutlist_open = false;
+        } else if let Some(a) = self.fg.as_mut().and_then(|p| p.asm.as_mut()).filter(|a| a.bom_open) {
+            a.bom_open = false;
+        } else if let Some(p) = self.fg.as_mut().filter(|p| p.occ_edit.is_some()) {
+            p.occ_edit = None;
+        } else if let Some(t) = self.fg.as_ref().and_then(|p| p.asm.as_ref()?.tool.as_ref()) {
+            fgasm::escape_to(ctx, t.head());
         } else if let Some(p) = self
             .fg
             .as_mut()
@@ -1405,7 +1903,8 @@ impl Shell {
     }
 
     fn resize_edges(&mut self, ui: &mut Ui, s: Rect) {
-        if self.view.maximized {
+        // a page's edges are the browser's: no resize cursor there for a resize that never comes
+        if self.view.maximized || cfg!(target_arch = "wasm32") {
             return;
         }
         let Some(at) = ui.ctx().input(|i| i.pointer.hover_pos()) else {
@@ -1445,18 +1944,21 @@ impl Shell {
             let mut items = vec![
                 ("New", Some(Action::New)),
                 ("New Sheet Metal", Some(Action::Sheet(sheet::SheetCmd::NewPart))),
-                ("Open...", Some(Action::Open)),
+                ("Open…", Some(Action::Open)),
             ];
             // a Forge file is written when asked (Ctrl+S too)
             items.push(("Save", model_open.then_some(Action::Fg(FgCmd::Save))));
-            items.push(("New Drawing...", model_open.then_some(Action::NewDrawing)));
-            // the part's mesh for printing and viewers: written natively, beside the part
-            if cfg!(not(target_arch = "wasm32")) {
+            items.push(("New Drawing…", model_open.then_some(Action::NewDrawing)));
+            // the part's mesh for printing and viewers: natively where the file dialog says, in a
+            // page to the browser's downloads
+            {
                 use forge_lang::meshfile::Format;
+                // ("…" where a file dialog follows: in a page the file downloads at once)
+                let page = cfg!(target_arch = "wasm32");
                 for (label, f) in [
-                    ("Export STL...", Format::Stl),
-                    ("Export 3MF...", Format::ThreeMf),
-                    ("Export OBJ...", Format::Obj),
+                    (if page { "Export STL" } else { "Export STL…" }, Format::Stl),
+                    (if page { "Export 3MF" } else { "Export 3MF…" }, Format::ThreeMf),
+                    (if page { "Export OBJ" } else { "Export OBJ…" }, Format::Obj),
                 ] {
                     items.push((label, model_open.then_some(Action::ExportMesh(f))));
                 }
@@ -1466,9 +1968,15 @@ impl Shell {
             }
             if self.dwgdoc.is_some() {
                 items.push(("Save", Some(Action::DwgDoc(dwgdoc::Cmd::Run("QSAVE")))));
-                items.push(("Save As...", Some(Action::DwgDoc(dwgdoc::Cmd::Run("SAVEAS")))));
+                items.push(("Save As…", Some(Action::DwgDoc(dwgdoc::Cmd::Run("SAVEAS")))));
             }
-            match menu_at(ctx, "file-menu", at, &t, &items, &mut self.places) {
+            // an item drawn off says why on hover (STANDARD §7)
+            let why = if self.drawing.is_some() {
+                "Not in a drawing: File > Close Drawing first"
+            } else {
+                "Open or create a part first (File > New or Open…)"
+            };
+            match menu_at(ctx, "file-menu", at, &t, &items, why, &mut self.places) {
                 MenuResult::Chose(a) => {
                     self.out.push(a);
                     self.file_menu = false;
@@ -1517,7 +2025,7 @@ impl Shell {
                 Some(Action::Parallel(false)),
             ));
             let fresh = std::mem::take(&mut self.cube_menu_fresh);
-            match menu_at(ctx, "cube-menu", at, &t, &items, &mut self.places) {
+            match menu_at(ctx, "cube-menu", at, &t, &items, "", &mut self.places) {
                 MenuResult::Chose(a) => {
                     self.out.push(a);
                     self.cube_menu = None;
@@ -1706,12 +2214,46 @@ enum MenuResult {
 }
 
 /// A flat menu at a point; closes on Esc or a press outside it.
+/// The status line as the bar draws it: each file path by its file's name ("Saved plate.fg",
+/// not the folders it's in; UX-LEAD), the whole line kept for the hover.
+pub fn brief(s: &str) -> String {
+    s.split(' ')
+        .map(|w| {
+            let core = w.trim_end_matches([',', ':', ';', ')']);
+            let tail = &w[core.len()..];
+            let path = (core.starts_with('/') || core.starts_with("~/") || core.get(1..3) == Some(":\\"))
+                && core.len() > 1
+                || (core.matches('/').count() >= 1
+                    && core.rsplit('/').next().is_some_and(|f| f.contains('.') && !f.ends_with('.'))
+                    && !core.contains("://"));
+            match core.rsplit(['/', '\\']).next() {
+                // a file's name has letters (not a ratio like 1/2.5)
+                Some(name) if path && name.chars().any(char::is_alphabetic) => format!("{name}{tail}"),
+                _ => w.to_string(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// What the status bar shows of `s`: in a page, the project's files by their path in the
+/// project ("weldments/gate_frame-cutlist.csv"): where the page keeps them (`/project`) is its own
+/// business.
+pub fn shown(s: &str) -> std::borrow::Cow<'_, str> {
+    if cfg!(target_arch = "wasm32") && s.contains("/project/") {
+        s.replace("/project/", "").into()
+    } else {
+        s.into()
+    }
+}
+
 fn menu_at(
     ctx: &egui::Context,
     id: &str,
     at: egui::Pos2,
     t: &Theme,
     items: &[(&str, Option<Action>)],
+    off_why: &str,
     places: &mut Vec<(String, Rect)>,
 ) -> MenuResult {
     let mut out = MenuResult::Open;
@@ -1735,7 +2277,10 @@ fn menu_at(
                 } else {
                     Sense::hover()
                 };
-                let resp = ui.interact(r, ui.scope_id().with(k), sense);
+                let mut resp = ui.interact(r, ui.scope_id().with(k), sense);
+                if action.is_none() && !off_why.is_empty() {
+                    resp = resp.on_hover_text(off_why);
+                }
                 places.push((format!("{id}:{label}"), r));
                 resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, action.is_some(), *label));
                 if (resp.hovered() || resp.has_focus()) && action.is_some() {
@@ -1762,14 +2307,44 @@ fn menu_at(
                 }
             }
         });
-    let outside = ctx.input(|i| {
-        i.pointer.any_pressed()
-            && i.pointer
-                .interact_pos()
-                .is_some_and(|p| !inner.response.rect.contains(p))
+    // the frame a menu first shows, the press that opened it is no press outside it: when the
+    // press and its release came in one frame (a tap, or a page whose frames lag the mouse) the
+    // menu shut in the frame it opened, so File never opened in a browser
+    let frame = ctx.cumulative_frame_nr();
+    let shown = egui::Id::unique(id).with("shown");
+    // (the frame it first showed in, the last): shown again the frame after, it is still open
+    let opened_now = ctx.data_mut(|d| {
+        let first = match d.get_temp::<(u64, u64)>(shown) {
+            Some((first, last)) if last + 1 >= frame => first,
+            _ => frame,
+        };
+        d.insert_temp(shown, (first, frame));
+        first == frame
     });
+    let outside = !opened_now
+        && ctx.input(|i| {
+            i.pointer.any_pressed()
+                && i.pointer
+                    .interact_pos()
+                    .is_some_and(|p| !inner.response.rect.contains(p))
+        });
     if matches!(out, MenuResult::Open) && (outside || ctx.input(|i| i.key_pressed(egui::Key::Escape))) {
         out = MenuResult::Close;
     }
     out
+}
+
+#[cfg(test)]
+mod brief_tests {
+    use super::brief;
+
+    #[test]
+    fn a_path_is_said_by_its_file_name() {
+        assert_eq!(brief("Saved /tmp/fg-ui-audit-5005/sketch/run/plate.fg"), "Saved plate.fg");
+        assert_eq!(brief("Wrote out/a.nc, out/b.nc"), "Wrote a.nc, b.nc");
+        assert_eq!(brief("Saved weldments/gate_frame-cutlist.csv"), "Saved gate_frame-cutlist.csv");
+        // not paths: units, ratios, links
+        assert_eq!(brief("F 3726 mm/min · 1/2.5 turn"), "F 3726 mm/min · 1/2.5 turn");
+        assert_eq!(brief("see https://example.com/a.html"), "see https://example.com/a.html");
+    }
 }

@@ -17,3 +17,12 @@ target*/
 
 # vendor CAD a user downloaded themselves (stdparts/README.md): never committed
 vendor-parts/
+
+# Fusion 360 Gallery Dataset and makers' tool-library caches (tools/fetch-fusion-gallery.sh,
+# tools/fetch-tool-libraries.sh): their terms forbid committing them
+/.cache/
+
+# forgecad's shipped machine models (Git LFS: .gitattributes)
+!kernel/forge-machine/data/models/**/*.stl
+# and its shipped workholding models (AGENTS.md: the Haas Tooling models)
+!kernel/forge-workholding/data/models/**/*.stl

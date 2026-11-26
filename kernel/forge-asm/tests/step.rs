@@ -139,6 +139,28 @@ fn the_structure_reads_back_where_the_solve_put_it() {
     } else {
         // a reader that leaves assemblies alone says so, and still gives each part
         assert_eq!(got.solids.len(), 2);
+        // and where each use of it stands, by the product names down to it: every use where the
+        // solve put it
+        let want = corners(
+            sol.occurrences
+                .iter()
+                .filter(|o| !o.reference)
+                .map(|o| forge_asm::check::rigid_copy(&bodies[&(o.part.doc.clone(), o.part.body)], &o.pose)),
+        );
+        assert_eq!(got.occurrences.len(), 6);
+        let placed = got.occurrences.iter().map(|u| {
+            let s = got
+                .solids
+                .iter()
+                .find(|s| s.entity == u.solid)
+                .expect("a read solid");
+            forge_asm::check::rigid_copy(&s.body, &u.frame)
+        });
+        assert_eq!(corners(placed), want);
+        let mut paths: Vec<String> = got.occurrences.iter().map(|u| u.path.join("/")).collect();
+        paths.sort();
+        assert_eq!(paths.first().map(|p| p.split('/').next()), Some(Some("top")));
+        assert_eq!(paths.iter().filter(|p| p.contains("post")).count(), 4);
     }
 }
 
@@ -153,4 +175,37 @@ fn a_part_with_no_body_is_named() {
             body: 0
         })
     );
+}
+
+/// A part read from a file keeps what it was read with when placed: each edge's and vertex's
+/// tolerance (an interference boolean on a copy at LINEAR understated them) and that it is a file's
+/// body. The part: a sheet-metal flange from the Haas GM2-5AX model, its spline edges up to 1.3e-4
+/// mm off their faces.
+#[test]
+fn a_placed_file_part_keeps_its_tolerances() {
+    let p = format!(
+        "{}/../forge-step/tests/data/haas/edge_flange_48faces.step",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let imp = forge_step::import(&std::fs::read(p).unwrap(), &forge_step::Limits::default()).unwrap();
+    let b = &imp.solids[0].body;
+    let tolerant = b
+        .edge_ids()
+        .filter(|&e| b.edge(e).tol > forge_math::tol::LINEAR)
+        .count();
+    assert!(tolerant > 0, "the part has tolerant edges");
+    let f = Frame::from_z(
+        forge_math::Point3::new(120.0, -40.0, 7.5),
+        forge_math::UnitVec3::Y,
+    )
+    .rotated_about_z(0.3);
+    let c = forge_asm::check::rigid_copy(b, &f);
+    assert!(c.from_file);
+    let mut got: Vec<f64> = c.edge_ids().map(|e| c.edge(e).tol).collect();
+    let mut want: Vec<f64> = b.edge_ids().map(|e| b.edge(e).tol).collect();
+    got.sort_by(f64::total_cmp);
+    want.sort_by(f64::total_cmp);
+    assert_eq!(got, want);
+    let p = forge_topo::check(&c);
+    assert!(p.is_empty(), "{p:?}");
 }

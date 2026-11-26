@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/casters/pedal_pin.fg"}
+{"op":"SetParam","param":"yq","value":{"value":31.5,"dim":"Length"}}
+{"op":"SetParam","param":"zq","value":{"value":42,"dim":"Length"}}
+{"op":"SetParam","param":"rs","value":{"value":3.1500000000000004,"dim":"Length"}}
+{"op":"Rename","from":"ref","to":"ref_r"}
+{"op":"ReplaceFeature","id":"head2","text":"head2 = extrude(h2.c, th)\n"}

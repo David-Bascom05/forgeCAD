@@ -1,0 +1,7 @@
+{"doc":"examples/machined/slot_plate.fg"}
+{"op":"SetParam","param":"L","value":{"value":63,"dim":"Length"}}
+{"op":"SetParam","param":"W","value":{"value":42,"dim":"Length"}}
+{"op":"SetParam","param":"t","value":{"value":10.5,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"MoveFeature","id":"groove2","before":null}
+{"op":"ReplaceFeature","id":"lines","text":"sketch lines(on: plate.end) {\n  la = line((x0, y0), (x1, y0))\n  lb = line((x0, y1), (x1, y1))\n}\n"}

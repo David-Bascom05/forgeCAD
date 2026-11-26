@@ -1,0 +1,18 @@
+[package]
+name = "forge-det"
+description = "The cross-platform determinism gate: exact body and mesh hashes of the example corpus and of recorded op streams, after every op (research/hosted/DESIGN.md §13)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+forge-lang = { path = "../../interface/forge-lang" }
+forge-agent = { path = "../../interface/forge-agent" }
+forge-math = { path = "../../kernel/forge-math" }
+forge-mesh = { path = "../../kernel/forge-mesh" }
+forge-topo = { path = "../../kernel/forge-topo" }
+
+[lints]
+workspace = true

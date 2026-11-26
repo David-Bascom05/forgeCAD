@@ -128,7 +128,7 @@ fn in_profile(segs: &[Seg2], q: Point2) -> Option<(bool, f64)> {
                     }
                     continue;
                 }
-                if sweep.abs() < dmath::TAU - 1e-12 {
+                if sweep.abs() < dmath::TAU {
                     for e in [start, start + sweep] {
                         if (c.y + r * dmath::sin(e) - q.y).abs() <= graze {
                             return None;
@@ -231,7 +231,7 @@ fn coil_member(
 
 /// Whether angle `a` lies on the arc from `start` through `sweep`.
 fn on_sweep(a: f64, start: f64, sweep: f64) -> bool {
-    if sweep.abs() >= dmath::TAU - 1e-12 {
+    if sweep.abs() >= dmath::TAU {
         return true;
     }
     let (lo, w) = if sweep >= 0.0 {

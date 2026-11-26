@@ -236,42 +236,62 @@ So `C` near `p` carries one pattern, `P_C`.
 point, so its sign at `p + d` is `Q(d)`'s, constant on `C`. Quadrics not through `p` keep their
 sign near `p` (`sign_nbhd`). ∎
 
-**Lemma 3.3.** Suppose `|J| ≤ 3` with independent normals. Then off `C̄`, near `p`, membership is
-`κ` with the cone quadric outside and the `J` signs those of the point's sector. Every one of
-the `2^{|J|}` sectors meets every neighbourhood of `p` off `C̄`.
+**Which planes count.** The nappe's own plane `N` passes through `p` with normal `a`. When it
+serves only as the cone solid's selector, its sign matters only to that solid: off `C ∪ −C` the
+cone quadric is outside, so the cone solid is out whatever `N`'s sign, and on `−C` the cone
+solid is out by its selector. Then `J` omits `N`. When a face lies on `N`'s carrier, or another
+solid's literal uses it, `N` is a surface through `p` like any other and belongs to `J`. This
+holds for a box top, a cylinder cap, a base disc, or a second cone's selector. Its normal is the
+axis, so it separates `C` (Lemma 3.1). (The first version dropped `N` in every case and then
+skipped an empty `J`. That missed five non-manifold apexes. The repro is
+`cone_apex_on_a_face_normal_to_its_axis_is_non_manifold`.)
 
-*Proof.* Independent normals: the surfaces cross transversally at `p`. By the implicit function
-theorem, a neighbourhood of `p` is homeomorphic to the linear model, the arrangement of the
-tangent planes, and every sign vector is realised by an open cone. `C̄` lies inside one sector
-(the separating one, `own`). Removing it leaves every other sector intact, and leaves `own`
-nonempty: `C̄` is a proper closed sub-cone of it. ∎
+**Lemma 3.3 (the caps).** Lemma 3.2 holds on `−C` as well, with every `q_j` of sign `−σ_j` and
+the cone quadric of the same sign as on `C` (its quadratic part is even). So `−C` near `p`
+carries one pattern too, `P_−C`. It matters when another solid uses the cone quadric (two cones
+sharing an apex and an axis). Otherwise `−C` is out for the cone solid, and lies inside the
+sector `anti` (every `J` sign `−σ_j`), where every other solid sees the same signs as on the rest
+of `anti`.
 
-**Theorem 3.4.** Let `kC = κ(P_C)`, `ownKept = κ(own sector, cone outside)`, and let `anyOther`
-and `allKept` range over the other sectors and over all sectors. The result is non-manifold at
-`p` iff `(kC ∧ ¬ownKept ∧ anyOther) ∨ (¬kC ∧ ownKept ∧ ¬allKept)`.
+**Lemma 3.4 (the cells).** Suppose `|J| ≤ 3` with independent normals. Then the link of `p` is cut
+into these cells:
+- the caps `D₊` (of `C`) and `D₋` (of `−C`);
+- for each of the `2^{|J|}` sectors `τ` of the tangent planes, the cell `O_τ`: the sector's
+  link, less the caps.
 
-*Proof.* By 3.2–3.3, near `p` the kept set is `(C if kC) ∪ (the kept sectors, less C̄)`, and its
-link at `p` is a union of spherical regions.
-- `kC` and `ownKept`: `C` lies inside a kept sector and changes nothing.
-- `¬kC` and `¬ownKept`: `C` lies inside a dropped sector and changes nothing.
+Every `O_τ` is nonempty and connected. `D₊` lies inside the sector `own`, and `D₋` inside `anti`.
+`D₊` meets only `O_own`, along a circle, and `D₋` meets only `O_anti`. Two cells `O_τ` and
+`O_τ'` share an arc iff `τ` and `τ'` differ in one bit. Two planes' line meets the link at two
+vertices, and round each of them lie the four cells with the other bits fixed. On every cell,
+membership is `κ` on one pattern:
+- on `D₊`, `P_C`; on `D₋`, `P_−C`;
+- on `O_τ`, the cone quadric outside, `τ`'s signs on `J`, and the other quadrics at their signs
+  at `p`.
 
-In both cases the apex adds no non-manifold point. The sectors' own structure at `p` is that of
-the other solids, judged by the other contacts.
-- `kC` and `¬ownKept`: the link is the cap of `C` together with the links of the kept sectors.
-  These are disjoint, since `C̄` lies inside the dropped sector `own`. With another sector kept
-  the link is disconnected, so not a disc: non-manifold. With none kept, the link is the cap
-  alone, a disc (the cone's own apex): manifold.
-- `¬kC` and `ownKept`: the link is the kept sectors' link with an open cap removed from the
-  interior of `own`'s. If every sector is kept, that is a sphere minus a cap, a disc: manifold.
-  Otherwise the kept sectors' link has nonempty boundary, and removing an interior cap leaves a
-  non-disc (an annulus when it was a disc): non-manifold. ∎
+*Proof.* By the implicit function theorem (independent normals, transversal crossings), a
+neighbourhood of `p` is homeomorphic to the arrangement of the tangent planes. The caps sit
+strictly inside one sector each (Lemma 3.1, applied to `±a`). A polyhedral cone with at most
+three faces is not a circular cone, so `own` minus `D₊` is a nonempty annulus. The planes' arcs
+lie off the caps, so the adjacencies of the sectors are those of the hyperplane arrangement.
+The signs are those of Lemmas 3.2 and 3.3. ∎
 
-**Hypothesis on the nappe.** The nappe's own plane passes through `p`. The analysis fixes its
-sign as the cone's. If another solid also bounds itself by that plane (a cone standing on a cap,
-its nappe plane the cap), the plane's sign varies off `C` and matters there. The apex is then
-undecided.
+**Theorem 3.5′ (`linkDisc`).** The result is a manifold at `p` iff the kept cells' union `X` on
+the link is empty, everything, or a closed disc. A disc means: `X` is connected through shared
+arcs, so is its complement, and no vertex has its four cells kept as a checkerboard.
 
-**Theorem 3.5 (one surface cutting `C`).** Suppose `J = {j}` and `j`'s tangent plane cuts `C`
+*Proof.* Near `p` the result is the cone over `X`, which is a manifold with boundary at `p` iff
+`X` is `∅`, `S²` or a disc. Suppose `X` has no checkerboard vertex. The caps' circles carry no
+vertex. Then `X` is a compact surface with boundary in `S²`. If it is connected, each boundary
+circle bounds one component of its complement (Jordan), so a connected complement means one
+boundary circle, and the region is a disc (Schoenflies). Conversely, a disc is connected, its
+complement is a disc too, and a pinch vertex makes `X` not a surface. ∎
+
+The earlier rule, Theorem 3.4, `(kC ∧ ¬ownKept ∧ anyOther) ∨ (¬kC ∧ ownKept ∧ ¬allKept)`, is the
+case `P_−C ~ anti` of this. 3.5′ also judges the sectors' own pattern at `p`, which 3.4 left to the
+other contacts.
+
+**Theorem 3.5 (one surface cutting `C`).** Suppose `J = {j}`, no other solid uses the cone
+quadric, and `j`'s tangent plane cuts `C`
 transversally: `(g·a)²(s² + c²) < s²|g|²|a|²`. Then the result is non-manifold at `p` iff
 exactly two opposite cells of the cycle `cap₊, cap₋, out₋, out₊` are kept. These are the cone
 region and its outside, on either side of the plane.
@@ -381,6 +401,60 @@ sign on `B` (`boxSign_spec`), so on `B` membership is the history on `U`'s signs
   - Points of `B` on two of the three sheets give one of the six vertices' four-cycles, which the
     same check covers. Points on one sheet give the first case.
 
+**Touches with a torus (`touches`, `judgeTouch`), by hand.** Let `T` be a torus with an
+axis-aligned axis, and work in its meridian half-plane: `ρ ≥ 0` is the distance from the axis
+and `w` the height along it. The solid torus is the body of revolution of the disc `Δ` about
+`(R, 0)` of radius `r`.
+
+- **Coaxial faces.** A face `F` coaxial with `T` is the body of revolution of a region `Φ` of the
+  meridian:
+  - a plane normal to the axis: a half-plane bounded by `w = c`;
+  - a cylinder on the axis: the strip `ρ < c`;
+  - a sphere centred on the axis, or a coaxial torus: a disc.
+
+  Two such bodies touch along the revolution of the points where `∂Δ` and `∂Φ` touch, and the
+  interiors' relation is that of `Δ` and `Φ`. For a circle and a line, or two circles, tangency
+  is an exact identity in ℚ: the distance from the centre to the line equals `r`, or
+  `|c₁c₂|² = (r ± s)²`. The contact point is then rational, and it is unique for distinct
+  curves. The plane's case depends on its outward normal: the torus lies on the plane's inner
+  side iff that normal points away from it.
+  - External tangency: `Δ ∩ Φ = ∅`.
+  - Internal tangency: one region contains the other.
+  
+  Both hold globally, so the combination they exclude is empty everywhere. With `ρ_P > 0` the
+  contact is a circle.
+- **Planes at a point.** The solid torus's support function in direction `n` is
+  `h(n) = n·o + R|n_⊥| + r|n|`. The farthest tube centre lies along `n_⊥`, and the tube adds
+  `r|n|`. When `n_⊥ ≠ 0` the maximum is attained at exactly one point, `o + R n_⊥/|n_⊥| + r n/|n|`.
+  So a plane `n·x = h(n)` touches the torus there and nowhere else, and the torus lies on one
+  side of it. The same holds for `−n`. The test is exact when `|n|` and `|n_⊥|` are rational.
+- **The other carriers** must keep one nonzero sign on the contact. At a point this is exact
+  evaluation. On a circle: with `t` the rational parameter, the carrier times `(1+t²)^D` is a
+  polynomial in `t`. If Descartes' rule clears every Möbius interval of `[−B, B]`, with `B` a
+  root bound (`noRealRoot`, built on the proven `noPosRoot`), it has no real root. It is then
+  nonzero on the circle except perhaps at `t = ∞`, which is checked directly to have the same
+  sign.
+- **The local rule.** Near a contact point `p` the two surfaces are tangent, and the third
+  combination, which the exclusion rules out, does not occur. In the plane normal to the
+  contact (for a circle, the meridian) the three occurring combinations are, along a small
+  circle round `p`: the side `A`, the pinched region `pin` between the two curves, and the side
+  `B`. `pin` is a cusp-shaped region that touches `p`, and the kept set is a union of these
+  closures.
+  - It is a half-disc, so a manifold, iff the kept set is one run: `∅`, `{A}`, `{B}`, `{A, pin}`,
+    `{pin, B}` or everything.
+  - It is not a manifold iff the kept set is `{A, B}` (two pieces meeting at `p`) or `{pin}`
+    (a region pinched to zero thickness at `p`).
+  
+  For a circle the picture is this one times an interval, since the other signs are constant
+  along it. This is the quadric path's `pinched` rule.
+- **Exclusions in the local check.** Inside a leaf `B`, membership is `κ` on the undecided
+  signs `U`. The exclusions above remove some patterns of `U` everywhere. If on the patterns
+  that remain `κ` is a function of `U ∖ {u}`, then off the wall the boundary of the result in `B`
+  lies on the zero sets of `U ∖ {u}`, and the regularisation does not see `u`. So the three
+  acceptance tests apply to `U ∖ {u}`. A manifold touch keeps one run, so it depends on only
+  one of the two surfaces, and the check accepts the leaves round it. A non-manifold touch
+  depends on both.
+
 A check that accepts every undecided leaf proves the result is a 3-manifold with boundary
 everywhere off the certified boxes. Inside a certified box the result is all or nothing. Every
 point of the wall lies in an undecided leaf, because a box with all signs certified holds no wall
@@ -389,9 +463,44 @@ point. Leaves the budget or the depth cut off report `und`, and the verdict is `
 So on this path:
 - `solid` is proven: a box is certified in, and the result is a manifold.
 - `empty` is proven (`empty_of_leaves`).
-- The path never says `nonmanifold`. A failed check (a tangency, a cone apex, a checkerboard, or
-  four undecided surfaces) is not proof of a bad point.
+- `nonmanifold` comes only from a touch decided exactly as above. A failed check (an undecided
+  tangency, a cone apex, a checkerboard, or four undecided surfaces) is not proof of a bad point.
+- Two undecided surfaces whose normals at a box's centre are within `1e-2` rad stop the check
+  at once. This is a shortcut to `und`, so it can only make the verdict ambiguous.
 
 **What stays unproven in Lean:** the check above, and the executable `norm`, `mul3` and `deriv3`
 that build the gradients and the cross products. A wrong derivative could accept a bad box. The
 signs of those polynomials are taken with the proven `Poly3.boxSign`.
+
+## 6. Completeness of root finding
+
+Several decisions need every root of a polynomial, not only sound ones. A root that is missed
+makes them wrong, not undecided. dol-curved found that `realRoots` dropped an interval still
+being split when its fuel ran out. The contacts also found the pencil's rational roots in
+floating point: float roots, then the convergents of their continued fractions.
+
+- **`realRoots` now returns `none`** unless its cover is complete. An interval left at the fuel
+  limit, or still on the stack at the step budget, gives `none`. Every interval of `[−B, B]`
+  must be cleared by Descartes' rule (`noPosRoot`, proven) or isolated (`Iso.ok`). Above degree
+  2 it works on the square-free part, whose roots are the same, so double roots no longer
+  exhaust the fuel.
+- **`rationalRoots`** gives every rational root of `p`, or `none`.
+  - Clear `p`'s denominators. A rational root `u/v` in lowest terms then has `v | L`, the
+    cleared leading coefficient.
+  - Every candidate lies on the grid `(1/L)ℤ` (with `L` taken after dividing by the content). Each
+    isolating interval is halved (exact sign bisection) below width `1/L`. It then holds
+    at most one grid point, which is tested exactly.
+
+The decisions that need completeness, and what an incomplete cover now gives:
+
+| decision | needs | incomplete gives |
+|---|---|---|
+| `contacts`: the pencil's rational roots `t` | every rational root of `det(A_i + tA_j)` | an open contact, so ambiguous (its exclusion `⟨i,+,i,−⟩` excludes nothing) |
+| contact line subdivision (Theorem 2.5) | every root of the other quadrics, `S(w,w)` and `S(D,w)` along the line | the contact undecided |
+| isolated contact points on the pencil's null line | every root of `q_i` there | the contact undecided |
+| `edgeTouches`: the plane pencil's rational roots | every rational root | an undecided note |
+| conic contacts, triple curves | one rational point | fewer points, so undecided (never wrong) |
+| polynomial path: constant signs on a touch circle | no real root (`noRealRoot`, complete by construction) | the touch undecided |
+
+The volume estimate's `froots` and `nearTouch`'s float roots stay heuristic. They feed only the
+estimate and near-decision notes, as documented.

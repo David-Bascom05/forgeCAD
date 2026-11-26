@@ -91,12 +91,14 @@ impl Repo {
             Err(_) => git_dir.clone(),
         };
         let config = Config::load(&common, &git_dir);
-        let version = config.int("core.repositoryformatversion").unwrap_or(0);
+        // the format and bareness: the repository's own config only, as git reads them
+        let local = Config::repo_local(&common, &git_dir).config;
+        let version = local.int("core.repositoryformatversion").unwrap_or(0);
         if version > 1 {
             return Err(Error::Unsupported(format!("repository format version {version}")));
         }
         if version == 1 {
-            for (k, _) in &config.entries {
+            for (k, _) in &local.entries {
                 if let Some(x) = k.strip_prefix("extensions.")
                     && !EXTENSIONS.contains(&x)
                 {
@@ -104,14 +106,14 @@ impl Repo {
                 }
             }
         }
-        let hash = match config.get("extensions.objectformat").map(|s| s.to_lowercase()) {
+        let hash = match local.get("extensions.objectformat").map(|s| s.to_lowercase()) {
             None => HashKind::Sha1,
             Some(s) if s == "sha1" => HashKind::Sha1,
             Some(s) if s == "sha256" => HashKind::Sha256,
             Some(s) => return Err(Error::Unsupported(format!("object format {s}"))),
         };
         let odb = Odb::open(&common.join("objects"), hash)?;
-        let work = if config.bool("core.bare") == Some(true) {
+        let work = if local.bool("core.bare") == Some(true) {
             None
         } else {
             work.map(|w| forge_dirs::fs::canonicalize(w).unwrap_or(w.to_path_buf()))

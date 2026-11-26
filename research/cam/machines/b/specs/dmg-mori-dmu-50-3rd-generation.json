@@ -1,0 +1,175 @@
+{
+ "vendor": "DMG MORI",
+ "model": "DMU 50 3rd Generation",
+ "family": "DMU",
+ "source": [
+  "https://en.dmgmori.com/products/machines/milling/5-axis-milling/dmu/dmu-50",
+  "https://us.dmgmori.com/products/machines/milling/5-axis-milling/dmu/dmu-50",
+  "https://en.dmgmori.com/media/public/epaper/TEM_1-2023/TEM_2023-1_ENOS/epaper/TEM_2023-1_ENOS.pdf"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "table-table",
+ "architecture": "Vertical spindle; NC swivel rotary table carries the work: B-axis swivel -35/+110 deg (maker calls it B) with rotary table on it (C, range not published). Linear axis carriers not published (direct-driven ball screws, one-piece bed).",
+ "control": {
+  "standard": null,
+  "options": [
+   "CELOS with SIEMENS",
+   "CELOS with HEIDENHAIN (per TEM 1-2023 DMU 40/50 table)"
+  ]
+ },
+ "travel_mm": {
+  "X": 650,
+  "Y": 520,
+  "Z": 475
+ },
+ "rotary": {
+  "A": null,
+  "B": {
+   "range_deg": [
+    -35,
+    110
+   ],
+   "rapid_rpm": null,
+   "indexing_or_full": "full 5-axis simultaneous"
+  },
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": 300,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 15000,
+  "rpm_min": null,
+  "taper_or_interface": null,
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": 21
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 111
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": null,
+  "Y": null,
+  "Z": null,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 30,
+  "options": [
+   "60",
+   "120",
+   "180 pockets (product page)",
+   "TEM 1-2023: up to 120 pockets"
+  ],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.chip_to_chip_s",
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "changer.max_tool_dia_mm",
+  "changer.max_tool_kg",
+  "changer.max_tool_len_mm",
+  "changer.tool_to_tool_s",
+  "control.standard",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "milling_head",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "pallet.change_s",
+  "pallet.count",
+  "pallet.load_kg",
+  "pallet.size_mm",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rapid_m_min.X",
+  "rapid_m_min.Y",
+  "rapid_m_min.Z",
+  "rotary.A",
+  "rotary.C",
+  "rotary_table_dia_mm",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.rpm_min",
+  "spindle.taper_or_interface",
+  "spindle.torque_nm.cont",
+  "spindle_center_to_column_mm",
+  "spindle_center_to_pallet_top_mm",
+  "spindle_nose_to_table_mm",
+  "table_height_from_floor_mm",
+  "table_mm",
+  "weight_kg"
+ ],
+ "options": [
+  "speedMASTER 15,000 rpm 46 kW / 200 Nm",
+  "speedMASTER 20,000 rpm 35 kW / 130 Nm",
+  "traverse rates +25 % to 42 m/min (TEM 1-2023, listed under OPTIONAL)",
+  "automation: Robo2Go Milling, PH Cell"
+ ],
+ "notes": "Standard spindle speedMASTER 15,000 rpm 21 kW / 111 Nm (rating basis not stated; US page gives 28.2 hp / 81.9 ft-lb). Max workpiece dia 630 mm, height 600 mm, 300 kg. Footprint 6.5 m2 without chip conveyor (TEM 1-2023). Absolute measuring systems + active cooling. Standard rapid not published (only 'increase to 42 m/min' option). DMG MORI's full technical data and brochures (PDF) are behind a DMG MORI Account registration (download URL returns 'Download - Registrierung erforderlich' HTML); not used. Only data printed on the public product page (and public TECHNOLOGY EXCELLENCE magazine PDFs) recorded.",
+ "_not_applicable": [
+  "swing_over_bed_mm",
+  "max_turning_dia_mm",
+  "max_turning_length_mm",
+  "chuck_size_in",
+  "bar_capacity_mm",
+  "spindle_nose_type",
+  "sub_spindle",
+  "live_tool",
+  "turret_stations",
+  "turret_index_s",
+  "tailstock"
+ ]
+}

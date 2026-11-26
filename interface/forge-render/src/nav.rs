@@ -21,6 +21,8 @@ const CLICK_SLOP: f32 = 4.0;
 /// How long a view change animates (ms).
 pub const TRANSITION_MS: f64 = 280.0;
 const CUBE_MARGIN_PX: f32 = 8.0;
+/// A view narrower than this (logical px) draws its cube at half size.
+pub const NARROW_VIEW_PX: f32 = 320.0;
 /// A wheel step of the section, as a share of the view's distance.
 const SECTION_STEP: f32 = 0.01;
 /// How long exploding or coming back together takes (ms).
@@ -253,7 +255,10 @@ impl Nav {
 
     /// Where the view cube is: the top right of the view.
     pub fn cube_place(&self) -> Place {
-        let side = viewcube::WIDGET_PX * self.scale;
+        // a narrow view (a phone-wide window): the cube at half size, so it leaves the part room
+        // (UX-LEAD: below ~320 px of view it covered the model)
+        let narrow = (self.size.0 as f32) < NARROW_VIEW_PX * self.scale;
+        let side = viewcube::WIDGET_PX * self.scale * if narrow { 0.5 } else { 1.0 };
         Place {
             at: (
                 self.size.0 as f32 - side - CUBE_MARGIN_PX * self.scale,
@@ -300,6 +305,7 @@ impl Nav {
                 entity,
                 selected: true,
                 second: false,
+                warn: false,
             })
             .collect();
         if self.drag.is_none()
@@ -312,6 +318,7 @@ impl Nav {
                 entity: h.entity,
                 selected: false,
                 second: false,
+                warn: false,
             });
         }
         out
@@ -370,6 +377,11 @@ impl Nav {
     }
 
     /// Where in the world the pointer last was on the part.
+    /// What the pointer is over, as the view last answered (what `marks` pre-lights).
+    pub fn hovered(&self) -> Option<PickHit> {
+        self.hit.filter(|_| self.hit_at.is_some())
+    }
+
     pub fn hit_point(&self) -> Option<[f32; 3]> {
         self.hit.map(|h| h.point)
     }
@@ -732,6 +744,17 @@ impl Nav {
         true
     }
 
+    /// Straight to `to`, no transition.
+    pub fn jump_to(&mut self, to: Camera) {
+        self.transition = None;
+        self.camera = to;
+    }
+
+    /// Where the camera is going: a transition's end, else where it is.
+    pub fn heading_to(&self) -> Camera {
+        self.transition.as_ref().map_or(self.camera, |t| t.to)
+    }
+
     /// Starts a smooth move to a view; any mouse press or wheel stops it where it is.
     pub fn go_to(&mut self, to: Camera) {
         self.transition = Some(Transition {
@@ -754,6 +777,12 @@ impl Nav {
         to.target = center;
         to.fit_to(radius, self.size.0, self.size.1);
         self.go_to(to);
+    }
+
+    /// Cut to a view (no move from the one before): a subject framed on entering.
+    pub fn cut_to(&mut self, c: Camera) {
+        self.transition = None;
+        self.camera = c;
     }
 
     /// The opening view of everything.

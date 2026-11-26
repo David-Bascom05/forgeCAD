@@ -24,22 +24,38 @@ pub mod gui_apptools;
 mod gui_asm;
 #[path = "gui_asmdrag.rs"]
 mod gui_asmdrag;
+#[path = "gui_bendsim.rs"]
+pub mod gui_bendsim;
+#[path = "gui_cam.rs"]
+mod gui_cam;
+#[path = "gui_camsim.rs"]
+pub mod gui_camsim;
 #[path = "gui_docs.rs"]
 pub mod gui_docs;
+#[path = "gui_env.rs"]
+mod gui_env;
 #[path = "gui_explode.rs"]
 mod gui_explode;
+#[path = "gui_record.rs"]
+pub mod gui_record;
 #[path = "gui_fgmarks.rs"]
 mod gui_fgmarks;
 #[path = "gui_inspect.rs"]
 pub mod gui_inspect;
+#[path = "gui_machine.rs"]
+pub mod gui_machine;
 #[path = "gui_markup.rs"]
 pub mod gui_markup;
 #[path = "gui_overlay.rs"]
 mod gui_overlay;
+#[path = "gui_robot.rs"]
+pub mod gui_robot;
 #[path = "gui_sheet.rs"]
 mod gui_sheet;
 #[path = "gui_speech.rs"]
 pub mod gui_speech;
+#[path = "gui_studio.rs"]
+mod gui_studio;
 #[path = "gui_thermo.rs"]
 mod gui_thermo;
 #[path = "gui_versions.rs"]
@@ -50,6 +66,16 @@ pub type Waker = Arc<dyn Fn() + Send + Sync>;
 /// The formats a target can be: blending in sRGB, as a browser's. The viewport's picture is sampled
 /// as stored.
 pub const HEADLESS_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+
+/// An assembly's view to make again from its renderer: its parts and scene.
+pub(crate) struct Restage {
+    file: Option<String>,
+    name: String,
+    scene: Scene,
+    parts: Vec<crate::mesh::PartMesh>,
+    /// Whose meshes these are, and how many (`fg::AsmMeshes::lineage`); none for others.
+    lineage: Option<(u64, usize)>,
+}
 
 pub(crate) struct Loaded {
     /// Its file, if it has one.
@@ -117,9 +143,67 @@ pub type AsmPlaced = (Vec<crate::fg::Occ>, Vec<(usize, crate::scene::Rows)>);
 /// A part file, and its anchors or why not.
 pub(crate) type PartAnchors = (String, Result<Vec<String>, String>);
 
+/// A selection window let go, as it's chosen from the view's ids: its box (device pixels), its
+/// direction, and what the moment of release said (a tool taking edges, Ctrl, Shift).
+struct WindowAsk {
+    lo: (f32, f32),
+    hi: (f32, f32),
+    crossing: bool,
+    takes_edges: bool,
+    ctrl: bool,
+    shift: bool,
+}
+
+/// What a selection window chose, from the view's ids: faces into (or, with Ctrl, out of) the
+/// selection, or the edges for a tool that takes them (returned).
+fn window_chosen(v: &mut View, ids: &crate::render::ViewIds, ask: &WindowAsk) -> Option<Vec<Entity>> {
+    let seen: Vec<Entity> = ids
+        .seen_in_box(ask.lo, ask.hi)
+        .into_iter()
+        .filter(|(_, inside, outside)| *inside > 0 && (ask.crossing || *outside == 0))
+        .map(|f| f.0)
+        .collect();
+    let (edges, found): (Vec<Entity>, Vec<Entity>) =
+        seen.into_iter().partition(|e| matches!(e, Entity::Edge(_)));
+    let found: Vec<Entity> = found
+        .into_iter()
+        .filter(|e| matches!(e, Entity::Face(_)))
+        .collect();
+    if ask.takes_edges {
+        return Some(edges);
+    }
+    if ask.ctrl {
+        v.nav.selected.retain(|s| !found.contains(&s.1));
+    } else {
+        if !ask.shift {
+            v.nav.selected.clear();
+        }
+        for e in found {
+            if !v.nav.selected.contains(&(0, e)) {
+                v.nav.selected.push((0, e));
+            }
+        }
+    }
+    None
+}
+
 pub struct Gui {
+    /// A photo of the view on its way back from the GPU (`gui_record.rs`).
+    photo: Option<gui_record::PhotoJob>,
+    /// A recording under way (`gui_record.rs`).
+    recording: Option<gui_record::RecordJob>,
+    /// The Render Studio's tracer and queue while its environment is open (`gui_studio.rs`).
+    studio: Option<gui_studio::StudioHost>,
     pub vers: gui_versions::VersState,
+    pub bend: gui_bendsim::BendView,
+    /// An environment asked by name (a deep link, `--env`): entered once the document built.
+    pub env_asked: Option<String>,
+    /// The Machine Builder's scene (`gui_machine.rs`).
+    pub mach: gui_machine::MachHost,
     pub ctx: egui::Context,
+    /// The UI audit's (tests/ui_audit): when `Some`, each frame's shapes are kept here, the text
+    /// and where it was clipped, for its judge to read. `None` (always, in the app) costs nothing.
+    pub audit_shapes: Option<Vec<egui::epaint::ClippedShape>>,
     /// The Agent tab's backend and its turns (`gui_agent.rs`).
     pub agent: gui_agent::AgentHost,
     /// The agent's app tools' view steps and driven joints (`gui_apptools.rs`).
@@ -147,8 +231,11 @@ pub struct Gui {
     target_px: (u32, u32),
     /// When the right button went down in the view, for its menu to show if it stays down.
     mark_held: Option<f64>,
+    /// A selection window let go whose view ids are on their way back (in a page they come in a
+    /// later task: `picks` finishes it).
+    window_out: Option<WindowAsk>,
     /// A message with marks, sent once the frame showing them is drawn.
-    markup_job: Option<(String, Vec<String>)>,
+    markup_job: Option<(String, Vec<String>, Vec<crate::agent::Picture>)>,
     /// A message with marks taken, waiting on its names; an assembly's occurrences' own names,
     /// by the text they were found for, and the thread finding them.
     markup_wait: Option<Box<gui_markup::Waiting>>,
@@ -161,6 +248,8 @@ pub struct Gui {
     /// The last build the part's session gave: what a host (the browser page, a test) reports.
     pub last_built: Option<LastBuilt>,
     fg_view: Option<Loaded>,
+    /// An assembly's parts placed anew, for the view's renderer to take (`Renderer::restage`).
+    fg_restage: Option<Restage>,
     /// The Forge part's last meshes, folded and (a sheet's) flat, and its sheets' DXF.
     fg_folded: Option<crate::mesh::PartMesh>,
     fg_flat: Option<crate::mesh::PartMesh>,
@@ -275,7 +364,14 @@ impl Gui {
         let warm = ctx.run_ui(warm_input, |ui| warm_shell.ui(ui));
         warm_shell.out.clear();
         Gui {
+            audit_shapes: None,
+            photo: None,
+            recording: None,
+            studio: None,
             vers: Default::default(),
+            bend: Default::default(),
+            env_asked: None,
+            mach: Default::default(),
             agent: Default::default(),
             apps: Default::default(),
             speech: Default::default(),
@@ -295,6 +391,7 @@ impl Gui {
             view_file: None,
             target_px: (1, 1),
             mark_held: None,
+            window_out: None,
             markup_job: None,
             markup_wait: None,
             markup_occ: None,
@@ -303,6 +400,7 @@ impl Gui {
             fg: None,
             last_built: None,
             fg_view: None,
+            fg_restage: None,
             fg_folded: None,
             fg_flat: None,
             fg_sketch: None,
@@ -376,6 +474,7 @@ impl Gui {
     /// Opens a part into the active document, in the background: the window never waits on the
     /// kernel. A bench part's name opens its Forge port. False if nothing could be opened.
     fn load(&mut self, path: &str) -> bool {
+        self.shell.camsim = None;
         // a DWG file: AutoCAD's layout, its own tab
         if is_dwg(path) {
             match crate::shell::dwgdoc::DwgDoc::open(path) {
@@ -399,6 +498,19 @@ impl Gui {
                 }
             }
             return true;
+        }
+        // a robot document: its source with the Robot panel
+        if path.ends_with(".fg")
+            && forge_dirs::fs::read_to_string(path).is_ok_and(|s| forge_lang::robot::is_robot(&s))
+        {
+            return self.open_robot(path);
+        }
+        // a machining document opens in the Manufacture workspace, over its part
+        if path.ends_with(".fg")
+            && let Ok(s) = forge_dirs::fs::read_to_string(path)
+            && forge_cam_lang::is_machining(&s)
+        {
+            return self.open_cam(path, &s);
         }
         if path.ends_with(".fg") {
             return self.open_fg(path);
@@ -431,6 +543,8 @@ impl Gui {
         let camera = view_camera(center, fit, self.shell.view.parallel, size);
         renderer.resize(size);
         self.theme_view(&mut renderer);
+        let waker = self.waker.clone();
+        renderer.set_pick_wake(Arc::new(move || waker()));
         let target = Offscreen::new(&self.device, size);
         let raw = raw_view(&target);
         let tex = self
@@ -552,7 +666,10 @@ impl Gui {
             .map(|(_, i)| i)
             .collect();
         let (c, r) = v.scene.bounds();
-        let empty = v.nav.marks().iter().all(|m| m.selected);
+        // the part under the pointer, selected or not, is what's there: a plane behind it isn't
+        // (with the face under the pointer selected its hover mark wasn't there, and the plane
+        // behind the face lit up instead of it)
+        let empty = v.nav.hover_hit().is_none();
         crate::origin::hit(
             &shown,
             crate::origin::reach(c, r),
@@ -759,26 +876,7 @@ impl Gui {
             }
             if let Some((a, b)) = v.nav.window.take() {
                 v.dirty = true;
-                let lo = (a.0.min(b.0), a.1.min(b.1));
-                let hi = (a.0.max(b.0), a.1.max(b.1));
-                let camera = v.nav.camera;
-                // only what can be seen: right to left what shows in it, left to right what shows
-                // in it and nowhere else
-                let crossing = b.0 < a.0;
-                let seen: Vec<Entity> = v
-                    .renderer
-                    .seen_in_box(&mut v.scene, &camera, lo, hi)
-                    .into_iter()
-                    .filter(|(_, inside, outside)| *inside > 0 && (crossing || *outside == 0))
-                    .map(|f| f.0)
-                    .collect();
                 // a tool's edges selection takes the window's edges, as Inventor's does
-                let (edges, found): (Vec<Entity>, Vec<Entity>) =
-                    seen.into_iter().partition(|e| matches!(e, Entity::Edge(_)));
-                let found: Vec<Entity> = found
-                    .into_iter()
-                    .filter(|e| matches!(e, Entity::Face(_)))
-                    .collect();
                 let takes_edges = self
                     .shell
                     .fg
@@ -786,19 +884,25 @@ impl Gui {
                     .and_then(|p| p.tool.as_ref())
                     .and_then(|t| t.slots.get(t.active))
                     .is_some_and(|s| s.kind == crate::shell::fgtool::SlotKind::Edges);
-                if takes_edges {
-                    window_edges = Some(edges);
-                } else if v.nav.ctrl_held() {
-                    v.nav.selected.retain(|s| !found.contains(&s.1));
+                let ask = WindowAsk {
+                    lo: (a.0.min(b.0), a.1.min(b.1)),
+                    hi: (a.0.max(b.0), a.1.max(b.1)),
+                    // only what can be seen: right to left what shows in it, left to right what
+                    // shows in it and nowhere else
+                    crossing: b.0 < a.0,
+                    takes_edges,
+                    ctrl: v.nav.ctrl_held(),
+                    shift: v.nav.shift_held(),
+                };
+                let camera = v.nav.camera;
+                // natively the ids are waited for; a page can't wait for the GPU, so they're asked
+                // for and the window is chosen when they're back (`picks`)
+                if cfg!(target_arch = "wasm32") {
+                    v.renderer.view_ids_start(&mut v.scene, &camera);
+                    self.window_out = Some(ask);
                 } else {
-                    if !v.nav.shift_held() {
-                        v.nav.selected.clear();
-                    }
-                    for e in found {
-                        if !v.nav.selected.contains(&(0, e)) {
-                            v.nav.selected.push((0, e));
-                        }
-                    }
+                    let ids = v.renderer.view_ids(&mut v.scene, &camera);
+                    window_edges = window_chosen(v, &ids, &ask);
                 }
             }
             if let Some(at) = v.nav.cube_menu.take() {
@@ -832,7 +936,7 @@ impl Gui {
                 self.fg_save();
                 return None;
             }
-            KeyCmd::Rename | KeyCmd::Delete | KeyCmd::Markup => return None,
+            KeyCmd::Rename | KeyCmd::Delete | KeyCmd::Markup | KeyCmd::Photo | KeyCmd::Record => return None,
             KeyCmd::FitSelected => K::KeyF,
             KeyCmd::Section => K::KeyS,
             KeyCmd::Explode => K::KeyE,
@@ -871,6 +975,17 @@ impl Gui {
         {
             v.renderer.pick_start(&mut v.scene, &v.nav.camera, px);
         }
+        // a selection window's ids back (a page's: see `view_event`)
+        if self.window_out.is_some()
+            && let Some(ids) = v.renderer.view_ids_take(&v.scene)
+            && let Some(ask) = self.window_out.take()
+        {
+            v.dirty = true;
+            if let Some(e) = window_chosen(v, &ids, &ask) {
+                self.fg_window_edges(e);
+            }
+            return true;
+        }
         if let Some((px, hit, _)) = v.renderer.pick_poll(&v.scene)
             && v.nav
                 .on_pick(px, hit.filter(|h| !crate::thermo_view::unpicked(h)))
@@ -904,6 +1019,22 @@ impl Gui {
                     s.set_toggle(g, !s.toggle(g));
                     continue;
                 }
+                Action::EnterEnv(id) => {
+                    self.env_enter(id);
+                    continue;
+                }
+                Action::ExitEnv => {
+                    self.env_exit();
+                    continue;
+                }
+                Action::Env(id, c) => {
+                    self.shell.env_command(id, c);
+                    continue;
+                }
+                Action::Capture(c) => {
+                    crate::shell::capture::command_of(&mut self.shell, c);
+                    continue;
+                }
                 a => a,
             };
             if let Action::PartColours(on) = a {
@@ -912,8 +1043,18 @@ impl Gui {
                 continue;
             }
             match a {
+                Action::MachineBuilder => self.machine_toggle(),
+                Action::Machine(c) => self.machine_cmd(c),
                 Action::Versions(c) => {
                     use crate::shell::versions::{VersionsAct, VersionsCmd};
+                    // a folder with no history can't keep a version: the panel says so and offers
+                    // Turn on history (a Create there failed with its words never shown)
+                    let kept = self.vers_kept();
+                    if !kept && matches!(c, VersionsCmd::Create | VersionsCmd::Release) {
+                        let what = if matches!(c, VersionsCmd::Create) { "Create Version" } else { "Release" };
+                        self.shell.status =
+                            format!("{what}: this folder keeps no history. Turn it on in Versions first");
+                    }
                     let v = &mut self.shell.versions;
                     if self.shell.agent.tab != crate::shell::agent::SideTab::Versions {
                         self.shell.agent.tab = crate::shell::agent::SideTab::Versions;
@@ -921,8 +1062,9 @@ impl Gui {
                     }
                     match c {
                         VersionsCmd::Show => {}
-                        VersionsCmd::Create => v.dialog = Some((String::new(), String::new())),
-                        VersionsCmd::Release => v.release = Some((String::new(), String::new(), false)),
+                        VersionsCmd::Create if kept => v.dialog = Some((String::new(), String::new())),
+                        VersionsCmd::Release if kept => v.release = Some((String::new(), String::new(), false)),
+                        VersionsCmd::Create | VersionsCmd::Release => {}
                         VersionsCmd::UpdateAll => v.out.push(VersionsAct::Update(None)),
                         // the newest version against the working copy
                         VersionsCmd::CompareCurrent => {
@@ -1050,6 +1192,12 @@ impl Gui {
                             t.set_units(u);
                         }
                         self.fg_text();
+                        continue;
+                    }
+                    Action::Cam(c) => {
+                        if let Some(w) = &mut self.shell.cam {
+                            w.command(c.into());
+                        }
                         continue;
                     }
                     Action::Fg(c) => {
@@ -1234,15 +1382,22 @@ impl Gui {
         }
         self.watch_frame();
         self.take_fg();
+        self.cam_host();
         self.take_agent();
         self.take_speech();
         self.take_extras(false);
         times.events = now_ms() - t0;
-        let mut animating = false;
+        let mut animating = self.camsim_tick();
         if let Some(v) = &mut self.view {
+            let was = v.nav.camera;
             if v.nav.tick(now_ms()) {
                 v.dirty = true;
                 animating = true;
+            } else if v.nav.camera != was {
+                // a view change's last step (the camera put at its end) is drawn too: a slow frame
+                // can take a change from its start to its end in one tick, and the picture stayed
+                // where it began
+                v.dirty = true;
             }
             if let Some(t) = v.nav.explode_tick(now_ms()) {
                 v.scene.set_explode(t);
@@ -1260,6 +1415,9 @@ impl Gui {
         self.sync_tab();
         let shell = &mut self.shell;
         let mut output = self.ctx.run_ui(raw, |ui| shell.ui(ui));
+        if let Some(a) = &mut self.audit_shapes {
+            a.clone_from(&output.shapes);
+        }
         self.asm_drag_cursor(&mut output.platform_output);
         self.sync_selection();
         self.pixels_per_point = output.pixels_per_point;
@@ -1277,9 +1435,15 @@ impl Gui {
         self.save_settings();
         self.inspect_tick();
         self.sheet_frame();
+        self.env_frame();
+        self.bendsim_frame();
+        self.machine_frame();
         self.fg_hole_guess();
         self.fg_preview();
         if self.explode_tick() {
+            animating = true;
+        }
+        if self.robot_tick() {
             animating = true;
         }
         self.body_eye();
@@ -1434,6 +1598,18 @@ impl Gui {
                     world.extend(local);
                 }
             }
+            // what the bend simulation sees through, outlined
+            if self.bend.showing() {
+                world.extend(self.bend.outline_tris(&v.nav.camera, v.size));
+            }
+            // the simulation draws the part itself, in each setup's frame (turned over, in soft
+            // jaws): the document's own model, in its own frame, would float in the wrong place
+            let simulating = self.shell.camsim.is_some() && self.shell.tab == crate::shell::CAM_TAB;
+            v.scene.hidden = simulating;
+            let solid = match self.shell.camsim.as_deref_mut() {
+                Some(st) if simulating => gui_camsim::geometry(st, &v.nav.camera, v.size, &mut world),
+                _ => vec![],
+            };
             let behind = extra_behind;
             let marks = {
                 let quiet = self
@@ -1448,7 +1624,9 @@ impl Gui {
                         .nav
                         .marks()
                         .into_iter()
-                        .filter(|m| !m.selected && !quiet)
+                        // what's selected drawn in the chosen colour (it wasn't drawn at all:
+                        // a face clicked showed nothing once the pointer left it)
+                        .filter(|_| !quiet)
                         .collect(),
                 };
                 m.extend(self.fg_located_marks.iter().copied());
@@ -1461,12 +1639,48 @@ impl Gui {
                     entity: Entity::Face(f),
                     selected: true,
                     second: false,
+                    warn: false,
                 }));
+                // the border of each face the view could not draw, in the warning colour, so its
+                // gap reads as "not drawn", not as a hole in the part (the Issues window says so)
+                if let Some(p) = &self.shell.fg {
+                    m.extend(
+                        p.undrawn
+                            .faces
+                            .iter()
+                            .flat_map(|f| f.edges.iter())
+                            .take(192)
+                            .map(|&e| Mark {
+                                placement: 0,
+                                entity: Entity::Edge(e),
+                                selected: false,
+                                second: false,
+                                warn: true,
+                            }),
+                    );
+                }
+                // the bend simulation's bodies are not the design's: none of its marks
+                if self.bend.showing() {
+                    m.clear();
+                }
                 m
             };
             // the build's flags on the faces of what they're of; Compare's colours over them
             let flagged;
-            let colours: &[crate::render::FaceColour] = if self.vers.colours.is_empty() {
+            let studio_lit;
+            let colours: &[crate::render::FaceColour] = if self.bend.showing() {
+                &[]
+            } else if self.shell.env == Some(crate::shell::env::EnvId::RenderStudio) {
+                // the Studio's chosen parts in the selection's colour, the row under the pointer
+                // fainter (its occurrences pre-lit, as the browser's are)
+                studio_lit = gui_studio::lit(
+                    &self.shell.studio,
+                    &v.scene,
+                    &v.renderer.cpu_parts,
+                    self.shell.theme.selection,
+                );
+                &studio_lit
+            } else if self.vers.colours.is_empty() {
                 flagged = self.fg_marks_was.1.clone();
                 &flagged
             } else {
@@ -1476,16 +1690,23 @@ impl Gui {
                 hud: None,
                 cube: Some((v.nav.cube_place(), v.nav.cube_hover)),
                 face_colours: colours,
-                face_ghosts: &self.vers.ghosts,
+                face_ghosts: if self.bend.showing() {
+                    &self.bend.ghosts
+                } else {
+                    &self.vers.ghosts
+                },
                 marks: &marks,
                 world: &world,
                 behind: &behind,
+                solid: &solid,
             };
             // a wall or draft map shows its colours as the legend has them: no occlusion over it
             let ao = v.renderer.ao;
             if self.shell.fg.as_ref().is_some_and(|p| {
                 p.thermo.analysis != crate::shell::thermo_ui::Analysis::None && !self.fg_walls.is_empty()
-            }) {
+            }) || (self.shell.camsim.is_some() && self.shell.tab == crate::shell::CAM_TAB)
+            {
+                // and a simulation: its light is baked in, its depth has no normals to occlude by
                 v.renderer.ao = false;
             }
             let (key, map) = gui_overlay::map_of(&self.fg_walls, self.shell.fg.as_ref());
@@ -1496,6 +1717,8 @@ impl Gui {
             v.dirty = false;
             times.view_drawn = true;
         }
+        let studio_busy = self.studio_frame();
+        self.capture_tick();
         times.view = now_ms() - t1;
 
         let t2 = now_ms();
@@ -1563,7 +1786,11 @@ impl Gui {
             .next()
             .map(|v| v.repaint_delay)
             .unwrap_or(std::time::Duration::MAX);
-        let again_in = if animating || self.mark_held.is_some() || self.view.as_ref().is_some_and(|v| v.dirty)
+        let again_in = if animating
+            || studio_busy
+            || self.capture_busy()
+            || self.mark_held.is_some()
+            || self.view.as_ref().is_some_and(|v| v.dirty)
         {
             Some(std::time::Duration::ZERO)
         } else if delay == std::time::Duration::MAX {
@@ -1571,6 +1798,9 @@ impl Gui {
         } else {
             Some(delay)
         };
+        // the sketches of the forge-lang runs this frame made on this thread (a tool's quick run,
+        // and in a page with one thread every build): freed between frames, none in use then
+        crate::plat::release_sketches();
         FrameOut {
             platform: output.platform_output,
             host,
@@ -1695,6 +1925,9 @@ pub struct Headless {
     time: f64,
     pending: Vec<egui::Event>,
     pointer: egui::Pos2,
+    /// Each step's frame on the UI thread (ms, the GPU's wait after it left out), while `Some`:
+    /// the big-model bench's (research/big-render).
+    pub frame_log: Option<Vec<[f64; 5]>>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1737,6 +1970,7 @@ impl Headless {
             time: 0.0,
             pending: Vec::new(),
             pointer: egui::Pos2::ZERO,
+            frame_log: None,
         })
     }
 
@@ -1807,8 +2041,13 @@ impl Headless {
         self.time += 1.0 / 60.0;
         let view = self.view.clone();
         let px = self.px();
+        let t = crate::viewer::now_ms();
         let out = self.gui.frame(raw, &view, px);
         self.gui.picks();
+        if let Some(log) = &mut self.frame_log {
+            let m = &out.times;
+            log.push([crate::viewer::now_ms() - t, m.ui, m.tess, m.view, m.draw]);
+        }
         let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
         self.gui.picks();
         out
@@ -1890,6 +2129,16 @@ impl Headless {
             },
             button: MouseButton::Right,
         });
+    }
+
+    /// Shift held down (true) or let go, for the view: a click with it adds to the selection.
+    pub fn shift(&mut self, on: bool) {
+        let m = if on {
+            winit::keyboard::ModifiersState::SHIFT
+        } else {
+            winit::keyboard::ModifiersState::empty()
+        };
+        self.gui.view_event(&WindowEvent::ModifiersChanged(m.into()));
     }
 
     /// A left click here.
@@ -2127,6 +2376,7 @@ impl Gui {
                 };
                 self.fg = Some(s);
                 self.fg_view = None;
+                self.fg_restage = None;
                 self.fg_folded = None;
                 self.fg_flat = None;
                 self.fg_sheets.clear();
@@ -2192,7 +2442,7 @@ impl Gui {
         // the anchors a selection was of, and those of the body now
         let mut renamed: Option<(Arc<crate::fg::AnchorView>, Arc<crate::fg::AnchorView>)> = None;
         for m in s.poll() {
-            let b = match m {
+            let mut b = match m {
                 crate::fg::Msg::Built(b) => *b,
                 crate::fg::Msg::Posed { poses, .. } => {
                     posed = poses.or(posed);
@@ -2213,7 +2463,13 @@ impl Gui {
                 }
                 // an older shape's, a newer one's faces already on screen
                 crate::fg::Msg::Final { seq, .. } if seq != s.changed => continue,
-                crate::fg::Msg::Final { mesh, flat, .. } => {
+                crate::fg::Msg::Final {
+                    mesh, flat, undrawn, ..
+                } => {
+                    // what of it couldn't be drawn: the Issues window's and the outline's
+                    if let Some(p) = &mut self.shell.fg {
+                        p.undrawn = undrawn;
+                    }
                     self.fg_folded = Some(mesh);
                     self.fg_flat = flat;
                     if let Some(v) = &mut self.view {
@@ -2239,12 +2495,15 @@ impl Gui {
                     .collect(),
             });
             if let Some(p) = &mut self.shell.fg {
-                p.summary = b.summary();
+                p.summary = b.summary(crate::shell::ux::System::of_doc(self.shell.units));
                 // a part that gained a component is an assembly now (and back)
                 p.assembly = b.asm.is_some();
                 p.feats = b.feats;
                 p.params = b.params;
                 p.issues = b.issues;
+                if let Some(u) = &b.undrawn {
+                    p.undrawn = u.clone();
+                }
                 if let Some(c) = b.cutlist {
                     p.cutlist = c;
                 }
@@ -2255,8 +2514,21 @@ impl Gui {
                 }) {
                     p.selected = None;
                 }
-                self.shell.status = p.summary.clone();
+                // the edit that asked for this build says what it did first, then the build: on
+                // every build of that edit (its number was kept when it was sent)
+                self.shell.status = match &p.said {
+                    Some((w, Some(at))) if *at == b.seq && b.checked && !b.preview => {
+                        format!("{w}: done · {}", p.summary)
+                    }
+                    Some((w, Some(at))) if *at == b.seq => format!("{w} · {}", p.summary),
+                    _ => {
+                        p.said = None;
+                        p.summary.clone()
+                    }
+                };
             }
+            // every mesh so far, moved out rather than copied (a big import's are tens of MB)
+            let restaged = b.asm.as_mut().and_then(|a| a.restage.take());
             if let Some(a) = &b.asm
                 && let Some(p) = &mut self.shell.fg
             {
@@ -2329,13 +2601,15 @@ impl Gui {
                 self.fg_asm = Some((a.occ.clone(), a.placed.clone()));
                 self.fg_asm_boxes = a.boxes.clone();
                 self.explode.stale();
+                Self::robot_solved(&mut self.shell.robot);
                 asm_moved = true;
                 // which part is placed where changed: the view made again, the camera kept
-                if let Some(all) = &a.restage {
+                if let Some(all) = restaged {
+                    let lineage = (!all.is_empty()).then_some(a.lineage);
                     let parts: Vec<crate::mesh::PartMesh> = if all.is_empty() {
                         vec![crate::mesh::PartMesh::empty()]
                     } else {
-                        all.clone()
+                        all
                     };
                     let placements: Vec<Placement> = if a.placed.is_empty() {
                         vec![Placement::at(0, [0.0; 3])]
@@ -2352,24 +2626,18 @@ impl Gui {
                     let mut scene = Scene::new(&part_info(&parts), placements);
                     scene.set_explode(0.0);
                     scene.set_part_boxes(a.boxes.clone());
-                    let renderer = Renderer::new(
-                        self.device.clone(),
-                        self.queue.clone(),
-                        self.adapter.clone(),
-                        render::OFFSCREEN,
-                        (16, 16),
-                        &parts,
-                        &scene,
-                    );
                     if let Some(v) = &self.view {
                         self.fg_keep_camera = Some(v.nav.camera);
                     }
-                    self.fg_view = Some(Loaded {
+                    // the view's renderer takes them when the view is made again (no pipelines
+                    // made in a frame); one made only if there is no view to take
+                    self.fg_view = None;
+                    self.fg_restage = Some(Restage {
                         file: s.path.clone(),
                         name: name_of(s.path.as_deref().unwrap_or("part.fg")),
-                        empty: false,
                         scene,
-                        renderer,
+                        parts,
+                        lineage,
                     });
                 }
             }
@@ -2382,6 +2650,7 @@ impl Gui {
                 {
                     self.fg_keep_camera = Some(v.nav.camera);
                 }
+                self.fg_restage = None;
                 self.fg_view = Some(Loaded {
                     file: s.path.clone(),
                     name: name_of(s.path.as_deref().unwrap_or("part.fg")),
@@ -2460,6 +2729,37 @@ impl Gui {
         }
         self.fg_text();
         // the view takes its size from the layout
+        if self.shell.view_rect.area() > 0.0
+            && let Some(r) = self.fg_restage.take()
+        {
+            let renderer = match self.view.take() {
+                Some(v) => {
+                    let mut renderer = v.renderer;
+                    renderer.restage(&r.parts, &r.scene, r.lineage);
+                    renderer
+                }
+                None => {
+                    let mut renderer = Renderer::new(
+                        self.device.clone(),
+                        self.queue.clone(),
+                        self.adapter.clone(),
+                        render::OFFSCREEN,
+                        (16, 16),
+                        &r.parts,
+                        &r.scene,
+                    );
+                    renderer.set_lineage(r.lineage);
+                    renderer
+                }
+            };
+            self.fg_view = Some(Loaded {
+                file: r.file,
+                name: r.name,
+                empty: false,
+                scene: r.scene,
+                renderer,
+            });
+        }
         if self.shell.view_rect.area() > 0.0
             && let Some(l) = self.fg_view.take()
         {
@@ -2583,7 +2883,7 @@ impl Gui {
                             if s.previewing {
                                 s.preview(None);
                             }
-                            format!("{label} refused: {}: {}", e.kind(), e.text())
+                            format!("{label} refused: {}", e.text())
                         }
                     };
                     self.fg_text();
@@ -2604,7 +2904,7 @@ impl Gui {
                     self.shell.status = match s.refactor(&r) {
                         Ok(files) if files.is_empty() => "Done: one undo step".into(),
                         Ok(files) => format!("Wrote {}", files.join(", ")),
-                        Err(e) => format!("{}: {}", e.kind(), e.text()),
+                        Err(e) => e.text(),
                     };
                 }
             }
@@ -2637,16 +2937,23 @@ impl Gui {
                 };
                 if let Some(p) = p {
                     p.refused = None;
+                    p.said = Some((self.shell.status.clone(), None));
                 }
                 self.fg_text();
+                // the build this edit asked for: its number, now it's sent
+                let seq = self.fg.as_ref().map(|s| s.seq);
+                if let Some((_, at)) = self.shell.fg.as_mut().and_then(|p| p.said.as_mut()) {
+                    *at = seq;
+                }
                 Ok(())
             }
             Err(e) => {
+                // typed for the agent and the tests; in words for a person (no error code)
                 let why = format!("{}: {}", e.kind(), e.text());
                 if let Some(p) = p {
                     p.refused = Some(why.clone());
                 }
-                self.shell.status = format!("{label} refused: {why}");
+                self.shell.status = format!("{label} refused: {}", e.text());
                 Err(why)
             }
         }
@@ -2793,6 +3100,7 @@ impl Gui {
                 entity: Entity::Face(f),
                 selected: true,
                 second,
+                warn: false,
             })
             .collect();
         let centre = c.centre.map(|x| x as f32);
@@ -2922,7 +3230,7 @@ impl Gui {
             }
             Err(e) => {
                 s.preview(None);
-                Some(format!("{}: {}", e.kind(), e.text()))
+                Some(e.text())
             }
         };
         if let Some(t) = self.shell.fg.as_mut().and_then(|p| p.tool.as_mut()) {
@@ -3020,9 +3328,9 @@ impl Gui {
     pub fn fg_refuse(&mut self, e: crate::shell::fgtool::ToolError) {
         let why = format!("{}: {}", e.kind(), e.text());
         if let Some(p) = &mut self.shell.fg {
-            p.refused = Some(why.clone());
+            p.refused = Some(why);
         }
-        self.shell.status = why;
+        self.shell.status = e.text();
     }
 
     /// Clicks on the part with Project Geometry on: each edge or face picked (a click's one, or all
@@ -3137,6 +3445,7 @@ impl Gui {
             Item::ZAxis => Some(("origin axis", "Z")),
             Item::Center => None,
         });
+        let was_posed = posed.is_some();
         let (what, text, edge): (&'static str, Result<String, ToolError>, Option<u32>) = match (ent, posed) {
             // the posed view's pick, named through the model (its edges' indices are the model's
             // no more: no sheet edge by index)
@@ -3181,7 +3490,7 @@ impl Gui {
                         None => self.shell.status = format!("{t} is not a plane to sketch on"),
                     }
                 }
-                (_, Err(e)) => self.shell.status = format!("{}: {}", e.kind(), e.text()),
+                (_, Err(e)) => self.shell.status = e.text(),
                 _ => {
                     self.shell.status =
                         format!("a sketch goes on a planar face or an origin plane, not a {what}")
@@ -3208,10 +3517,44 @@ impl Gui {
             v.dirty = true;
             return;
         }
+        // an op dialog of the Manufacture workspace takes the pick as its geometry
+        if let Some(w) = &mut self.shell.cam
+            && w.op_dlg.is_some()
+        {
+            self.shell.status = match &text {
+                Ok(t) => w.pick(t),
+                Err(e) => e.text(),
+            };
+            v.nav.selected.clear();
+            v.clicked.clear();
+            v.dirty = true;
+            return;
+        }
+        // more than one picked (posed views aside): each named, for the Agent tab
+        let all: Vec<String> = if !was_posed && v.nav.selected.len() > 1 {
+            let mut names: Vec<String> = Vec::new();
+            for &(_, e) in &v.nav.selected {
+                let n = match e {
+                    Entity::Face(f) => named(a.as_ref().map(|a| &a.faces), f, "face").ok(),
+                    Entity::Edge(k) => named(a.as_ref().map(|a| &a.edges), k, "edge").ok(),
+                    _ => None,
+                };
+                if let Some(n) = n
+                    && !names.contains(&n)
+                {
+                    names.push(n);
+                }
+            }
+            names
+        } else {
+            Vec::new()
+        };
         let Some(p) = &mut self.shell.fg else { return };
+        p.picked_all = all;
         let Some(tool) = &mut p.tool else {
             self.shell.status = match &text {
-                Ok(a) => format!("Picked: {a}"),
+                // in words, as the Agent tab's chip says it: "end face of extrude1"
+                Ok(a) => format!("Picked: {}", crate::shell::agent::describe_lower(a)),
                 Err(e) => format!("Picked: {}", e.text()),
             };
             p.picked = Some(text);
@@ -3319,7 +3662,7 @@ impl Gui {
         }
         let got = o
             .write_back(&m.rows, m.kept())
-            .map_err(|e| format!("{}: {}", e.kind(), e.text()));
+            .map_err(|e| e.text());
         let got = got.and_then(|ops| {
             if ops.is_empty() {
                 return Ok(());
@@ -3332,7 +3675,7 @@ impl Gui {
                 } else {
                     format!(" (fix: {})", fixes.join(", "))
                 };
-                format!("{}: {}{fix}", e.kind(), e.text())
+                format!("{}{fix}", e.text())
             })
         });
         match got {
@@ -3421,13 +3764,19 @@ impl Gui {
         let thermo = if flat { None } else { self.thermo_compose(m) };
         let m = thermo.as_ref().unwrap_or(m);
         let chords: Vec<f32> = m.lods.iter().map(|x| x.chord).collect();
-        if let Some(l) = &mut self.fg_view {
+        if let Some(r) = &mut self.fg_restage {
+            r.parts = vec![m.clone()];
+            r.lineage = None;
+            r.scene.set_part(0, m.center, m.radius, chords);
+        } else if let Some(l) = &mut self.fg_view {
             l.renderer.set_parts(std::slice::from_ref(m));
             l.scene.set_part(0, m.center, m.radius, chords);
+            l.scene.set_part_box(0, crate::explode::mesh_box(m));
         } else if let Some(v) = &mut self.view {
             let part = v.scene.placements[0].part;
             v.renderer.set_parts(std::slice::from_ref(m));
             v.scene.set_part(part, m.center, m.radius, chords);
+            v.scene.set_part_box(part, crate::explode::mesh_box(m));
             v.dirty = true;
         }
     }

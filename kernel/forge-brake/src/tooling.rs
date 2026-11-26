@@ -79,6 +79,50 @@ pub struct Punch {
     pub segments: Vec<Segment>,
     /// kN per metre of bend.
     pub max_load: Option<f64>,
+    /// The body's published width, for drawing only, where `width` is an envelope wider than it
+    /// (the checks read `width`: it errs large).
+    pub drawn_width: Option<f64>,
+    pub role: Role,
+    /// The thickest sheet the maker rates it for, where published.
+    pub max_thickness: Option<f64>,
+}
+
+/// What a tool is for. Air bending is every tool's but these: a hem's flattening (a flat punch
+/// face, a flat die), a combination hem die (an acute V for the pre-bend beside a spring pad that
+/// flattens), an offset (Z) pair forming two bends in one stroke, `z` apart.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum Role {
+    #[default]
+    Bend,
+    Flatten,
+    Hem,
+    Offset {
+        z: f64,
+    },
+}
+
+impl Role {
+    pub fn word(self) -> &'static str {
+        match self {
+            Role::Bend => "bend",
+            Role::Flatten => "flatten",
+            Role::Hem => "hem",
+            Role::Offset { .. } => "offset",
+        }
+    }
+
+    /// An air bend's tool: a plain one, or a combination hem die's V.
+    pub fn bends(self) -> bool {
+        matches!(self, Role::Bend | Role::Hem)
+    }
+
+    /// A tool that flattens a hem: a flattening one. A combination die's spring part flattens on
+    /// the press, but how its height divides between the spring part and the holder under it is
+    /// not published (WILA DDU-00x/1, Mate 20.2xx-20.4xx: open, closed and gap only), so it is not
+    /// simulated: it pre-bends, and a flattening pair must follow.
+    pub fn flattens(self) -> bool {
+        matches!(self, Role::Flatten)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -92,9 +136,15 @@ pub struct Die {
     pub shoulder_radius: f64,
     pub height: f64,
     pub width: f64,
+    /// The V's depth below the top where a flat floor (a relief channel) cuts it off, when
+    /// it stops short of the sharp bottom.
+    pub floor: Option<f64>,
     pub profile: Option<Vec<Seg>>,
     pub segments: Vec<Segment>,
     pub max_load: Option<f64>,
+    pub role: Role,
+    /// The thickest sheet the maker rates it for, where published.
+    pub max_thickness: Option<f64>,
 }
 
 /// A beam's envelope across the bed: from `front` before the tool line (-x) to `back` behind it.
@@ -123,6 +173,19 @@ pub struct Backgauge {
     pub finger: Finger,
     /// How far the fingers back off once the punch holds the part.
     pub retract: f64,
+    /// The fingers' range along the bed (Z1/Z2 axes), from the bed's centre; None: not stated.
+    pub z: Option<(f64, f64)>,
+}
+
+/// The press frame's side housings, one each end of the bed past the housing gap: plates
+/// `thickness` thick along the bed, open towards the operator (-x) to `throat` behind the tool
+/// line, solid from there `depth` further back, from far below the die seat to far above the
+/// ram (the throat's height is the daylight the beams already bound).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Frame {
+    pub throat: f64,
+    pub thickness: f64,
+    pub depth: f64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -140,6 +203,15 @@ pub struct Press {
     /// kN.
     pub max_force: Option<f64>,
     pub backgauge: Backgauge,
+    /// The side housings, when their throat is known: then a part may run past the housing gap
+    /// through the throat, checked by distance against them.
+    pub frame: Option<Frame>,
+    /// Values a real press's record does not know (`open_height`, `stroke`, ..): the rules that
+    /// need them are reported as not checked, never passed.
+    pub unchecked: Vec<String>,
+    /// Bodies whose envelope is an estimate that errs large (`ram`, `bed`, `frame`,
+    /// `backgauge`): a collision with one is reported as against an estimate.
+    pub estimated: Vec<String>,
 }
 
 /// Overbend at a target angle (the bend's turn) for a material (`*`: any).
@@ -165,6 +237,21 @@ pub struct Tooling {
     pub springback: Vec<Springback>,
     /// The die the planner tries first: V nearest this many thicknesses.
     pub v_rule: f64,
+    /// Stations along the bed. None: one station, centred on the bed, tooled for each step by
+    /// the segment rule (and only its tools are on the press).
+    pub stations: Vec<Station>,
+}
+
+/// A station: a punch and a die (indices into the set), their stacks' lengths, and the stack's
+/// centre along the bed from the bed's centre. Every station's tools are on the press in every
+/// step; a step works at the station holding its punch and die.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Station {
+    pub punch: usize,
+    pub die: usize,
+    pub y: f64,
+    pub punch_length: f64,
+    pub die_length: f64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -187,6 +274,16 @@ pub enum ToolingError {
     },
     NoPunches,
     NoDies,
+    /// A station names a punch or die the set does not hold.
+    Station {
+        y: f64,
+    },
+    /// A tool's working geometry is not known (its record holds no published value for these
+    /// fields): it cannot be simulated.
+    Unknown {
+        id: String,
+        fields: Vec<String>,
+    },
 }
 
 fn check(id: &str, what: &'static str, value: f64, lo: f64, hi: f64) -> Result<(), ToolingError> {
@@ -209,6 +306,37 @@ fn closed(id: &str, p: &[Seg]) -> Result<(), ToolingError> {
         return Err(ToolingError::Profile { id: id.into() });
     }
     Ok(())
+}
+
+/// A closed loop's part at or above height `z0` (Sutherland-Hodgman against the half plane).
+/// Lines are clipped exactly; an arc wholly above is kept, one that crosses is replaced by its
+/// chord's ends there (none of the library's drawn sections has arcs).
+fn clip_above(loop_: &[Seg], z0: f64) -> Vec<Seg> {
+    let pts: Vec<Point2> = loop_.iter().map(|s| s.point(0.0)).collect();
+    if pts.iter().all(|q| q.y >= z0) {
+        return loop_.to_vec();
+    }
+    let n = pts.len();
+    let mut out: Vec<Point2> = Vec::new();
+    for i in 0..n {
+        let (a, b) = (pts[i], pts[(i + 1) % n]);
+        let (ia, ib) = (a.y >= z0, b.y >= z0);
+        if ia {
+            out.push(a);
+        }
+        if ia != ib {
+            let t = (z0 - a.y) / (b.y - a.y);
+            out.push(Point2::new(a.x + t * (b.x - a.x), z0));
+        }
+    }
+    let m = out.len();
+    (0..m)
+        .filter(|i| out[*i].distance(out[(i + 1) % m]) > 1e-9)
+        .map(|i| Seg::Line {
+            a: out[i],
+            b: out[(i + 1) % m],
+        })
+        .collect()
 }
 
 fn tan(x: f64) -> f64 {
@@ -264,8 +392,33 @@ impl Punch {
         rp + (x - rp / dmath::cos(h)) / tan(h)
     }
 
-    /// The working part: the tip arc and both flanks up to `tip_height` (one loop).
+    /// The working part: the tip arc and both flanks up to `tip_height` (one loop); a
+    /// flattening punch's, its flat face and the block above it.
     pub fn tip_section(&self) -> Region {
+        if self.role == Role::Flatten && self.profile.is_none() {
+            let w = self.width / 2.0;
+            return Region::of(vec![poly(&[
+                (-w, 0.0),
+                (w, 0.0),
+                (w, self.tip_height),
+                (-w, self.tip_height),
+            ])]);
+        }
+        if let (Role::Offset { z }, None) = (self.role, &self.profile) {
+            // an offset insert: its lower face over the far wall (+x) at 0, its upper face over
+            // the base (-x) at z, the step between at the tool's angle (its included angle the
+            // bends'), across the middle (where across the width is not published)
+            let (w, d) = (self.width / 2.0, offset_run(z, self.tip_angle));
+            let h = self.tip_height.max(z + 1.0);
+            return Region::of(vec![poly(&[
+                (-w, z),
+                (-d, z),
+                (d, 0.0),
+                (w, 0.0),
+                (w, h),
+                (-w, h),
+            ])]);
+        }
         let h = self.tip_angle / 2.0;
         let rp = self.tip_radius;
         let ht = self.tip_height;
@@ -301,9 +454,27 @@ impl Punch {
     /// The rest of the punch above `tip_height`, to the clamping face.
     pub fn body_section(&self) -> Region {
         if let Some(p) = &self.profile {
-            // an explicit section: all of it is checked as body above the tip height; the
-            // working part below it is decided by the rules
-            return Region::of(vec![p.clone()]);
+            // an explicit section: what lies above the tip height is body, checked by distance;
+            // the working part below it is decided by the rules (as a generated section's is)
+            return Region::of(vec![clip_above(p, self.tip_height)]);
+        }
+        if let Role::Offset { z } = self.role {
+            let (w, h) = (self.width / 2.0, self.tip_height.max(z + 1.0));
+            return Region::of(vec![poly(&[
+                (-w, h),
+                (w, h),
+                (w, self.height),
+                (-w, self.height),
+            ])]);
+        }
+        if self.role == Role::Flatten {
+            let w = self.width / 2.0;
+            return Region::of(vec![poly(&[
+                (-w, self.tip_height),
+                (w, self.tip_height),
+                (w, self.height),
+                (-w, self.height),
+            ])]);
         }
         let ht = self.tip_height;
         let xf = self.flank_x(ht);
@@ -346,6 +517,15 @@ impl Punch {
 impl Die {
     pub fn validate(&self) -> Result<(), ToolingError> {
         let id = &self.id;
+        if matches!(self.role, Role::Flatten | Role::Offset { .. }) {
+            // a block, its top flat or stepped: no V to hold to anything
+            check(id, "height", self.height, 1.0, 2000.0)?;
+            check(id, "width", self.width, 1.0, 1000.0)?;
+            for s in &self.segments {
+                check(id, "segments.length", s.length, 1.0, 10000.0)?;
+            }
+            return Ok(());
+        }
         check(id, "v", self.v, 1.0, 1000.0)?;
         check(id, "angle", self.angle, 0.1, dmath::PI - 0.01)?;
         check(id, "shoulder_radius", self.shoulder_radius, 0.0, self.v)?;
@@ -366,8 +546,13 @@ impl Die {
         Ok(())
     }
 
-    /// The V's depth below the top (to its sharp bottom).
+    /// The V's depth below the top: to its sharp bottom, or to its floor.
     pub fn depth(&self) -> f64 {
+        let sharp = self.sharp_depth();
+        self.floor.map_or(sharp, |f| f.min(sharp))
+    }
+
+    fn sharp_depth(&self) -> f64 {
         (self.v / 2.0) / tan(self.angle / 2.0)
     }
 
@@ -383,11 +568,38 @@ impl Die {
         if let Some(p) = &self.profile {
             return Region::of(vec![p.clone()]);
         }
+        if let Role::Offset { z } = self.role {
+            // an offset insert in its holder: the high face under the base (-x) at 0, the low
+            // face under the far wall (+x) at -z, the step at the tool's angle across the middle
+            let (w, d) = (self.width / 2.0, offset_run(z, self.angle));
+            let h = self.height;
+            return Region::of(vec![poly(&[
+                (-w, -h),
+                (w, -h),
+                (w, -z),
+                (d, -z),
+                (-d, 0.0),
+                (-w, 0.0),
+            ])]);
+        }
+        if self.role == Role::Flatten {
+            // a flattening die: a block, its top flat
+            let w = self.width / 2.0;
+            return Region::of(vec![poly(&[
+                (-w, -self.height),
+                (w, -self.height),
+                (w, 0.0),
+                (-w, 0.0),
+            ])]);
+        }
         let a = self.angle / 2.0;
         let rs = self.shoulder_radius;
         let s = self.shoulder();
         let (w, h) = (self.width / 2.0, self.height);
-        let bottom = Point2::new(0.0, -self.depth());
+        let bottom = Point2::new(0.0, -self.sharp_depth());
+        // a floored V: the flanks meet the floor at +-xf
+        let floored = self.floor.filter(|f| *f < self.sharp_depth());
+        let xf = floored.map(|f| (self.sharp_depth() - f) * tan(a));
         // the flank's tangent point on the right shoulder: the circle's normal towards the V,
         // perpendicular to the flank (direction (-sin a, -cos a)), pointing up-left
         let n_ang = dmath::PI - a; // (-cos a, sin a)
@@ -411,14 +623,30 @@ impl Die {
                 sweep: n_ang - dmath::FRAC_PI_2,
             });
         }
-        l.push(Seg::Line {
-            a: if rs > 0.0 { ft } else { tt },
-            b: bottom,
-        });
-        l.push(Seg::Line {
-            a: bottom,
-            b: if rs > 0.0 { mirror(ft) } else { mirror(tt) },
-        });
+        match (floored, xf) {
+            (Some(f), Some(xf)) => {
+                let (r0, l0) = (Point2::new(xf, -f), Point2::new(-xf, -f));
+                l.push(Seg::Line {
+                    a: if rs > 0.0 { ft } else { tt },
+                    b: r0,
+                });
+                l.push(Seg::Line { a: r0, b: l0 });
+                l.push(Seg::Line {
+                    a: l0,
+                    b: if rs > 0.0 { mirror(ft) } else { mirror(tt) },
+                });
+            }
+            _ => {
+                l.push(Seg::Line {
+                    a: if rs > 0.0 { ft } else { tt },
+                    b: bottom,
+                });
+                l.push(Seg::Line {
+                    a: bottom,
+                    b: if rs > 0.0 { mirror(ft) } else { mirror(tt) },
+                });
+            }
+        }
         if rs > 0.0 {
             l.push(Seg::Arc {
                 c: mirror(s),
@@ -466,9 +694,66 @@ impl Tooling {
         check(&p.id, "bed_length", p.bed_length, 1.0, 100000.0)?;
         check(&p.id, "housing_gap", p.housing_gap, 1.0, 100000.0)?;
         check(&p.id, "backgauge.retract", p.backgauge.retract, 0.0, 1000.0)?;
+        if let Some(f) = p.frame {
+            check(&p.id, "frame.throat", f.throat, 1.0, 10000.0)?;
+            check(&p.id, "frame.thickness", f.thickness, 1.0, 10000.0)?;
+            check(&p.id, "frame.depth", f.depth, 1.0, 100000.0)?;
+        }
         check(&self.id, "clearance", self.clearance, 0.01, 100.0)?;
         check(&self.id, "self_clearance", self.self_clearance, 0.0, 100.0)?;
+        for st in &self.stations {
+            if st.punch >= self.punches.len() || st.die >= self.dies.len() {
+                return Err(ToolingError::Station { y: st.y });
+            }
+            check(
+                &self.id,
+                "station.punch_length",
+                st.punch_length,
+                1.0,
+                p.bed_length + 1e-6,
+            )?;
+            check(
+                &self.id,
+                "station.die_length",
+                st.die_length,
+                1.0,
+                p.bed_length + 1e-6,
+            )?;
+            let h = 0.5 * st.punch_length.max(st.die_length);
+            check(
+                &self.id,
+                "station.y",
+                st.y,
+                -0.5 * p.bed_length + h - 1e-6,
+                0.5 * p.bed_length - h + 1e-6,
+            )?;
+        }
         Ok(())
+    }
+
+    /// The first station holding this punch and die.
+    pub fn station(&self, punch: usize, die: usize) -> Option<&Station> {
+        self.stations.iter().find(|s| s.punch == punch && s.die == die)
+    }
+
+    /// The station a bend works at: of those holding its punch and die, the first whose stacks
+    /// both cover `need` and stand within the room (`room`: the punch's and the die's, each the
+    /// bend's length less the clearance at its ends, or the tool's own shortest cover where that
+    /// is longer), else the first holding them. The same tools may stand at two stations with
+    /// different stack lengths (a box's last sides want shorter ones).
+    pub fn station_for(&self, punch: usize, die: usize, need: f64, room: (f64, f64)) -> Option<usize> {
+        let fits = |x: f64, r: f64| x >= need && x <= r + 1e-9;
+        let mut first = None;
+        for (k, s) in self.stations.iter().enumerate() {
+            if s.punch != punch || s.die != die {
+                continue;
+            }
+            if fits(s.punch_length, room.0) && fits(s.die_length, room.1) {
+                return Some(k);
+            }
+            first.get_or_insert(k);
+        }
+        first
     }
 
     pub fn punch(&self, id: &str) -> Option<&Punch> {
@@ -575,6 +860,17 @@ pub fn cover_within(segments: &[Segment], need: f64, room: f64) -> Option<(f64, 
         s -= items[k].0;
     }
     Some((best as f64 * unit, used))
+}
+
+/// Half the run across the bed of an offset tool's step: `z` high at an included angle `alpha`
+/// (the bends' turn pi - alpha); none for a square step.
+fn offset_run(z: f64, alpha: f64) -> f64 {
+    let turn = dmath::PI - alpha;
+    if turn >= 0.5 * dmath::PI - 1e-9 {
+        0.0
+    } else {
+        0.5 * z / tan(turn)
+    }
 }
 
 #[cfg(test)]

@@ -1,6 +1,7 @@
 use super::*;
 use crate::Curve;
 use crate::surface::{Procedural, Surface};
+use forge_math::ipow::Powi as _;
 use forge_math::rng::Rng;
 use forge_math::{Box2, Point2};
 
@@ -214,7 +215,7 @@ fn through_passes_its_points_and_is_c2() {
     // closed: runs on past the joint smoothly
     let mut q = p.clone();
     q.push(p[0]);
-    let cl = Spline::through(&q, None, None).unwrap();
+    let cl = Spline::through_periodic(&q).unwrap();
     let dm = cl.domain();
     let (a, b) = (cl.deriv(dm.lo), cl.deriv(dm.hi));
     assert!(a.p.distance(b.p) < 1e-12);
@@ -712,15 +713,15 @@ fn through_a_sharp_turn_the_fit_never_crosses_itself_where_the_chord_fit_did() {
     let b = beziers(&c);
     let at = |z: &Bez, u: f64| {
         let w = [
-            (1.0 - u).powi(3),
-            3.0 * (1.0 - u).powi(2) * u,
+            (1.0 - u).ipow(3),
+            3.0 * (1.0 - u).ipow(2) * u,
             3.0 * (1.0 - u) * u * u,
-            u.powi(3),
+            u.ipow(3),
         ];
         (0..4).fold((0.0, 0.0), |a, k| (a.0 + w[k] * z[k].0, a.1 + w[k] * z[k].1))
     };
     let d = |z: &Bez, u: f64| {
-        let w = [(1.0 - u).powi(2), 2.0 * (1.0 - u) * u, u * u];
+        let w = [(1.0 - u).ipow(2), 2.0 * (1.0 - u) * u, u * u];
         (0..3).fold((0.0, 0.0), |a, k| {
             (
                 a.0 + 3.0 * w[k] * (z[k + 1].0 - z[k].0),
@@ -734,7 +735,7 @@ fn through_a_sharp_turn_the_fit_never_crosses_itself_where_the_chord_fit_did() {
         for j in 1..n {
             let (u, v) = (i as f64 / n as f64, j as f64 / n as f64);
             let (x, y) = (at(&b[0], u), at(&b[1], v));
-            let g = ((x.0 - y.0).powi(2) + (x.1 - y.1).powi(2)).sqrt();
+            let g = ((x.0 - y.0).ipow(2) + (x.1 - y.1).ipow(2)).sqrt();
             // away from where the two pieces join
             if g < best.0 && u < 0.9 && v > 0.1 {
                 best = (g, u, v);
@@ -753,7 +754,7 @@ fn through_a_sharp_turn_the_fit_never_crosses_itself_where_the_chord_fit_did() {
     let (x, y) = (at(&b[0], u), at(&b[1], v));
     let (da, db) = (d(&b[0], u), d(&b[1], v));
     assert!(
-        ((x.0 - y.0).powi(2) + (x.1 - y.1).powi(2)).sqrt() < 1e-12,
+        ((x.0 - y.0).ipow(2) + (x.1 - y.1).ipow(2)).sqrt() < 1e-12,
         "{x:?} {y:?}"
     );
     assert!(0.0 < u && u < 1.0 && 0.0 < v && v < 1.0, "{u} {v}");

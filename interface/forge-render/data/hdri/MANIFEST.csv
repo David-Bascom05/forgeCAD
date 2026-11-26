@@ -1,0 +1,9 @@
+# The Render Studio's HDRIs: equirectangular Radiance (.hdr) maps from Poly Haven, all CC0
+# (https://polyhaven.com/license). Only the bundled one is in the repository; the rest are fetched
+# by tools/fetch-hdri.sh into the user's cache (forge-dirs cache/forgecad/hdri), each checked
+# against its sha256 here; a map not fetched falls back to the drawn studio.
+key,name,authors,licence,page,file,sha256,bundled
+studio_small_09,Studio Small 09,Sergej Majboroda,CC0,https://polyhaven.com/a/studio_small_09,https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_small_09_1k.hdr,e7cfda5f4e98e623db12b8bfd0184e048488e4855d9c83e2751fb44a32e80c45,studio_small_09_512.hdr
+photo_studio_loft_hall,Photo Studio Loft Hall,Sergej Majboroda,CC0,https://polyhaven.com/a/photo_studio_loft_hall,https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/photo_studio_loft_hall_1k.hdr,2243ac7b3418e0f4ade3a39ebf29856e6c581134ce8e557d9e6464ff15459513,
+empty_warehouse_01,Empty Warehouse 01,Sergej Majboroda,CC0,https://polyhaven.com/a/empty_warehouse_01,https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/empty_warehouse_01_1k.hdr,9b3d611cadc32c3a0c7e084ce5611c0650293881c4a041e7fa13748fe0dc6451,
+kloofendal_48d_partly_cloudy_puresky,Kloofendal 48d Partly Cloudy (Pure Sky),Greg Zaal; Jarod Guest,CC0,https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky,https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/kloofendal_48d_partly_cloudy_puresky_1k.hdr,fd94c84997b8a3c353b62c2125a9b44e19509956986a126e472684432a02d798,

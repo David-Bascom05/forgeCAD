@@ -2,6 +2,7 @@
 //! to the solid FreeCAD would make of it (volume and centroid worked out by hand), or says why not.
 
 use forge_import::fcstd::translate;
+use forge_math::ipow::Powi as _;
 
 /// A zip of stored members (no CRC: the reader does not check one).
 fn zip(members: &[(&str, &str)]) -> Vec<u8> {
@@ -500,7 +501,7 @@ fn a_revolve_symmetric_about_its_sketch_turns_half_each_way() {
     };
     let vol = 100.0 * 15.0 * PI / 2.0;
     // the centroid of a sector of the ring: at 15 * sin(45deg) / (pi / 4) from the axis, mid-angle
-    let r = (2.0 / 3.0) * (20.0f64.powi(3) - 10.0f64.powi(3)) / (20.0f64.powi(2) - 10.0f64.powi(2))
+    let r = (2.0 / 3.0) * (20.0f64.ipow(3) - 10.0f64.ipow(3)) / (20.0f64.ipow(2) - 10.0f64.ipow(2))
         * std::f64::consts::FRAC_1_SQRT_2
         / (PI / 4.0);
     let fg = only(&file(rev(true)));
@@ -863,6 +864,41 @@ fn a_fillet_on_one_copy_of_a_pattern_names_that_copys_edge() {
     assert!(m.centroid[1] > 0.0, "{fg}");
 }
 
+// research/formats/repro/fcstd_sidetype.rs (formats-corpus): FreeCAD 1.1 says a pad's sides with
+// SideType (0 one side, 1 two sides, 2 symmetric) and leaves the deprecated Midplane false, as its
+// data/examples/PartDesignExample.FCStd does.
+#[test]
+fn a_freecad_1_1_pad_takes_its_sides_from_side_type() {
+    let side = |t: i32, extra: &[(&'static str, String)]| {
+        let mut p = vec![
+            ("SideType", format!("<Integer value=\"{t}\"/>")),
+            ("Midplane", "<Bool value=\"false\"/>".into()),
+        ];
+        p.extend(extra.iter().cloned());
+        doc(&[
+            body("Pad", &["Sketch", "Pad"]),
+            sketch("Sketch", place(0.0), rect()),
+            pad("Pad", "", "Sketch", 10.0, &p),
+        ])
+    };
+    // symmetric: 10 in all, -5..5
+    let fg = only(&file(side(2, &[])));
+    let m = built(&fg);
+    near(m.volume, 60.0 * 40.0 * 10.0, "symmetric: volume", &fg);
+    near(m.centroid[2], 0.0, "symmetric: centroid z", &fg);
+    // two sides: 10 up and Length2 = 4 down, -4..10
+    let fg = only(&file(side(
+        1,
+        &[
+            ("Length2", "<Float value=\"4\"/>".into()),
+            ("Type2", "<Integer value=\"0\"/>".into()),
+        ],
+    )));
+    let m = built(&fg);
+    near(m.volume, 60.0 * 40.0 * 14.0, "two sides: volume", &fg);
+    near(m.centroid[2], 3.0, "two sides: centroid z", &fg);
+}
+
 type P3 = (f64, f64, f64);
 
 /// A stored shape of plain straight edges and planar faces (each face its own edges), as a
@@ -988,10 +1024,10 @@ fn a_periodic_spline_is_written_with_its_poles_wrapped() {
     // the closed uniform cubic over the poles: each span's point is the poles' blend by the uniform basis
     let at = |i: usize, t: f64| {
         let b = [
-            (1.0 - t).powi(3) / 6.0,
-            (3.0 * t.powi(3) - 6.0 * t * t + 4.0) / 6.0,
-            (-3.0 * t.powi(3) + 3.0 * t * t + 3.0 * t + 1.0) / 6.0,
-            t.powi(3) / 6.0,
+            (1.0 - t).ipow(3) / 6.0,
+            (3.0 * t.ipow(3) - 6.0 * t * t + 4.0) / 6.0,
+            (-3.0 * t.ipow(3) + 3.0 * t * t + 3.0 * t + 1.0) / 6.0,
+            t.ipow(3) / 6.0,
         ];
         let x: f64 = (0..4).map(|j| b[j] * poles[(i + j) % 4].0).sum();
         let y: f64 = (0..4).map(|j| b[j] * poles[(i + j) % 4].1).sum();
@@ -1055,10 +1091,10 @@ fn a_pad_with_a_spline_side_writes_the_spline_exactly() {
     // the bump over y = 10: the integral of (y - 10) dx along the curve, from x = 40 to 0
     let at = |t: f64| {
         let b = [
-            (1.0 - t).powi(3),
-            3.0 * t * (1.0 - t).powi(2),
+            (1.0 - t).ipow(3),
+            3.0 * t * (1.0 - t).ipow(2),
             3.0 * t * t * (1.0 - t),
-            t.powi(3),
+            t.ipow(3),
         ];
         let w: f64 = (0..4).map(|i| b[i] * ws[i]).sum();
         let x: f64 = (0..4).map(|i| b[i] * ws[i] * poles[i].0).sum::<f64>() / w;

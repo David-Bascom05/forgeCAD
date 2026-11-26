@@ -1,0 +1,17 @@
+# A plate with a filleted boss and a chamfered bore: the CAM lowering of tori and cones.
+shared side = 60
+shared t = 10
+sketch plan(on: xy) {
+  outline = rect(center: (0, 0), size: (side, side))
+}
+plate = extrude(plan, t)
+sketch bk(on: plate.end) {
+  outline = circle((0, 0), 12)
+}
+boss = extrude(bk.outline, 8)
+sketch bs(on: boss.end) {
+  c = pt(0, 0)
+}
+bore = hole(at: bs.c, d: 10, depth: thru)
+foot = fillet(edges(between: (plate, boss)), 2)
+lip = chamfer(edges(of: bore, crease: "convex"), 1)

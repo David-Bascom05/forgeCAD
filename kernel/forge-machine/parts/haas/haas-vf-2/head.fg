@@ -1,0 +1,22 @@
+# haas-vf-2 head: spindle nose cylinder and housing (measured on Haas's model)
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared ax = 381
+shared ay = 211.6
+shared nz = 611
+shared nr = 69
+shared nh = 69
+shared x0 = 177
+shared y0 = 97
+shared z0 = 680
+shared lx = 522
+shared ly = 576
+shared lz = 389
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (lx, ly))
+}
+housing = extrude(plan, lz)
+sketch nk(on: offset(xy, nz)) {
+  c = circle((ax, ay), nr)
+}
+nose = extrude(nk.c, nh)

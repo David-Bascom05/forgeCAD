@@ -1,4 +1,3 @@
-{"fillets": 381, "first": {"right": 281, "refused": 50, "unjudged": 29, "wrong": 20, "invalid": 1}, "final": {"right": 293, "refused": 50, "unjudged": 29, "wrong": 8, "invalid": 1}, "overruled": {"OCCT's fillet is ours": 12}, "parts": 272, "parts_final": {"right": 185, "refused": 50, "unjudged": 28, "wrong": 8, "invalid": 1}}
 100000003 6 right right 
 100000031 17 right right 
 100000031 18 right right 
@@ -8,7 +7,7 @@
 100000068 22 right right 
 100000068 23 right right 
 100000085 12 unjudged unjudged 
-100000085 6 wrong right OCCT's fillet is ours
+100000085 6 right right 
 100000094 18 refused refused 
 100000110 12 right right 
 100000110 13 refused refused 
@@ -28,7 +27,7 @@
 100000319 20 right right 
 100000355 18 right right 
 100000355 6 right right 
-100000380 28 wrong unsure OCCT no reference; every point a ball wider than the wall
+100000380 28 right right 
 100000404 12 right right 
 100000446 21 refused refused 
 100000461 24 right right 
@@ -38,7 +37,7 @@
 100000484 6 right right 
 100000505 12 refused refused 
 100000505 6 right right 
-100000515 21 wrong unsure OCCT no reference; every point a ball wider than the wall
+100000515 21 right right 
 100000550 31 right right 
 100000574 6 right right 
 100000574 7 right right 
@@ -99,11 +98,11 @@
 100001218 8 refused refused 
 100001227 17 unjudged unjudged 
 100001237 6 right right 
-100001251 9 wrong right OCCT's fillet is ours
+100001251 9 right right 
 100001262 6 right right 
 100001275 9 unjudged unjudged 
 100001289 18 right right 
-100001297 10 wrong right OCCT's fillet is ours
+100001297 10 right right 
 100001308 6 right right 
 100001319 7 right right 
 100001338 16 right right 
@@ -127,9 +126,9 @@
 100001602 20 right right 
 100001602 21 refused refused 
 100001602 5 right right 
-100001614 8 wrong unsure OCCT no reference; every point a ball wider than the wall
+100001614 8 right right 
 100001632 12 right right 
-100001640 37 wrong right OCCT's fillet is ours
+100001640 37 right right 
 100001640 38 refused refused 
 100001681 6 right right 
 100001695 5 right right 
@@ -167,17 +166,17 @@
 100001989 13 right right 
 100001989 14 right right 
 100001989 15 right right 
-100001997 9 wrong unsure OCCT no reference; every point a ball wider than the wall
+100001997 9 right right 
 100002009 9 unjudged unjudged 
 100002018 6 right right 
 100002018 7 refused refused 
-100002029 12 wrong unsure OCCT no reference; every point a ball wider than the wall
+100002029 12 right right 
 100002058 15 unjudged unjudged 
 100002070 9 right right 
 100002092 12 right right 
 100002104 18 right right 
 100002114 21 right right 
-100002114 22 wrong unsure OCCT no reference; every point a ball wider than the wall
+100002114 22 right right 
 100002124 15 right right 
 100002124 16 right right 
 100002148 5 right right 
@@ -194,7 +193,7 @@
 100002228 5 right right 
 100002228 6 right right 
 100002244 10 right right 
-100002244 14 wrong right OCCT's fillet is ours
+100002244 14 right right 
 100002256 5 right right 
 100002256 6 right right 
 100002256 7 right right 
@@ -204,22 +203,22 @@
 100002320 5 right right 
 100002328 12 right right 
 100002338 15 right right 
-100002338 16 wrong right OCCT's fillet is ours
+100002338 16 right right 
 100002357 10 right right 
 100002357 11 right right 
 100002371 13 refused refused 
 100002388 11 right right 
 100002399 15 right right 
 100002411 12 right right 
-100002424 12 wrong right OCCT's fillet is ours
+100002424 12 right right 
 100002454 5 right right 
 100002491 14 right right 
 100002502 6 right right 
-100002526 20 wrong right OCCT's fillet is ours
+100002526 20 right right 
 100002555 13 right right 
 100002565 24 right right 
 100002565 6 right right 
-100002615 19 wrong unsure OCCT no reference; every point a ball wider than the wall
+100002615 19 right right 
 100002628 8 right right 
 100002636 16 right right 
 100002659 5 right right 
@@ -285,7 +284,7 @@
 100003386 22 right right 
 100003408 12 refused refused 
 100003419 9 right right 
-100003429 20 wrong right OCCT's fillet is ours
+100003429 20 right right 
 100003449 6 right right 
 100003463 14 right right 
 100003480 22 right right 
@@ -296,7 +295,7 @@
 100003573 6 right right 
 100003585 6 right right 
 100003585 7 refused refused 
-100003602 6 wrong right OCCT's fillet is ours
+100003602 6 right right 
 100003618 5 right right 
 100003629 8 refused refused 
 100003646 20 refused refused 
@@ -347,7 +346,7 @@
 100004144 6 right right 
 100004159 11 unjudged unjudged 
 100004178 9 right right 
-100004199 26 wrong right OCCT's fillet is ours
+100004199 26 right right 
 100004213 6 right right 
 100004226 11 refused refused 
 100004226 6 right right 
@@ -358,7 +357,7 @@
 100004310 19 refused refused 
 100004310 6 right right 
 100004323 13 right right 
-100004323 18 wrong unsure OCCT no reference; every point a ball wider than the wall
+100004323 18 right right 
 100004323 9 right right 
 100004343 13 right right 
 100004354 6 right right 

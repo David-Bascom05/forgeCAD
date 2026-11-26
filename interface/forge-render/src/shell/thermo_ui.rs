@@ -380,6 +380,9 @@ impl Shell {
     /// tab shows.
     pub fn thermo_tab(&self) -> bool {
         let Some(f) = self.fg.as_ref() else { return false };
+        if self.env == Some(super::env::EnvId::Thermoform) {
+            return true;
+        }
         if self.is_asm() {
             return !f.thermo.asm_files.is_empty();
         }
@@ -1033,9 +1036,7 @@ impl Shell {
         }
         let t = self.theme;
         let mut places = vec![];
-        if self.convert_dialog(ctx, &t, &mut fg, &mut places) {
-            self.tab = super::THERMO_TAB;
-        }
+        let converted = self.convert_dialog(ctx, &t, &mut fg, &mut places);
         self.form_dialog(ctx, &t, &mut fg, &mut places);
         self.mould_dialog(ctx, &t, &mut fg, &mut places);
         self.check_window(ctx, &t, &mut fg, &mut places);
@@ -1047,6 +1048,10 @@ impl Shell {
         material_window(ctx, &t, &mut fg, &mut places);
         self.places.extend(places);
         self.fg = Some(fg);
+        // Convert to Thermoform's OK: into its environment
+        if converted {
+            let _ = self.enter_env(super::env::EnvId::Thermoform);
+        }
     }
 
     /// Convert to Thermoform: the shape, what it is, the mould's side, the sheet. True on OK.

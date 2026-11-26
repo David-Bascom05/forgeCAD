@@ -1,0 +1,158 @@
+{
+ "vendor": "Nakamura-Tome",
+ "model": "NTRX-300",
+ "family": "ATC multitasking (NTRX)",
+ "source": [
+  "https://www.nakamura-tome.com/products/machines/ntrx-300/",
+  "https://www.nakamura-tome.co.jp/products/machines/ntrx-300/"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "mill-turn",
+ "architecture": "Horizontal wide low-gravity bed with vertical column structure carrying the slides; ATC milling (tool) spindle swivels on B axis 225 deg (-120..+105); X-Y stroke 250 mm square about the spindle centre; left main spindle and right sub-spindle (or tailstock option), max distance between spindles 1,350 mm.",
+ "control": {
+  "standard": null,
+  "options": []
+ },
+ "travel_mm": {
+  "X": null,
+  "Y": null,
+  "Z": null,
+  "note": "X-Y plane stroke 250 mm square from spindle centre"
+ },
+ "rotary": {
+  "A": null,
+  "B": {
+   "range_deg": [
+    -120,
+    105
+   ],
+   "rapid_rpm": null,
+   "indexing_or_full": "tool-spindle swivel, full"
+  },
+  "C": {
+   "range_deg": null,
+   "rapid_rpm": null,
+   "indexing_or_full": "C on main spindle (not stated on page)"
+  }
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": 640,
+ "max_turning_length_mm": 1100,
+ "chuck_size_in": 8,
+ "bar_capacity_mm": 65,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 4500,
+  "rpm_min": null,
+  "taper_or_interface": null,
+  "power_kw": {
+   "cont": 11,
+   "30min": 15,
+   "peak/other": null
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": null
+  },
+  "curve_points": null
+ },
+ "sub_spindle": {
+  "rpm_max": 2500,
+  "note": "R spindle 2,500 rpm; R motor not stated on page; selectable vs tailstock"
+ },
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": "option (distance between centers max 1,225 / min 125 mm)",
+ "rapid_m_min": {
+  "X": null,
+  "Y": null,
+  "Z": null,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 40,
+  "options": [
+   "60",
+   "80",
+   "120"
+  ],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": 4529,
+  "D": 2670,
+  "H": 2615
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.chip_to_chip_s",
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "changer.max_tool_dia_mm",
+  "changer.max_tool_kg",
+  "changer.max_tool_len_mm",
+  "changer.tool_to_tool_s",
+  "control.standard",
+  "coolant.through_spindle",
+  "live_tool.power_kw",
+  "live_tool.rpm_max",
+  "max_cutting_feed_m_min",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rapid_m_min.X",
+  "rapid_m_min.Y",
+  "rapid_m_min.Z",
+  "spindle.curve_points",
+  "spindle.power_kw.peak/other",
+  "spindle.rpm_min",
+  "spindle.taper_or_interface",
+  "spindle.torque_nm.cont",
+  "spindle.torque_nm.max",
+  "spindle_nose_type",
+  "swing_over_bed_mm",
+  "table_height_from_floor_mm",
+  "travel_mm.X",
+  "travel_mm.Z",
+  "turret_index_s",
+  "turret_stations",
+  "weight_kg"
+ ],
+ "options": [
+  "Bar 71 mm (3,500 rpm), 80 mm (2,500 rpm, 22/18.5 kW), 90 mm (NTRX-300L only)",
+  "L spindle motor 22/18.5 kW",
+  "chuck 10 in, 12 in, 15 in+ (on request)",
+  "ATC 60/80/120"
+ ],
+ "notes": "Motor published '15/11kW' -- read as 30-min/continuous (Japanese convention; duty not labelled). Distance between spindles max 1,350 / min 250 mm. Detailed catalog is behind a lead form (not used). Tool-spindle rpm/power, travels, rapids, weight not published on pages."
+}

@@ -65,6 +65,98 @@ impl Drop for Watch {
     }
 }
 
+/// The vendor and material library files a run used (each with the hash of its bytes, `None`:
+/// it did not read), recorded whether or not anything watches: a run declares them in
+/// `Run::libraries`. Taken from what the libraries' loaders read already (their `sources`), so
+/// no file is read for it; a run that uses no library pays a thread-local push and pop.
+pub type Libraries = BTreeMap<PathBuf, Option<u128>>;
+
+thread_local! {
+    // the open record's token on this thread (0: none open); an enclosing one's waits in its
+    // LibWatch. A Cell<u64> has no destructor, so this thread-local registers none (registering
+    // one allocates); the records themselves are in RECORDS, and only once a file is recorded:
+    // a run that uses no library leaves the heap as it was
+    static OPEN: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// Each open record that has recorded something: its token and what it recorded.
+static RECORDS: std::sync::Mutex<Vec<(u64, Libraries)>> = std::sync::Mutex::new(Vec::new());
+static TOKENS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+fn records() -> std::sync::MutexGuard<'static, Vec<(u64, Libraries)>> {
+    RECORDS.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// What the record `token` holds, taken out (none: an empty map, no allocation).
+fn take_record(token: u64) -> Libraries {
+    let mut r = records();
+    match r.iter().position(|x| x.0 == token) {
+        Some(k) => r.swap_remove(k).1,
+        None => Libraries::new(),
+    }
+}
+
+/// Records the libraries used on this thread until `done`; an enclosing record waits in it.
+pub struct LibWatch {
+    mine: u64,
+    outer: u64,
+}
+
+pub fn libraries() -> LibWatch {
+    let mine = TOKENS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    LibWatch {
+        mine,
+        outer: OPEN.with(|o| o.replace(mine)),
+    }
+}
+
+impl LibWatch {
+    /// What was used; an enclosing record gets it too.
+    pub fn done(self) -> Libraries {
+        OPEN.with(|o| o.set(self.outer));
+        let mine = take_record(self.mine);
+        libraries_used(&mine);
+        std::mem::forget(self);
+        mine
+    }
+}
+
+impl Drop for LibWatch {
+    fn drop(&mut self) {
+        OPEN.with(|o| o.set(self.outer));
+        drop(take_record(self.mine));
+    }
+}
+
+/// Whether a library record is open on this thread.
+pub fn recording_libraries() -> bool {
+    OPEN.with(|o| o.get() != 0)
+}
+
+/// Library files a loader read (`forge_material::Libraries::sources`,
+/// `forge_vendor::Profiles::sources`), into this thread's record.
+pub fn libraries_used<'a>(files: impl IntoIterator<Item = (&'a PathBuf, &'a Option<u128>)>) {
+    let mut files = files.into_iter().peekable();
+    if files.peek().is_none() {
+        return;
+    }
+    let token = OPEN.with(|o| o.get());
+    if token == 0 {
+        return;
+    }
+    let mut r = records();
+    let k = match r.iter().position(|x| x.0 == token) {
+        Some(k) => k,
+        None => {
+            r.push((token, Libraries::new()));
+            r.len() - 1
+        }
+    };
+    for (p, h) in files {
+        r[k].1.insert(p.clone(), *h);
+    }
+}
+
 /// What this thread's watch has recorded so far (None: nothing is recording).
 pub fn so_far() -> Option<Deps> {
     WATCHING.with(|w| w.borrow().last().cloned())

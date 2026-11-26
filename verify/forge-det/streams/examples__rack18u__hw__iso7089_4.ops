@@ -1,0 +1,5 @@
+{"doc":"examples/rack18u/hw/iso7089_4.fg"}
+{"op":"SetParam","param":"di","value":{"value":4.515,"dim":"Length"}}
+{"op":"SetParam","param":"do","value":{"value":9.450000000000001,"dim":"Length"}}
+{"op":"SetParam","param":"h","value":{"value":0.8400000000000001,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}

@@ -3,6 +3,7 @@
 //! its surface's domain, a narrow tip of an intersection curve, a round touching a flush torus,
 //! curves in sketches, fillets past slight kinks, topology that must not follow ids, and real
 //! parts that must mesh.
+use forge_math::ipow::Powi as _;
 mod common;
 mod kernel_util;
 
@@ -701,6 +702,64 @@ fn spline_forms_refused() {
     }
 }
 
+/// A through-spline is open unless `closed: true` (the owner's rule), and the flag alone decides:
+/// an open one whose ends meet is open, its slopes kept, a corner where its ends meet; points that
+/// repeat are a typed error at the points (research/spline-spec).
+#[test]
+fn through_splines_open_unless_closed() {
+    let arch = |extra: &str| {
+        format!(
+            "sketch s(on: xy) {{\n  c = spline([(0, 0), (10, 8), (20, 8), (30, 0)]{extra})\n  l = line((30, 0), (0, 0))\n}}\na = extrude(s, 5)\n"
+        )
+    };
+    // the default is the open curve
+    assert_eq!(
+        volume(&arch("")).to_bits(),
+        volume(&arch(", closed: false")).to_bits()
+    );
+    // ends that meet: open (natural ends, a corner there) and closed (periodic) are two curves
+    let drop = |extra: &str| {
+        format!(
+            "sketch s(on: xy) {{\n  c = spline([(0, 0), (10, 8), (20, 0), (10, -8), (0, 0)]{extra})\n}}\na = extrude(s, 2)\n"
+        )
+    };
+    // the closed one is through the same points, the first not repeated
+    let ring = "sketch s(on: xy) {\n  c = spline([(0, 0), (10, 8), (20, 0), (10, -8)], closed: true)\n}\na = extrude(s, 2)\n";
+    let (open, closed) = (volume(&drop("")), volume(ring));
+    assert!(
+        open > 0.0 && closed > 0.0 && (open - closed).abs() > 1e-3,
+        "{open} {closed}"
+    );
+    // a slope at an end that meets the other is kept
+    let sloped = volume(&drop(", start_slope: (1, 1)"));
+    assert!((sloped - open).abs() > 1e-3, "{sloped} {open}");
+    for curve in [
+        "spline([(0, 0), (0, 0), (10, 8), (20, 0)])",
+        "spline([(0, 0), (10, 8), (20, 0), (20, 0.000001)])",
+        "spline([(0, 0), (10, 8), (20, 0), (0, 0)], closed: true)",
+    ] {
+        let src = format!(
+            "sketch s(on: xy) {{\n  c = {curve}\n  l = line((20, 0), (0, 0))\n}}\na = extrude(s, 2)\n"
+        );
+        let msg = common::refused(&src);
+        assert!(msg.contains("SplinePointsMeet"), "{curve}: {msg}");
+    }
+}
+
+/// A closed spline through a long hairpin whose tip turns a small loop crosses itself: refused,
+/// exactly (forge-ops simple.rs), where sixteen samples a piece saw no crossing and let it through.
+#[test]
+fn a_hairpin_spline_that_crosses_itself_is_refused() {
+    let msg = common::refused(
+        "sketch s(on: xy) {
+  c = spline([(0, 0), (20, 1.47), (40, 0.035), (40.7, -0.001), (39.77, -0.035), (20, -1.25), (0, -0.41), (-5, -3)], closed: true)
+}
+e = extrude(s, 2)
+",
+    );
+    assert!(msg.contains("self intersect"), "{msg}");
+}
+
 /// Loops that cross are refused at the sketch (a circle r 40 and one r 30 at (20, 0): a
 /// SketchProfile self intersection); loops that touch at a corner go on to the kernel, which says
 /// where the solid pinches (a 20 square with a triangle touching its edge at (10, 0): ZeroThickness
@@ -952,7 +1011,7 @@ fn meshes(src: &str) {
     // the mesh's face indices are the compacted body's
     let b = built(src).body.compact();
     let bb = forge_math::Box3::from_points(b.vertices.iter().map(|v| v.point));
-    let diag = (bb.x.width().powi(2) + bb.y.width().powi(2) + bb.z.width().powi(2)).sqrt();
+    let diag = (bb.x.width().ipow(2) + bb.y.width().ipow(2) + bb.z.width().ipow(2)).sqrt();
     for chord in [0.25, 4e-4 * diag, 0.05] {
         let q = Quality {
             chord,

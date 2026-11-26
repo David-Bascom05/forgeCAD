@@ -1,0 +1,22 @@
+# generic-trunnion-bc head: the spindle on X Y Z (gauge line z = 400), housing above the nose.
+# frame: the machine's base frame at the home pose.
+shared nose_r = 50
+shared gauge = 400
+shared nose_h = 100
+shared hw = 200
+shared hh = 200
+shared bore = 60
+shared taper_d = 50
+
+sketch nk(on: offset(xy, gauge)) {
+  c = circle((0, 0), nose_r)
+}
+nose = extrude(nk.c, nose_h)
+sketch hs(on: nose.end) {
+  r = rect(center: (0, 0), size: (hw, hw))
+}
+housing = extrude(hs.r, hh)
+sketch tb(on: nk) {
+  c = circle((0, 0), bore / 2)
+}
+taper = cut(tb.c, -taper_d)

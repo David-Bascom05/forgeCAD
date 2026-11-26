@@ -6,6 +6,7 @@ use crate::b64;
 use crate::fg::{self, Args, Reply};
 use forge_agent::json::Json;
 use std::io::{BufRead, Write};
+use std::path::Path;
 use std::process::ExitCode;
 
 /// Each tool: name, description, how many of its parameters are required, its parameters,
@@ -17,7 +18,37 @@ type Tool = (
     &'static [(&'static str, &'static str)],
 );
 
-const TOOLS: [Tool; 15] = [
+const TOOLS: [Tool; 18] = [
+    (
+        "import",
+        "A model file (STEP, IGES, .brep, Parasolid .x_t/.x_b) under the root as a part: the file kept in `out` beside a new `<stem>.fg` that imports it (writable sessions). Replies with its solids and what was refused",
+        1,
+        &[
+            ("file", "path to the model under the root"),
+            (
+                "out",
+                "the directory under the root for the part (default: the model's own)",
+            ),
+        ],
+    ),
+    (
+        "bend",
+        "Run a bending document (.fg starting with `bending`): the press-brake program simulated as it states (certified tool clearance through each bend, handling between steps); reply forgecad.bending/1. what=sheet: the setup sheet",
+        1,
+        &[
+            ("file", "path to a bending .fg"),
+            ("what", "sheet: the setup sheet"),
+        ],
+    ),
+    (
+        "cam",
+        "Run a machining document (.fg starting with `machining`): every op's path certified against the exact part (gouge, holder, rapids) or refused with the check and a fix; reply forgecad.cam/1. what=sheet: the setup sheet",
+        1,
+        &[
+            ("file", "path to a machining .fg"),
+            ("what", "sheet: the setup sheet instead of the program"),
+        ],
+    ),
     (
         "query",
         "selector -> @handles; or stat, file, check, params, features; holes, section z=V, gap A B, ..",
@@ -229,29 +260,39 @@ pub fn run(mcp: bool, root: &str, writable: bool) -> ExitCode {
         if line.trim().is_empty() {
             continue;
         }
-        let reply = match Json::parse(&line) {
-            // a request that panics answers with an error, and the session starts afresh
-            Ok(req) => {
-                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| answer(&mut forge, &req, mcp)))
-                    .unwrap_or_else(|_| {
-                        forge = fg::Session::new(Some(root.clone()), writable);
-                        let id = req.get("id").cloned().unwrap_or(Json::Null);
-                        Some(error(
-                            id,
-                            -32603,
-                            "internal error: the request failed; the session was reset",
-                        ))
-                    })
-            }
-            Err(e) => Some(error(Json::Null, -32700, &e)),
-        };
-        if let Some(r) = reply
+        if let Some(r) = respond(&mut forge, &line, mcp, (&root, writable))
             && writeln!(out, "{r}").and_then(|_| out.flush()).is_err()
         {
             break;
         }
     }
     ExitCode::SUCCESS
+}
+
+/// One request's answer (none for an MCP notification), and the sketches its runs kept freed.
+fn respond(
+    forge: &mut fg::Session,
+    line: &str,
+    mcp: bool,
+    (root, writable): (&std::path::Path, bool),
+) -> Option<Json> {
+    let reply = match Json::parse(line) {
+        // a request that panics answers with an error, and the session starts afresh
+        Ok(req) => std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| answer(forge, &req, mcp)))
+            .unwrap_or_else(|_| {
+                *forge = fg::Session::new(Some(root.to_path_buf()), writable);
+                let id = req.get("id").cloned().unwrap_or(Json::Null);
+                Some(error(
+                    id,
+                    -32603,
+                    "internal error: the request failed; the session was reset",
+                ))
+            }),
+        Err(e) => Some(error(Json::Null, -32700, &e)),
+    };
+    // the sketches the request's runs made: freed between requests (a run lets none go)
+    release_sketches();
+    reply
 }
 
 fn error(id: Json, code: i32, msg: &str) -> Json {
@@ -371,6 +412,9 @@ fn call(forge: &mut fg::Session, name: &str, p: &Json) -> Reply {
             },
         };
     }
+    if name == "import" {
+        return model_import(p);
+    }
     if name == "help" {
         let text = forge_lang::help(&a.file);
         return Reply {
@@ -381,6 +425,13 @@ fn call(forge: &mut fg::Session, name: &str, p: &Json) -> Reply {
         };
     }
     let mut r = forge.run(name, &a, p);
+    if (name == "cam" || name == "bend")
+        && let Some(b) = r.png.take()
+    {
+        // the program or the sheet is text: it goes as text, never as an image
+        r.text.push('\n');
+        r.text.push_str(&String::from_utf8_lossy(&b));
+    }
     if name == "export"
         && r.ok
         && let Some(out) = p.get("out").and_then(Json::str)
@@ -388,6 +439,95 @@ fn call(forge: &mut fg::Session, name: &str, p: &Json) -> Reply {
         write_out(&mut r, out);
     }
     r
+}
+
+/// `import`: a model under the root brought in as a part, in a writable session only.
+fn model_import(p: &Json) -> Reply {
+    let fail = |msg: String| Reply {
+        ok: false,
+        text: format!("error: {msg}"),
+        json: Json::obj(vec![("ok", false.into()), ("error", msg.as_str().into())]),
+        png: None,
+    };
+    let Some((root, writable)) = FENCE.get() else {
+        return fail("no session root".into());
+    };
+    if !writable {
+        return fail("import writes: the session is read-only (serve --writable)".into());
+    }
+    let Some(file) = p.get("file").and_then(Json::str) else {
+        return fail("import needs a file".into());
+    };
+    let src = root.join(file);
+    let dir = match p.get("out").and_then(Json::str) {
+        Some(o) => root.join(o),
+        None => src.parent().map_or_else(|| root.clone(), Path::to_path_buf),
+    };
+    let under = |q: &Path| std::fs::canonicalize(q).is_ok_and(|c| c.starts_with(root));
+    if !under(&src) {
+        return fail(format!("{file} is not a file under the session's root"));
+    }
+    let git = |q: &Path| {
+        q.strip_prefix(root)
+            .unwrap_or(q)
+            .components()
+            .any(|c| c.as_os_str().to_string_lossy().eq_ignore_ascii_case(".git"))
+    };
+    if git(&dir) {
+        return fail("out: not into the repository's .git".into());
+    }
+    let _ = std::fs::create_dir_all(&dir);
+    if !under(&dir) || std::fs::canonicalize(&dir).is_ok_and(|d| git(&d)) {
+        return fail("out is outside the session's root".into());
+    }
+    if !crate::model::is_model_name(&src) {
+        return fail(format!(
+            "{file}: not a model file (STEP, IGES, .brep, .x_t, .x_b)"
+        ));
+    }
+    match crate::model::import(&src, &dir) {
+        Ok((json, text)) => Reply {
+            ok: true,
+            json,
+            text,
+            png: None,
+        },
+        Err(e) => fail(e),
+    }
+}
+
+/// Where an export's `out` really goes: under the root, its folder there already, not in the
+/// repository's .git (git would run what's written there), and not through a link out of the
+/// root or into .git (`model.stl -> ~/.bashrc`, `g -> .git`).
+fn out_place(root: &std::path::Path, out: &str) -> Result<std::path::PathBuf, String> {
+    let git = |p: &std::path::Path| {
+        p.components()
+            .any(|c| c.as_os_str().to_string_lossy().eq_ignore_ascii_case(".git"))
+    };
+    let rel = std::path::Path::new(out);
+    if git(rel) {
+        return Err(format!("{out}: not into the repository's .git"));
+    }
+    let path = root.join(rel);
+    let (Some(dir), Some(name)) = (path.parent(), path.file_name()) else {
+        return Err(format!("{out} is outside the session's root"));
+    };
+    let dir = std::fs::canonicalize(dir).map_err(|_| format!("{out} is outside the session's root"))?;
+    if !dir.starts_with(root) {
+        return Err(format!("{out} is outside the session's root"));
+    }
+    let real = dir.join(name);
+    // a link there already: where it leads is where the old code would have written
+    if std::fs::symlink_metadata(&real).is_ok_and(|m| m.file_type().is_symlink()) {
+        let to = std::fs::canonicalize(&real).unwrap_or_else(|_| real.clone());
+        if !to.starts_with(root) || git(to.strip_prefix(root).unwrap_or(&to)) {
+            return Err(format!("{out} is a link out of the session's root"));
+        }
+    }
+    if git(real.strip_prefix(root).unwrap_or(&real)) {
+        return Err(format!("{out}: not into the repository's .git"));
+    }
+    Ok(real)
 }
 
 /// An export written to `out` under the session's root, not sent back: refused in a read-only
@@ -408,17 +548,14 @@ fn write_out(r: &mut Reply, out: &str) {
             "export out writes: the session is read-only (serve --writable)".into(),
         );
     }
-    let path = root.join(out);
-    let inside = path
-        .parent()
-        .and_then(|d| std::fs::canonicalize(d).ok())
-        .is_some_and(|d| d.starts_with(root))
-        && path.file_name().is_some();
-    if !inside {
-        return refuse(r, format!("{out} is outside the session's root"));
-    }
+    let path = match out_place(root, out) {
+        Ok(p) => p,
+        Err(e) => return refuse(r, e),
+    };
     let Some(bytes) = r.png.take() else { return };
-    if let Err(e) = std::fs::write(&path, &bytes) {
+    // as forgecad web writes: a file made new under a random name beside it, renamed over it,
+    // never written through a link
+    if let Err(e) = crate::web::put(&path, &bytes) {
         return refuse(r, format!("{out}: {e}"));
     }
     if let Json::Obj(f) = &mut r.json {
@@ -569,4 +706,58 @@ fn tool(t: &Tool) -> Json {
             ]),
         ),
     ])
+}
+
+/// Frees the sketches forge-lang's runs on this thread kept (`forge_keep`): each lets go of its
+/// names, the cycle through them broken (a sketch with a named entity is an `Rc` cycle: its
+/// `named` holds `Value::Ent`s of itself). A run frees none itself, so the speed gate's builds do
+/// what they did; between builds, never during one, on the thread that ran them. Without it every
+/// run kept its sketches (5.5 KB a run of a small part natively, ~30 KB an edit in the browser).
+/// A process that never calls it (the speed gate's benchparts, a one-shot CLI command) keeps them
+/// till it exits, as every process did before. Its own cost: the freeing a run paid before, about
+/// 5,500 instructions a run of a small one-sketch part.
+fn release_sketches() {
+    forge_lang::release_sketches();
+}
+
+#[cfg(test)]
+mod bounded {
+    use super::*;
+
+    /// A long session keeps no more sketches than one request's runs made: each request's are
+    /// freed as it is answered (`release_sketches`), in `serve` and in `mcp` alike. Without it
+    /// every build of a part kept its sketches (a sketch with a named entity is an `Rc` cycle).
+    #[test]
+    fn a_session_frees_each_requests_sketches() {
+        let dir = forge_dirs::temp_dir().join(format!("forge-serve-bounded-{}", forge_dirs::process_id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let part = dir.join("plate.fg");
+        std::fs::write(
+            &part,
+            "shared t = 6\nsketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (60, 30))\n}\nbase = extrude(plan, t)\n",
+        )
+        .unwrap();
+        let root = std::fs::canonicalize(&dir).unwrap();
+        let file = part.to_str().unwrap().to_string();
+        for mcp in [false, true] {
+            let mut forge = fg::Session::new(Some(root.clone()), true);
+            for k in 0..20 {
+                let req = if mcp {
+                    format!(
+                        r#"{{"jsonrpc":"2.0","id":{k},"method":"tools/call","params":{{"name":"build","arguments":{{"file":{file:?}}}}}}}"#
+                    )
+                } else {
+                    format!(r#"{{"jsonrpc":"2.0","id":{k},"method":"build","params":{{"file":{file:?}}}}}"#)
+                };
+                let r = respond(&mut forge, &req, mcp, (&root, true)).expect("an answer");
+                assert!(r.get("error").is_none(), "{r}");
+                assert_eq!(
+                    forge_keep::kept(),
+                    0,
+                    "mcp {mcp}, request {k}: sketches kept after it"
+                );
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

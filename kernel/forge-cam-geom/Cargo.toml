@@ -1,0 +1,25 @@
+[package]
+name = "forge-cam-geom"
+description = "ForgeCAD CAM geometry: exact numbers, exact line/arc region offsets, tool shapes as revolved profiles, and the certified tool-part clearance checker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+# forge-num's interval rules without the exact-zero rule (`forge-num/ival-strict`), for one train's
+# comparison: a build feature, never a runtime switch.
+ival-strict = ["forge-num/ival-strict"]
+# the closed forms as they were before the bull-nose ones (contact::disc_capsule, drop::bull_section):
+# kept for one train as the rewrite's way back (research/cam/speed-ledger.md)
+old-closed-form = []
+
+[dependencies]
+# the exact numbers (Nat, the exact reals, Ival): one implementation, shared with forge-math
+forge-num = { path = "../forge-num", features = ["real"] }
+# ipow: powers as on every target, folded or not
+forge-math = { path = "../forge-math" }
+
+[lints]
+workspace = true
+

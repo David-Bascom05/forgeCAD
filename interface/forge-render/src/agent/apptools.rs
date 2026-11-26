@@ -115,10 +115,14 @@ impl AppTools {
                     return Reply::err(e);
                 }
             }
-            return match super::project::call(name, &args, &dir) {
+            let r = match super::project::call(name, &args, &dir) {
                 Ok(j) => Reply::ok(j.to_string()),
                 Err(e) => Reply::err(e),
             };
+            // the sketches its runs kept: freed as it ends (this thread lives as long as the
+            // connection, and forge-lang frees none itself)
+            crate::plat::release_sketches();
+            return r;
         }
         // the fg tools build on the caller's thread, never the frame's
         if name.starts_with("fg_") {
@@ -126,6 +130,7 @@ impl AppTools {
                 return Reply::err("no document is open");
             };
             let (text, error) = super::tools::fg_call(name, &args, &dir);
+            crate::plat::release_sketches();
             return Reply {
                 text,
                 png: None,
@@ -152,6 +157,12 @@ impl AppTools {
 
 /// Each tool: its name, what it does, its parameters (JSON Schema properties) and the required ones.
 pub const NAMES: &[(&str, &str, &str, &[&str])] = &[
+    (
+        "environment",
+        "Enter an environment of the open document (manufacture, machine-builder, thermoform, flat-pattern, bendsim, robot, render, drawing, simulation) by key or name, or `exit` to go back to the design. With no name: the one active and each one's availability (and why not). An environment replaces the ribbon with its own tabs; one at a time.",
+        r#"{"name":{"type":"string"}}"#,
+        &[],
+    ),
     (
         "tree",
         "The browser of the open document: each row's id, kind and whether it's shown. An assembly lists its top-level parts, subassemblies and patterns; `filter` lists every row (at any depth) whose id or name has it; `relationships: true` adds joints and constraints.",

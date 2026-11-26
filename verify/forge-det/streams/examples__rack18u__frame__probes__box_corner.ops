@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/frame/probes/box_corner.fg"}
+{"op":"SetParam","param":"t","value":{"value":3.1710000000000003,"dim":"Length"}}
+{"op":"SetParam","param":"W","value":{"value":210,"dim":"Length"}}
+{"op":"SetParam","param":"D","value":{"value":157.5,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"ReplaceFeature","id":"flat","text":"flat = unfold(floor)\n"}

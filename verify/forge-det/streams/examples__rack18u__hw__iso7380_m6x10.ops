@@ -1,0 +1,6 @@
+{"doc":"examples/rack18u/hw/iso7380_m6x10.fg"}
+{"op":"SetParam","param":"d","value":{"value":6.300000000000001,"dim":"Length"}}
+{"op":"SetParam","param":"P","value":{"value":1.05,"dim":"Length"}}
+{"op":"SetParam","param":"l","value":{"value":10.5,"dim":"Length"}}
+{"op":"Rename","from":"prof","to":"prof_r"}
+{"op":"MoveFeature","id":"socket","before":null}

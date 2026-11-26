@@ -3,6 +3,12 @@
 # path against a baseline (REGRESSED: more than 0.5% over it), and the hash of every regen's exact
 # result against tools/speed/bits.txt (CHANGED: expected only when geometry changes on purpose).
 # usage: tools/speed/gate.sh [baseline]    exit 1 regressed, 2 bits changed, 3 both
+#
+# The committed baseline-valgrind.txt is a REFERENCE (main's counts on one machine), not the
+# pass/fail comparison: another container's glibc or CPU can move whole-process lines by tens to
+# hundreds of Ir. A branch is judged by measuring main and the branch on the same machine
+# (`gate.sh --save` on each into a scratch copy) and comparing them with tools/speed/band.py, whose
+# band is the trains' rule. bits.txt, by contrast, must match exactly everywhere.
 #        tools/speed/gate.sh --save        rewrite the counter's baseline and bits.txt
 #
 # Two counters, each with its own baseline (their counts are not comparable with each other):
@@ -71,13 +77,26 @@ case $counter in
     vgonly=
     count1() {
       if [ "$exact" = 1 ]; then
+        # every exact count from the binary's own main (`regen1::main`, `benchparts::main`), unless
+        # the line names its own call: what the process does before main (the loader, std's
+        # runtime start, its stack-guard probe parsing /proc/self/maps, which scales with the
+        # binary's size) and after it is never counted. The process runs on one CPU (taskset), so
+        # its work is on main's thread, under main.
+        only=${vgonly:-"--toggle-collect=$(basename "$1")::main"}
+        # (TMPDIR the gate directory's own: benchparts writes its font to a fixed name in the temp
+        # folder on every run, and two gates counting at once read each other's half-written
+        # font, gearbox edit off by 364; a path of one length, as FORGE_BENCH_PARTS. And no
+        # result cache (FORGECAD_CACHE=off): forge-lang keeps assemblies' results under
+        # $HOME/.cache, which every gate and run shares; no bench part is an assembly today, so it
+        # is never read, but a count must not depend on what an earlier run left there)
         (cd / && env -i PATH=/usr/bin:/bin HOME=/tmp LD_PRELOAD="$bin/fixedrandom.so" \
-          FORGE_BENCH_PARTS="$bin/parts" taskset -c "${GATE_CPU:-0}" setarch -R \
-          valgrind --fair-sched=yes --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null $vgonly "$@")
+          FORGE_BENCH_PARTS="$bin/parts" TMPDIR="$bin/tmp" FORGECAD_CACHE=off taskset -c "${GATE_CPU:-0}" setarch -R \
+          valgrind --fair-sched=yes --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null $only "$@")
       else
         valgrind --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null $vgonly "$@"
       fi 2>&1 >/dev/null |
-        awk '/Collected :/{n=$NF}/Process terminating/{bad=1}END{if(!bad&&n!="")print n}'
+        # a count of 0 is a toggle that matched nothing (a renamed main): a failure, never a pass
+        awk '/Collected :/{n=$NF}/Process terminating/{bad=1}END{if(!bad&&n!=""&&n>0)print n}'
     }
     ;;
   *) echo "GATE_COUNTER: perf or callgrind, not $counter" >&2; exit 64 ;;
@@ -96,20 +115,96 @@ count() {
 }
 echo "counter: $counter (baseline $baseline)"
 export CARGO_TARGET_DIR="$target"
-cargo build -q --release -p forge-model --example regen1 --example bits
-cargo build -q --release -p forge-lang --example benchparts
+if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
+  # Built from one fixed source path, whatever the checkout's: the binaries carry their sources'
+  # paths (CARGO_MANIFEST_DIR in benchparts, and each path crate's metadata hash, which names its
+  # symbols), so two checkouts at paths of different lengths build binaries whose counts differ.
+  # The checkout's files (tracked, and untracked ones not ignored: the work in progress) are copied
+  # there with their times, under a lock (gates may run at once: each builds in turn, then counts
+  # in parallel), and built into this checkout's own target directory, so neither side of a
+  # comparison reuses the other's build.
+  src=/tmp/forge-gate-src
+  checkout=$PWD
+  exec 9>"$src.lock"
+  flock 9
+  rm -rf "$src"
+  mkdir "$src"
+  git ls-files -co --exclude-standard -z | tar --null -T - -cf - | tar -xf - -C "$src"
+  (cd "$src" && cargo build -q --release -p forge-model --example regen1 --example bits \
+    && cargo build -q --release -p forge-lang --example benchparts) || exit 1
+else
+  cargo build -q --release -p forge-model --example regen1 --example bits
+  cargo build -q --release -p forge-lang --example benchparts
+fi
 bin="$target/release/examples"
 if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
-  # (the binaries at a path of one length whatever the checkout, and the fixed getrandom)
+  # (the binaries at a path of one length whatever the checkout, and the fixed getrandom and
+  # clock, fixedrandom.c: a clock read under load moved tour seq by up to 24)
+  # (the directory's path reaches each counted process in argv[0], LD_PRELOAD and
+  # FORGE_BENCH_PARTS: its LENGTH moves the counts (tour seq: 9,441,701 from a 22-character
+  # directory, 9,436,604 from 14, 9,437,129 from 41), its letters do not. Always this one form)
+  fill() {
+    cp "$bin/regen1" "$bin/bits" "$bin/benchparts" "$1/"
+    # (benchparts' font folder made here: a counted run that had to create it paid 564 fewer
+    # instructions than one finding it there, so the first part counted differed from the rest)
+    mkdir -p "$1/parts" "$1/tmp/forge-benchparts"
+    cp interface/forge-lang/parts/bench/*.fg "$1/parts/"
+    cc -O2 -fno-builtin -ffreestanding -shared -fPIC -o "$1/fixedrandom.so" "$dir/fixedrandom.c"
+  }
   gatedir=$(mktemp -d /tmp/forge-gate.XXXXXX)
   trap 'rm -rf "$gatedir"' EXIT
-  cp "$bin/regen1" "$bin/bits" "$bin/benchparts" "$gatedir/"
-  mkdir "$gatedir/parts"
-  cp interface/forge-lang/parts/bench/*.fg "$gatedir/parts/"
-  cc -O2 -shared -fPIC -o "$gatedir/fixedrandom.so" "$dir/fixedrandom.c"
+  case $gatedir in
+    /tmp/forge-gate.??????) ;;
+    *) echo "gate dir $gatedir is not /tmp/forge-gate.XXXXXX: its length would move the counts" >&2; exit 64 ;;
+  esac
+  fill "$gatedir"
+  # (the binaries copied out, the source directory is free for the next gate's build)
+  flock -u 9
+  # the binaries were built from the fixed source path, not from this checkout's
+  if [ "${GATE_SELFTEST:-0}" = 1 ]; then
+    # (workspace crates name their sources relatively; benchparts holds its manifest's directory
+    # whole, CARGO_MANIFEST_DIR, which must be the fixed one)
+    for b in regen1 benchparts; do
+      if grep -q -a "$checkout/" "$gatedir/$b"; then
+        echo "self-test FAILED: $b carries this checkout's path ($checkout)" >&2
+        exit 66
+      fi
+    done
+    if ! grep -q -a "$src/" "$gatedir/benchparts"; then
+      echo "self-test FAILED: benchparts was not built from $src" >&2
+      exit 66
+    fi
+    echo "self-test: built from $src, no path of the checkout in the binaries"
+  fi
+  # GATE_SELFTEST=1: the counts do not depend on which gate directory they are made in (nor on the
+  # checkout's: workspace crates embed their sources' paths relative). A second directory of the
+  # same form counts the process alone and one small part's line; any difference fails the gate
+  if [ "${GATE_SELFTEST:-0}" = 1 ]; then
+    other=$(mktemp -d /tmp/forge-gate.XXXXXX)
+    fill "$other"
+    for a in "noop" "tour seq"; do
+      # shellcheck disable=SC2086
+      x=$(bin=$gatedir; count "$bin/regen1" $a)
+      # shellcheck disable=SC2086
+      y=$(bin=$other; count "$bin/regen1" $a)
+      echo "self-test regen1 $a: $x in $gatedir, $y in $other"
+      if [ -z "$x" ] || [ "$x" != "$y" ]; then
+        rm -rf "$other"
+        echo "self-test FAILED: the count depends on the gate directory" >&2
+        exit 65
+      fi
+    done
+    rm -rf "$other"
+  fi
   bin=$gatedir
 fi
 now=$(mktemp)
+# each binary's main alone, given nothing to build (exact counts start at main, so start-up work
+# that moves with the binary's layout, glibc reading /proc/self/maps for the main thread's stack
+# guard say, is in no line): a constant, which band.py still takes off both sides' whole-process
+# lines; with counts from before this gate (start-up included) it is what keeps them comparable
+echo "noop regen1 $(count "$bin/regen1" noop)" >> "$now"
+echo "noop benchparts $(count "$bin/benchparts" noop)" >> "$now"
 for p in torture plate shaft housing coplanar patterns mixed hole-grid tour upto upto-flat; do
   for m in seq nary1; do
     n=$(count "$bin/regen1" $p $m)
@@ -142,7 +237,9 @@ for p in gearbox volute crank valve heatsink quadarm conrod jack frame manifold 
     echo "$p $m ${n:-FAIL}" >> "$now"
   done
 done
-bits() { "$bin/bits"; "$bin/benchparts" bits; }
+# (the parts from this checkout: the binaries' own source path is the shared build folder, which a
+# gate starting while this one counts empties and refills; its bits then failed, or were cut short)
+bits() { "$bin/bits"; FORGE_BENCH_PARTS="$PWD/interface/forge-lang/parts/bench" "$bin/benchparts" bits; }
 if [ "$1" = --save ]; then
   mv "$now" "$baseline"
   bits > "$dir/bits.txt"

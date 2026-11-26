@@ -64,6 +64,13 @@ export F stl|3mf|obj [tol MM] [angle DEG] [ascii] [normals] [faces] [flat] [-o F
                             meshes: an object per solid (an assembly's: per part, a 3MF item
                             per occurrence; flat: one each), tol 0.01 mm, angle 15 deg by
                             default; each checked closed and facing out (`watertight`), `manifold`
+export F urdf effort [J] N velocity [J] V [travel MM] [cut J].. [-o DIR|F.zip]
+                            a robot: a link per part or rigid group, mass from materials, joints
+                            at their values; refused, with fixes: a closed loop (cut J), no
+                            effort/velocity (or --placeholder-limits); research/export/urdf.md
+                            a `robot` document (`src = source("arm.fg")` + overrides) builds and
+                            exports the same way (`forgecad import X.urdf` makes an unlinked one);
+                            research/export/urdf-editor.md
 help forge
 ```
 SEL: `faces|edges|verts`, then filters: plane cyl cone .. | line circle | convex concave |
@@ -87,3 +94,12 @@ carry spans and `fixes`; a loose number is a lint with a LiftLiteral fix.
 A `.fg` file is plain text: write a new part whole, then `build` it; hand edits are fine. An
 assembly's names are OCC/NAME and its numbers are in its own frame (`in OCC` for a part's);
 `fg query F help` lists its queries.
+
+Machine models, by the repo owner's explicit decision: the machine makers' published 3D models
+(Haas's free solid-model downloads, the `haas-3d-models` branch) may be used, converted and
+committed: per-body meshes under `kernel/forge-machine/data/models/` (Git LFS, excluded from
+normal clones by `.lfsconfig`), test fixtures and regions cut from them, and clips or images
+rendered with them. No licence record is needed for these. Keep raw vendor archives out of main.
+Haas Tooling workholding models likewise (David, of the `haas-tooling-step` upload: "They are totally ok to
+include in the repo I checked."): the STEP files used and their per-body meshes under
+`kernel/forge-workholding/data/models/haas-tooling/` (Git LFS, excluded from normal clones).

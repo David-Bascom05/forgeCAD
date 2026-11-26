@@ -1,0 +1,20 @@
+# Benchmark: three islands (two round bosses and a block) on a base, an open level 15 deep all
+# round and between them, for adaptive vs clear at 2.5 D with islands.
+
+shared L = 90
+shared W = 70
+shared t = 10
+shared h = 15
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = extrude(plan, t)
+sketch isl(on: base.end) {
+  a = circle((25, 25), 8)
+  b = rect(corner: (48, 12), size: (14, 22))
+  c = circle((66, 52), 6)
+}
+round_a = extrude(isl.a, h)
+block_b = extrude(isl.b, h)
+round_c = extrude(isl.c, h)

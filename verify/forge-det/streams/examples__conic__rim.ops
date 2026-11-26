@@ -1,0 +1,6 @@
+{"doc":"examples/conic/rim.fg"}
+{"op":"SetParam","param":"L","value":{"value":42,"dim":"Length"}}
+{"op":"SetParam","param":"W","value":{"value":31.5,"dim":"Length"}}
+{"op":"SetParam","param":"H","value":{"value":21,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"ReplaceFeature","id":"rim","text":"rim = fillet(edges(of: base.end), r, conic: rho)\n"}

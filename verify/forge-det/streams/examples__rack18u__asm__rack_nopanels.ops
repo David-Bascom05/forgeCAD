@@ -1,0 +1,4 @@
+{"doc":"examples/rack18u/asm/rack_nopanels.fg"}
+{"op":"Rename","from":"base_pan","to":"base_pan_r"}
+{"op":"MoveFeature","id":"press_fh6","before":null}
+{"op":"ReplaceFeature","id":"press_fh8","text":"press_fh8 = fit_rule(\"../hw/pem_fh_m8_25.fg\", \"../frame/top_pan.fg\")\n"}

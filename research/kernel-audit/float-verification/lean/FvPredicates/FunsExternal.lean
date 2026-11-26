@@ -18,7 +18,7 @@ Rust's `<`, `<=`, `>`, `>=` and `==` on `f64` are IEEE 754's ordered comparisons
 negation of `==`, so it is true when an operand is NaN.
 -/
 
--- `f64::abs`, `f64::from_bits` and `<f64 as Clone>::clone` are the bridge's
+-- `f64::abs`, `f64::from_bits`, `<f64 as Clone>::clone` and `<f64 as PartialEq>::{eq, ne}` are the bridge's
 -- (verify/aeneas/bridge/AeneasF64/Std.lean), with the same definitions.
 
 open Aeneas Aeneas.Std Result
@@ -33,10 +33,6 @@ def F64.Insts.CoreOpsArithSubF64F64.sub (a b : F64) : Result F64 := ok (IEEE754.
 def F64.Insts.CoreOpsArithMulF64F64.mul (a b : F64) : Result F64 := ok (IEEE754.FP.mul a b)
 /-- `<f64 as Neg>::neg` -/
 def F64.Insts.CoreOpsArithNegF64.neg (a : F64) : Result F64 := ok (IEEE754.FP.neg a)
-/-- `<f64 as PartialEq>::eq` -/
-def F64.Insts.CoreCmpPartialEqF64.eq (a b : F64) : Result Bool := ok (IEEE754.FP.eq a b)
-/-- `<f64 as PartialEq>::ne` -/
-def F64.Insts.CoreCmpPartialEqF64.ne (a b : F64) : Result Bool := ok (!IEEE754.FP.eq a b)
 /-- `<f64 as PartialOrd>::lt` -/
 def F64.Insts.CoreCmpPartialOrdF64.lt (a b : F64) : Result Bool := ok (IEEE754.FP.lt a b)
 /-- `<f64 as PartialOrd>::gt` -/

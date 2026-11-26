@@ -5,6 +5,7 @@
 use super::Gui;
 use crate::render::{Entity, FaceColour};
 use crate::shell::fg::{FgPanel, Severity, Status};
+use forge_math::ipow::Powi as _;
 
 /// A warning's tint over a face (straight alpha), and an error's.
 const AMBER: [u8; 4] = [0xE0, 0xA0, 0x30, 120];
@@ -64,7 +65,7 @@ pub(super) fn straight(mesh: Option<&crate::mesh::PartMesh>, k: u32) -> bool {
             let p = [f(seg, o), f(seg, o + 4), f(seg, o + 8)];
             let w = [p[0] - a[0], p[1] - a[1], p[2] - a[2]];
             let t = (w[0] * d[0] + w[1] * d[1] + w[2] * d[2]) / len2;
-            let off: f32 = (0..3).map(|j| (w[j] - t * d[j]).powi(2)).sum();
+            let off: f32 = (0..3).map(|j| (w[j] - t * d[j]).ipow(2)).sum();
             off < 1e-6 * len2.max(1.0)
         })
     })
@@ -83,6 +84,25 @@ impl Gui {
         let (Some(p), Some(a)) = (self.fg_part_quiet(), self.fg_anchors.as_ref()) else {
             return vec![];
         };
+        // an id the pointer is on in the Agent tab (a chip) lights what it names, over the row
+        if let Some(id) = self.shell.agent.hover_ref.as_deref() {
+            let mut out: Vec<u32> = match a.role_faces.get(id) {
+                // a named face or role: its faces
+                Some(f) => f.clone(),
+                // a feature (or a group): every face its features made
+                None => p
+                    .feats
+                    .iter()
+                    .filter(|f| under(&f.id, id))
+                    .filter_map(|f| a.role_faces.get(&format!("{}.faces", f.id)))
+                    .flatten()
+                    .copied()
+                    .collect(),
+            };
+            out.sort_unstable();
+            out.dedup();
+            return out;
+        }
         let Some(key) = p.selected.as_deref() else {
             return vec![];
         };
@@ -180,6 +200,10 @@ impl Gui {
             .iter()
             .find(|f| f.id == id)
             .and_then(|f| crate::shell::fgdim::handle(f, &s.src, &p.issues, &p.params, a, mesh, key));
+        let units = self.shell.units;
+        if let Some(d) = &mut self.shell.fg_dim {
+            d.text = crate::shell::fgdim::words(d.value, units);
+        }
     }
 
     /// A selection window let go while a tool's edges selection takes picks: each edge it holds

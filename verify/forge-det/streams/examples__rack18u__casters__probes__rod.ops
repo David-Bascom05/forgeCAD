@@ -1,0 +1,4 @@
+{"doc":"examples/rack18u/casters/probes/rod.fg"}
+{"op":"SetParam","param":"L","value":{"value":21,"dim":"Length"}}
+{"op":"SetParam","param":"r","value":{"value":2.1,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}

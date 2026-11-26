@@ -1,0 +1,6 @@
+{"doc":"examples/machined/boss_fillet.fg"}
+{"op":"SetParam","param":"side","value":{"value":63,"dim":"Length"}}
+{"op":"SetParam","param":"t","value":{"value":10.5,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"MoveFeature","id":"foot","before":null}
+{"op":"ReplaceFeature","id":"lip","text":"lip = chamfer(edges(of: bore, crease: \"convex\"), 1)\n"}

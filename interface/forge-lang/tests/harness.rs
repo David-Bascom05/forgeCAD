@@ -6,6 +6,7 @@ use forge_lang::asm::Issue;
 use forge_lang::error::{Error, Warning};
 use forge_lang::harness::{self, HarnessOut, HarnessProblem};
 use forge_lang::{Options, Run};
+use forge_math::ipow::Powi as _;
 use std::path::{Path, PathBuf};
 
 const HEADER: &str = include_str!("../../../examples/harness/header.fg");
@@ -117,7 +118,7 @@ fn the_example_routes_with_every_term_and_no_notes() {
     // the spec: worked-out resistance, a voltage drop where a current is given
     let p18 = h.types.iter().find(|t| t.name == "p18").unwrap();
     assert_eq!(p18.get("spec"), "UL 1015");
-    let area = std::f64::consts::PI / 4.0 * forge_harness::awg_d(18.0).powi(2);
+    let area = std::f64::consts::PI / 4.0 * forge_harness::awg_d(18.0).ipow(2);
     assert!((p18.ohm_km.unwrap() - 1000.0 / 58.0 / area).abs() < 1e-9 && p18.ohm_worked);
     let w1 = &h.wires[0];
     let len = w1.routed.as_ref().unwrap().length;
@@ -409,13 +410,29 @@ fn the_wire_list_goes_out_and_back_in_unchanged_and_a_change_is_a_diff() {
 #[test]
 fn the_example_rebuilds_in_milliseconds() {
     let d = dir("speed");
-    let _ = run_in(&d, ROBOT);
+    let opts = Options {
+        dir: Some(d.to_path_buf()),
+        ..Options::default()
+    };
+    let (cold, cache) = forge_lang::run(ROBOT, opts.clone(), Default::default());
+    assert!(cold.errors.is_empty(), "{:?}", errors(&cold));
     let t = std::time::Instant::now();
-    let r = run_in(&d, ROBOT);
+    let (warm, _) = forge_lang::run(ROBOT, opts, cache);
     let ms = t.elapsed().as_secs_f64() * 1e3;
-    assert!(r.errors.is_empty());
-    // the whole document: parts loaded, solved, the harness routed
-    assert!(ms < 1500.0, "{ms} ms");
+    assert!(warm.errors.is_empty(), "{:?}", errors(&warm));
+    // the work, not the clock (a loaded machine moves the time, printed for a person): the whole
+    // document again, parts loaded, solved, the harness routed, from the last run's cache, so no
+    // part file is built again
+    let (c, w) = (
+        &cold.asm.as_ref().unwrap().timings,
+        &warm.asm.as_ref().unwrap().timings,
+    );
+    eprintln!(
+        "robot: warm rebuild {ms:.1} ms; part files built cold {}, warm {}",
+        c.built, w.built
+    );
+    assert!(c.built > 0, "{c:?}");
+    assert_eq!(w.built, 0, "{w:?}");
 }
 
 #[test]

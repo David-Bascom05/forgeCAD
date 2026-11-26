@@ -1,0 +1,14 @@
+# brother-speedio-u500xd1 cradle: the tilting cradle under the rotary table (estimate).
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared x0 = -170
+shared y0 = -150
+shared z0 = -140
+shared L = 340
+shared W = 300
+shared H = 80
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (L, W))
+}
+body = extrude(plan, H)

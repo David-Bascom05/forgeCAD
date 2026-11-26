@@ -9,6 +9,7 @@
 
 use super::Shell;
 use super::fg::{FgPanel, From};
+use super::placed::Placed as _;
 use super::sheet::SheetAct;
 use super::theme::{medium, mono, sans, semi};
 use egui::{Color32, Ui, pos2, vec2};
@@ -280,14 +281,12 @@ impl VendorUi {
         let (tx, rx) = mpsc::channel();
         let src = fg.source.clone();
         let dir = doc_dir(fg);
-        let spawned = std::thread::Builder::new()
-            .name("dfm-check".into())
-            .spawn(move || {
-                let _ = tx.send(forge_lang::dfm::report(&src, dir, None));
-            });
-        if spawned.is_ok() {
-            self.running = Some(rx);
-        }
+        // `plat::spawn`, not std's: a browser has no threads (std's spawn fails there, and the
+        // check never ran); in the single-threaded page it runs before this returns
+        crate::plat::spawn("dfm-check", move || {
+            let _ = tx.send(forge_lang::dfm::report(&src, dir, None));
+        });
+        self.running = Some(rx);
     }
 
     /// Every violation's flat points on sheet `id`, the chosen one's last: (points, chosen).
@@ -354,16 +353,25 @@ impl Shell {
         }
         let mut close = false;
         let mut todo: Option<Later> = None;
+        // fits the window it's in; under theme::NARROW its two parts stack (UX-LEAD)
+        let area = super::dialog_area(ctx);
+        let narrow = area.width() < super::theme::NARROW;
         egui::Window::new("Sheet Metal Vendor")
             .id(egui::Id::unique("sheet-vendor"))
             .title_bar(false)
             .collapsible(false)
             .resizable(false)
-            .default_pos(pos2(v.left() + 360.0, v.top() + 48.0))
-            .default_width(560.0)
+            .default_pos(pos2(
+                (v.left() + 360.0)
+                    .min(area.right() - 568.0)
+                    .max(area.left() + 8.0),
+                v.top() + 48.0,
+            ))
+            .default_width(560.0f32.min(area.width() - 16.0))
+            .max_width(area.width() - 16.0)
             .frame(super::fgasm::dialog_frame(&t))
             .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
+            .show_fit(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(
                         egui::RichText::new("Sheet Metal Vendor")
@@ -380,10 +388,15 @@ impl Shell {
                     ui.label(small(&t, format!("This part: {c}")));
                 }
                 ui.add_space(4.0);
-                ui.horizontal_top(|ui| {
+                let parts = if narrow {
+                    egui::Layout::top_down(egui::Align::Min)
+                } else {
+                    egui::Layout::left_to_right(egui::Align::Min)
+                };
+                ui.with_layout(parts, |ui| {
                     // the profiles, by where they are kept
                     ui.vertical(|ui| {
-                        ui.set_width(170.0);
+                        ui.set_width(if narrow { ui.available_width() } else { 170.0 });
                         for lib in [Lib::Project, Lib::User, Lib::ForgeCad] {
                             let here: Vec<_> = profiles.list.iter().filter(|e| e.lib == lib).collect();
                             if here.is_empty() {
@@ -408,14 +421,14 @@ impl Shell {
                         for (f, e) in &profiles.errors {
                             ui.label(
                                 egui::RichText::new(format!("unread {}: {e}", f.display()))
-                                    .font(sans(10.0))
+                                    .font(sans(11.0))
                                     .color(t.error),
                             );
                         }
                     });
                     ui.add_space(10.0);
                     ui.vertical(|ui| {
-                        ui.set_width(360.0);
+                        ui.set_width(if narrow { ui.available_width() } else { 360.0 });
                         let Some(e) = ui_state.pick.as_deref().and_then(|id| profiles.find(id)) else {
                             ui.label(small(&t, "No profile chosen"));
                             return;
@@ -642,7 +655,7 @@ impl Shell {
             .default_width(500.0)
             .frame(super::fgasm::dialog_frame(&t))
             .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
+            .show_fit(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(
                         egui::RichText::new("Design for Manufacture")
@@ -895,7 +908,7 @@ fn edit_ui(ui: &mut Ui, t: &super::theme::Theme, ed: &mut Edit, saved: &mut bool
                     .spacing(vec2(4.0, 2.0))
                     .show(ui, |ui| {
                         for c in COLS {
-                            ui.label(egui::RichText::new(c).font(medium(10.0)).color(t.ink2));
+                            ui.label(egui::RichText::new(c).font(medium(11.0)).color(t.ink2));
                         }
                         ui.end_row();
                         let mut remove = None;

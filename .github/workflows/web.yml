@@ -7,11 +7,19 @@
 #   wasm     the page: wasm32 release build + wasm-bindgen  forge-render's workspace; the
 #            default build and the threaded artifact (THREADS=only) at once, put together after
 #   clippy   the wasm32 build stays warning-free
+#   gpu      forge-render's own tests (cargo test) on lavapipe, a software Vulkan GPU, so the
+#            renderer's and the Render Studio's GPU tests run instead of skipping
 #   browser  for the default build and for the threaded artifact (THREADED=1, which adds
 #            responsive.cjs): e2e on one runner, and parity on every bench part and example in
 #            three shards that between them test each file once (PARITY_SHARD in parity.cjs)
 # The commands, crates, profiles and flags are ci.sh's. Each Rust job has its own build cache,
 # saved only from main (and manual runs), so a pull request restores main's and never races it.
+#
+# A push to main only refreshes those caches: pull requests merge with current main in their head,
+# so every check below already ran on the tree that lands. On push, parity, wasm and clippy restore
+# their cache and, when it was not an exact hit, build with the same commands and save; cli (whose
+# cache holds no third-party crates), the uploads, browser and the summary do not run. A manual run
+# (workflow_dispatch) runs everything.
 name: web
 
 on:
@@ -31,6 +39,7 @@ env:
 
 jobs:
   cli:
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -59,11 +68,14 @@ jobs:
       - name: toolchain (rust-toolchain.toml)
         run: rustup show
       - uses: Swatinem/rust-cache@v2
+        id: rust
         with:
           workspaces: interface/forge-render -> target
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
       - run: cargo build --release --locked --bin forge-parity
+        if: ${{ github.event_name != 'push' || steps.rust.outputs.cache-hit != 'true' }}
       - uses: actions/upload-artifact@v4
+        if: ${{ github.event_name != 'push' }}
         with:
           name: forge-parity
           path: interface/forge-render/target/release/forge-parity
@@ -84,17 +96,22 @@ jobs:
       - name: toolchain (rust-toolchain.toml)
         run: rustup show && rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+        id: rust
         with:
           workspaces: interface/forge-render -> target
           key: threads-${{ matrix.threads }}
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
       # the release binary of the version Cargo.toml pins, not a 1.5 min `cargo install`
       - uses: taiki-e/install-action@v2
+        if: ${{ github.event_name != 'push' || steps.rust.outputs.cache-hit != 'true' }}
         with:
           tool: wasm-bindgen@0.2.130
       - run: wasm-bindgen --version | grep -x 'wasm-bindgen 0.2.130'
+        if: ${{ github.event_name != 'push' }}
       - run: NO_MESHES=1 THREADS=${{ matrix.threads }} sh web/build.sh "$GITHUB_WORKSPACE/target/web"
+        if: ${{ github.event_name != 'push' || steps.rust.outputs.cache-hit != 'true' }}
       - uses: actions/upload-artifact@v4
+        if: ${{ github.event_name != 'push' }}
         with:
           name: web${{ matrix.threads && '-threads' || '' }}
           path: target/web${{ matrix.threads && '/threads' || '' }}
@@ -111,14 +128,42 @@ jobs:
       - name: toolchain (rust-toolchain.toml)
         run: rustup show && rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+        id: rust
         with:
           workspaces: interface/forge-render -> target
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
-      # the browser build stays warning-free (it broke unseen before: a native-only dependency)
-      - run: cargo clippy --lib --locked --target wasm32-unknown-unknown -- -D warnings
+      # the browser build stays warning-free (it broke unseen before: a native-only dependency),
+      # and calls none of std's that panic or fail in a page (web/clippy/clippy.toml)
+      # on push the same build without the lint gate (-D warnings): the cache is the same
+      - run: CLIPPY_CONF_DIR="$PWD/web/clippy" cargo clippy --lib --locked --target wasm32-unknown-unknown -- ${{ github.event_name != 'push' && '-D warnings' || '' }}
+        if: ${{ github.event_name != 'push' || steps.rust.outputs.cache-hit != 'true' }}
+
+  gpu:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: interface/forge-render
+    steps:
+      - uses: actions/checkout@v4
+      - name: toolchain (rust-toolchain.toml)
+        run: rustup show
+      # lavapipe: wgpu finds it as a Vulkan adapter, no GPU needed
+      - name: software Vulkan
+        run: sudo apt-get update -q && sudo apt-get install -y -q mesa-vulkan-drivers
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: interface/forge-render -> target
+          key: gpu-tests
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+      - run: cargo test --release --locked --no-fail-fast
+        env:
+          CARGO_PROFILE_RELEASE_DEBUG: 0
 
   browser:
     needs: [cli, parity, wasm]
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -169,7 +214,44 @@ jobs:
       - name: end to end
         if: matrix.test == 'e2e'
         working-directory: interface/forge-render
-        run: node web/tests/e2e.cjs "$GITHUB_WORKSPACE/target/web"
+        run: |
+          node web/tests/e2e.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/idle.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/cam.cjs "$GITHUB_WORKSPACE/target/web"
+      # the Render Studio's tracer on WebGPU against the native golden picture; its live view
+      # within a frame budget, its samples going on
+      - name: render studio
+        if: matrix.test == 'e2e' && !matrix.threaded
+        working-directory: interface/forge-render
+        run: |
+          node web/tests/studio.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/studio_live.cjs "$GITHUB_WORKSPACE/target/web"
+      # the paths that reached std's browser panics (Versions, Agent, Check Forming) are clicked
+      # through, parts of any size are drawn shaded, history is kept where the project is, and
+      # frames keep up with the mouse
+      - name: no panics, shaded, history, pace
+        if: matrix.test == 'e2e'
+        working-directory: interface/forge-render
+        run: |
+          node web/tests/nopanic.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/shade.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/history.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/pace.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/select.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/sketches.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/export.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/chrome.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/wall.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/deeplink.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/import.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/clipboard.cjs "$GITHUB_WORKSPACE/target/web"
+      # Photo and Record: a PNG, and an MP4 by WebCodecs into the app's muxer, ffprobe'd
+      - name: record
+        if: matrix.test == 'e2e' && !matrix.threaded
+        working-directory: interface/forge-render
+        run: |
+          sudo apt-get install -y -q ffmpeg >/dev/null || true
+          node web/tests/record.cjs "$GITHUB_WORKSPACE/target/web"
       - name: parity (shard ${{ matrix.test }} of 3)
         if: matrix.test != 'e2e'
         working-directory: interface/forge-render
@@ -185,8 +267,8 @@ jobs:
   # the one check a pull request waits on, as before the split: every job above passed
   web:
     name: web
-    needs: [cli, parity, wasm, clippy, browser]
-    if: always()
+    needs: [cli, parity, wasm, clippy, gpu, browser]
+    if: ${{ always() && github.event_name != 'push' }}
     runs-on: ubuntu-latest
     steps:
       - run: |

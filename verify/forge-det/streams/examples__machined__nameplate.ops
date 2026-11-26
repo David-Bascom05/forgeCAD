@@ -1,0 +1,6 @@
+{"doc":"examples/machined/nameplate.fg"}
+{"op":"SetParam","param":"L","value":{"value":94.5,"dim":"Length"}}
+{"op":"SetParam","param":"W","value":{"value":37.800000000000004,"dim":"Length"}}
+{"op":"SetParam","param":"t","value":{"value":4.2,"dim":"Length"}}
+{"op":"Rename","from":"plan","to":"plan_r"}
+{"op":"ReplaceFeature","id":"serial_cut","text":"serial_cut = cut(serial.no, d)\n"}

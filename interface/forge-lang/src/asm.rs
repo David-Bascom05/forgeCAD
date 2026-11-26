@@ -1745,6 +1745,10 @@ pub enum Issue {
         measured: f64,
         cmp: Cmp,
         limit: f64,
+        /// An `=`'s tolerance (`+- T`), 0 for none.
+        tol: f64,
+        /// The limit is an angle: the numbers are radians, said in degrees.
+        deg: bool,
     },
     UnknownMetric {
         metric: String,
@@ -1854,6 +1858,23 @@ fn note(span: Span, issue: Issue) -> Error {
 }
 
 impl Issue {
+    /// What a person may want under the text: a failed expect's line as written
+    /// (`expect interferences = 0`), its text being in words.
+    pub fn detail(&self) -> Option<String> {
+        match self {
+            Issue::ExpectFailed {
+                metric,
+                cmp,
+                limit,
+                tol,
+                deg,
+                ..
+            } => Some(format!("expect {}", crate::expect_words::raw_in(metric, *cmp, *limit, *tol, *deg))),
+            Issue::Inside { issue, .. } => issue.detail(),
+            _ => None,
+        }
+    }
+
     pub fn level(&self) -> Level {
         match self {
             Issue::Redundant { .. }
@@ -2130,7 +2151,9 @@ fn issue_text(i: &Issue) -> String {
             measured,
             cmp,
             limit,
-        } => format!("expect {metric}: {measured} is not {cmp:?} {limit}"),
+            tol,
+            deg,
+        } => crate::expect_words::words_in(metric, *cmp, *limit, *tol, *measured, *deg),
         Issue::ExpectUnevaluable { metric, why } => {
             format!("expect {metric} cannot be measured: {}", why.text())
         }
@@ -2283,11 +2306,15 @@ fn issue_data(i: &Issue) -> Vec<(&'static str, Json)> {
             measured,
             cmp,
             limit,
+            tol,
+            deg,
         } => vec![
             ("metric", s(metric)),
             ("measured", (*measured).into()),
             ("cmp", s(&format!("{cmp:?}"))),
             ("limit", (*limit).into()),
+            ("tol", (*tol).into()),
+            ("expect", s(&crate::expect_words::raw_in(metric, *cmp, *limit, *tol, *deg))),
         ],
         Issue::UnknownMetric { metric } => vec![("metric", s(metric))],
         Issue::ExpectUnevaluable { metric, why } => {
@@ -3045,13 +3072,19 @@ fn variant_text<'d>(
     };
     let text = match (text, variant) {
         (Some(mut t), Some(Variant::With(xs))) => {
+            // the placed file's own place, under the same fence
+            let here = crate::edit::At {
+                dir: std::path::Path::new(&path).parent().map(|p| p.to_path_buf()),
+                root: fence.clone(),
+            };
             for (n, l) in xs {
-                t = crate::edit::apply(
+                t = crate::edit::apply_at(
                     &t,
                     &Op::SetParam {
                         param: ParamKey::shared(n),
                         value: *l,
                     },
+                    &here,
                 )
                 .map_err(|_| n.clone())?;
             }
@@ -3298,6 +3331,8 @@ pub struct AsmOut {
     pub occ_anchors: Vec<Option<Arc<crate::anchors::Anchors>>>,
     /// The document's wire harnesses, routed on the solved assembly.
     pub harnesses: Vec<crate::harness::HarnessOut>,
+    /// With `Options::kin`: the bodies, joints and relations as solved, for an export.
+    pub kin: Option<crate::kin::Kin>,
 }
 
 /// A part or subassembly occurrence, as a browser lists it.
@@ -4534,6 +4569,17 @@ pub fn finish(
             free: j.free,
         });
     }
+    if opts.kin {
+        let name = |m: &BTreeMap<u64, (String, Span)>, id: u64| m.get(&id).map(|x| x.0.clone());
+        out.kin = Some(crate::kin::kin_of(
+            live_asm,
+            sol,
+            &**checker.parts(),
+            &|id| name(&names.inst, id),
+            &|id| names.link.get(&id).map(|x| x.0.clone()),
+            &|id| name(&names.rel, id),
+        ));
+    }
 
     // expects
     let t4 = Instant::now();
@@ -4788,8 +4834,9 @@ pub fn finish(
                 });
                 break 'one;
             };
-            let limit = match ev.expr(v) {
-                Ok(Value::Num(n)) => n.v,
+            // an angle's limit (`value(j.turn) = 30deg`): the numbers are radians, said in degrees
+            let (limit, deg) = match ev.expr(v) {
+                Ok(Value::Num(n)) => (n.v, n.dim == crate::values::Dim::Angle),
                 _ => {
                     ev.errors.push(note(s.span, unevaluable(Unevaluable::NoLimit)));
                     out.expects.push(ExpectOut {
@@ -4837,6 +4884,8 @@ pub fn finish(
                         measured,
                         cmp: *c,
                         limit,
+                        tol,
+                        deg,
                     },
                 ));
             }
@@ -4917,6 +4966,10 @@ fn at_text(
         );
     }
     let mut text = ev.src.to_string();
+    let here = crate::edit::At {
+        dir: ev.dir.clone(),
+        root: ev.root.clone(),
+    };
     // the document's dimensions hold while each value set keeps its param's dimension; after a
     // param of no fixed dimension is set they are worked out again from the text
     let mut fresh = false;
@@ -4925,7 +4978,7 @@ fn at_text(
             let base = done.dims.as_ref().expect("made above");
             let known = |k: &ParamKey| -> Option<Dim> {
                 if fresh {
-                    return crate::edit::param_dim(&text, k);
+                    return crate::edit::param_dim(&text, k, &here);
                 }
                 base.get(k).copied().flatten()
             };

@@ -1,0 +1,123 @@
+{
+ "vendor": "Mazak",
+ "model": "HCN-6000",
+ "family": "HCN",
+ "source": [
+  "https://www.mazak.com/jp-en/products/detail/horizontal/hn6000e/",
+  "https://www.mazak.com/us-en/detail/japan/horizontal/hn6000e/",
+  "https://www.mazak.com/us-en/products/hcn/"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "hmc",
+ "architecture": null,
+ "control": {
+  "standard": "MAZATROL SmoothG (named in the machine-size row only)",
+  "options": []
+ },
+ "travel_mm": {
+  "X": 800,
+  "Y": 800,
+  "Z": 800
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": [
+  100,
+  900
+ ],
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": [
+   500,
+   500
+  ],
+  "change_s": null,
+  "load_kg": 1000
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 10000,
+  "rpm_min": null,
+  "taper_or_interface": "BT50 (JP page) / CAT50 (US page)",
+  "power_kw": {
+   "cont": 30,
+   "30min": null,
+   "peak/other": "37 kW (40% ED)"
+  },
+  "torque_nm": {
+   "cont": 239,
+   "max": 350
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 60,
+  "Y": 60,
+  "Z": 60,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 43,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": 125,
+  "max_tool_dia_empty_adjacent_mm": 250,
+  "max_tool_len_mm": 500,
+  "max_tool_kg": 30
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": 3091,
+  "D": 6813,
+  "H": 3380
+ },
+ "weight_kg": 15800,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "architecture",
+  "changer.chip_to_chip_s",
+  "changer.tool_to_tool_s",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "pallet.change_s",
+  "pallet.count",
+  "rotary.B",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.rpm_min",
+  "spindle_center_to_column_mm"
+ ],
+ "options": [],
+ "notes": "Max workpiece Φ900 x 1000 mm. US page gives cont torque 238 N·m vs JP 239. Pallet count, indexing, pallet change time not on page."
+}

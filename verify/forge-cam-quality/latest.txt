@@ -1,0 +1,145 @@
+job/op                 kind       tool     t_stop   t_min   cut_s   air rapid retr plng c>90 phiMx phiAv climb  slot  hexMx  hex99  hexAv  fzTgt  thin thick     MRR   Fc_N  P_kW  f/rev
+block_m6_cam/skim      facing     flat-10    14.4    13.3     7.4   24%    74    2    0    0    96    76   57%    0%  0.065  0.062  0.061  0.062    1%    0%   10560     90  0.31      -
+block_m6_cam/side      clear      flat-10    24.5    21.8    18.3   14%   151    5    0    0   104    57   98%    0%  0.062  0.062  0.057  0.062    1%    0%   19052    253  0.98      -
+block_m6_cam/tapd      drill      drill-5    35.0    34.1     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.033     -     -       0      -     - 0.0066
+block_m6_cam/thr       thread_mill threadmi    9.3     8.3     0.1   96%    14    2    0    0     -     -     -     -      -      -      -  0.032     -     -   38840      -     -      -
+block_m6_cam: program prog on generic-vmc3: t_stop 83.2 s, t_min 77.5 s, 4 tool changes, 0 violations
+bracket_cam/skim       facing     flat-10    51.5    48.5    38.3   14%   217    3    0    0   102    85   55%    0%  0.065  0.062  0.061  0.062    1%    0%   12174     90  0.34      -
+bracket_cam/side       clear      flat-10    38.6    33.7    26.6   17%   763    9    0   12   171    65   85%    1%  0.063  0.062  0.057  0.062    4%    0%   22488    249  1.63      -
+bracket_cam/bore       pocket     flat-6     28.4    26.6    15.3   27%    14    5    0    0   180   164   16%   84%  0.039  0.039  0.038  0.039    2%    0%    4298    178  0.72      -
+bracket_cam/cutj       pocket     flat-6    166.8   157.3   134.3   11%   633   27   24   69   180    89   90%   10%  0.039  0.039  0.038  0.039    1%    0%    7696    123  0.49      -
+bracket_cam/rest       clear      flat-10    42.6    37.4    26.0   16%  1045    9    0   18   171    66   85%    1%  0.063  0.062  0.058  0.062    3%    0%   17630    191  1.25      -
+bracket_cam: program p1 on generic-vmc3: t_stop 118.5 s, t_min 108.8 s, 2 tool changes, 0 violations
+bracket_cam: program pj on generic-vmc3: t_stop 166.8 s, t_min 157.3 s, 1 tool changes, 0 violations
+bracket_cam: program p2 on generic-vmc3: t_stop 42.6 s, t_min 37.4 s, 1 tool changes, 0 violations
+collar_turn/face       face                   0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+collar_turn/rough      rough                  0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+collar_turn/fin        finish                 0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+collar_turn/neck       groove                 0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+collar_turn/under      rough                  0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+collar_turn/back       finish                 0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+collar_turn: program prog on : t_stop 0.0 s, t_min 0.0 s, 0 tool changes, 0 violations
+flange_cam/skim        facing     flat-10    85.3    80.7    67.3   12%   186    3    0    0   105    92   43%    0%  0.065  0.062  0.061  0.062    1%    0%   13226     90  0.36      -
+flange_cam/top         clear      flat-10    93.6    86.4    70.2   18%   461    4    0   34   174    79   71%   17%  0.063  0.062  0.058  0.062    4%    0%   31579    265  1.74      -
+flange_cam/prof        contour    flat-10    40.0    37.8    35.4    6%    14    2    4    0    62    59  100%    0%  0.062  0.062  0.059  0.062    1%    0%   21465    271  0.52      -
+flange_cam/bore        pocket     flat-10    18.0    16.3    11.1   31%    46    7    7    0   169    82   94%    6%  0.062  0.062  0.057  0.062    7%    0%   31302    230  1.51      -
+flange_cam/bolts       drill      drill-6.  127.9   124.5     0.0     -   255    0    0    0     -     -     -     -      -      -      -  0.042     -     -       0      -     - 0.0085
+flange_cam: program prog on generic-vmc3: t_stop 364.7 s, t_min 345.7 s, 3 tool changes, 0 violations
+hub_turn/face          face                   0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+hub_turn/drl           drill                  0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+hub_turn/rough         rough                  0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+hub_turn/relf          groove                 0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+hub_turn/oring         groove                 0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+hub_turn/neck          groove                 0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+hub_turn/back          finish                 0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+hub_turn/thr           thread                 0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+hub_turn/bor           bore rough             0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+hub_turn/bfin          finish                 0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+hub_turn/irel          groove                 0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+hub_turn/ithr          thread                 0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+hub_turn: program prog on : 566 refusals: no program is written
+hub_turn: error: finish: Geometry("the finish path finds no start over the front face")
+hub_turn: error: part-off: Tool("the blade's reach (25) is short of the bar's radius (33)")
+manifold_cam/skim      facing     face-50     0.0     0.0    42.0   26%   171    3    0    0    89    59   26%    0%  0.122  0.120  0.116  0.120    2%    0%   20135    109  0.62      -
+manifold_cam/prof      contour    flat-10     0.0     0.0    74.4   24%    14    3   10    0   124    62  100%    0%  0.064  0.062  0.058  0.062    1%    0%   40257    923  4.68      -
+manifold_cam/well      pocket     flat-6      0.0     0.0   269.2   24%   483   38   15   84   180   105   69%   26%  0.039  0.039  0.037  0.039    5%    0%   12860    554  2.23      -
+manifold_cam/crn       pocket     flat-3      0.0     0.0   227.5   85%   309   72    4  306   180   165   15%   85%  0.022  0.022  0.021  0.022    2%    0%     522    315  0.42      -
+manifold_cam/shal      pocket     flat-6      0.0     0.0    18.9   73%   296   17    6   16   180   135   41%   55%  0.040  0.039  0.038  0.039    3%    0%   25279    474  1.86      -
+manifold_cam/grv       slot       flat-6      0.0     0.0     2.7   80%    92    2    0    4   180   180    0%  100%  0.039  0.039  0.039  0.039    0%    0%    6236     61  0.25      -
+manifold_cam/bored     drill                  0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+manifold_cam/thr       thread_mill threadmi    0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.032     -     -       0      -     -      -
+manifold_cam/dwl       drill      guhring-    0.0     0.0     0.0     -    94    0    0    0     -     -     -     -      -      -      -  0.039     -     -       0      -     - 0.0078
+manifold_cam/tap       drill      drill-5     0.0     0.0     0.0     -   427    0    0    0     -     -     -     -      -      -      -  0.033     -     -       0      -     - 0.0066
+manifold_cam/brk       edge_break chamfer-    0.0     0.0     1.9   20%    24    2    2    0     -     -     -     -      -      -      -  0.062     -     -    2444      -     -      -
+manifold_cam/face2     facing     face-50     0.0     0.0    63.0   27%   250    4    0    0    89    59   26%    0%  0.122  0.120  0.116  0.120    2%    0%   40269    217  1.23      -
+manifold_cam/rel       pocket     flat-6      0.0     0.0    29.0   19%    58    8    6    6   180    96   87%   12%  0.039  0.039  0.037  0.039    4%    0%    4588     62  0.25      -
+manifold_cam/cbh       drill                  0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+manifold_cam: program p1 on : an operation was refused: the program is not released
+manifold_cam: program p2 on : an operation was refused: the program is not released
+manifold_cam: error: line 22: the part's section at z = 29: NotPrism { face: 38 }
+mold_core_cam/rough    zlevel     flat-10   311.6   283.8   155.9   44%  1897   69   53   25   169    66    2%    8%  0.104  0.104  0.086  0.062   16%   81%   34057    362  2.38      -
+mold_core_cam/fin      parallel   ball-6    236.1   156.9   134.7   12%    14   37  505    0   180   140   16%   68%  0.065  0.065  0.062  0.039    2%   93%    3310   1399  3.76      -
+mold_core_cam/walls    waterline  ball-6     73.0    53.7    24.4   54%    17    7    5    0    52    35  100%    0%  0.050  0.050  0.036  0.039   19%    9%     872    333  0.23      -
+mold_core_cam/corner   pencil     ball-6     13.1    10.3     5.5   47%    14    2    1    0   174   161    0%  100%  0.065  0.065  0.065  0.039    0%  100%     927    374  0.99      -
+mold_core_cam/left     rest       ball-6    121.6   107.5     0.0  100%   658   41    0    0     0     0    0%    0%  0.000  0.000  0.000  0.039    0%    0%       0      0  0.00      -
+mold_core_cam: program prog on generic-vmc3: t_stop 755.4 s, t_min 612.2 s, 2 tool changes, 0 violations
+nut_turn/face          face                   0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+nut_turn/drill         drill                  0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+nut_turn/rough         bore rough             0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+nut_turn/fin           finish                 0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+nut_turn/relief        groove                 0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+nut_turn/thr           thread                 0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+nut_turn: program prog on : t_stop 0.0 s, t_min 0.0 s, 0 tool changes, 0 violations
+plate_break_cam/skim   facing     flat-6     32.4    30.9    23.6   13%    82    2    0    0   104    89   54%    0%  0.041  0.039  0.039  0.039    0%    0%    4726     63  0.15      -
+plate_break_cam/side   clear      flat-6     79.0    71.5    55.1   21%   898   20    0   25   159    75   71%    0%  0.039  0.039  0.036  0.039    5%    0%    6222    105  0.40      -
+plate_break_cam/bore   pocket     flat-6      8.3     7.8     3.8   51%    14    6    5    0   173   117   77%   23%  0.039  0.039  0.036  0.039    8%    0%   10519    104  0.42      -
+plate_break_cam/brk    edge_break chamfer-    9.1     8.0     2.0   18%    59    2    2    0     -     -     -     -      -      -      -  0.062     -     -     220      -     -      -
+plate_break_cam: program prog on generic-vmc3: t_stop 128.8 s, t_min 118.2 s, 2 tool changes, 0 violations
+plate_mark_cam/skim    facing     flat-10    16.4    15.2     9.3   20%    82    2    0    0    97    77   57%    0%  0.065  0.062  0.061  0.062    2%    0%   10782     90  0.32      -
+plate_mark_cam/side    clear      flat-10    15.8    14.1    12.5   10%    79    3    0    0   104    57   99%    0%  0.062  0.062  0.058  0.062    1%    0%   12285    160  0.62      -
+plate_mark_cam/mark    engrave    engrave-   13.7    12.9     4.8   35%    67    2    2    0     -     -     -     -      -      -      -  0.039     -     -      41      -     -      -
+plate_mark_cam: program prog on generic-vmc3: t_stop 45.9 s, t_min 42.2 s, 2 tool changes, 0 violations
+shaft_turn/face        face                   0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+shaft_turn/rough       rough                  0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+shaft_turn/fin         finish                 0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+shaft_turn/thr         thread                 0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+shaft_turn/cut         part-off               0.0     0.0     0.0     -     0    0    0    0     -     -     -     -      -      -      -  0.000     -     -       0      -     -      -
+shaft_turn: program prog on : t_stop 0.0 s, t_min 0.0 s, 0 tool changes, 0 violations
+slot_plate_cam/skim    facing     flat-10    22.7    21.2    14.9   16%    60    2    0    0   105    86   38%    0%  0.065  0.062  0.061  0.062    1%    0%   12292     90  0.36      -
+slot_plate_cam/slots   slot       flat-6     30.0    28.3    18.5   18%   165    4    0    8   180   180    0%  100%  0.039  0.039  0.039  0.039    0%    0%    6341    123  0.50      -
+slot_plate_cam: program prog on generic-vmc3: t_stop 52.7 s, t_min 49.5 s, 2 tool changes, 0 violations
+well_island_cam/skim   facing     flat-10    22.7    21.2    14.9   16%    60    2    0    0   105    86   38%    0%  0.065  0.062  0.061  0.062    1%    0%   12292     90  0.36      -
+well_island_cam/well   pocket     flat-6     55.7    52.2    39.6   14%   222    8    4   20   180   115   57%   42%  0.040  0.039  0.036  0.039    4%    0%    8814    187  0.74      -
+well_island_cam: program prog on generic-vmc3: t_stop 78.4 s, t_min 73.4 s, 2 tool changes, 0 violations
+boss_cam/skim          facing     flat-10    35.4    33.3    25.6   14%    90    2    0    0   109    94   42%    0%  0.065  0.062  0.061  0.062    1%    0%   13579     90  0.37      -
+boss_cam/rough         clear      flat-10   169.8   157.9   140.7   11%   205    5    0   65   174    78   66%   20%  0.063  0.062  0.057  0.062    6%    0%   30862    261  1.71      -
+boss_cam/fin           contour    flat-10     7.9     7.3     4.1   35%    14    2    1    0   171   161    0%   95%  0.062  0.062  0.061  0.062    1%    0%    4439     17  0.11      -
+boss_cam: program prog on generic-vmc3: t_stop 213.2 s, t_min 198.6 s, 1 tool changes, 0 violations
+deep_slot_cam/skim     facing     flat-6     55.1    53.0    45.2    8%    60    2    0    0   113    98   42%    0%  0.042  0.039  0.039  0.039    0%    0%    5269     65  0.17      -
+deep_slot_cam/slot     pocket     flat-6     33.1    31.8    25.4   18%    14    6    5    0   180   126   50%   50%  0.039  0.039  0.038  0.039    1%    0%   16738    184  0.74      -
+deep_slot_cam: program prog on generic-vmc3: t_stop 88.2 s, t_min 84.8 s, 1 tool changes, 0 violations
+open_step_cam/skim     facing     flat-10    32.8    30.9    24.0   12%    70    2    0    0   100    85   40%    0%  0.065  0.062  0.061  0.062    1%    0%   12082     90  0.33      -
+open_step_cam/stp      clear      flat-10    82.9    74.5    61.7   14%   775    8    0   20   171    71   90%    8%  0.064  0.062  0.059  0.062    2%    0%   22674    222  1.44      -
+open_step_cam: program prog on generic-vmc3: t_stop 115.7 s, t_min 105.4 s, 1 tool changes, 0 violations
+pocket_islands_cam/skim facing     flat-10    45.5    43.0    35.3   10%    90    2    0    0   109    95   42%    0%  0.065  0.062  0.062  0.062    1%    0%   13741     90  0.37      -
+pocket_islands_cam/well pocket     flat-10    62.6    57.4    47.8   15%   167    6    2   18   180   101   64%   34%  0.066  0.062  0.057  0.062    6%    0%   45496    457  2.89      -
+pocket_islands_cam: program prog on generic-vmc3: t_stop 108.1 s, t_min 100.5 s, 1 tool changes, 0 violations
+thin_wall_cam/skim     facing     flat-6     67.7    65.1    56.5    8%   123    2    0    0   109    98   53%    0%  0.042  0.039  0.039  0.039    0%    0%    5132     65  0.16      -
+thin_wall_cam/wells    pocket     flat-6    201.4   192.3   180.8    5%   159    8    0   48   180    98   82%   18%  0.039  0.039  0.038  0.039    3%    0%   10768    184  0.74      -
+thin_wall_cam: program prog on generic-vmc3: t_stop 269.1 s, t_min 257.4 s, 1 tool changes, 0 violations
+../../examples/machined/block_m6_cam.fg: 4 of 4 ops certified
+../../examples/machined/bracket_cam.fg: 5 of 5 ops certified
+../../examples/machined/collar_turn.fg: 6 of 6 ops certified
+../../examples/machined/flange_cam.fg: 5 of 5 ops certified
+../../examples/machined/hub_turn.fg: 6 of 12 ops certified
+  drl drill refused: part (drill) at step 12, near (0.0000, -38.5000): Undecided { lower: -1.000000121103142e-5 } (and 81 more)
+  rough rough refused: part (insert) at step 49, near (13.0880, 1.8000): Undecided { lower: -0.8000100000011643 } (and 348 more)
+  back finish refused: stock (insert) at step 7, near (31.9000, -60.5000): Hit { d: -0.03431514668872004, at: [31.9, -60.5] } (and 0 more)
+  bor bore rough refused: part (insert) at step 13, near (17.6000, 1.4000): Undecided { lower: -0.40001000000116876 } (and 113 more)
+  bfin finish refused: part (insert) at step 4, near (13.7880, -22.0000): Undecided { lower: -0.3652186688526325 } (and 3 more)
+  ithr thread refused: part (thread insert) at step 1, near (14.4250, 2.0000): Undecided { lower: -0.050010000001173074 } (and 15 more)
+  error: finish: Geometry("the finish path finds no start over the front face")
+  error: part-off: Tool("the blade's reach (25) is short of the bar's radius (33)")
+../../examples/machined/manifold_cam.fg: 6 of 14 ops certified
+  prof contour refused: holder_collision fail at move 165 (plunge): -1.4312498842425707 vs -0.01 on stock face 2004
+  well pocket refused: gouge fail at move 21 (plunge): -0.17434953572854295 vs -0.01 on part face 36
+  crn pocket refused: gouge undecided at move 2 (cut): -inf vs -0.01 on part face 38
+  bored drill refused: NeedTool: no 18.5 mm drill in the library for `bore`
+  thr thread_mill refused: thread_mill: the tool's pitch 1 is not the thread's 1.5
+  dwl drill refused: rapid_clear fail at move 2 (rapid): -0.16607734896409115 vs 0.1 on stock face 2176
+  tap drill refused: rapid_clear fail at move 2 (rapid): -0.375999674631842 vs 0.1 on stock face 2257
+  cbh drill refused: NeedTool: no 5.5 mm drill in the library for `cb`
+  error: line 22: the part's section at z = 29: NotPrism { face: 38 }
+../../examples/machined/mold_core_cam.fg: 5 of 5 ops certified
+../../examples/machined/nut_turn.fg: 6 of 6 ops certified
+../../examples/machined/plate_break_cam.fg: 4 of 4 ops certified
+../../examples/machined/plate_mark_cam.fg: 3 of 3 ops certified
+../../examples/machined/shaft_turn.fg: 5 of 5 ops certified
+../../examples/machined/slot_plate_cam.fg: 2 of 2 ops certified
+../../examples/machined/well_island_cam.fg: 2 of 2 ops certified
+parts/boss_cam.fg: 3 of 3 ops certified
+parts/deep_slot_cam.fg: 2 of 2 ops certified
+parts/open_step_cam.fg: 2 of 2 ops certified
+parts/pocket_islands_cam.fg: 2 of 2 ops certified
+parts/thin_wall_cam.fg: 2 of 2 ops certified
+all: 70 of 84 ops certified

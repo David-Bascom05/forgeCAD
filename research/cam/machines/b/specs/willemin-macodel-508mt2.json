@@ -1,0 +1,152 @@
+{
+ "vendor": "Willemin-Macodel",
+ "model": "508MT2",
+ "family": "Series 50",
+ "source": [
+  "https://willemin-macodel.com/en/machining-centers/508mt2/"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "mill-turn",
+ "architecture": "Bar-fed 6-9 axis multi-process centre, 'Full Linear' (linear motors) X/Y/Z; horizontal A axis workpiece spindle (torque motor, turning 6,000 rpm); B-axis swivel torque motor -45..+115 deg; motor spindle S1 HSK-E40; optional 3-position backworking turret on U axis (360 mm) with swivel pick-up counter-spindle (8,000 rpm turning).",
+ "control": {
+  "standard": "FANUC 31i-B5 PLUS iHMI Pro",
+  "options": []
+ },
+ "travel_mm": {
+  "X": 400,
+  "Y": 200,
+  "Z": 385,
+  "U(backworking)": 360
+ },
+ "rotary": {
+  "A": {
+   "range_deg": null,
+   "rapid_rpm": 200,
+   "indexing_or_full": "full; S1/S6 72/96 Nm; turning 6,000 rpm"
+  },
+  "B": {
+   "range_deg": [
+    -45,
+    115
+   ],
+   "rapid_rpm": null,
+   "indexing_or_full": "full, torque motor"
+  },
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": 42,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 30000,
+  "rpm_min": null,
+  "taper_or_interface": "HSK-E40 (HSK-A40 / CAPTO C4 opt)",
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": null
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": null
+  },
+  "curve_points": null
+ },
+ "sub_spindle": {
+  "rpm_max_turning": 8000,
+  "milling_rpm": 200,
+  "interface": "A4 cone",
+  "note": "optional pick-up on backworking turret"
+ },
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": null,
+  "Y": null,
+  "Z": null,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": 60,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 48,
+  "options": [
+   "72"
+  ],
+  "tool_to_tool_s": 0.8,
+  "chip_to_chip_s": 3,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": 1870,
+  "D": 2165,
+  "H": 2300
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "changer.max_tool_dia_mm",
+  "changer.max_tool_kg",
+  "changer.max_tool_len_mm",
+  "coolant.through_spindle",
+  "live_tool.power_kw",
+  "live_tool.rpm_max",
+  "max_turning_dia_mm",
+  "milling_head",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rapid_m_min.X",
+  "rapid_m_min.Y",
+  "rapid_m_min.Z",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.power_kw.peak/other",
+  "spindle.rpm_min",
+  "spindle.torque_nm.cont",
+  "spindle.torque_nm.max",
+  "spindle_nose_type",
+  "table_height_from_floor_mm",
+  "weight_kg"
+ ],
+ "options": [
+  "42,000 rpm spindle",
+  "bar 51/65 mm",
+  "A5/A6 cone",
+  "backworking turret + pick-up spindle",
+  "72 tools"
+ ],
+ "notes": "Floor area 4 m2. Linear axes resolution 0.0125 um. Max feed 60 m/min published."
+}

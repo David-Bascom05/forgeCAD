@@ -211,6 +211,52 @@ fn stage(a: &Args) -> Result<Stage, String> {
             hits: 0,
         });
     }
+    // a STEP file: each solid a part of its own, meshed as an assembly's parts are, placed where
+    // the file puts it (the big-model bench: research/big-render)
+    let lower = a.part.to_ascii_lowercase();
+    if lower.ends_with(".step") || lower.ends_with(".stp") {
+        let bytes = forge_dirs::fs::read(&a.part).map_err(|e| format!("{}: {e}", a.part))?;
+        let imp = forge_step::import(&bytes, &forge_step::Limits::default())
+            .map_err(|e| format!("{}: {e:?}", a.part))?;
+        let read_ms = now_ms() - t;
+        let meshed: Vec<Option<PartMesh>> = forge_render::plat::par_map(&imp.solids, 4, |s| {
+            forge_render::tess::build_part_coarse(&s.body).ok()
+        });
+        let failed = meshed.iter().filter(|m| m.is_none()).count();
+        let parts: Vec<PartMesh> = meshed.into_iter().flatten().collect();
+        let faces: usize = imp.solids.iter().map(|s| s.body.face_ids().count()).sum();
+        let tris: usize = parts.iter().map(|p| p.lods[0].indices.len() / 12).sum();
+        println!(
+            "step: {} solids ({failed} not meshed), {faces} faces, {tris} triangles at the finest; read {read_ms:.0} ms, meshed {:.0} ms",
+            imp.solids.len(),
+            now_ms() - t - read_ms
+        );
+        let placements = (0..parts.len())
+            .map(|k| Placement::at(k as u32, [0.0; 3]))
+            .collect();
+        let mut scene = Scene::new(&part_info(&parts), placements);
+        scene.set_explode(a.explode);
+        let (center, radius) = scene.bounds();
+        let mut camera = Camera::fit(center, radius);
+        camera.yaw = a.yaw.unwrap_or(camera.yaw);
+        camera.pitch = a.pitch.unwrap_or(camera.pitch);
+        camera.dist = a.dist.unwrap_or(camera.dist);
+        let path = Path {
+            center,
+            far: camera.dist,
+            near: camera.dist * 0.35,
+            frames: a.frames,
+        };
+        return Ok(Stage {
+            names: vec![a.part.clone()],
+            parts,
+            scene,
+            camera,
+            path,
+            spent_ms: now_ms() - t,
+            hits: 0,
+        });
+    }
     let names: Vec<&str> = if a.stress > 0 {
         forge_render::load::BENCH.to_vec()
     } else {
@@ -311,6 +357,7 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
                     entity: h.entity,
                     selected: true,
                     second: false,
+                    warn: false,
                 });
             }
         }
@@ -328,6 +375,7 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
                 marks: &marks,
                 world: &[],
                 behind: &[],
+                solid: &[],
             };
             drawn = r.frame(&target.view, &mut s.scene, &s.camera, overlay);
             r.wait();
@@ -346,6 +394,7 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
         let motion = (a.moving > 0).then(|| Motion::new(&s.scene, a.moving));
         let (mut times, mut gpu, mut motion_ms, mut all) = (Vec::new(), Vec::new(), vec![0.0], Vec::new());
         let mut pick_ms = Vec::new();
+        let (mut pick_cpu, mut cpu) = (Vec::new(), Vec::new());
         let mut heaviest = (0.0f64, 0, Default::default());
         let mut hud = String::new();
         let place = forge_render::nav::Nav::new(s.camera, a.size, 1.0).cube_place();
@@ -364,15 +413,26 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
                 marks: &[],
                 world: &[],
                 behind: &[],
+                solid: &[],
             };
             if a.hover {
                 let p = now_ms();
                 r.pick_start(&mut s.scene, &cam, bench::hover_at(frame, a.size));
+                let started = now_ms();
                 r.wait();
+                let waited = now_ms();
                 r.pick_poll(&s.scene);
                 pick_ms.push(now_ms() - p);
+                pick_cpu.push(started - p + now_ms() - waited);
             }
+            let f0 = now_ms();
             let d = r.frame(&target.view, &mut s.scene, &cam, overlay);
+            // the CPU's share: the frame handed to the GPU, before waiting on it
+            cpu.push(
+                now_ms() - f0
+                    + pick_cpu.last().copied().unwrap_or(0.0)
+                    + motion_ms.last().copied().unwrap_or(0.0),
+            );
             r.wait();
             let ms = now_ms() - t;
             hud.clear();
@@ -387,8 +447,10 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
         let mode = format!("headless {}x{}", a.size.0, a.size.1);
         println!("{}", bench::report(&mode, &times, &gpu, &r.adapter));
         println!("{}", bench::report_cpu(a.moving, &motion_ms, &all));
+        println!("{}", bench::report_split("cpu submit", &cpu));
         if !pick_ms.is_empty() {
             println!("{}", bench::report_pick(&pick_ms));
+            println!("{}", bench::report_split("pick cpu", &pick_cpu));
         }
         println!("slowest frame {} of {}: {:?}", heaviest.1, a.frames, heaviest.2);
     }
