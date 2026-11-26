@@ -19,7 +19,7 @@ fn main() {
             let kind = format!("{:?}", face.surface).chars().take(90).collect::<String>();
             let edges: Vec<String> = face.loops.iter().flat_map(|&l| s.body.lp(l).coedges()).map(|c| {
                 let e = s.body.edge(s.body.coedge(c).edge);
-                format!("{}", format!("{:?}", e.curve).split(['(', ' ']).next().unwrap())
+                format!("{:?}", e.curve).split(['(', ' ']).next().unwrap().to_owned()
             }).collect();
             println!("face {f} open {n} | {kind} | edges {:?}", edges);
         }
