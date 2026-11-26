@@ -10,7 +10,7 @@ use forge_geom::{
     Circle, Cone, Curve, CurveGeom, Cylinder, Ellipse, Hyperbola, Line, Parabola, Plane, Sphere, Surface,
     Torus,
 };
-use forge_math::{Box3, Frame, Interval, Point3, UnitVec3, Vec3, dmath};
+use forge_math::{Box3, Frame, Interval, Point2, Point3, UnitVec3, Vec3, dmath};
 use forge_topo::{Body, Name};
 use std::collections::BTreeMap;
 
@@ -1292,6 +1292,7 @@ impl Build<'_, '_> {
             shell,
             loops,
         });
+        self.p.face_ids.push(id);
         Ok(())
     }
 
@@ -1688,7 +1689,55 @@ fn debug_head(x: &impl std::fmt::Debug, n: usize) -> String {
     h.0
 }
 
-/// How far a file's geometry misses itself, before anything is changed.
+/// A face's edges lie off its surface by more than both of these (mm, and of the part's size)
+/// only where the file gives the face a surface somewhere else: the solid is refused, saying so.
+const FAR_FACE_MM: f64 = 1.0;
+const FAR_FACE_PART: f64 = 0.01;
+
+/// How far face `fi`'s edges lie off its surface, measured so that a nearest-point search's local
+/// answer cannot pass for the truth: each point's distance is the least over a 64 x 64 grid of the
+/// surface's parameter box (bounded to 1e5) and a projection started from the nearest grid point.
+/// Asked only of a face whose quick measure (`measure_gaps`) already says it lies far off.
+fn far_gap(proto: &Proto, fi: usize) -> f64 {
+    let fa = &proto.faces[fi];
+    let s = &fa.surface;
+    let d = s.domain();
+    let (u0, u1) = (d.u.lo.max(-1e5), d.u.hi.min(1e5));
+    let (v0, v1) = (d.v.lo.max(-1e5), d.v.hi.min(1e5));
+    const N: usize = 64;
+    let grid: Vec<(Point2, Point3)> = (0..=N)
+        .flat_map(|i| (0..=N).map(move |j| (i, j)))
+        .map(|(i, j)| {
+            let uv = Point2::new(u0 + (u1 - u0) * i as f64 / N as f64, v0 + (v1 - v0) * j as f64 / N as f64);
+            (uv, s.eval(uv))
+        })
+        .collect();
+    let mut worst = 0.0_f64;
+    for u in fa.loops.iter().flatten() {
+        let e = &proto.edges[u.0];
+        let w = e.range.width();
+        for k in 0..=8 {
+            let x = e.curve.eval(e.range.lo + w * k as f64 / 8.0);
+            let (near, at) = grid
+                .iter()
+                .map(|&(uv, p)| (p.distance(x), uv))
+                .fold((f64::INFINITY, Point2::new(0.0, 0.0)), |a, b| if b.0 < a.0 { b } else { a });
+            let refined = s.eval(s.project_near(x, at)).distance(x);
+            worst = worst.max(s.distance(x).min(near).min(refined));
+        }
+    }
+    worst
+}
+
+/// A distance in mm, in words.
+fn far(mm: f64) -> String {
+    if mm >= 1000.0 {
+        format!("{:.1} m", mm / 1000.0)
+    } else {
+        format!("{mm:.1} mm")
+    }
+}
+
 /// The holes of an open shell (its edges each one face uses, in closed chains) that lie in a
 /// plane within `tol`, every vertex and 16 points of every edge: each filled with the plane's
 /// face, which goes along each edge the other way from the face that has it. A hole not flat, or
@@ -1792,8 +1841,11 @@ fn fill_flat_holes(proto: &mut Proto, tol: f64) {
     }
 }
 
-fn measure_gaps(proto: &Proto, stats: &mut Stats) {
-    for fa in &proto.faces {
+/// How far a file's geometry misses itself, before anything is changed; and each face's largest
+/// gap, by face.
+fn measure_gaps(proto: &Proto, stats: &mut Stats) -> Vec<f64> {
+    let mut by_face = vec![0.0_f64; proto.faces.len()];
+    for (fi, fa) in proto.faces.iter().enumerate() {
         for u in fa.loops.iter().flatten() {
             let e = &proto.edges[u.0];
             let w = e.range.width();
@@ -1801,6 +1853,7 @@ fn measure_gaps(proto: &Proto, stats: &mut Stats) {
                 .map(|k| fa.surface.distance(e.curve.eval(e.range.lo + w * k as f64 / 8.0)))
                 .fold(0.0, f64::max);
             stats.curve_off_surface = stats.curve_off_surface.max(worst);
+            by_face[fi] = by_face[fi].max(worst);
             if worst > forge_math::tol::LINEAR {
                 stats.edges_off += 1;
             }
@@ -1816,6 +1869,7 @@ fn measure_gaps(proto: &Proto, stats: &mut Stats) {
             en.2 = en.2.max(worst);
         }
     }
+    by_face
 }
 
 /// From a read file's topology to a body, and its integrals where the check worked them out: seams,
@@ -1994,7 +2048,7 @@ fn finish_root(f: &File<'_>, id: u32, r: Record, b: Built, lim: &Limits, only_me
         match built {
             Ok(proto) => {
                 if only_measure {
-                    measure_gaps(&proto, stats);
+                    let _ = measure_gaps(&proto, stats);
                     break;
                 }
                 out.finished = true;
@@ -2093,7 +2147,49 @@ fn healed(
             return Err("a face's loops go along one edge twice the same way".into());
         }
     }
-    measure_gaps(&proto, stats);
+    if let Some((fi, gap)) = repair_slits_and_find_far_face(&mut proto, uncertainty, stats) {
+        return Err(far_face_words(&proto, fi, gap));
+    }
+    heal_rest(proto, uncertainty, lim, stats)
+}
+
+/// The first face whose edges lie far off its surface (more than both `FAR_FACE_MM` and
+/// `FAR_FACE_PART` of the part), and how far, as `far_gap` measures it; the gaps measured
+/// on the way into `stats`.
+pub(super) fn repair_slits_and_find_far_face(
+    proto: &mut Proto,
+    uncertainty: f64,
+    stats: &mut Stats,
+) -> Option<(usize, f64)> {
+    let gaps = measure_gaps(proto, stats);
+    // Keep as-read statistics, then confirm candidate gaps on the repaired boundaries.
+    proto.cancel_slits(uncertainty.max(forge_math::tol::LINEAR));
+    // a face whose edges lie far off its surface has the wrong surface in the file (VS-3 #478011:
+    // a B-spline patch 5 m from its face's edges): nothing in the file says where it is
+    let size = Box3::from_points(proto.verts.iter().map(|v| v.0)).diagonal();
+    gaps.iter()
+        .enumerate()
+        .filter(|&(_, &g)| g > FAR_FACE_MM && g > FAR_FACE_PART * size)
+        .map(|(fi, _)| (fi, far_gap(proto, fi)))
+        .find(|&(_, g)| g > FAR_FACE_MM && g > FAR_FACE_PART * size)
+}
+
+/// The refusal of a solid whose face `fi` lies `gap` from its edges.
+fn far_face_words(proto: &Proto, fi: usize, gap: f64) -> String {
+    let face = proto.face_ids.get(fi).map_or(String::new(), |id| format!(" #{id}"));
+    format!(
+        "face{face} can't be read: its surface lies {} from its own edges (the file disagrees with itself there; exporting it again may help)",
+        far(gap)
+    )
+}
+
+/// `healed` after its checks of the file: the body healed and made, under the read's budget.
+fn heal_rest(
+    mut proto: Proto,
+    uncertainty: f64,
+    lim: &Limits,
+    stats: &mut Stats,
+) -> Result<(Body, forge_geom::budget::Budget), String> {
     let budget = forge_geom::budget::scoped(lim.max_evals);
     proto.split_closed_splines();
     proto.add_seams()?;
@@ -2188,6 +2284,89 @@ pub fn import(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
         return crate::xt::import(text, lim);
     }
     read_file(text, lim, false)
+}
+
+/// A solid the read refused because one of its faces lies far off its edges ([`far_face`]),
+/// drawn for display only: its body healed as the read would have healed it without the far face
+/// (whose surface is not where the face is), drawn as [`Solid::display_mesh`] draws a body.
+/// Never a [`Solid`]: nothing of it is checked, and nothing but a viewer should use it.
+pub struct ShownRefused {
+    pub entity: u32,
+    pub name: String,
+    /// The refusal's words, as in [`Imported::refusals`].
+    pub why: String,
+    /// The far face's entity in the file, where it has one.
+    pub far_face: Option<u32>,
+    pub mesh: forge_mesh::TriMesh,
+}
+
+/// The solids of `imp` (a read of `text` under `lim`) refused for a face far off its edges, drawn
+/// for a viewer ([`ShownRefused`]). The read itself is not touched: the file is read again, as
+/// far as those solids, only when there is one. A body that cannot be drawn within what its
+/// healing left of `lim`'s budget is left out.
+pub fn draw_far_refused(text: &[u8], lim: &Limits, imp: &Imported) -> Vec<ShownRefused> {
+    let far: Vec<u32> = imp
+        .refusals
+        .iter()
+        .filter(|r| r.why.contains("can't be read: its surface lies"))
+        .map(|r| r.entity)
+        .collect();
+    if far.is_empty() || crate::brep::is_brep(text) || crate::iges::is_iges(text) {
+        return Vec::new();
+    }
+    let Ok(h) = head(text, lim, false) else {
+        return Vec::new();
+    };
+    let ks: Vec<usize> = (0..h.roots.len()).filter(|&k| far.contains(&h.roots[k].0)).collect();
+    let drawn = forge_math::par::map_eager(ks.len(), |i| {
+        let (id, r, ctx) = h.roots[ks[i]];
+        draw_far_root(&h, id, r, ctx, lim)
+    });
+    drawn.into_iter().flatten().collect()
+}
+
+fn draw_far_root(h: &Head<'_>, id: u32, r: Record, ctx: Option<u32>, lim: &Limits) -> Option<ShownRefused> {
+    let b = build_root(&h.f, id, r, ctx, h.assembly);
+    let (u, built) = b.built?;
+    let mut stats = Stats::default();
+    let mut proto = built.ok()?;
+    let mut check_voids = h.f.name(&r) == "BREP_WITH_VOIDS";
+    let (fi, gap) = loop {
+        let (fi, gap) = repair_slits_and_find_far_face(&mut proto, u.uncertainty, &mut stats)?;
+        // files differ on what a void's .F. turns, as `finish_root` reads them: told from the
+        // whole body, healed as the read heals it
+        if check_voids {
+            let (body, healing) = heal_rest(proto, u.uncertainty, lim, &mut stats).ok()?;
+            drop(healing);
+            let inward = voids_inward(&body);
+            check_voids = false;
+            proto = build_shell(&h.f, id, r, u, inward, &mut stats).ok()?;
+            continue;
+        }
+        break (fi, gap);
+    };
+    let why = far_face_words(&proto, fi, gap);
+    let far_id = proto.face_ids.get(fi).copied();
+    // drawn without the far face: its surface is not where the face is, and drawing it toward
+    // there is what takes long (VS-3 #478011: minutes, and nothing drawn)
+    proto.faces.remove(fi);
+    if fi < proto.face_ids.len() {
+        proto.face_ids.remove(fi);
+    }
+    // under the read's own budget, what healing left of it, as the read draws its check's mesh
+    let (mut body, healing) = heal_rest(proto, u.uncertainty, lim, &mut stats).ok()?;
+    // the edges' tolerances, as the read gives them before it draws: the mesher meets an edge off
+    // its faces by them (without them VS-3 #478011's first face spends minutes and fails)
+    record_deviations(&mut body, &mut stats);
+    let mesh = forge_mesh::tessellate::tessellate_tolerant(&body, &Solid::display_quality(&body)).ok();
+    drop(healing);
+    Some(ShownRefused {
+        entity: id,
+        name: b.name,
+        why,
+        far_face: far_id,
+        mesh: mesh?,
+    })
 }
 
 /// [`import`], and every solid drawn for display ([`Solid::display_mesh`], kept in

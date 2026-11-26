@@ -159,7 +159,9 @@ fn a_users_model_is_kept_in_their_library_placed_drawn_and_checked() {
     let mid = |a: f64, b: f64| (a + b) / 2.0;
     assert!((mid(lo[0], hi[0]) - mid(min[0], max[0])).abs() < 1e-6);
     // 2.5 % past each end in x: it sticks out, and says by how much
-    let o = m.model_checks[0].clone().unwrap();
+    let check = m.model_checks[0].as_ref().unwrap();
+    assert!(check.notes.is_empty());
+    let o = &check.outside;
     assert!(o.out > 0);
     let past = (max[0] - min[0]) * 0.025;
     assert!((o.worst - past).abs() < 0.01, "{} vs {past}", o.worst);
@@ -186,7 +188,9 @@ fn a_users_model_is_kept_in_their_library_placed_drawn_and_checked() {
         m.def = Some(d2);
         m.edited(true);
         m.check_models();
-        let o = m.model_checks[0].clone().unwrap();
+        let check = m.model_checks[0].as_ref().unwrap();
+        assert!(check.notes.is_empty());
+        let o = &check.outside;
         assert_eq!(o.out, 0, "{o:?}");
     }
     shot(&mut h, "models-02-envelope-fitted");

@@ -132,3 +132,24 @@ more cores; on 4 cores the parallel work is already spread.
   either a cheaper exact filter or the argument that there is none.
 - `research/import-speed/CORPUS.md` — the frozen benchmark set (20 Haas files, tune / held-out).
 - `research/import-speed/band-*.txt` — the speed gate's bands for the commits that were gated.
+
+## Faces that fail to mesh (branch `import/faces`, off `import/speed-ks`)
+
+David's direction: no caps and no faster refusals — find why faces fail and fix the cause. A sweep
+of the 237 Haas machine STEP files (every solid read without its measures, meshed at display
+quality; `examples/facesweep` in my scratch worktree, the same as `solidinfo` plus a mesh) finds 15
+failing solids, 13 distinct. The mesher stops at a solid's first failing face, so rerun the sweep
+after each fix. Four causes:
+
+| cause | solids | where | state |
+|---|---:|---|---|
+| A. a loop's slit of no width (out and back along two edges lying on each other within the file's uncertainty) | 1 (HRT160-2 #13299) | reader | **fixed**: `heal.rs cancel_slits`, 52c2877c; unit test incl. a 1e-3 slit left alone; HRT160-2 now 5 solids, 0 refused, app read 211 s -> 0.24 s; corpus differential queued |
+| B. a small-radius cylinder gridded to its radius (`interior_steps`: rows 2·r·du apart even when r ≪ chord: 50k–100k rows per fillet) | 10 (ST-30-35Y x2, GM-1-5AX, GM-1XT-5AX, DM-1, EC-1600ZT, HFL-3015D-6, HFL-6512T, HRP-2, cobot_pkg-7) | mesher | waiting on the coordinator's rigor ruling: the fix (no row spacing below the chord tolerance) changes every such fillet's mesh |
+| C. an intersection-curve edge sampled one point per chain link at least (`edge_segments`: 2,000 links over 6 mm -> 4,845 boundary points on a 1 mm-chord plane; CDT recovery thrashes) | 1 (VF-5_40_SS_TR #252821) | mesher | same family and same ruling as B |
+| D. a face whose surface the file puts 5 m from its edges (B-spline patch read correctly; edges 5,040 mm off it) | 1 (VS-3 #478011) | the file | not repairable exactly; proposed: refuse early with the true reason (today: "too long to measure") |
+
+Tools: `tools/kernel-stress/extract.py FILE ENTITY OUT` takes one solid out of a file; then read it
+with the measures skipped (a scratch patch of `finish`, env `FORGE_NOCHECK`) and mesh it per solid
+to find its first failing face; log the interior grid sizes and per-stage spends in `tessellate.rs`
+to see where the budget goes. Whatever is fixed needs the full differential with the repository's
+fixtures and the app's 16x path, as above.
