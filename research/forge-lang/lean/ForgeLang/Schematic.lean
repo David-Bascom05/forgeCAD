@@ -156,4 +156,58 @@ theorem move_preserves_intent (d : Drawing) (pos : Terminal → Int × Int) :
     ({d with pose := pos} : Drawing).bindings = d.bindings ∧
     ({d with pose := pos} : Drawing).wires = d.wires := ⟨rfl,rfl⟩
 
+/-- A fitted bridge represents one occurrence with both terminals and a nominal value.
+    The nets are the already partitioned electrical graph. -/
+structure Bridge where
+  symbol : String
+  partKind : Option String
+  path : Option String
+  defaultPath : Bool
+  fitted : Bool
+  left : Nat
+  right : Nat
+  value : Option Rat
+
+abbrev NominalBounds := Rat × Rat
+
+inductive PartType where
+  | exactSymbol (name : String)
+  | classified (name : String)
+
+structure PathWant where
+  part : PartType
+  path : Option String
+
+def bridgeMatches (a b : Nat) (want : PathWant) (range : Option NominalBounds) (part : Bridge) : Bool :=
+  let matchesType := match want.part with
+    | .exactSymbol s => part.symbol == s
+    | .classified k => part.partKind == some k
+  let matchesPath := match want.path with
+    | none => part.defaultPath
+    | some name => part.path == some name
+  a != b && part.fitted && matchesType && matchesPath &&
+    ((part.left == a && part.right == b) || (part.path.isNone && part.left == b && part.right == a)) &&
+    match range with
+    | none => true
+    | some r => part.value.any fun v => decide (r.1 ≤ v ∧ v ≤ r.2)
+
+def directConnection (a b : Terminal) (net : Terminal → Nat) : Bool :=
+  a != b && net a == net b
+
+theorem direct_connection_iff (a b : Terminal) (net : Terminal → Nat) :
+    directConnection a b net = true ↔ a ≠ b ∧ net a = net b := by simp [directConnection]
+
+theorem unpopulated_bridge_refused (a b : Nat) (s : PathWant) (r : Option NominalBounds) (p : Bridge)
+    (h : p.fitted = false) : bridgeMatches a b s r p = false := by simp [bridgeMatches, h]
+
+theorem short_bypasses_bridge (a : Nat) (s : PathWant) (r : Option NominalBounds) (p : Bridge) :
+    bridgeMatches a a s r p = false := by simp [bridgeMatches]
+
+theorem wrong_entry_refused (a b : Nat) (s : PathWant) (r : Option NominalBounds) (p : Bridge)
+    (name : String) (h : p.path = some name) (wrong : p.left ≠ a) :
+    bridgeMatches a b s r p = false := by simp [bridgeMatches, h, wrong]
+
+theorem one_bridge_witness (a b : Nat) (s : PathWant) (r : Option NominalBounds) (parts : List Bridge) :
+    parts.any (bridgeMatches a b s r) = true ↔ ∃ p ∈ parts, bridgeMatches a b s r p = true := by simp
+
 end ForgeLang.Schematic

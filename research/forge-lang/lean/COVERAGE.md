@@ -109,8 +109,8 @@ extension so far:
 
 | Kind | Item | Names | Rust site | Lean |
 |---|---|---|---|---|
-| args | `schematic::role` | `kind`, `key`, `capacitance_nf`, `voltage_mv`, `voltage_range_v`, `prefer` | schematic::ARGS and checked reader | `Schematic.acceptsVoltage_iff` for inclusive range semantics. GAP record decoding in Rust |
-| args | `schematic::symbol` | `pins`, `graphics`, `fields`, `datasheet`, `power_net`, `ref_prefix`, `peripherals` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::role` | `kind`, `key`, `capacitance_nf`, `voltage_mv`, `voltage_range_v`, `prefer`, `connect_to`, `through`, `part_path`, `value`, `value_range` | schematic::ARGS and checked reader | `Schematic.acceptsVoltage_iff` for inclusive voltage ranges. `Schematic.direct_connection_iff` for direct wants. `Schematic.one_bridge_witness` and `Schematic.short_bypasses_bridge` cover one-hop matching on partitioned nets. GAP record decoding in Rust |
+| args | `schematic::symbol` | `pins`, `graphics`, `fields`, `datasheet`, `power_net`, `ref_prefix`, `peripherals`, `part_kind`, `paths` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::pin` | `number`, `kind`, `at`, `angle`, `wants`, `gives`, `unit`, `description`, `aliases` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::line` | `from`, `to`, `unit`, `sheet`, `width` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::rect` | `from`, `to`, `unit`, `sheet`, `width` | schematic::ARGS and checked reader | GAP record decoding in Rust |

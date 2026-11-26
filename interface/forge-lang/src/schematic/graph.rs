@@ -31,6 +31,7 @@ impl Issue {
     pub fn severity(&self) -> &'static str {
         match self.kind {
             "DriverConflict"
+            | "PinConnectionMismatch"
             | "VoltageOutOfRange"
             | "ConnectedNoConnect"
             | "ReturnMismatch"
@@ -68,6 +69,7 @@ impl VoltageCheck {
 }
 #[derive(Default, Debug)]
 pub struct Circuit {
+    pub connections: Map<String, Map<RoleId, ConnectionCheck>>,
     pub voltages: Map<String, Map<RoleId, VoltageCheck>>,
     pub origins: Map<String, Span>,
     attached: Set<String>,
@@ -133,6 +135,7 @@ impl Circuit {
         }
         c.partition();
         c.check_voltages(doc);
+        c.check_connections(doc, &by_sheet);
         c.check();
         c.sort_findings();
         Ok(c)
@@ -574,6 +577,7 @@ impl Circuit {
             for r in &p.wants {
                 if p.populated
                     && !self.voltages.get(id).is_some_and(|v| v.contains_key(r))
+                    && !self.connections.get(id).is_some_and(|v| v.contains_key(r))
                     && !satisfied.contains(&(id, r))
                 {
                     self.issues.push(issue(

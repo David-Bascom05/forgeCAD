@@ -104,6 +104,13 @@ struct Inputs {
     return_to: String,
     preferred_distance: String,
     role_kind: String,
+    target_pin: String,
+    through: Option<sch::PartType>,
+    part_kind: String,
+    part_paths: Vec<(String, [String; 2])>,
+    required_path: String,
+    part_value: String,
+    part_value_max: String,
     voltage_min: String,
     voltage_max: String,
     role: String,
@@ -831,6 +838,53 @@ chip = place(sheet: main, symbol: S, at: (0,0))
         e.form.role_kind = "power".into();
         e.create_record().unwrap();
         assert!(e.src.find("rail =").unwrap() < e.src.find("Z =").unwrap());
+    }
+
+    #[test]
+    fn create_and_apply_a_connection_want_in_the_editor() {
+        let file = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples/electronics/analog/pin-connections.fg");
+        let mut e = Editor::open(
+            Some(file.to_str().unwrap().into()),
+            std::fs::read_to_string(&file).unwrap(),
+        )
+        .unwrap();
+        e.start(Tool::Role);
+        e.form.name = "series_resistor".into();
+        e.form.target_pin = "J1.P1".into();
+        e.form.through = Some(sch::PartType::Kind("resistor".into()));
+        e.form.part_value = "4700 Ω".into();
+        e.create_record().unwrap();
+        let role = e.doc.role_names["series_resistor"].clone();
+        e.set_placement_role("main/U1.INP", &role, true, true).unwrap();
+        assert!(e.circuit.connections["main/U1.INP"][&role].satisfied);
+        e.step(false);
+        assert!(!e.circuit.connections["main/U1.INP"].contains_key(&role));
+    }
+
+    #[test]
+    fn symbol_properties_define_the_terminal_pair_for_a_custom_part_type() {
+        let src = r#"symbol_library
+Switch = symbol(pins: {
+    control: pin(number: "1", kind: "input", at: (0,2)),
+    common: pin(number: "2", kind: "passive", at: (-2,0)),
+    contact: pin(number: "3", kind: "passive", at: (2,0))
+})
+"#;
+        let mut e = Editor::open(None, src.to_owned()).unwrap();
+        e.subject = "Switch".into();
+        e.inspect();
+        e.form.part_kind = "reed_relay".into();
+        e.form
+            .part_paths
+            .push(("normally_open".into(), ["common".into(), "contact".into()]));
+        e.save_properties().unwrap();
+        let reopened = Editor::open(None, e.src.clone()).unwrap();
+        let symbol = &reopened.doc.symbols["Switch"];
+        assert_eq!(symbol.part_kind.as_deref(), Some("reed_relay"));
+        assert_eq!(symbol.paths["normally_open"], ["common", "contact"]);
+        e.step(false);
+        assert_eq!(e.src, src);
     }
 
     #[test]

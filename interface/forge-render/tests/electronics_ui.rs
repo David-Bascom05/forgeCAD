@@ -449,3 +449,28 @@ fn checklist_explains_the_connected_supply_voltage() {
     }
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn inspect_wiring_through_a_typed_component() {
+    let Ok(mut h) = Headless::new((1400., 860.), 1.) else {
+        return;
+    };
+    let file =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/electronics/analog/switched-load.fg");
+    h.gui.open(file.to_str().unwrap());
+    h.step();
+    assert!(h.click("electronics:anchor:J1.P1"));
+    h.step();
+    assert!(
+        h.placed("electronics:connection:main/J1.P1:load_return:true")
+            .is_some()
+    );
+    if let Some(out) = std::env::var_os("FORGE_UI_SHOTS") {
+        std::fs::create_dir_all(&out).unwrap();
+        std::fs::write(
+            Path::new(&out).join("native-pin-connection.png"),
+            h.png().unwrap(),
+        )
+        .unwrap();
+    }
+}

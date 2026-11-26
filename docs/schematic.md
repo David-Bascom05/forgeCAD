@@ -24,6 +24,23 @@ Reg = symbol(pins: {
 
 A role declaration binds an identifier. Pin lists and `fulfill(role: ...)` take references to these declarations. The schema encodes a role as an object, for example `{"id":"@example.3v3","kind":"power","rating":{"kind":"voltage","unit":"mV","value":3300},"prefer_mm":null}`. A quoted role name in a pin list, an unknown role, a mismatch between a want and a give, and incompatible definitions of a shared key produce located compile errors. Distinct libraries can intentionally share a type by using the same explicit key and definition. Without a key the import namespace qualifies the role. The declared kind is one of `power`, `return`, `bypass`, `signal`, `clock`, `bias`, `termination`, `feedback`, `protection`, `reference`, or `interface`. Optional capacitance in nF applies to bypass roles, voltage in mV to power and reference roles. An optional positive length `prefer` records a project placement preference. The PCB consumer owns its eventual measurement.
 
+### Pin-to-pin connection wants
+
+A target pin can be a sibling such as `OUT` on the requesting component, or a pin such as `J1.P1` on the same sheet occurrence. A direct want checks net equality, including connections made through junctions, labels and sheet ports. A through-part want checks for one fitted component bridging two distinct nets through a permitted pair of terminals. A wire shorting those nets fails the check. The target pin can be passive and needs no role declaration.
+
+```fg
+feedback = role(kind: "feedback", connect_to: OUT)
+input_filter = role(kind: "signal", connect_to: J1.P1, through: "resistor", value_range: ["2.2 kΩ", "4.7 kΩ"])
+```
+
+A quoted type accepts any symbol declaring that `part_kind`. Part types are open names such as `"capacitor"`, `"inductor"`, `"mosfet"`, and `"relay"`. A symbol reference such as `through: analog.Resistor` selects one library symbol. Set **Part type** and **Terminal paths** in symbol properties.
+
+Two-pin symbols with no named paths can be traversed in either order. Other symbols declare ordered pin pairs. For example, a MOSFET can declare `paths: {channel: [D, S]}`. A want such as `role(kind: "return", connect_to: P2, through: "mosfet", part_path: "channel")` checks that the requester reaches the drain and the target reaches the source on the same fitted MOSFET. A second MOSFET symbol can map the same path to differently named pins. With one declared path, the want may omit its name. With several paths, select one explicitly. These rules check wiring topology. Gate voltage and transistor operating state are separate electrical questions. [MOSFET, capacitor and inductor example](../examples/electronics/analog/switched-load.fg)
+
+Put the roles in the pin's Wants list or on a placement, for example `wants: {INP: [input_filter], INM: [feedback]}`. Omit the value constraint to accept any nominal value, or use `value: "4.7 kΩ"` for an exact match. Values use Ω, ohm, F or H with SI prefixes. Resistor markings such as `4k7` are accepted. An unknown or dimensionally incompatible placed value fails a value-constrained check. These checks concern nominal values and the two terminals of a single component. Ordered paths can specify polarity. Multi-part chains and manufacturing tolerances remain outside this check.
+
+In **Pin Role**, enter the target pin and choose **Direct connection**, a declared part type, or a specific symbol. For a symbol, enter one value or both inclusive limits. The pin checklist and `forgecad schematic FILE pin main/U1.INP --json` report the result and the bridging pins. The pin query returns value bounds as decimal strings with a common base unit to preserve small electrical values. [Amplifier input and feedback example](../examples/electronics/analog/pin-connections.fg)
+
 ### Connector pin roles
 
 A generic connector starts with numbered passive contacts and empty wants and provides. Put the external circuit's signal or supply on the placed connector. In the schematic, select the contact, expand **Placement roles**, and check **Wants** or **Provides** for that pin. **New role…** declares a typed role in the schematic.

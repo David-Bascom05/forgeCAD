@@ -726,3 +726,162 @@ link = wire(sheet:main,from:J1.contact,to:J2.contact)
         );
     }
 }
+
+#[test]
+fn pin_connection_wants_follow_wiring_type_and_fitted_value() {
+    const FILE: &str = include_str!("../../../examples/electronics/analog/pin-connections.fg");
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/electronics/analog");
+    let compile = |s: &str| schematic::compile(s, Some(&dir), Some(&dir));
+    let (doc, c) = compile(FILE).unwrap();
+    let pin = "main/U1.INP";
+    let wanted = &doc.role_names["input_filter"];
+    assert!(c.connections["main/U1.INM"][&doc.role_names["feedback"]].satisfied);
+    assert_eq!(c.connections[pin][wanted].bridge_pins, ["main/R1.B", "main/R1.A"]);
+    let inspection = schematic::inspect_pin(&c, pin).unwrap();
+    assert!(inspection.wires.contains("main/input_wire") && inspection.wires.contains("main/filtered_wire"));
+    assert!(!inspection.pins.contains("main/U1.OUT"));
+    assert!(
+        schematic::response(&doc, &c, &["pin".into(), pin.into()])
+            .unwrap()
+            .to_string()
+            .contains("connection_checks")
+    );
+    for (from, to, pass) in [
+        ("value: \"4.7 kΩ\"", "value: \"2200 ohm\"", true),
+        ("value: \"4.7 kΩ\"", "value: \"4k7\"", true),
+        ("value: \"4.7 kΩ\"", "value: \"4701 Ω\"", false),
+        ("value: \"4.7 kΩ\"", "value: \"4.7 nF\"", false),
+        ("value: \"4.7 kΩ\"", "value: \"TBD\"", false),
+        ("value: \"4.7 kΩ\"", "populated: false", false),
+        ("from: J1.P1, to: R1.A", "from: J1.P2, to: R1.A", false),
+        ("connect_to: J1.P1", "connect_to: J1.absent", false),
+        ("through: analog.Resistor", "through: \"resistor\"", true),
+        ("value_range: [\"2.2 kΩ\", \"4.7 kΩ\"]", "value: \"4700 Ω\"", true),
+        (
+            "value_range: [\"2.2 kΩ\", \"4.7 kΩ\"]",
+            "value: \"3300 Ω\"",
+            false,
+        ),
+        (", value_range: [\"2.2 kΩ\", \"4.7 kΩ\"]", "", true),
+        ("from: J1.P1, to: R1.A", "from: J1.P1, to: U1.INP", false),
+    ] {
+        let (_, c) = compile(&FILE.replace(from, to)).unwrap();
+        assert_eq!(c.connections[pin][wanted].satisfied, pass, "{to}");
+        assert_eq!(
+            c.issues
+                .iter()
+                .any(|i| i.kind == "PinConnectionMismatch" && i.objects[0] == pin),
+            !pass
+        );
+    }
+    for (from, to, kind) in [
+        (
+            "through: analog.Resistor",
+            "through: analog.Amplifier",
+            "ExpectedPartPath",
+        ),
+        ("through: analog.Resistor", "through: unknown", "UnknownSymbol"),
+        (
+            "through: analog.Resistor",
+            "through: analog.Capacitor",
+            "WrongPartValueDimension",
+        ),
+        ("2.2 kΩ", "22 F", "InvalidPartRange"),
+        ("2.2 kΩ", "22 kΩ", "InvalidPartRange"),
+    ] {
+        assert_eq!(compile(&FILE.replace(from, to)).unwrap_err().kind, kind);
+    }
+    // A part class accepts a different library symbol; an exact-symbol rule still distinguishes it.
+    let variant = "Other = symbol(part_kind: \"resistor\", pins: {A: pin(number: \"1\", kind: \"passive\", at: (0,0)), B: pin(number: \"2\", kind: \"passive\", at: (3,0))})";
+    let substituted = FILE
+        .replace("main = sheet", &format!("{variant}\nmain = sheet"))
+        .replace("symbol: analog.Resistor,", "symbol: Other,");
+    assert!(!compile(&substituted).unwrap().1.connections[pin][wanted].satisfied);
+    let generic = substituted.replace("through: analog.Resistor", "through: \"resistor\"");
+    assert!(compile(&generic).unwrap().1.connections[pin][wanted].satisfied);
+    let disconnected = FILE.replace("from: U1.OUT, to: U1.INM", "from: U1.OUT, to: J1.P2");
+    assert!(
+        !compile(&disconnected).unwrap().1.connections["main/U1.INM"][&doc.role_names["feedback"]].satisfied
+    );
+    let self_link = FILE.replace("connect_to: OUT", "connect_to: INM");
+    assert!(
+        !compile(&self_link).unwrap().1.connections["main/U1.INM"][&doc.role_names["feedback"]].satisfied
+    );
+    let swapped = FILE
+        .replace("R1.A", "R1.swap")
+        .replace("R1.B", "R1.A")
+        .replace("R1.swap", "R1.B");
+    assert!(compile(&swapped).unwrap().1.connections[pin][wanted].satisfied);
+    let repeated = format!(
+        "{FILE}\ntop = sheet()\nfirst = subsheet(sheet: top, of: main, at: (0,0))\nsecond = subsheet(sheet: top, of: main, at: (10,0))\n"
+    );
+    let (_, c) = compile(&repeated).unwrap();
+    for scope in ["top/first", "top/second"] {
+        let check = &c.connections[&format!("{scope}/U1.INP")][wanted];
+        assert!(check.satisfied);
+        assert_eq!(check.target, format!("{scope}/J1.P1"));
+    }
+}
+
+#[test]
+fn paths_use_the_declared_component_type_and_terminal_pair() {
+    const FILE: &str = include_str!("../../../examples/electronics/analog/switched-load.fg");
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/electronics/analog");
+    let compile = |s: &str| schematic::compile(s, Some(&dir), Some(&dir));
+    let (doc, c) = compile(FILE).unwrap();
+    let report = schematic::response(&doc, &c, &["pin".into(), "main/J1.P1".into()])
+        .unwrap()
+        .to_string();
+    assert!(
+        report.contains(r#""min":"0.00000001","max":"0.00000001","unit":"F""#),
+        "{report}"
+    );
+    let role = &doc.role_names["load_return"];
+    let status = |c: &Circuit| c.connections["main/J1.P1"][role].satisfied;
+    assert!(status(&c));
+    assert_eq!(
+        c.connections["main/J1.P1"][role].bridge_pins,
+        ["main/Q1.D", "main/Q1.S"]
+    );
+    assert!(c.connections["main/J1.P1"][&doc.role_names["output_cap"]].satisfied);
+    assert!(c.connections["main/J2.P1"][&doc.role_names["load_coil"]].satisfied);
+    for (old, new, pass) in [
+        ("to: Q1.D", "to: Q1.G", false),
+        ("channel: [D, S]", "channel: [S, D]", false),
+        ("channel: [D, S]", "channel: [D, S], control: [G,S]", true),
+        (
+            "through: \"mosfet\", part_path: \"channel\"",
+            "through: Switch, part_path: \"channel\"",
+            true,
+        ),
+        ("part_kind: \"mosfet\"", "part_kind: \"relay\"", false),
+        ("mosfet", "custom_optocoupler", true),
+        ("D: pin(number:", "Drain: pin(aliases: [D], number:", true),
+        (
+            "symbol: Switch, at:",
+            "symbol: Switch, populated: false, at:",
+            false,
+        ),
+        (", part_path: \"channel\"", "", true),
+    ] {
+        assert_eq!(
+            status(&compile(&FILE.replace(old, new)).unwrap().1),
+            pass,
+            "{new}"
+        );
+    }
+    let ambiguous = FILE
+        .replace(", part_path: \"channel\"", "")
+        .replace("channel: [D, S]", "channel: [D, S], control: [G,S]");
+    assert!(!status(&compile(&ambiguous).unwrap().1));
+    assert_eq!(
+        compile(&FILE.replace("channel: [D, S]", "channel: [G, missing]"))
+            .unwrap_err()
+            .kind,
+        "UnknownPathPin"
+    );
+    let cap_wrong = compile(&FILE.replace("value: \"10 nF\")\ndrain", "value: \"100 nF\")\ndrain"))
+        .unwrap()
+        .1;
+    assert!(!cap_wrong.connections["main/J1.P1"][&doc.role_names["output_cap"]].satisfied);
+}

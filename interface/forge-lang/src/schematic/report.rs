@@ -28,12 +28,41 @@ fn role(id: &RoleId, d: &Document) -> Json {
             ("value", v.into()),
         ]),
     };
-    Json::obj(vec![
+    let mut fields = vec![
         ("id", id.0.clone().into()),
         ("kind", r.kind.word().into()),
         ("rating", rating),
         ("prefer_mm", r.prefer.map_or(Json::Null, Into::into)),
-    ])
+    ];
+    if let Some(w) = &r.connection {
+        fields.push((
+            "connection",
+            Json::obj(vec![
+                ("target", w.to.clone().into()),
+                ("path", w.path.clone().map_or(Json::Null, Into::into)),
+                (
+                    "through",
+                    w.through.as_ref().map_or(Json::Null, |selector| match selector {
+                        PartType::Kind(k) => Json::obj(vec![("kind", k.clone().into())]),
+                        PartType::Symbol(s) => Json::obj(vec![("symbol", s.clone().into())]),
+                    }),
+                ),
+                (
+                    "value_range",
+                    w.values.map_or(Json::Null, |[lo, hi]| {
+                        Json::obj(vec![
+                            // The CAD JSON number formatter rounds small geometry values.
+                            // Decimal strings preserve electrical limits down to picofarads.
+                            ("min", lo.magnitude.to_string().into()),
+                            ("max", hi.magnitude.to_string().into()),
+                            ("unit", lo.unit.into()),
+                        ])
+                    }),
+                ),
+            ]),
+        ));
+    }
+    Json::obj(fields)
 }
 fn roles(ids: &Set<RoleId>, d: &Document) -> Json {
     Json::Arr(ids.iter().map(|r| role(r, d)).collect())
@@ -76,6 +105,16 @@ fn symbol(id: &str, s: &Symbol, d: &Document) -> Json {
                             ),
                         )
                     })
+                    .collect(),
+            ),
+        ),
+        ("part_kind", s.part_kind.clone().map_or(Json::Null, Into::into)),
+        (
+            "paths",
+            Json::Obj(
+                s.paths
+                    .iter()
+                    .map(|(name, pair)| (name.clone(), strings(pair)))
                     .collect(),
             ),
         ),
@@ -469,6 +508,9 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
             let branch = c.drawn_branch(k);
             let mut candidates = Vec::new();
             for role_id in &p.wants {
+                if d.roles[role_id].connection.is_some() {
+                    continue;
+                }
                 let mut providers = c.nets[&c.net_of[*k]]
                     .iter()
                     .filter(|other| {
@@ -526,6 +568,25 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
                                                 .collect(),
                                         ),
                                     ),
+                                ])
+                            })
+                            .collect(),
+                    ),
+                ),
+                (
+                    "connection_checks",
+                    Json::Arr(
+                        c.connections
+                            .get(*k)
+                            .into_iter()
+                            .flatten()
+                            .map(|(role, check)| {
+                                Json::obj(vec![
+                                    ("role", role.0.clone().into()),
+                                    ("target", check.target.clone().into()),
+                                    ("satisfied", check.satisfied.into()),
+                                    ("bridge_pins", strings(&check.bridge_pins)),
+                                    ("detail", check.detail.clone().into()),
                                 ])
                             })
                             .collect(),

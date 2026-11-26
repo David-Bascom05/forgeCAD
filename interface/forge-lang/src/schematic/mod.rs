@@ -1,6 +1,8 @@
 //! Native schematic and symbol documents. Source owns drawing geometry and functional
 //! intent; each elaborated sheet occurrence owns a separate graph of electrical terminals.
 mod author;
+mod connection;
+pub use connection::{ConnectionCheck, ConnectionWant, PartType, PartValue};
 mod drawing;
 mod graph;
 mod move_cache;
@@ -42,6 +44,11 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "capacitance_nf",
             "voltage_mv",
             "voltage_range_v",
+            "connect_to",
+            "through",
+            "part_path",
+            "value",
+            "value_range",
             "prefer",
         ],
     ),
@@ -55,6 +62,8 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "power_net",
             "ref_prefix",
             "peripherals",
+            "part_kind",
+            "paths",
         ],
     ),
     (
@@ -177,6 +186,7 @@ impl std::fmt::Display for VoltageRange {
 }
 #[derive(Clone, Debug, PartialEq)]
 pub struct Role {
+    pub connection: Option<ConnectionWant>,
     pub kind: RoleKind,
     pub rating: Option<Rating>,
     pub prefer: Option<f64>,
@@ -210,6 +220,8 @@ pub enum Shape {
 }
 #[derive(Clone, Debug)]
 pub struct Symbol {
+    pub part_kind: Option<String>,
+    pub paths: Map<String, [String; 2]>,
     pub ref_prefix: String,
     pub peripherals: Map<String, Map<String, Set<String>>>,
     pub power_net: Option<String>,

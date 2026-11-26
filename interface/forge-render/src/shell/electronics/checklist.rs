@@ -17,7 +17,7 @@ enum Action {
 }
 
 impl Editor {
-    fn set_placement_role(
+    pub(super) fn set_placement_role(
         &mut self,
         terminal: &str,
         role: &sch::RoleId,
@@ -152,6 +152,9 @@ impl Editor {
                 let voltage = need
                     .then(|| self.circuit.voltages.get(&focus.id)?.get(&check.role))
                     .flatten();
+                let connection = need
+                    .then(|| self.circuit.connections.get(&focus.id)?.get(&check.role))
+                    .flatten();
                 let verified = check.peers.iter().any(|(_, e)| *e == sch::Evidence::Verified);
                 let invalid = check.peers.iter().any(|(_, e)| *e == sch::Evidence::Invalid);
                 ui.add_space(theme::S1);
@@ -173,7 +176,9 @@ impl Editor {
                             toggle.rect,
                         ));
                         if toggle
-                            .on_hover_text(if check.measured {
+                            .on_hover_text(if connection.is_some() {
+                                "Checked from the actual wiring and component value"
+                            } else if check.measured {
                                 "Checked from the voltages provided on this net"
                             } else if invalid || verified {
                                 "Manage this assignment"
@@ -191,6 +196,16 @@ impl Editor {
                             });
                         }
                         ui.indent((&focus.id, &check.role.0, need), |ui| {
+                            if let Some(path) = connection {
+                                let r = ui.label(&path.detail);
+                                places.push((
+                                    format!(
+                                        "electronics:connection:{}:{}:{}",
+                                        focus.id, check.role.0, path.satisfied
+                                    ),
+                                    r.rect,
+                                ));
+                            }
                             if need && matches!(spec.kind, sch::RoleKind::Power | sch::RoleKind::Return) {
                                 for (rail, pin) in &focus.inspection.rails {
                                     let label = ui.label(format!("{rail} connected"));
@@ -232,7 +247,7 @@ impl Editor {
                                     }
                                 });
                             }
-                            if check.peers.is_empty() {
+                            if check.peers.is_empty() && connection.is_none() {
                                 let text = match (need, spec.kind) {
                                     _ if voltage.is_some() => "No connected pin provides a known voltage",
                                     (true, sch::RoleKind::Power) => "No power source assigned",
@@ -299,7 +314,10 @@ impl Editor {
                         let inherited = defaults.contains(role);
                         let mut enabled = effective.contains(role);
                         let response = ui
-                            .add_enabled(!inherited, egui::Checkbox::without_text(&mut enabled))
+                            .add_enabled(
+                                !inherited && (want || self.doc.roles[role].connection.is_none()),
+                                egui::Checkbox::without_text(&mut enabled),
+                            )
                             .on_hover_text(if inherited {
                                 "Defined on the library pin"
                             } else {

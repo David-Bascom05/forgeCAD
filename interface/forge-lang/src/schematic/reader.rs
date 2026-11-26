@@ -172,6 +172,107 @@ fn rotation(e: Option<&Expr>, p: &Params) -> Result<f64> {
     }
     Ok(angle.rem_euclid(360.0))
 }
+fn class_name(e: &Expr) -> Result<String> {
+    let s = string(e)?;
+    if s.is_empty()
+        || !s
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || b"._-".contains(&c))
+    {
+        return Err(fault(
+            e,
+            "InvalidPartKind",
+            "use a part type such as mosfet or relay",
+        ));
+    }
+    Ok(s)
+}
+fn nominal_unit(kind: &str) -> Option<&'static str> {
+    match kind {
+        "resistor" => Some("Ω"),
+        "capacitor" => Some("F"),
+        "inductor" => Some("H"),
+        _ => None,
+    }
+}
+fn connection_want(c: &mut Call<'_>) -> Result<Option<ConnectionWant>> {
+    let Some(to) = c.take("connect_to") else {
+        return Ok(None);
+    };
+    let target = reference(to)?;
+    if target.matches('.').count() > 1 {
+        return Err(fault(
+            to,
+            "ExpectedPin",
+            "use a sibling pin or component.pin on this sheet",
+        ));
+    }
+    let through = c
+        .take("through")
+        .map(|e| match &e.kind {
+            E::Str(_) => class_name(e).map(PartType::Kind),
+            _ => reference(e).map(PartType::Symbol),
+        })
+        .transpose()?;
+    let quantity = |e: &Expr| {
+        PartValue::parse(&string(e)?).ok_or_else(|| {
+            fault(
+                e,
+                "InvalidPartValue",
+                "expected an electrical value such as 4.7 kΩ, 100 nF, or 1 uH",
+            )
+        })
+    };
+    let values = match (c.take("value"), c.take("value_range")) {
+        (None, None) => None,
+        (Some(v), None) => Some([quantity(v)?; 2]),
+        (None, Some(e)) => {
+            let [lo, hi] = list(e)? else {
+                return Err(fault(e, "InvalidPartRange", "expected two limits"));
+            };
+            let (lo, hi) = (quantity(lo)?, quantity(hi)?);
+            if lo.unit != hi.unit || lo.magnitude > hi.magnitude {
+                return Err(fault(
+                    e,
+                    "InvalidPartRange",
+                    "use ordered limits of the same dimension",
+                ));
+            }
+            Some([lo, hi])
+        }
+        (Some(e), Some(_)) => {
+            return Err(fault(
+                e,
+                "InvalidPartRange",
+                "choose an exact value or an interval",
+            ));
+        }
+    };
+    let path = c.take("part_path").map(class_name).transpose()?;
+    if (values.is_some() || path.is_some()) && through.is_none() {
+        return Err(fault(
+            to,
+            "MissingThroughPart",
+            "a path or component value requires a through part",
+        ));
+    }
+    if let (Some(PartType::Kind(kind)), Some([lo, _])) = (&through, values)
+        && let Some(unit) = nominal_unit(kind)
+        && lo.unit != unit
+    {
+        return Err(fault(
+            to,
+            "WrongPartValueDimension",
+            format!("a {kind} value requires {unit}"),
+        ));
+    }
+    Ok(Some(ConnectionWant {
+        path,
+        to: target,
+        through,
+        values,
+    }))
+}
 fn resolve_role(e: &Expr, doc: &Document) -> Result<RoleId> {
     let name = reference(e)?;
     doc.role_names
@@ -187,11 +288,18 @@ fn register_role(doc: &mut Document, name: String, id: RoleId, role: Role, e: &E
     doc.roles.insert(id, role);
     Ok(())
 }
-fn roles(e: Option<&Expr>, doc: &Document) -> Result<Set<RoleId>> {
+fn roles(e: Option<&Expr>, doc: &Document, gives: bool) -> Result<Set<RoleId>> {
     let mut result = Set::new();
     if let Some(e) = e {
         for x in list(e)? {
             let id = resolve_role(x, doc)?;
+            if gives && doc.roles[&id].connection.is_some() {
+                return Err(fault(
+                    x,
+                    "ExpectedConnectionWant",
+                    "a target-pin rule belongs in the Wants list",
+                ));
+            }
             if !result.insert(id) {
                 return Err(fault(x, "DuplicateRole", "role listed twice"));
             }
@@ -273,8 +381,8 @@ fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
                 .transpose()?
                 .unwrap_or(0.)
                 .rem_euclid(360.),
-            wants: roles(c.take("wants"), doc)?,
-            gives: roles(c.take("gives"), doc)?,
+            wants: roles(c.take("wants"), doc, false)?,
+            gives: roles(c.take("gives"), doc, true)?,
         };
         c.end()?;
         pins.insert(name.clone(), pin);
@@ -352,7 +460,41 @@ fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
         })
         .transpose()?
         .unwrap_or_default();
+    let part_kind = call
+        .take("part_kind")
+        .map(class_name)
+        .transpose()?
+        .filter(|k| k != "generic");
+    let paths = call
+        .take("paths")
+        .map(|e| {
+            map(e, |pair| {
+                let [a, b] = list(pair)? else {
+                    return Err(fault(
+                        pair,
+                        "InvalidPartPath",
+                        "a path takes an entry pin and an exit pin",
+                    ));
+                };
+                let resolve = |e: &Expr| {
+                    let name = reference(e)?;
+                    pins.get_key_value(&name)
+                        .or_else(|| pins.iter().find(|(_, p)| p.aliases.contains(&name)))
+                        .map(|(name, _)| name.clone())
+                        .ok_or_else(|| fault(e, "UnknownPathPin", name))
+                };
+                let pair_names = [resolve(a)?, resolve(b)?];
+                if pair_names[0] == pair_names[1] {
+                    return Err(fault(pair, "InvalidPartPath", "select two distinct pins"));
+                }
+                Ok(pair_names)
+            })
+        })
+        .transpose()?
+        .unwrap_or_default();
     Ok(Symbol {
+        paths,
+        part_kind,
         peripherals,
         ref_prefix,
         power_net,
@@ -393,11 +535,12 @@ fn placement_roles(
     input: Option<&Expr>,
     symbol: &Symbol,
     doc: &Document,
+    gives: bool,
 ) -> Result<Map<String, Set<RoleId>>> {
     let Some(input) = input else {
         return Ok(Map::new());
     };
-    let bindings = map(input, |e| roles(Some(e), doc))?;
+    let bindings = map(input, |e| roles(Some(e), doc, gives))?;
     let mut result = Map::new();
     for (key, set) in bindings {
         let pin = symbol
@@ -422,8 +565,8 @@ fn item(c: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Item> {
                 .get(&sym)
                 .ok_or_else(|| fault(e, "UnknownSymbol", &sym))?;
             Item::Place {
-                wants: placement_roles(c.take("wants"), def, doc)?,
-                gives: placement_roles(c.take("gives"), def, doc)?,
+                wants: placement_roles(c.take("wants"), def, doc, false)?,
+                gives: placement_roles(c.take("gives"), def, doc, true)?,
                 symbol: sym,
                 unit: c
                     .take("unit")
@@ -657,6 +800,14 @@ pub fn read(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Docume
                     }
                     rating = Some(Rating::VoltageRange(range));
                 }
+                let connection = connection_want(&mut c)?;
+                if connection.is_some() && rating.is_some() {
+                    return Err(fault(
+                        e,
+                        "InvalidRoleRating",
+                        "use separate wants for pin connectivity and electrical ratings",
+                    ));
+                }
                 let id = if let Some(key) = c.take("key") {
                     let text = string(key)?;
                     if text.is_empty()
@@ -675,6 +826,7 @@ pub fn read(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Docume
                     name.clone(),
                     id,
                     Role {
+                        connection,
                         kind,
                         rating,
                         prefer: c.take("prefer").map(|e| positive(e, &params)).transpose()?,
@@ -702,7 +854,12 @@ pub fn read(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Docume
                     }
                 };
                 for (alias, id) in library.role_names {
-                    let ty = library.roles[&id].clone();
+                    let mut ty = library.roles[&id].clone();
+                    if let Some(PartType::Symbol(through)) =
+                        ty.connection.as_mut().and_then(|w| w.through.as_mut())
+                    {
+                        *through = format!("{name}.{through}");
+                    }
                     register_role(&mut doc, format!("{name}.{alias}"), qualify(id), ty, e)?;
                 }
                 for (id, mut sym) in library.symbols {
@@ -755,6 +912,49 @@ pub fn read(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Docume
             }
         }
         c.end()?;
+    }
+    for (name, id) in &doc.role_names {
+        if let Some(PartType::Symbol(through)) =
+            doc.roles[id].connection.as_ref().and_then(|w| w.through.as_ref())
+        {
+            let span = body
+                .iter()
+                .find(|s| matches!(&s.kind, S::Assign { name: n, .. } if n == name))
+                .map(|s| s.span)
+                .unwrap_or_default();
+            let symbol = doc
+                .symbols
+                .get(through)
+                .ok_or_else(|| Fault::new("UnknownSymbol", span, through))?;
+            if let (Some(kind), Some([lo, _])) = (
+                symbol.part_kind.as_deref(),
+                doc.roles[id].connection.as_ref().and_then(|w| w.values),
+            ) && let Some(unit) = nominal_unit(kind)
+                && lo.unit != unit
+            {
+                return Err(Fault::new(
+                    "WrongPartValueDimension",
+                    span,
+                    format!("{through} requires {unit}"),
+                ));
+            }
+            let wanted = doc.roles[id].connection.as_ref().unwrap();
+            if let Some(path) = &wanted.path {
+                if !symbol.paths.contains_key(path) {
+                    return Err(Fault::new(
+                        "UnknownPartPath",
+                        span,
+                        format!("{through} has no path {path}"),
+                    ));
+                }
+            } else if !(symbol.paths.len() == 1 || symbol.paths.is_empty() && symbol.pins.len() == 2) {
+                return Err(Fault::new(
+                    "ExpectedPartPath",
+                    span,
+                    format!("{through} needs an explicit terminal path"),
+                ));
+            }
+        }
     }
     resolve_pin_aliases(&mut doc);
     Ok(doc)

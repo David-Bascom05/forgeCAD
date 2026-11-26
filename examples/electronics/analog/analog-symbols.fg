@@ -21,11 +21,11 @@ Amplifier = symbol(
     line(from: (0, -8), to: (0, -3.8))
   ]
 )
-Resistor = symbol(ref_prefix: "R", pins: {
+Resistor = symbol(part_kind: "resistor", ref_prefix: "R", pins: {
     A: pin(number: "1", kind: "passive", at: (-6, 0)),
     B: pin(number: "2", kind: "passive", at: (6, 0))
   }, graphics: [rect(from: (-3,-1), to: (3,1)), line(from: (-6,0),to:(-3,0)), line(from: (3,0),to:(6,0))])
-Capacitor = symbol(ref_prefix: "C", pins: {
+Capacitor = symbol(part_kind: "capacitor", ref_prefix: "C", pins: {
     P: pin(description: "Connect to the rail being bypassed.", number: "1", kind: "passive", at: (0, 4), gives: [bypass]),
     N: pin(description: "Connect to the local return.", number: "2", kind: "passive", at: (0, -4))
   }, graphics: [line(from:(0,4),to:(0,0.55)),line(from:(-2.5,0.55),to:(2.5,0.55)),

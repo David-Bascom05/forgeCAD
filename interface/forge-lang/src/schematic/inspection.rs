@@ -131,6 +131,33 @@ pub fn inspect_pin(c: &Circuit, pin: &str) -> Option<PinInspection> {
         .collect();
     for (need, roles) in [(true, &p.wants), (false, &p.gives)] {
         for role in roles {
+            if need && let Some(check) = c.connections.get(pin).and_then(|w| w.get(role)) {
+                let mut peers = Vec::new();
+                let state = if check.satisfied {
+                    Evidence::Verified
+                } else {
+                    Evidence::Invalid
+                };
+                for id in std::iter::once(&check.target).chain(&check.bridge_pins) {
+                    if c.terminals.contains_key(id) {
+                        peers.push((id.clone(), state));
+                        inspection.pins.insert(id.clone());
+                        if c.net_of[id] == c.net_of[pin] {
+                            targets.insert(id.clone());
+                        }
+                    }
+                }
+                if let [_, far] = check.bridge_pins.as_slice() {
+                    trace_paths(c, far, &Set::from([check.target.clone()]), &mut inspection, false);
+                }
+                inspection.checks.push(RoleCheck {
+                    role: role.clone(),
+                    need,
+                    measured: true,
+                    peers,
+                });
+                continue;
+            }
             let mut peers = Map::new();
             for i in c.relations.get(pin).into_iter().flatten() {
                 let link = &c.links[*i];
@@ -205,9 +232,20 @@ pub fn inspect_pin(c: &Circuit, pin: &str) -> Option<PinInspection> {
             });
         }
     }
+    trace_paths(c, pin, &targets, &mut inspection, true);
+    Some(inspection)
+}
+
+fn trace_paths(
+    c: &Circuit,
+    pin: &str,
+    targets: &Set<String>,
+    inspection: &mut PinInspection,
+    include_rails: bool,
+) {
     // Start on the selected side. A return still affects ERC evidence, but belongs to
     // a different net. Prefer visible wires before crossing a label or sheet boundary.
-    let scope = pin.rsplit_once('/')?.0;
+    let scope = pin.rsplit_once('/').unwrap().0;
     let mut parent = Map::from([(pin, pin)]);
     let mut local = VecDeque::from([pin]);
     let mut remote = VecDeque::new();
@@ -216,7 +254,7 @@ pub fn inspect_pin(c: &Circuit, pin: &str) -> Option<PinInspection> {
         on_sheet = false;
         remote.pop_front()
     }) {
-        if let Some(name) = c.terminals.get(node).and_then(|t| t.power_net.as_ref()) {
+        if include_rails && let Some(name) = c.terminals.get(node).and_then(|t| t.power_net.as_ref()) {
             inspection
                 .rails
                 .entry(name.clone())
@@ -234,9 +272,9 @@ pub fn inspect_pin(c: &Circuit, pin: &str) -> Option<PinInspection> {
             }
         }
     }
-    targets.extend(inspection.rails.values().cloned());
+    let rails = inspection.rails.values().filter(|_| include_rails);
     let mut edges = Set::new();
-    for target in &targets {
+    for target in targets.iter().chain(rails) {
         let mut here = target.as_str();
         while let Some(&prev) = parent.get(here) {
             if c.terminals.contains_key(here) {
@@ -254,5 +292,4 @@ pub fn inspect_pin(c: &Circuit, pin: &str) -> Option<PinInspection> {
             inspection.wires.insert(id.clone());
         }
     }
-    Some(inspection)
 }

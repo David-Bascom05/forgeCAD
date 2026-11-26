@@ -108,6 +108,8 @@ impl Editor {
             if let Some(sym) = self.doc.symbols.get(&self.subject) {
                 self.form.name = self.subject.clone();
                 self.form.ref_prefix = sym.ref_prefix.clone();
+                self.form.part_kind = sym.part_kind.clone().unwrap_or_default();
+                self.form.part_paths = sym.paths.clone().into_iter().collect();
                 self.form.fields = sym.fields.clone().into_iter().collect();
                 self.form.datasheet = sym.datasheet.clone().unwrap_or_default();
                 if let Some(g) = self.graphic.and_then(|i| sym.graphics.get(i)) {
@@ -352,11 +354,12 @@ impl Editor {
                         ui.label(name).on_hover_text(self.doc.roles[id].kind.word());
                         for (direction, set) in [("Wants", &mut f.wants), ("Provides", &mut f.gives)] {
                             let mut on = set.contains(name);
-                            let r = ui.add(egui::Checkbox::without_text(&mut on));
+                            let allowed = direction == "Wants" || self.doc.roles[id].connection.is_none();
+                            let r = ui.add_enabled(allowed, egui::Checkbox::without_text(&mut on));
                             r.widget_info(|| {
                                 egui::WidgetInfo::selected(
                                     egui::Role::CheckBox,
-                                    true,
+                                    allowed,
                                     on,
                                     format!("{direction} {name}"),
                                 )
@@ -392,9 +395,34 @@ impl Editor {
         let mut ops = vec![];
         if self.library()
             && let Some(symbol) = self.doc.symbols.get(id)
-            && symbol.ref_prefix != f.ref_prefix
         {
-            ops.push(arg(id, "ref_prefix", quote(&f.ref_prefix)));
+            if symbol.ref_prefix != f.ref_prefix {
+                ops.push(arg(id, "ref_prefix", quote(&f.ref_prefix)));
+            }
+            if symbol.part_kind.as_deref().unwrap_or("") != f.part_kind {
+                ops.push(arg(
+                    id,
+                    "part_kind",
+                    quote(if f.part_kind.is_empty() {
+                        "generic"
+                    } else {
+                        &f.part_kind
+                    }),
+                ));
+            }
+        }
+        if self.library()
+            && let Some(symbol) = self.doc.symbols.get(id)
+            && !symbol.paths.iter().eq(f.part_paths.iter().map(|(k, v)| (k, v)))
+        {
+            let mut pairs = Vec::new();
+            for (name, [a, b]) in &f.part_paths {
+                if !identifier(name) || !symbol.pins.contains_key(a) || !symbol.pins.contains_key(b) {
+                    return Err("Give each path a name and select its entry and exit pins.".into());
+                }
+                pairs.push(format!("{name}: [{a}, {b}]"));
+            }
+            ops.push(arg(id, "paths", format!("{{{}}}", pairs.join(", "))));
         }
         if let Some(row) = self.doc.rows.iter().find(|r| &r.id == id) {
             match &row.item {
@@ -490,6 +518,7 @@ impl Editor {
             Tool::Library => format!("library(file: {})", quote(&f.text)),
             Tool::Role => {
                 let rating = match f.role_kind.as_str() {
+                    _ if !f.target_pin.trim().is_empty() => String::new(),
                     "power" if !f.voltage_min.is_empty() || !f.voltage_max.is_empty() => {
                         if f.voltage_min.trim().is_empty()
                             || f.voltage_max.trim().is_empty()
@@ -504,7 +533,33 @@ impl Editor {
                     "power" | "reference" => format!(", voltage_mv: {}", f.value),
                     _ => String::new(),
                 };
-                format!("role(kind: {}{rating})", quote(&f.role_kind))
+                let mut connection = String::new();
+                if !f.target_pin.trim().is_empty() {
+                    let target = f.target_pin.trim();
+                    if !target.split('.').all(identifier) {
+                        return Err("Enter a pin name or component.pin.".into());
+                    }
+                    connection = format!(", connect_to: {target}");
+                    if let Some(part) = &f.through {
+                        let encoded = match part {
+                            sch::PartType::Symbol(name) => name.clone(),
+                            sch::PartType::Kind(name) => quote(name.trim()),
+                        };
+                        connection.push_str(&format!(", through: {encoded}"));
+                        if !f.required_path.trim().is_empty() {
+                            connection.push_str(&format!(", part_path: {}", quote(f.required_path.trim())));
+                        }
+                        match (f.part_value.trim(), f.part_value_max.trim()) {
+                            ("", "") => {}
+                            ("", _) => return Err("Enter the minimum component value.".into()),
+                            (v, "") => connection.push_str(&format!(", value: {}", quote(v))),
+                            (lo, hi) => {
+                                connection.push_str(&format!(", value_range: [{}, {}]", quote(lo), quote(hi)))
+                            }
+                        }
+                    }
+                }
+                format!("role(kind: {}{rating}{connection})", quote(&f.role_kind))
             }
             Tool::Bus => {
                 if f.wants.is_empty() {
@@ -706,6 +761,33 @@ impl Editor {
                         let r = text_control(ui, "Reference prefix", &mut self.form.ref_prefix)
                             .on_hover_text("Letters used for new references, e.g. R1, C1 or TP1.");
                         places.push(("electronics:ref-prefix".into(), r.rect));
+                        text_control(ui, "Part type", &mut self.form.part_kind)
+                            .on_hover_text("Shared component type, such as mosfet, capacitor or relay.");
+                        ui.collapsing("Terminal paths", |ui| {
+                            let pins: Vec<_> = self.doc.symbols[&self.subject].pins.keys().cloned().collect();
+                            let mut remove = None;
+                            for (i, (name, [entry, exit])) in self.form.part_paths.iter_mut().enumerate() {
+                                ui.push_id(i, |ui| {
+                                    field(ui, "Path name", name);
+                                    choice(ui, "Entry pin", entry, pins.clone());
+                                    choice(ui, "Exit pin", exit, pins.clone());
+                                    if ui.button("Remove path").clicked() {
+                                        remove = Some(i);
+                                    }
+                                });
+                            }
+                            if let Some(i) = remove {
+                                self.form.part_paths.remove(i);
+                            }
+                            if ui
+                                .add_enabled(pins.len() >= 2, egui::Button::new("Add path"))
+                                .clicked()
+                            {
+                                self.form
+                                    .part_paths
+                                    .push((String::new(), [pins[0].clone(), pins[1].clone()]));
+                            }
+                        });
                     }
                     let part = self
                         .doc
@@ -975,16 +1057,77 @@ impl Editor {
                             .map(str::to_string)
                             .to_vec(),
                         );
-                        match self.form.role_kind.as_str() {
-                            "bypass" => field(ui, "Capacitance · nF (optional)", &mut self.form.value),
-                            "power" | "reference" => {
-                                field(ui, "Voltage · mV (optional)", &mut self.form.value);
-                                if self.form.role_kind == "power" {
-                                    field(ui, "Minimum (V)", &mut self.form.voltage_min);
-                                    field(ui, "Maximum (V)", &mut self.form.voltage_max);
-                                }
+                        text_control(ui, "Target pin", &mut self.form.target_pin).on_hover_text(
+                            "Optional. Enter OUT on the same component, or J1.P1 on this sheet.",
+                        );
+                        if !self.form.target_pin.trim().is_empty() {
+                            property_row(ui, "Through part", |ui, caption| {
+                                let selected = &mut self.form.through;
+                                ComboBox::from_id_salt("through-part")
+                                    .width(ui.available_width())
+                                    .selected_text(match selected.as_ref() {
+                                        None => "Direct connection",
+                                        Some(sch::PartType::Kind(name)) if name.is_empty() => {
+                                            "Custom part type"
+                                        }
+                                        Some(part) => part.name(),
+                                    })
+                                    .show_ui(ui, |ui| {
+                                        ui.selectable_value(selected, None, "Direct connection");
+                                        ui.selectable_value(
+                                            selected,
+                                            Some(sch::PartType::Kind(String::new())),
+                                            "Custom part type…",
+                                        );
+                                        let kinds: std::collections::BTreeSet<_> = self
+                                            .doc
+                                            .symbols
+                                            .values()
+                                            .filter_map(|s| s.part_kind.as_deref())
+                                            .collect();
+                                        for kind in kinds {
+                                            ui.selectable_value(
+                                                selected,
+                                                Some(sch::PartType::Kind(kind.into())),
+                                                format!("Any {kind}"),
+                                            );
+                                        }
+                                        for (name, _) in self
+                                            .doc
+                                            .symbols
+                                            .iter()
+                                            .filter(|(_, s)| s.pins.len() == 2 || !s.paths.is_empty())
+                                        {
+                                            ui.selectable_value(
+                                                selected,
+                                                Some(sch::PartType::Symbol(name.clone())),
+                                                name,
+                                            );
+                                        }
+                                    })
+                                    .response
+                                    .labelled_by(caption.id);
+                            });
+                            if let Some(sch::PartType::Kind(kind)) = &mut self.form.through {
+                                field(ui, "Part type", kind);
                             }
-                            _ => {}
+                            if self.form.through.is_some() {
+                                text_control(ui,"Terminal path",&mut self.form.required_path).on_hover_text("Optional for parts with one path. Enter the path name from the symbol.");
+                                field(ui, "Value or minimum", &mut self.form.part_value);
+                                field(ui, "Maximum (optional)", &mut self.form.part_value_max);
+                            }
+                        } else {
+                            match self.form.role_kind.as_str() {
+                                "bypass" => field(ui, "Capacitance · nF (optional)", &mut self.form.value),
+                                "power" | "reference" => {
+                                    field(ui, "Voltage · mV (optional)", &mut self.form.value);
+                                    if self.form.role_kind == "power" {
+                                        field(ui, "Minimum (V)", &mut self.form.voltage_min);
+                                        field(ui, "Maximum (V)", &mut self.form.voltage_max);
+                                    }
+                                }
+                                _ => {}
+                            }
                         }
                     }
                     Bus => {

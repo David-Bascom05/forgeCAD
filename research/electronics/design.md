@@ -21,6 +21,8 @@ Determine how ForgeCAD can infer **which components serve which pins or function
 
 Reusable connector symbols default to passive contacts. The schematic placement owns the board-specific pinout and the external circuit's wants and provides. For example, J1 pin 1 can bring 3.3 V into a board while pin 1 on another copy carries a signal. A library may declare a stable interface for a purpose-built connector. Electrical ratings of the hardware describe the contact's limits and are separate from the external supply available on a placement.
 
+A pin can require a direct connection to a specific pin or one hop through a fitted component of any declared part type or a particular library symbol. Library symbols can define ordered terminal paths, for example drain to source on a MOSFET or one contact pair on a relay. Optional nominal bounds constrain the component’s value. The schematic checks these wants against the partitioned nets on each occurrence and retains the witnessing terminals for inspection. [Connection wants](../../docs/schematic.md#pin-to-pin-connection-wants)
+
 Selecting a pin exposes what its library definition wants and gives. Both may apply to one pin. A regulator output gives power and can want a local output capacitor. A passive terminal acquires a job when it fulfills a particular want. **Add bypass capacitor** should create the occurrence, connect supply and return, and record which pin or pin group it serves in one undoable source edit. The designer can make the same connection freehand and inspect suggested associations.
 
 In the current backend, a want or give names a **declared role type**. For example, a regulator pin can give a 3.3 V rail and want a 100 nF bypass at the same time. Roles carry a stable identity, a checked kind and optional typed ratings. A fulfillment must match the same role identity at both endpoints. Libraries share an identity explicitly. CLI, canvas and MCP consumers read the same structured role objects, including units. The [native schematic reference](../../docs/schematic.md) gives the declarations and wire format.
@@ -78,7 +80,7 @@ The [readability example](shots/native-readability.png) places the note `scope_p
 
 The left tree follows sheet occurrences, including repeated instances. The right dock provides part and power search and the selected object's properties. Selecting a pin opens its checklist and highlights the supply or signal side of its typed relationships, including a connected rail marker. Return connectivity contributes to verification independently of the highlight. The signal overlay reuses resolved wire directions as the display clock advances. Arrows and dots can be enabled independently. Decorative sheet geometry shares the print-space readability checks and remains outside the net graph.
 
-[Pin inspection](shots/native-pin-inspection.png) · [Parts browser](shots/native-parts.png) · [Signal animation](shots/signal-directions.gif) · [Drawing tools and grid](shots/native-drawing-grid.png)
+[MOSFET and capacitor connection checks](shots/native-pin-connection.png) · [Pin inspection](shots/native-pin-inspection.png) · [Parts browser](shots/native-parts.png) · [Signal animation](shots/signal-directions.gif) · [Drawing tools and grid](shots/native-drawing-grid.png)
 
 [Editing a pin name and direction](shots/native-pin-edit.png) · [Reference prefix in symbol properties](shots/native-reference-prefix.png)
 
