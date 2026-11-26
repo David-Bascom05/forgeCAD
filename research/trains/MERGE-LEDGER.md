@@ -4,7 +4,7 @@ Kept by TRAIN-CONDUCTOR. One row per branch. The status values are: queued, pre-
 Rules: each item needs a GREEN pre-verify on the train's main, made with tools/preverify ≥13d78f06 or proven clean by a record check or my own test build. UI changes need UX-LEAD's OK. Branches with the flagged history land squashed.
 This branch (coord/trains) is never merged into main.
 
-Main: 3d718a28016a1dd9f67b3f1d8b825686210999fd (electronics design, #71), following dfe0c096fcc8bc2b9e7de804aade9c7037d6d014 (platform CI, #73), following 292e2ec01fd6128a94d97ea78af24b5bf3c77659 (Train 13, #69), on 5a3f4875b4d57f23f8e1f653b4f43c84b5c01031 (train CI, #66). Train 11 landed at 568d5f497c3c343b8fafeebe6f1b50e13d9c56e3 (#65). Before it: 247a26942e5cc29a2ddc6b80ae43d6fe1751f45a (train 10, #64), d6820393 (train 9, #62), 5767cdb4 (gate-memfns alone, #63), 10d87778 (train 8, #61).
+Main: d991b4c4d5f59c07fafb1e0b3d226f37bb44702b (schematic backend, #72), following 3d718a28016a1dd9f67b3f1d8b825686210999fd (electronics design, #71), following dfe0c096fcc8bc2b9e7de804aade9c7037d6d014 (platform CI, #73), following 292e2ec01fd6128a94d97ea78af24b5bf3c77659 (Train 13, #69), on 5a3f4875b4d57f23f8e1f653b4f43c84b5c01031 (train CI, #66). Train 11 landed at 568d5f497c3c343b8fafeebe6f1b50e13d9c56e3 (#65). Before it: 247a26942e5cc29a2ddc6b80ae43d6fe1751f45a (train 10, #64), d6820393 (train 9, #62), 5767cdb4 (gate-memfns alone, #63), 10d87778 (train 8, #61).
 Train 12 ([#67](https://github.com/David-Bascom05/forgeCAD/pull/67)) has fixes for the client review findings and is being revalidated against current main. Standalone Train 13 ([#69](https://github.com/David-Bascom05/forgeCAD/pull/69)) merged after all 82 PR checks, independent review and the full Haas differential passed. [#68](https://github.com/David-Bascom05/forgeCAD/pull/68) was closed as superseded.
 UI OKs now come from the coordinator (UX-LEAD wound down), judged against docs/ux/STANDARD.md.
 
@@ -47,8 +47,8 @@ UI OKs now come from the coordinator (UX-LEAD wound down), judged against docs/u
 | cam/adaptive-ties, cam/adaptive-pass-start | CAM-CORE | edc2f3d84783654d4fbf4b44dd4406f8e5d4eddb, 9cbee5ea9baf4f2134af50cb5268a2ebbce7e2fb | in train 12 | |
 | hosted/server-hardening, client-native, client-web | HOSTED | 38663ef76a0aaf7ca41a67ab002f13249bdcfd0b, f8c9038c486b0e0b85c78e59b97099c241e0220e, 5aa6912b9f2674a401866defaaeffe28cf0ca6e6 | in train 12 | client UI OK given |
 | import/speed-ks | IMPORT-SPEED | 934102fa6d797045e1adbf8374bdc080d937e2dd | pre-verify | After kernel-stress. Verify evidence against landed main. |
-| import/faces | IMPORT-SPEED | ba36e31bc052a47b03736e92e799c04fedf6e8ad | held | Needs independent review and the rigor package on the final candidate. |
-| import/mesh-floor | IMPORT-SPEED | 0dbe360a754be73f528cb7f783e5a61d14c91fcb | held | Needs independent review and the rigor package on the final candidate. |
+| import/faces | IMPORT-SPEED | 2ff3be7370a8c381acd96348a1378eed9d435546 | held | Independent review complete. Full import corpus, mesh oracles and clean-main integration remain. |
+| import/mesh-floor | IMPORT-SPEED | fcd66de27676e23cf04e7e8c2671a0bd74895cfe | held | Independent review complete. Full import corpus, mesh oracles and clean-main integration remain. |
 | fix/nurbs-stall, fix/far-line-torus | FALLBACK | — | held | after kernel-stress |
 
 ## FLAT-SITES work, pushed by the conductor (FLAT-SITES had wound down and could not push), 2026-11-25 09:15Z
@@ -274,3 +274,12 @@ The two IMPORT-SPEED review PRs completed all checks against their work-branch p
 [#72 merged](https://github.com/David-Bascom05/forgeCAD/pull/72) at `d991b4c4d5f59c07fafb1e0b3d226f37bb44702b`. All 71 checks and nine applicable workflows passed. Exact independent review cleared head `14c6f9d0f429d63563dbfc7f3c2c1d17ee699dad`. Verified the actual merge parents (main `3d718a28016a1dd9f67b3f1d8b825686210999fd` and that head) and tree `b35b5c26dd11b0fc359f8ab7fa0e4bed5642cfe8` against tested candidate `2176ba6b46b65ec55483b18d25f36dee03b0d5f3`. Eight main push workflows registered. [#74](https://github.com/David-Bascom05/forgeCAD/pull/74) now targets main and still requires coordinator UI sign-off.
 
 [#67 native gate](https://github.com/David-Bascom05/forgeCAD/actions/runs/45799020121/job/139840147401) passed on the prior candidate with the isolation case at 3.24 s. [#70 browser diagnosis](https://github.com/David-Bascom05/forgeCAD/pull/70#issuecomment-7191245846) reproduced the missed frame on main and identified a 461 ms median software GPU completion time. The smaller ray batch did not improve redraw and reduced search progress, so it was discarded. [#19](https://github.com/David-Bascom05/forgeCAD/pull/19#issuecomment-7191290336) repaired the duplicate font proof declaration and preallocated the Boolean coedge vector after the first allocation repairs recovered three of the four over-band rows.
+
+Fresh candidates on schematic main, with exact independent review requested on each head. [Paired Callgrind profiles for #67, #70 and #19](https://github.com/David-Bascom05/forgeCAD/actions/runs/45815533985) run alongside protected CI.
+
+| PR | Head | Candidate | Decision |
+|---|---|---|---|
+| #67 | `268ff18db8c22477b5c65f7c986d0915ef5c1b0b` | `53586931f1bd38da56d051d427c83a05be728005` | Revalidate all gates before squash. |
+| #70 | `e9fab8b252614b32abb159e9b644a9410d2e1e35` | `a8e26e7ecbe6e1d61b06a1c9ad338eb34b3c393c` | CLI registry conflict resolved with all 23 unique tool entries retained. |
+| #19 | `724ac7e580df7f9a531078eb5a163af2e58ddcaf` | `b37c61194434afbe7b2345b56b8c08a73f0d8d2f` | Await exact perf, proofs, CI and coordinator diagnostic approval. |
+| #74 | `bc281011da10750582d1d35dbb9fe94dacef4d35` | `f5775cf5a26960766ed27ee63df4d20535e4f40c` | Draft editor now targets main. Await CI and coordinator UI approval. |
