@@ -1,0 +1,53 @@
+name: Train 12 GPU comparison
+on:
+  push:
+    branches: [diagnostics/train12-gpu]
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    env:
+      CARGO_PROFILE_RELEASE_DEBUG: 0
+      CARGO_INCREMENTAL: 0
+    steps:
+      - name: Software Vulkan
+        run: sudo apt-get update -q && sudo apt-get install -y -q mesa-vulkan-drivers
+      - uses: actions/checkout@v4
+        with:
+          ref: 310dd0e623e52336d25f3621deb38eb83456af9c
+          path: main
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 3e457796cbbb6ecea46ee36ed2d1b375ce5ab7c9
+          path: candidate
+          persist-credentials: false
+      - name: Compare the affected GPU tests on one runner
+        shell: bash
+        run: |
+          export XDG_RUNTIME_DIR="$RUNNER_TEMP/runtime"
+          install -d -m 700 "$XDG_RUNTIME_DIR"
+          mkdir -p "$RUNNER_TEMP/gpu-results"
+          lscpu > "$RUNNER_TEMP/gpu-results/runner.txt"
+          dpkg-query -W mesa-vulkan-drivers >> "$RUNNER_TEMP/gpu-results/runner.txt"
+          for rev in main candidate; do
+            (cd "$rev/interface/forge-render" && cargo test --release --locked --no-run --test bendsim_env --test environments --test camsim_ui) \
+              2>&1 | tee "$RUNNER_TEMP/gpu-results/$rev-build.log"
+          done
+          failed=0
+          for mode in parallel serial; do
+            options=()
+            if [[ "$mode" == serial ]]; then options=(--test-threads=1); fi
+            for rev in main candidate; do
+              (cd "$rev/interface/forge-render" && cargo test --release --locked --no-fail-fast --test bendsim_env --test environments --test camsim_ui -- "${options[@]}") \
+                2>&1 | tee "$RUNNER_TEMP/gpu-results/$rev-$mode.log" || failed=1
+            done
+          done
+          exit "$failed"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: train12-gpu-comparison
+          path: ${{ runner.temp }}/gpu-results/
