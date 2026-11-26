@@ -149,6 +149,23 @@ impl Editor {
                     };
                     self.form.wants = names(&p.wants);
                     self.form.gives = names(&p.gives);
+                    self.form.pads = if p.pads == [p.number.clone()] {
+                        String::new()
+                    } else {
+                        p.pads.join(", ")
+                    };
+                    self.form.pin_functions = p
+                        .functions
+                        .iter()
+                        .map(|(k, f)| {
+                            (
+                                k.clone(),
+                                f.electrical.word().to_owned(),
+                                names(&f.wants),
+                                names(&f.gives),
+                            )
+                        })
+                        .collect();
                 }
             }
         } else if let Some(row) = self.doc.rows.iter().find(|r| r.id == self.selected) {
@@ -165,6 +182,28 @@ impl Editor {
                     value_offset,
                     ..
                 } => {
+                    if let Item::Place {
+                        reference,
+                        functions,
+                        symbol,
+                        ..
+                    } = &row.item
+                    {
+                        self.form.name = self
+                            .doc
+                            .reference(
+                                &format!("{}/{}", self.subject, row.id),
+                                reference.as_ref().unwrap_or(&row.id),
+                            )
+                            .to_owned();
+                        self.form.ref_locked = self
+                            .doc
+                            .annotations
+                            .get(&format!("{}/{}", self.subject, row.id))
+                            .is_some_and(|a| a.locked);
+                        self.form.selected_functions = functions.clone();
+                        self.form.replacement = symbol.clone();
+                    }
                     self.form.ref_offset = *ref_offset;
                     self.form.value_offset = *value_offset;
                     self.form.value = value.clone();
@@ -249,8 +288,28 @@ impl Editor {
             .filter(|p| p.angle == deg.rem_euclid(360.))
             .and_then(|_| original("angle"))
             .unwrap_or_else(|| format!("{deg}deg"));
+        let mut optional = String::new();
+        if !f.pads.trim().is_empty() {
+            let pads = f.pads.split(',').map(|p| quote(p.trim())).collect::<Vec<_>>();
+            optional.push_str(&format!(", pads: [{}]", pads.join(", ")));
+        }
+        if !f.pin_functions.is_empty() {
+            let mut fs = Vec::new();
+            for (name, kind, wants, gives) in &f.pin_functions {
+                if !identifier(name) {
+                    return Err("Enter a unique function name.".into());
+                }
+                fs.push(format!(
+                    "{name}: function(kind: {}, wants: [{}], gives: [{}])",
+                    quote(kind),
+                    wants.join(", "),
+                    gives.join(", ")
+                ));
+            }
+            optional.push_str(&format!(", functions: {{{}}}", fs.join(", ")));
+        }
         let body = format!(
-            "pin(number: {}, kind: {}, at: {position}, unit: {}, angle: {direction}, wants: [{}], gives: [{}], description: {}{alias_arg})",
+            "pin(number: {}, kind: {}, at: {position}, unit: {}, angle: {direction}, wants: [{}], gives: [{}], description: {}{alias_arg}{optional})",
             quote(&f.number),
             quote(&f.electrical),
             quote(&f.unit),
@@ -376,6 +435,63 @@ impl Editor {
                     }
                 });
         }
+        ui.collapsing("Physical pads", |ui| {
+            text_control(ui, "Pad numbers", &mut f.pads)
+                .on_hover_text("Leave empty to use the pin number. Separate multiple pads with commas.");
+        });
+        ui.collapsing("Alternate functions", |ui| {
+            let mut remove = None;
+            for (i, (name, kind, wants, gives)) in f.pin_functions.iter_mut().enumerate() {
+                ui.push_id(i, |ui| {
+                    field(ui, "Name", name);
+                    choice(
+                        ui,
+                        "Electrical type",
+                        kind,
+                        [
+                            "passive",
+                            "input",
+                            "output",
+                            "bidirectional",
+                            "power_in",
+                            "power_out",
+                            "open_drain",
+                            "no_connect",
+                        ]
+                        .map(str::to_owned)
+                        .to_vec(),
+                    );
+                    for (role, id) in &self.doc.role_names {
+                        ui.horizontal(|ui| {
+                            ui.label(role);
+                            for (label, items) in [("Wants", &mut *wants), ("Provides", &mut *gives)] {
+                                if label == "Provides" && self.doc.roles[id].connection.is_some() {
+                                    continue;
+                                }
+                                let mut on = items.contains(role);
+                                if ui.checkbox(&mut on, label).changed() {
+                                    if on {
+                                        items.push(role.clone())
+                                    } else {
+                                        items.retain(|k| k != role)
+                                    }
+                                }
+                            }
+                        });
+                    }
+                    if ui.small_button("Remove function").clicked() {
+                        remove = Some(i);
+                    }
+                });
+            }
+            if let Some(i) = remove {
+                f.pin_functions.remove(i);
+            }
+            if ui.small_button("Add function").clicked() {
+                f.pin_functions
+                    .push((String::new(), "input".into(), vec![], vec![]));
+            }
+        });
         ui.collapsing("Sub parts", |ui| {
             field(ui, "Sub part", &mut f.unit);
             ui.weak("For a dual op-amp, A and B are separate sections of the same chip.");
@@ -490,13 +606,68 @@ impl Editor {
         {
             ops.push(arg(id, "value", quote(&f.text)));
         }
-        if !self.form.name.is_empty() && self.form.name != *id {
+        let placement = self.doc.rows.iter().find(|r| &r.id == id).and_then(|r| {
+            if let Item::Place {
+                reference, functions, ..
+            } = &r.item
+            {
+                Some((reference, functions))
+            } else {
+                None
+            }
+        });
+        if let Some((reference, functions)) = placement {
+            let path = format!("{}/{}", self.subject, id);
+            if let Some(a) = self.doc.annotations.get(&path) {
+                if a.reference != f.name {
+                    ops.push(arg(&a.id, "reference", quote(&f.name)));
+                }
+                if a.locked != f.ref_locked {
+                    ops.push(arg(&a.id, "locked", f.ref_locked.to_string()));
+                }
+            } else if f.ref_locked
+                || (reference.as_ref().unwrap_or(id) != &f.name
+                    && self
+                        .circuit
+                        .occurrences
+                        .values()
+                        .filter(|s| s.as_str() == self.sheet())
+                        .count()
+                        > 1)
+            {
+                ops.push(Op::AddFeature {
+                    before: None,
+                    text: format!(
+                        "{} = annotation(occurrence: {}, reference: {}, locked: {})",
+                        self.fresh("refdes"),
+                        quote(&path),
+                        quote(&f.name),
+                        f.ref_locked
+                    ),
+                });
+            } else if reference.as_ref().unwrap_or(id) != &f.name {
+                ops.push(arg(id, "reference", quote(&f.name)));
+            }
+            if functions != &f.selected_functions {
+                let map = f
+                    .selected_functions
+                    .iter()
+                    .map(|(k, v)| format!("{k}: {v}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                ops.push(arg(id, "functions", format!("{{{map}}}")));
+            }
+        } else if !self.form.name.is_empty() && self.form.name != *id {
             ops.push(Op::Rename {
                 from: id.clone(),
                 to: self.form.name.clone(),
             });
         }
-        let next_id = self.form.name.clone();
+        let next_id = if placement.is_some() {
+            id.clone()
+        } else {
+            self.form.name.clone()
+        };
         self.apply(ops)?;
         if self.library() {
             self.subject = next_id;
@@ -506,11 +677,84 @@ impl Editor {
         self.refresh();
         Ok(())
     }
+    fn variant_picker(&mut self, ui: &mut Ui) {
+        if !self.doc.variants.is_empty() {
+            ComboBox::from_id_salt("assembly-variant")
+                .selected_text(if self.variant.is_empty() {
+                    "Base assembly"
+                } else {
+                    &self.variant
+                })
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.variant, String::new(), "Base assembly");
+                    for name in self.doc.variants.keys() {
+                        ui.selectable_value(&mut self.variant, name.clone(), name);
+                    }
+                });
+        }
+    }
+    fn set_rule(&mut self, kind: &str, priority: &str) -> Result<()> {
+        for stmt in syntax::parse(&self.src).map_err(|e| e.text())? {
+            if let StmtKind::Assign { name, value } = &stmt.kind
+                && let ExprKind::Call(head, args) = &value.kind
+                && matches!(&head.kind,ExprKind::Name(n) if n=="erc_rule")
+                && args.iter().any(|a| {
+                    a.name.as_ref().is_some_and(|(k, _)| k == "rule")
+                        && matches!(&a.value.kind,ExprKind::Str(v) if v==kind)
+                })
+            {
+                return self.apply(vec![arg(name, "severity", quote(priority))]);
+            }
+        }
+        self.add(
+            &self.fresh("policy"),
+            format!("erc_rule(rule: {}, severity: {})", quote(kind), quote(priority)),
+        )
+    }
+    pub(super) fn create_child_library(&mut self) -> Result<()> {
+        use std::io::Write;
+        let path = self.path.as_deref().ok_or("Save the parent library first.")?;
+        let base = Path::new(path)
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
+        let file = Path::new(&self.form.text);
+        if file.extension().and_then(|x| x.to_str()) != Some("fg") || file.is_absolute() {
+            return Err("Enter a relative .fg filename inside this library’s directory.".into());
+        }
+        let target = base.join(file);
+        let parent = forge_dirs::fs::canonicalize(target.parent().ok_or("Missing parent directory")?)
+            .map_err(|e| e.to_string())?;
+        if !parent.starts_with(forge_dirs::fs::canonicalize(base).map_err(|e| e.to_string())?) {
+            return Err("Choose a file inside this library’s directory.".into());
+        }
+        let target = parent.join(file.file_name().ok_or("Enter a filename.")?);
+        let mut handle = forge_dirs::fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&target)
+            .map_err(|e| e.to_string())?;
+        let result = handle.write_all(b"symbol_library\n").map_err(|e| e.to_string());
+        drop(handle);
+        if let Err(err) = result.and_then(|_| self.create_record()) {
+            let _ = forge_dirs::fs::remove_file(target);
+            return Err(err);
+        }
+        Ok(())
+    }
     pub(super) fn create_record(&mut self) -> Result<()> {
         let f = &self.form;
         let name = f.name.clone();
         let body = match self.tool {
-            Tool::Sheet => format!("sheet(title: {})", quote(&f.text)),
+            Tool::Sheet => {
+                let template = self
+                    .doc
+                    .templates
+                    .get(self.sheet())
+                    .map(|t| format!(", template: {t}"))
+                    .unwrap_or_default();
+                format!("sheet(title: {}{template})", quote(&f.text))
+            }
             Tool::NewSymbol => format!(
                 "symbol(ref_prefix: {}, pins: {{}}, graphics: [])",
                 quote(&f.ref_prefix)
@@ -587,12 +831,19 @@ impl Editor {
         self.start(Tool::Select);
         Ok(())
     }
-    fn follow_finding(&mut self, id: &str) {
+    pub(super) fn follow_finding(&mut self, id: &str) {
         let Some((scope, object)) = id.rsplit_once('/') else {
             return;
         };
         let (record, field) = object.split_once(':').unwrap_or((object, ""));
         let (name, pin) = record.split_once('.').unwrap_or((record, ""));
+        if self.library()
+            && let Some((lib, _)) = scope.rsplit_once('.')
+            && let Some(Some(path)) = self.doc.libraries.get(lib)
+        {
+            self.open_file = Some(path.to_string_lossy().into_owned());
+            return;
+        }
         if self.library() && self.doc.symbols.contains_key(scope) {
             self.subject = scope.into();
             self.unit = name.into();
@@ -669,26 +920,221 @@ impl Editor {
             self.tool = Checks;
         }
         match self.tool {
+            Block => {
+                ui.label(format!("{} objects selected", self.form.block.len()));
+                ui.weak(self.form.block.iter().cloned().collect::<Vec<_>>().join(", "));
+                let previous = (self.form.offset, self.form.copying);
+                checkbox(ui, "Duplicate", &mut self.form.copying);
+                for (label, n) in ["Offset X", "Offset Y"].into_iter().zip(&mut self.form.offset) {
+                    property_row(ui, label, |ui, _| {
+                        ui.add(egui::DragValue::new(n).suffix(" mm").speed(self.pitch))
+                    });
+                }
+                if previous != (self.form.offset, self.form.copying) {
+                    self.form.block_preview = None;
+                }
+                if ui.button("Review block edit").clicked() {
+                    match sch::block_plan(
+                        &self.src,
+                        &self.doc,
+                        &self.circuit,
+                        &self.subject,
+                        &self.form.block,
+                        self.form.offset,
+                        self.form.copying,
+                    ) {
+                        Ok(plan) => self.form.block_preview = Some(plan),
+                        Err(e) => self.message = e.message,
+                    }
+                }
+                if let Some(plan) = &self.form.block_preview {
+                    ui.label(format!(
+                        "{} source edits · {} external connections",
+                        plan.ops.len(),
+                        plan.boundary.len()
+                    ));
+                    for edge in &plan.boundary {
+                        ui.label(edge);
+                    }
+                    if ui.button("Apply block edit").clicked() {
+                        let plan = self.form.block_preview.take().unwrap();
+                        result = self.apply(plan.ops);
+                        if result.is_ok() {
+                            self.start(Select);
+                        }
+                    }
+                }
+                ui.collapsing("Bulk component field", |ui| {
+                    field(ui, "Field", &mut self.form.group);
+                    field(ui, "Value", &mut self.form.value);
+                    if ui.button("Set on selected components").clicked() {
+                        result = (|| {
+                            if !identifier(&self.form.group) {
+                                return Err("Enter a field identifier.".into());
+                            }
+                            let mut ops = vec![];
+                            for r in &self.doc.rows {
+                                if let Item::Place { fields, .. } = &r.item
+                                    && self.form.block.contains(&r.id)
+                                {
+                                    let mut merged = fields.clone();
+                                    merged.insert(self.form.group.clone(), self.form.value.clone());
+                                    ops.push(arg(
+                                        &r.id,
+                                        "fields",
+                                        field_text(&merged.into_iter().collect::<Vec<_>>())?,
+                                    ));
+                                }
+                            }
+                            if ops.is_empty() {
+                                return Err("Select components first.".into());
+                            }
+                            self.apply(ops)
+                        })();
+                    }
+                });
+            }
             Checks => {
-                ui.label(format!("{} findings", self.circuit.issues.len()));
-                let issues = self
-                    .circuit
+                self.variant_picker(ui);
+                if let Some(v) = self.doc.variants.get(&self.variant)
+                    && self
+                        .variant_checks
+                        .as_ref()
+                        .is_none_or(|(name, _)| name != &self.variant)
+                {
+                    match Circuit::build_fitted(&self.doc, v) {
+                        Ok(c) => self.variant_checks = Some((self.variant.clone(), c)),
+                        Err(e) => self.message = e.message,
+                    }
+                }
+                let circuit = self
+                    .variant_checks
+                    .as_ref()
+                    .filter(|(name, _)| name == &self.variant)
+                    .map_or(&self.circuit, |(_, c)| c);
+                ui.label(format!("{} findings", circuit.issues.len()));
+                if let Some(review) = &self.revision_review {
+                    ui.collapsing("Library update review", |ui| {
+                        if review.is_empty() {
+                            ui.label("Electrical behavior unchanged");
+                        } else {
+                            ui.monospace(review);
+                        }
+                    });
+                }
+                let issues = circuit
                     .issues
                     .iter()
-                    .map(|i| (i.severity(), i.message.clone(), i.objects.clone()))
+                    .map(|i| {
+                        (
+                            i.kind,
+                            i.priority(&self.doc).to_owned(),
+                            i.status(),
+                            i.waiver(&self.doc).map(str::to_owned),
+                            i.message.clone(),
+                            i.objects.clone(),
+                        )
+                    })
                     .collect::<Vec<_>>();
-                for (severity, msg, ids) in issues {
+                for (kind, severity, status, waived, msg, ids) in issues {
                     ui.separator();
-                    ui.colored_label(if severity == "error" { t.error } else { t.warn }, msg);
-                    for id in ids {
-                        if ui.link(&id).clicked() {
-                            self.follow_finding(&id);
+                    ui.colored_label(
+                        if severity == "error" && waived.is_none() {
+                            t.error
+                        } else {
+                            t.warn
+                        },
+                        msg,
+                    );
+                    ui.weak(format!("{kind} · {severity} · {status}"));
+                    for id in &ids {
+                        if ui.link(id).clicked() {
+                            self.follow_finding(id);
                         }
+                    }
+                    if let Some(reason) = waived {
+                        ui.label(format!("Waived · {reason}"));
+                    } else if !self.library() {
+                        ui.push_id((kind, &ids), |ui| {
+                            ui.collapsing("Review finding", |ui| {
+                                let mut priority = severity.clone();
+                                choice(
+                                    ui,
+                                    "Rule severity",
+                                    &mut priority,
+                                    ["info", "warning", "error"].map(str::to_owned).to_vec(),
+                                );
+                                if priority != severity {
+                                    result = self.set_rule(kind, &priority);
+                                }
+                                field(ui, "Waiver reason", &mut self.form.waiver_reason);
+                                if ui
+                                    .add_enabled(
+                                        !self.form.waiver_reason.trim().is_empty(),
+                                        egui::Button::new("Waive this finding"),
+                                    )
+                                    .clicked()
+                                {
+                                    let objects = ids.iter().map(|v| quote(v)).collect::<Vec<_>>().join(", ");
+                                    result = self.add(
+                                        &self.fresh("waiver"),
+                                        format!(
+                                            "waiver(rule: {}, objects: [{objects}], reason: {})",
+                                            quote(kind),
+                                            quote(&self.form.waiver_reason)
+                                        ),
+                                    );
+                                }
+                            })
+                        });
                     }
                 }
             }
             Bom => {
-                let rows = sch::bom(&self.doc, &self.circuit);
+                self.variant_picker(ui);
+                if !self.library() {
+                    ui.collapsing("New assembly variant", |ui| {
+                        field(ui, "Variant name", &mut self.form.name);
+                        ui.label("Omit from this assembly");
+                        for (scope, sheet) in &self.circuit.occurrences {
+                            for row in self.doc.rows.iter().filter(|r| &r.sheet == sheet) {
+                                let Item::Place { symbol, .. } = &row.item else {
+                                    continue;
+                                };
+                                if self.doc.symbols[symbol].power_net.is_some() {
+                                    continue;
+                                }
+                                let id = format!("{scope}/{}", row.id);
+                                let mut omit = self.form.block.contains(&id);
+                                if ui.checkbox(&mut omit, &id).changed() {
+                                    if omit {
+                                        self.form.block.insert(id);
+                                    } else {
+                                        self.form.block.remove(&id);
+                                    }
+                                }
+                            }
+                        }
+                        if ui.button("Create assembly variant").clicked() {
+                            let name = self.form.name.clone();
+                            let omitted = self
+                                .form
+                                .block
+                                .iter()
+                                .map(|s| quote(s))
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            result = self.add(&name, format!("variant(omit: [{omitted}])"));
+                            if result.is_ok() {
+                                self.variant = name;
+                            }
+                        }
+                    });
+                }
+                let rows = self.doc.variants.get(&self.variant).map_or_else(
+                    || sch::bom(&self.doc, &self.circuit),
+                    |v| sch::bom_for(&self.doc, &self.circuit, v),
+                );
                 ui.label(format!("{} purchasing lines", rows.len()));
                 if ui.button("Copy CSV").clicked() {
                     ui.ctx().copy_text(sch::bom_csv(&rows));
@@ -761,8 +1207,47 @@ impl Editor {
                         let r = text_control(ui, "Reference prefix", &mut self.form.ref_prefix)
                             .on_hover_text("Letters used for new references, e.g. R1, C1 or TP1.");
                         places.push(("electronics:ref-prefix".into(), r.rect));
-                        text_control(ui, "Part type", &mut self.form.part_kind)
-                            .on_hover_text("Shared component type, such as mosfet, capacitor or relay.");
+                        let known: std::collections::BTreeSet<_> = sch::PART_KINDS
+                            .iter()
+                            .copied()
+                            .chain(self.doc.symbols.values().filter_map(|s| s.part_kind.as_deref()))
+                            .collect();
+                        property_row(ui, "Part type", |ui, caption| {
+                            ComboBox::from_id_salt("symbol-part-type")
+                                .selected_text(if self.form.part_kind.is_empty() {
+                                    "Generic"
+                                } else {
+                                    &self.form.part_kind
+                                })
+                                .width(ui.available_width())
+                                .show_ui(ui, |ui| {
+                                    ui.add(
+                                        egui::TextEdit::singleline(&mut self.form.kind_search)
+                                            .hint_text("Find or create type"),
+                                    );
+                                    let search = self.form.kind_search.trim();
+                                    ui.selectable_value(&mut self.form.part_kind, String::new(), "Generic");
+                                    for kind in known
+                                        .iter()
+                                        .filter(|k| k.to_lowercase().contains(&search.to_lowercase()))
+                                    {
+                                        ui.selectable_value(
+                                            &mut self.form.part_kind,
+                                            kind.to_string(),
+                                            *kind,
+                                        );
+                                    }
+                                    if !search.is_empty() && !known.contains(search) {
+                                        ui.selectable_value(
+                                            &mut self.form.part_kind,
+                                            search.to_owned(),
+                                            format!("Create {search}"),
+                                        );
+                                    }
+                                })
+                                .response
+                                .labelled_by(caption.id);
+                        });
                         ui.collapsing("Terminal paths", |ui| {
                             let pins: Vec<_> = self.doc.symbols[&self.subject].pins.keys().cloned().collect();
                             let mut remove = None;
@@ -802,6 +1287,74 @@ impl Editor {
                     } else if self.library() || matches!(part, Some(Item::Place { .. })) {
                         if let Some(Item::Place { symbol, .. }) = part {
                             property_row(ui, "Symbol", |ui, _| ui.label(symbol));
+                            ui.collapsing("Replace symbol", |ui| {
+                                let previous = self.form.replacement.clone();
+                                choice(
+                                    ui,
+                                    "Replacement",
+                                    &mut self.form.replacement,
+                                    self.doc
+                                        .symbols
+                                        .iter()
+                                        .filter(|(_, s)| s.power_net.is_none())
+                                        .map(|(id, _)| id.clone())
+                                        .collect(),
+                                );
+                                if self.form.replacement != previous {
+                                    self.form.replacement_review = None;
+                                }
+                                if ui.button("Preview replacement").clicked() {
+                                    let op = arg(&self.selected, "symbol", self.form.replacement.clone());
+                                    match edit::apply(&self.src, &op)
+                                        .map_err(|e| e.text())
+                                        .and_then(|next| {
+                                            let (d, c) = compile(&next, self.path.as_deref())?;
+                                            let changes =
+                                                sch::electrical_diff((&self.doc, &self.circuit), (&d, &c))
+                                                    .map_err(|e| e.message)?;
+                                            Ok(if let forge_agent::json::Json::Arr(items) = changes {
+                                                review_text(&items)
+                                            } else {
+                                                String::new()
+                                            })
+                                        }) {
+                                        Ok(review) => self.form.replacement_review = Some(review),
+                                        Err(err) => self.message = err,
+                                    }
+                                }
+                                if let Some(review) = &self.form.replacement_review {
+                                    ui.label(if review.is_empty() {
+                                        "Electrical behavior unchanged"
+                                    } else {
+                                        review
+                                    });
+                                }
+                            });
+                            let def = &self.doc.symbols[symbol];
+                            for (pin, p) in def.pins.iter().filter(|(_, p)| !p.functions.is_empty()) {
+                                let mut function =
+                                    self.form.selected_functions.get(pin).cloned().unwrap_or_default();
+                                property_row(ui, &format!("{pin} function"), |ui, _| {
+                                    ComboBox::from_id_salt(("pin-mode", pin))
+                                        .selected_text(if function.is_empty() {
+                                            "Default"
+                                        } else {
+                                            &function
+                                        })
+                                        .show_ui(ui, |ui| {
+                                            ui.selectable_value(&mut function, String::new(), "Default");
+                                            for k in p.functions.keys() {
+                                                ui.selectable_value(&mut function, k.clone(), k);
+                                            }
+                                        });
+                                });
+                                if function.is_empty() {
+                                    self.form.selected_functions.remove(pin);
+                                } else {
+                                    self.form.selected_functions.insert(pin.clone(), function);
+                                }
+                            }
+                            checkbox(ui, "Lock reference", &mut self.form.ref_locked);
                             field(ui, "Value", &mut self.form.value);
                             ui.collapsing("Field positions", |ui| {
                                 for (label, offset) in [
@@ -1084,6 +1637,7 @@ impl Editor {
                                             .symbols
                                             .values()
                                             .filter_map(|s| s.part_kind.as_deref())
+                                            .chain(sch::PART_KINDS.iter().copied())
                                             .collect();
                                         for kind in kinds {
                                             ui.selectable_value(
@@ -1135,6 +1689,45 @@ impl Editor {
                     }
                     _ => {}
                 }
+                if self.tool == Library
+                    && self.doc.libraries.contains_key(&self.form.name)
+                    && !self.form.name.contains('.')
+                {
+                    let alias = self.form.name.clone();
+                    let path = self.form.text.clone();
+                    if ui.button("Preview library update").clicked() {
+                        result = (|| {
+                            let src = edit::apply(&self.src, &arg(&alias, "file", quote(&path)))
+                                .map_err(|e| e.text())?;
+                            let (d, c) = compile(&src, self.path.as_deref())?;
+                            let diff = sch::electrical_diff((&self.doc, &self.circuit), (&d, &c))
+                                .map_err(|e| e.message)?;
+                            if let forge_agent::json::Json::Arr(changes) = diff {
+                                self.form.library_review =
+                                    Some((alias.clone(), path.clone(), review_text(&changes)));
+                            }
+                            Ok(())
+                        })();
+                    }
+                    if let Some((last, file, review)) = &self.form.library_review
+                        && last == &alias
+                        && file == &path
+                    {
+                        ui.label(if review.is_empty() {
+                            "Electrical behavior unchanged"
+                        } else {
+                            review
+                        });
+                        if ui.button("Apply library update").clicked() {
+                            result = self.apply(vec![arg(&alias, "file", quote(&path))]);
+                        }
+                    }
+                } else if self.tool == Library
+                    && self.library()
+                    && ui.button("Create and link child library").clicked()
+                {
+                    result = self.create_child_library();
+                }
                 if ui
                     .button(if self.tool == Library {
                         "Link library"
@@ -1147,6 +1740,12 @@ impl Editor {
                 }
             }
             _ => {}
+        }
+        if self.form.replacement_review.is_some() && ui.button("Apply symbol replacement").clicked() {
+            result = self.apply(vec![arg(&self.selected, "symbol", self.form.replacement.clone())]);
+            if result.is_ok() {
+                self.inspect();
+            }
         }
         if !matches!(self.tool, Select | Properties | Bom | Checks) {
             ui.add_space(10.);

@@ -474,3 +474,51 @@ fn inspect_wiring_through_a_typed_component() {
         .unwrap();
     }
 }
+
+#[test]
+fn browse_nested_library_and_place_the_leaf_symbol() {
+    let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/electronics/load-switch");
+    let Ok(mut h) = Headless::new((1600., 1000.), 1.) else {
+        eprintln!("No headless GPU adapter");
+        return;
+    };
+    let dir = std::env::temp_dir().join(format!("fg-nested-window-{}", std::process::id()));
+    for file in [
+        "switch-card.fg",
+        "components/catalog.fg",
+        "components/discrete/catalog.fg",
+        "components/discrete/switches.fg",
+    ] {
+        let target = dir.join(file);
+        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+        std::fs::copy(base.join(file), target).unwrap();
+    }
+    let sheet = dir.join("switch-card.fg");
+    h.gui.open(sheet.to_str().unwrap());
+    h.step();
+    assert!(h.click("electronics:sheet:overview/left"));
+    h.step();
+    assert!(h.click("electronics:dock:Parts"));
+    h.step();
+    assert!(h.click("electronics:part:components.discrete.switches.PowerFET"));
+    h.step();
+    if let Some(out) = std::env::var_os("FORGE_UI_SHOTS") {
+        std::fs::create_dir_all(&out).unwrap();
+        let left = h.placed("electronics:anchor:J1.IN").unwrap().center();
+        let right = h.placed("electronics:anchor:Q1.source").unwrap().center();
+        h.move_to((left.x + right.x) / 2., (left.y + right.y) / 2.);
+        h.step();
+        h.wheel(800.);
+        for _ in 0..24 {
+            h.step();
+        }
+        std::fs::write(Path::new(&out).join("nested-library.png"), h.png().unwrap()).unwrap();
+    }
+    h.click_at(750., 560.);
+    h.step();
+    h.gui.fg_save();
+    let src = std::fs::read_to_string(&sheet).unwrap();
+    let (_, c) = forge_lang::schematic::compile(&src, Some(&dir), None).unwrap();
+    assert!(c.terminals.contains_key("overview/left/Q2.drain"));
+    std::fs::remove_dir_all(dir).unwrap();
+}

@@ -88,7 +88,7 @@ impl Editor {
                 for (id, s) in &self.doc.symbols {
                     let Some(net) = &s.power_net else { continue };
                     if id
-                        .split_once('.')
+                        .rsplit_once('.')
                         .is_some_and(|(alias, _)| self.power_aliases.iter().any(|a| a == alias))
                     {
                         continue;
@@ -130,47 +130,60 @@ impl Editor {
             }
         }
     }
-    fn parts_ui(&mut self, ui: &mut Ui, t: &Theme, places: &mut Vec<(String, Rect)>) {
-        ui.add(
-            egui::TextEdit::singleline(&mut self.catalog_search)
-                .hint_text("Search symbols, pins or part numbers"),
-        );
+    pub(super) fn filter_catalog(&mut self) {
         let words: Vec<_> = self
             .catalog_search
             .split_whitespace()
             .map(str::to_lowercase)
             .collect();
-        let mut library = None;
-        let mut selected = None;
+        let mut tree = LibraryBranch::default();
         for (name, terms) in &self.catalog {
-            if !words.iter().all(|s| terms.contains(s)) {
-                continue;
-            }
-            let (lib, short) = name.rsplit_once('.').unwrap_or(("Document", name));
-            if library != Some(lib) {
-                ui.add_space(6.);
-                ui.strong(lib);
-                library = Some(lib);
-            }
-            let symbol = &self.doc.symbols[name];
-            let pins = format!("{} pins", symbol.pins.len());
-            if row(
-                places,
-                ui,
-                t,
-                short,
-                symbol.fields.get("MPN").unwrap_or(&pins),
-                self.tool == Tool::Place && self.symbol == *name,
-                "schchip",
-            ) {
-                selected = Some(name.clone());
-            }
-            if let Some((key, _)) = places.last_mut() {
-                *key = format!("electronics:part:{name}");
+            if words.iter().all(|w| terms.contains(w)) {
+                let (namespace, _) = name.rsplit_once('.').unwrap_or(("", name));
+                tree.at(namespace).symbols.push(name.clone());
             }
         }
-        if library.is_none() {
+        self.catalog_tree = tree;
+    }
+    fn parts_ui(&mut self, ui: &mut Ui, t: &Theme, places: &mut Vec<(String, Rect)>) {
+        if ui
+            .add(
+                egui::TextEdit::singleline(&mut self.catalog_search)
+                    .hint_text("Search symbols, pins or part numbers"),
+            )
+            .changed()
+        {
+            self.filter_catalog();
+        }
+        let tree = &self.catalog_tree;
+        let mut selected = None;
+        if tree.symbols.is_empty() && tree.children.is_empty() {
             ui.weak("No matching symbols");
+        } else {
+            tree.show(
+                ui,
+                !self.catalog_search.trim().is_empty(),
+                self.catalog.len() < 100,
+                &mut |ui, name| {
+                    let short = name.rsplit('.').next().unwrap_or(name);
+                    let symbol = &self.doc.symbols[name];
+                    let pins = format!("{} pins", symbol.pins.len());
+                    if row(
+                        places,
+                        ui,
+                        t,
+                        short,
+                        symbol.fields.get("MPN").unwrap_or(&pins),
+                        self.tool == Tool::Place && self.symbol == name,
+                        "schchip",
+                    ) {
+                        selected = Some(name.to_owned());
+                    }
+                    if let Some((key, _)) = places.last_mut() {
+                        *key = format!("electronics:part:{name}");
+                    }
+                },
+            );
         }
         if let Some(name) = selected {
             self.symbol = name;
@@ -232,11 +245,14 @@ impl Editor {
         if ui.button("Link library…").clicked() {
             self.start(Tool::Library);
         }
-        for path in self.dependencies() {
-            if let Some(file) = path.file_name()
-                && ui.link(format!("Open {}", file.to_string_lossy())).clicked()
+        for (name, path) in &self.doc.libraries {
+            if let Some(path) = path
+                && ui
+                    .link(format!("Open {name}"))
+                    .on_hover_text(path.display().to_string())
+                    .clicked()
             {
-                self.open_file = Some(path.to_string_lossy().into());
+                self.open_file = Some(path.to_string_lossy().into_owned());
             }
         }
     }
@@ -287,6 +303,35 @@ fn symbol_preview(ui: &mut Ui, t: &Theme, page: &forge_draw::Page) {
                 egui::FontId::proportional((text.h as f32 * scale).max(8.)),
                 t.ink,
             );
+        }
+    }
+}
+
+#[derive(Default)]
+pub(super) struct LibraryBranch {
+    children: BTreeMap<String, LibraryBranch>,
+    symbols: Vec<String>,
+}
+impl LibraryBranch {
+    fn at(&mut self, path: &str) -> &mut Self {
+        let mut node = self;
+        for name in path.split('.').filter(|s| !s.is_empty()) {
+            node = node.children.entry(name.to_owned()).or_default();
+        }
+        node
+    }
+    fn show(&self, ui: &mut Ui, searching: bool, open: bool, row: &mut impl FnMut(&mut Ui, &str)) {
+        for name in &self.symbols {
+            row(ui, name);
+        }
+        for (name, child) in &self.children {
+            let header = egui::CollapsingHeader::new(name.as_str()).default_open(open);
+            let header = if searching {
+                header.open(Some(true))
+            } else {
+                header
+            };
+            header.show(ui, |ui| child.show(ui, searching, open, row));
         }
     }
 }

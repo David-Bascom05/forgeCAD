@@ -5,6 +5,7 @@ impl Editor {
     pub(super) fn prompt(&self) -> &str {
         use Tool::*;
         match self.tool {
+            Block => "Click objects to add or remove them from the block",
             Select | Properties => "Select a symbol, pin or connection",
             Place | Gate | Subsheet => "Choose the part, then click its position",
             Wire if self.first.is_some() => "Click a bend or a destination pin · Esc cancels",
@@ -253,6 +254,64 @@ impl Editor {
         }
         if resp.dragged_by(egui::PointerButton::Middle) {
             self.origin += ui.input(|i| i.pointer.delta());
+        }
+        if self.tool == Tool::Select && !self.library() {
+            if resp.drag_started_by(egui::PointerButton::Primary)
+                && let Some(p) = ui.input(|i| i.pointer.press_origin())
+                && let Some(wire) = self.picked(p)
+                && let Some((a, b, via)) = self.circuit.wires.get(&format!("{}/{}", self.subject, wire))
+            {
+                let route: Vec<_> = std::iter::once(&self.circuit.locations[a])
+                    .chain(via)
+                    .chain(std::iter::once(&self.circuit.locations[b]))
+                    .collect();
+                let bend = via.iter().position(|q| self.screen(*q).distance(p) < 8.);
+                if let Some(i) = bend {
+                    self.wire_drag = Some((wire, i, self.world(p), true));
+                } else if let Some((i, _)) =
+                    route.windows(2).enumerate().min_by(|(_, a), (_, b)| {
+                        segment_distance(self.screen(*a[0]), self.screen(*a[1]), p)
+                            .total_cmp(&segment_distance(self.screen(*b[0]), self.screen(*b[1]), p))
+                    })
+                {
+                    self.wire_drag = Some((wire, i, self.world(p), false));
+                }
+            }
+            if let Some((wire, index, start, bend)) = self.wire_drag.clone()
+                && let Some(cursor) = resp.interact_pointer_pos()
+            {
+                let (a, b, via) = &self.circuit.wires[&format!("{}/{}", self.subject, wire)];
+                let mut route: Vec<_> = std::iter::once(self.circuit.locations[a])
+                    .chain(via.iter().copied())
+                    .chain(std::iter::once(self.circuit.locations[b]))
+                    .collect();
+                let q = self.world(cursor);
+                if bend {
+                    route[index + 1] = q;
+                } else {
+                    let delta = [q[0] - start[0], q[1] - start[1]];
+                    move_segment(&mut route, index, delta);
+                }
+                painter.add(Shape::line(
+                    route.iter().map(|p| self.screen(*p)).collect(),
+                    Stroke::new(2., t.focus),
+                ));
+                if resp.drag_stopped_by(egui::PointerButton::Primary) {
+                    self.wire_drag = None;
+                    if q != start {
+                        route.dedup();
+                        let via = route[1..route.len().saturating_sub(1).max(1)]
+                            .iter()
+                            .copied()
+                            .map(coord)
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        if let Err(e) = self.apply(vec![arg(&wire, "via", format!("[{via}]"))]) {
+                            self.message = e;
+                        }
+                    }
+                }
+            }
         }
         if self.grid {
             let mut spacing = self.zoom * self.pitch as f32;
@@ -763,6 +822,12 @@ impl Editor {
     }
     pub(super) fn click(&mut self, p: Point, near: Option<&str>, picked: Option<&str>) -> Result<()> {
         use Tool::*;
+        if self.library()
+            && self.subject.is_empty()
+            && matches!(self.tool, Pin | Text | Line | Circle | Rect | Arc | Move)
+        {
+            return Err("Create or select a local symbol first.".into());
+        }
         let at = coord(p);
         let sheet = self.sheet().to_owned();
         let need = || near.ok_or("Choose a pin, port or junction.");
@@ -780,6 +845,15 @@ impl Editor {
             return Err("This point already has a connection.".into());
         }
         let (prefix, body) = match self.tool {
+            Block => {
+                if let Some(id) = near.map(|p| p.split('.').next().unwrap_or(p)).or(picked) {
+                    if !self.form.block.insert(id.into()) {
+                        self.form.block.remove(id);
+                    }
+                    self.form.block_preview = None;
+                }
+                return Ok(());
+            }
             Select | Properties => {
                 if self.library() {
                     self.pin = near.unwrap_or("").into();
@@ -858,7 +932,45 @@ impl Editor {
                         };
                         self.apply(annotation::geometry_args(&self.selected, shape, &points, radius))?;
                     } else {
-                        self.apply(vec![arg(self.geometric_selection(), "at", at)])?;
+                        if let Some((a, b, via)) = self
+                            .circuit
+                            .wires
+                            .get(&format!("{}/{}", self.subject, self.selected))
+                        {
+                            let mut route: Vec<_> = std::iter::once(self.circuit.locations[a])
+                                .chain(via.iter().copied())
+                                .chain(std::iter::once(self.circuit.locations[b]))
+                                .collect();
+                            let index = route
+                                .windows(2)
+                                .enumerate()
+                                .min_by(|(_, a), (_, b)| {
+                                    let distance = |part: &[Point]| {
+                                        segment_distance(
+                                            self.screen(part[0]),
+                                            self.screen(part[1]),
+                                            self.screen(p),
+                                        )
+                                    };
+                                    distance(a).total_cmp(&distance(b))
+                                })
+                                .map(|(i, _)| i)
+                                .unwrap();
+                            let delta = [
+                                p[0] - (route[index][0] + route[index + 1][0]) / 2.,
+                                p[1] - (route[index][1] + route[index + 1][1]) / 2.,
+                            ];
+                            move_segment(&mut route, index, delta);
+                            let via = route[1..route.len() - 1]
+                                .iter()
+                                .copied()
+                                .map(coord)
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            self.apply(vec![arg(&self.selected, "via", format!("[{via}]"))])?;
+                        } else {
+                            self.apply(vec![arg(self.geometric_selection(), "at", at)])?;
+                        }
                     }
                 }
                 self.start(Select);
@@ -1067,6 +1179,21 @@ impl Editor {
     }
 }
 
+/// Keep terminal anchors fixed and move interior corners with the segment.
+fn move_segment(route: &mut Vec<Point>, index: usize, delta: Point) {
+    let [a, b] = [route[index], route[index + 1]];
+    let offset = if a[0] == b[0] {
+        [delta[0], 0.]
+    } else if a[1] == b[1] {
+        [0., delta[1]]
+    } else {
+        delta
+    };
+    let moved = [a, b].map(|p| [p[0] + offset[0], p[1] + offset[1]]);
+    let first = if index == 0 { 1 } else { index };
+    let end = (index + 2).min(route.len() - 1);
+    route.splice(first..end, moved);
+}
 fn segment_distance(a: Pos2, b: Pos2, p: Pos2) -> f32 {
     let direction = b - a;
     let fraction = ((p - a).dot(direction) / direction.length_sq().max(f32::EPSILON)).clamp(0., 1.);
@@ -1140,6 +1267,14 @@ fn paint_signal(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn segment_drags_keep_pin_anchors_and_slide_existing_bends() {
+        let mut straight = vec![[0., 0.], [10., 0.]];
+        move_segment(&mut straight, 0, [2., 3.]);
+        assert_eq!(straight, [[0., 0.], [0., 3.], [10., 3.], [10., 0.]]);
+        move_segment(&mut straight, 1, [1., 2.]);
+        assert_eq!(straight, [[0., 0.], [0., 5.], [10., 5.], [10., 0.]]);
+    }
     #[test]
     fn metric_and_mil_snap_agree_with_the_origin_and_off_grid_anchors() {
         let mut e = Editor::open(

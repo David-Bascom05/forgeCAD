@@ -5,6 +5,10 @@ impl Tool {
     pub(in crate::shell) fn shortcut(self) -> (egui::Key, &'static str) {
         use Tool::*;
         match self {
+            Block => (
+                egui::Key::F4,
+                "Select a block, review its boundary and move or duplicate it.",
+            ),
             Select => (
                 egui::Key::Escape,
                 "Return to selection and cancel the current tool.",
@@ -81,6 +85,7 @@ impl Tool {
     pub(super) fn button(self) -> (&'static str, &'static str) {
         use Tool::*;
         match self {
+            Block => ("Edit Block", "select"),
             Select => ("Select", "select"),
             Power => ("Power", "schpower"),
             Place => ("Place Symbol", "schchip"),
@@ -146,12 +151,13 @@ impl Editor {
             (0, false) => vec![
                 group("Place", &[Place, Wire, Power], &[Junction, Label, Port]),
                 group("Connections", &[Intent], &[NoConnect, Bus, Flow]),
-                group("Modify", &[Move], &[Rotate, Mirror, Delete]),
+                group("Modify", &[Move, Block], &[Rotate, Mirror, Delete]),
                 group("Sheets", &[Sheet], &[Subsheet, Gate]),
                 group("Library", &[Library], &[]),
             ],
             (0, true) => vec![
                 group("Symbol", &[NewSymbol, Pin], &[Role]),
+                group("Libraries", &[Library], &[]),
                 group("Graphics", &[Line, Rect, Circle], &[Arc, Text]),
                 group("Modify", &[Properties], &[Move, Delete]),
             ],
@@ -172,9 +178,34 @@ impl Editor {
     fn browser(&mut self, ui: &mut Ui, t: &Theme, places: &mut Vec<(String, Rect)>) {
         let section = |ui: &mut Ui, s: &str| ux::Sheet::new(t, ux::System::of_doc("mm"), "").section(ui, s);
         if self.library() {
+            section(ui, "Libraries");
+            for (alias, path) in &self.doc.libraries {
+                let depth = alias.matches('.').count();
+                ui.horizontal(|ui| {
+                    ui.add_space(12. * depth as f32);
+                    let label = alias.rsplit('.').next().unwrap_or(alias);
+                    if let Some(path) = path {
+                        if ui.link(label).on_hover_text(path.display().to_string()).clicked() {
+                            self.open_file = Some(path.to_string_lossy().into_owned());
+                        }
+                    } else {
+                        ui.weak(label).on_hover_text("Bundled library");
+                    }
+                });
+            }
+            if ui.button("Add child library…").clicked() {
+                self.start(Tool::Library);
+            }
             section(ui, "Symbols");
             ui.add(egui::TextEdit::singleline(&mut self.search).hint_text("Find symbol"));
-            for id in self.doc.symbols.keys().cloned().collect::<Vec<_>>() {
+            for id in self
+                .doc
+                .symbols
+                .keys()
+                .filter(|id| !id.contains('.'))
+                .cloned()
+                .collect::<Vec<_>>()
+            {
                 if id.to_lowercase().contains(&self.search.to_lowercase())
                     && row(places, ui, t, &id, "symbol", self.subject == id, "schchip")
                 {
@@ -260,6 +291,84 @@ impl Editor {
             }
         } else {
             section(ui, "Sheet hierarchy");
+            if ui
+                .add(egui::TextEdit::singleline(&mut self.search).hint_text("Find across sheets"))
+                .changed()
+            {
+                self.hits = sch::search(&self.doc, &self.circuit, &self.search);
+            }
+            if !self.search.trim().is_empty() {
+                let mut target = None;
+                for h in &self.hits {
+                    let label = h
+                        .zone
+                        .as_ref()
+                        .map_or_else(|| h.id.clone(), |z| format!("{} · {z}", h.id));
+                    if ui.link(label).on_hover_text(&h.label).clicked() {
+                        target = Some(h.id.clone());
+                    }
+                }
+                if self.hits.is_empty() {
+                    ui.weak("No matches");
+                }
+                if let Some(id) = target {
+                    if self.circuit.occurrences.contains_key(&id) {
+                        self.subject = id;
+                        self.selected.clear();
+                        self.pin.clear();
+                        self.refresh();
+                    } else {
+                        self.follow_finding(&id);
+                    }
+                }
+                ui.separator();
+            }
+            ui.collapsing("Sheet settings", |ui| {
+                let id = self.sheet().to_owned();
+                let title = self.doc.sheets.get(&id).cloned().unwrap_or_default();
+                ui.label(&title);
+                let current = self.doc.templates.get(&id).cloned().unwrap_or_default();
+                egui::ComboBox::from_id_salt("sheet-template")
+                    .selected_text(if current.is_empty() {
+                        "Choose template"
+                    } else {
+                        &current
+                    })
+                    .show_ui(ui, |ui| {
+                        for name in self
+                            .doc
+                            .symbols
+                            .iter()
+                            .filter(|(_, s)| s.pins.is_empty() && !s.graphics.is_empty())
+                            .map(|(k, _)| k.clone())
+                            .collect::<Vec<_>>()
+                        {
+                            if ui.selectable_label(name == current, &name).clicked()
+                                && let Err(e) = self.apply(vec![arg(&id, "template", name)])
+                            {
+                                self.message = e;
+                            }
+                        }
+                    });
+                if ui.button("Reannotate project").on_hover_text("Assign unique references across all sheet occurrences. Locked references keep their numbers.").clicked() {
+                    match sch::project_annotation(&self.src,&self.doc,&self.circuit).map_err(|e|e.message).and_then(|ops|self.apply(ops)){
+                        Ok(())=>self.inspect(), Err(err)=>self.message=err
+                    }
+                }
+                if ui.button("Export project PDF").clicked() {
+                    let result = self
+                        .path
+                        .as_ref()
+                        .ok_or_else(|| "Save the schematic first.".to_owned())
+                        .and_then(|file| {
+                            let out = Path::new(file).with_extension("pdf");
+                            let data = sch::sheet_pdf(&self.doc, &self.circuit).map_err(|e| e.message)?;
+                            forge_dirs::fs::write(&out, data).map_err(|e| e.to_string())?;
+                            Ok(format!("Exported {}", out.display()))
+                        });
+                    self.message = result.unwrap_or_else(|e| e);
+                }
+            });
             // Iterate subtrees explicitly: lexicographic path ordering can interleave roots
             // such as a and a_2 with descendants of a.
             let mut children: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
@@ -418,6 +527,7 @@ impl Shell {
                     Tool::Subsheet,
                     Tool::Gate,
                     Tool::Library,
+                    Tool::Block,
                     Tool::Checks,
                     Tool::Bom,
                     Tool::Intent,

@@ -26,6 +26,7 @@ type Result<T> = std::result::Result<T, String>;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tool {
     Select,
+    Block,
     Place,
     Power,
     Wire,
@@ -73,7 +74,20 @@ pub fn tab_name(library: bool, tab: usize) -> &'static str {
 
 #[derive(Default)]
 struct Inputs {
+    block: std::collections::BTreeSet<String>,
+    offset: Point,
+    copying: bool,
+    block_preview: Option<sch::BlockPlan>,
+    selected_functions: BTreeMap<String, String>,
+    pin_functions: Vec<(String, String, Vec<String>, Vec<String>)>,
+    pads: String,
+    waiver_reason: String,
+    kind_search: String,
+    replacement: String,
+    replacement_review: Option<String>,
+    library_review: Option<(String, String, String)>,
     ref_prefix: String,
+    ref_locked: bool,
     /// Pin and role direction when assigning from the checklist.
     checklist_pin: Option<(String, bool)>,
     description: String,
@@ -161,10 +175,16 @@ pub struct Editor {
     search: String,
     dock: Dock,
     catalog_search: String,
+    hits: Vec<sch::SearchHit>,
+    variant: String,
+    variant_checks: Option<(String, Circuit)>,
+    revision_review: Option<String>,
+    wire_drag: Option<(String, usize, Point, bool)>,
     preview: Option<(String, String, forge_draw::Page)>,
     power_search: String,
     power_aliases: Vec<String>,
     catalog: Vec<(String, String)>,
+    catalog_tree: palette::LibraryBranch,
     collapsed: std::collections::BTreeSet<String>,
     focus_pin: Option<PinFocus>,
     markers: SignalMarkers,
@@ -184,11 +204,47 @@ pub struct Editor {
     pub open_file: Option<String>,
     pub attach_requested: bool,
 }
+fn review_text(changes: &[forge_agent::json::Json]) -> String {
+    use forge_agent::json::Json;
+    changes
+        .iter()
+        .filter_map(|change| {
+            let id = change.get("id")?.str()?;
+            let before = change.get("before")?;
+            let after = change.get("after")?;
+            let fields = match (before, after) {
+                (Json::Null, _) => "added".to_owned(),
+                (_, Json::Null) => "removed".to_owned(),
+                (Json::Obj(a), Json::Obj(b)) => a
+                    .iter()
+                    .chain(b)
+                    .map(|(k, _)| k.as_str())
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .into_iter()
+                    .filter(|k| before.get(k) != after.get(k))
+                    .map(|k| match (before.get(k), after.get(k)) {
+                        (Some(Json::Str(x)), Some(Json::Str(y))) => format!("{k} {x} → {y}"),
+                        _ => k.to_owned(),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                _ => "changed".to_owned(),
+            };
+            Some(format!("{id} · {fields}"))
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn compile(src: &str, path: Option<&str>) -> Result<(Document, Circuit)> {
     let dir = path
         .and_then(|s| Path::new(s).parent())
         .filter(|p| !p.as_os_str().is_empty());
-    sch::compile(src, dir, None).map_err(|e| format!("{} · {}", e.kind, e.message))
+    let root = path.and_then(crate::gui::gui_docs::root_of);
+    sch::compile(src, dir, root.as_deref()).map_err(|e| match e.file {
+        Some(file) => format!("{file} · {} · {}", e.kind, e.message),
+        None => format!("{} · {}", e.kind, e.message),
+    })
 }
 fn arg(id: &str, name: &str, value: String) -> Op {
     Op::SetArg {
@@ -210,25 +266,6 @@ fn source_arg<'a>(statements: &'a [syntax::Stmt], id: &str, field: &str) -> Opti
             None
         }
     })
-}
-fn power_aliases(src: &str) -> Vec<String> {
-    let tree = syntax::parse(src).unwrap_or_default();
-    tree.iter()
-        .filter_map(|s| {
-            let StmtKind::Assign { name, value } = &s.kind else {
-                return None;
-            };
-            let ExprKind::Call(function, args) = &value.kind else {
-                return None;
-            };
-            let is_power = matches!(&function.kind, ExprKind::Name(n) if n == "library")
-                && args.iter().any(|arg| {
-                    arg.name.as_ref().is_some_and(|(k, _)| k == "file")
-                        && matches!(&arg.value.kind, ExprKind::Str(path) if path == "forge:power")
-                });
-            is_power.then(|| name.clone())
-        })
-        .collect()
 }
 fn pin_degrees(input: &str) -> Option<f64> {
     let input = input.trim();
@@ -289,10 +326,16 @@ impl Editor {
             search: String::new(),
             dock: Dock::Properties,
             catalog_search: String::new(),
+            hits: vec![],
+            variant: String::new(),
+            variant_checks: None,
+            revision_review: None,
+            wire_drag: None,
             preview: None,
             power_search: String::new(),
             power_aliases: vec![],
             catalog: vec![],
+            catalog_tree: Default::default(),
             collapsed: Default::default(),
             focus_pin: None,
             markers: Default::default(),
@@ -324,10 +367,24 @@ impl Editor {
     }
     fn refresh(&mut self) {
         self.preview = None;
+        self.form.block_preview = None;
+        self.wire_drag = None;
+        self.variant_checks = None;
+        if !self.doc.variants.contains_key(&self.variant) {
+            self.variant.clear();
+        }
+        self.form.replacement_review = None;
+        self.form.library_review = None;
         let focused = self.focus_pin.take().map(|f| f.id);
         if self.doc.library {
             if !self.doc.symbols.contains_key(&self.subject) {
-                self.subject = self.doc.symbols.keys().next().cloned().unwrap_or_default();
+                self.subject = self
+                    .doc
+                    .symbols
+                    .keys()
+                    .find(|id| !id.contains('.'))
+                    .cloned()
+                    .unwrap_or_default();
             }
             if let Some(s) = self.doc.symbols.get(&self.subject)
                 && !s.pins.values().any(|p| p.unit == self.unit)
@@ -353,6 +410,7 @@ impl Editor {
             }
             self.page = sch::symbol_page(&self.doc, &self.subject, &self.unit).unwrap_or_default();
         } else {
+            self.hits = sch::search(&self.doc, &self.circuit, &self.search);
             if !self.circuit.occurrences.contains_key(&self.subject) {
                 self.subject = self
                     .circuit
@@ -362,21 +420,22 @@ impl Editor {
                     .cloned()
                     .unwrap_or_default();
             }
-            self.power_aliases = power_aliases(&self.src);
-            if self
+            self.power_aliases = self
                 .doc
                 .symbols
-                .get(&self.symbol)
-                .is_none_or(|s| s.power_net.is_some())
-            {
-                self.symbol = self
-                    .doc
-                    .symbols
-                    .iter()
-                    .find(|(_, s)| s.power_net.is_none())
-                    .map(|(id, _)| id.clone())
-                    .unwrap_or_default();
-            }
+                .iter()
+                .filter_map(|(id, s)| {
+                    s.power_net.as_ref()?;
+                    let (namespace, _) = id.rsplit_once('.')?;
+                    self.doc
+                        .libraries
+                        .get(namespace)
+                        .is_some_and(Option::is_none)
+                        .then_some(namespace.to_owned())
+                })
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect();
             if !self
                 .doc
                 .rows
@@ -391,9 +450,10 @@ impl Editor {
                 .doc
                 .symbols
                 .iter()
-                .filter(|(_, s)| s.power_net.is_none())
+                .filter(|(id, s)| s.power_net.is_none() && !self.doc.templates.values().any(|t| t == *id))
                 .map(|(name, s)| {
                     let mut terms = vec![name.as_str()];
+                    terms.extend(s.part_kind.as_deref());
                     terms.extend(s.fields.values().map(String::as_str));
                     terms.extend(
                         s.pins
@@ -403,6 +463,10 @@ impl Editor {
                     (name.clone(), terms.join(" ").to_lowercase())
                 })
                 .collect();
+            if !self.catalog.iter().any(|(id, _)| id == &self.symbol) {
+                self.symbol = self.catalog.first().map(|(id, _)| id.clone()).unwrap_or_default();
+            }
+            self.filter_catalog();
             if self.markers.active() {
                 self.directions = sch::wire_directions(&self.circuit);
             }
@@ -507,7 +571,24 @@ impl Editor {
         } else {
             self.src.clone()
         };
-        match self.install(next) {
+        let revision = if !own {
+            match compile(&next, self.path.as_deref()) {
+                Ok((d, c)) => {
+                    let diff = sch::electrical_diff((&self.doc, &self.circuit), (&d, &c));
+                    self.doc = d;
+                    self.circuit = c;
+                    self.refresh();
+                    if let Ok(forge_agent::json::Json::Arr(changes)) = diff {
+                        self.revision_review = Some(review_text(&changes));
+                    }
+                    Ok(())
+                }
+                Err(err) => Err(err),
+            }
+        } else {
+            self.install(next)
+        };
+        match revision {
             Ok(()) => {
                 if own {
                     self.saved = self.src.clone();
@@ -641,6 +722,9 @@ impl Editor {
                     Tool::NewSymbol => "Symbol",
                     _ => "item",
                 });
+                if t == Tool::Block && !self.selected.is_empty() {
+                    self.form.block.insert(self.selected.clone());
+                }
                 if t == Tool::Pin
                     && let Some(s) = self.doc.symbols.get(&self.subject)
                 {
@@ -808,6 +892,37 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn create_child_in_a_container_save_reopen_and_protect_existing_files() {
+        let dir = forge_dirs::temp_dir().join(format!("fg-author-child-{}", forge_dirs::process_id()));
+        forge_dirs::fs::create_dir_all(&dir).unwrap();
+        let parent = dir.join("catalog.fg");
+        let child = dir.join("drivers.fg");
+        let mut e = Editor::open(None, "symbol_library\n".into()).unwrap();
+        e.save(parent.to_str().unwrap()).unwrap();
+        e.start(Tool::Library);
+        e.form.name = "drivers".into();
+        e.form.text = "drivers.fg".into();
+        e.create_child_library().unwrap();
+        e.save(parent.to_str().unwrap()).unwrap();
+        assert!(child.is_file());
+        let mut child_editor =
+            Editor::open(child.to_str(), forge_dirs::fs::read_to_string(&child).unwrap()).unwrap();
+        child_editor.start(Tool::NewSymbol);
+        child_editor.form.name = "Part".into();
+        child_editor.create_record().unwrap();
+        child_editor.save(child.to_str().unwrap()).unwrap();
+        let mut reopened =
+            Editor::open(parent.to_str(), forge_dirs::fs::read_to_string(&parent).unwrap()).unwrap();
+        assert!(reopened.subject.is_empty());
+        assert!(reopened.doc.symbols.contains_key("drivers.Part"));
+        reopened.start(Tool::Library);
+        reopened.form.name = "other".into();
+        reopened.form.text = "drivers.fg".into();
+        assert!(reopened.create_child_library().is_err());
+        assert!(forge_dirs::fs::read_to_string(&child).unwrap().contains("Part"));
+        forge_dirs::fs::remove_dir_all(dir).unwrap();
+    }
     #[test]
     fn no_connect_toggles_existing_markers_in_one_edit() {
         let src = r#"schematic

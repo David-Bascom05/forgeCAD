@@ -60,10 +60,12 @@ The board should be a third, linked layout document. A package on the board shou
 
 | Area | Available in this implementation | Work still needed |
 | --- | --- | --- |
-| Symbols and parts | Bundled power and ground symbols, project-local reusable library files, sub parts, configurable reference prefixes, numbered pins, graphic primitives, typed wants and gives, fields and datasheets | Searchable managed catalogs, lifecycle and approved alternates, footprint library and pin-to-pad validation |
-| Schematics | Hierarchical sheets, sub parts, wires, junctions, labels, buses, ports, notes, named nets, functional links, ERC, independently positioned reference and value fields, text collision warnings and source-backed undo | Multi-sheet physical reannotation, bulk and multi-object editing, interactive wire dragging, project-scale cross-probing |
-| Purchasing | Inherited string fields with occurrence overrides, content-addressed local PDFs, URL references, fitted and BOM flags, grouped occurrence-correct BOM with CSV | Named assembly variants, supplier data pipelines and release snapshots that include referenced assets |
-| Layout and performance | Logical occurrences, terminals, connections, confirmed placement preferences, dimensional coordinates | Copper and clearance geometry, routing, placement checking, stable ECO interchange and measured interactive budgets on large designs |
+| Symbols and parts | Nested project libraries with searchable namespaces, bundled power symbols, sub parts, alternate pin functions, typed component classes and terminal paths, physical pad assignments, fields and datasheets | Searchable managed catalogs, lifecycle and approved alternates, footprint library and validation against actual copper pad geometry |
+| Schematics | Sheet hierarchy and templates, searchable PDF export, electrical and readability rules with scoped waivers, project search, locked occurrence-specific references, block editing, wire dragging and checked symbol replacement | Cross-probing between the schematic and physical layout |
+| Purchasing | Inherited fields, bulk placement-field edits, content-addressed local PDFs, named assembly variants, grouped BOM and CSV | Supplier data pipelines and release snapshots including referenced assets |
+| Layout and performance | Board handoff with stable occurrence IDs, footprint assignments, pad nets and typed placement preferences | Copper and clearance geometry, routing, placement checking, stable ECO interchange and measured interactive budgets on large designs |
+
+Child libraries carry their own namespace, pin roles and source file. Designs subscribe to transitive library changes. A display reference can change while a wire, variant or board pad continues to address the same occurrence. The [load-switch example](../../examples/electronics/load-switch/switch-card.fg) exercises a custom MOSFET in a nested discrete library and two instances of the same sheet.
 
 The [editing guide](../../docs/schematic.md#editing-in-forgecad) includes the sensor interface example. Backend and GUI tests exercise saving and reopening the source, building the connectivity graph, and resolving the effective BOM. The editor compiles committed changes. The release criteria for frame-rate checking on a populated board still require measurement with actual board geometry.
 

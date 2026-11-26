@@ -159,3 +159,41 @@ Symbols accept a map of custom string fields and a datasheet reference. Placemen
 ```sh
 forgecad schematic examples/electronics/analog/sensor-interface.fg bom-csv -o sensor-bom.csv
 ```
+
+## Nested libraries and custom components
+
+A library can contain symbols, child libraries, or both. Each import binds one name. A controller project can import a catalog once and place a symbol four names deep.
+
+```fg
+components = library(file: "components/catalog.fg")
+Q1 = place(sheet: channel, symbol: components.discrete.switches.PowerFET, at: (8,2))
+```
+
+In the symbol editor, choose **Add child library**, enter its namespace and relative filename, then choose **Create and link child library**. **Link library** attaches an existing file. Save the parent to persist the link. Click a library in the left browser to edit its own file. The Parts dock browses folders and searches descendant symbols, pin descriptions, component types and purchasing fields. Nested changes invalidate dependent schematics. Circular imports report the offending file.
+
+Choose **Part type** in symbol properties to find an existing classification or create a custom one. A want for `fet` accepts a `mosfet` or `jfet`. A want for `mosfet` accepts that specific class. Map the path endpoints to the custom symbol's actual pin names under **Terminal paths**. A connector can keep its generic passive contacts. [Load-switch project](../examples/electronics/load-switch/switch-card.fg)
+
+![Nested component libraries in the native Parts dock](../research/electronics/shots/native-nested-library.png)
+
+## Sheet frames and project navigation
+
+New schematic documents use the bundled A4 frame. To make your own, draw a graphics-only symbol in a library with the symbol editor. The largest rectangle defines the eight-column, four-row reference grid. Put `{title}`, `{sheet}`, `{page}` and `{pages}` in its text where those fields should print. Link the library and select the frame under **Sheet settings**. For example, `main = sheet(title: "Controller", template: company.frames.Assembly)` binds one sheet definition to a shared frame.
+
+**Find across sheets** searches occurrences, reference designators, values, fields, labels, notes and pins. Results include the zone when a template provides bounds. Select a result to visit its sheet. **Export project PDF** writes one searchable page per sheet occurrence beside the saved schematic. CLI users can choose the output filename.
+
+```sh
+forgecad schematic examples/electronics/load-switch/switch-card.fg search PowerFET
+forgecad schematic examples/electronics/load-switch/switch-card.fg pdf -o switch-card.pdf
+```
+
+## Editing, annotation and review
+
+- With **Select** active, drag a bend or segment to reroute a wire. The named endpoints stay attached. **Edit Block** selects objects by clicking. Set the offset, choose move or duplicate, and review boundary connections before applying. Interior wires and declared fulfillments copy with the selected components. Shared labels and connections to external components appear in the review. Editing a repeated sheet definition changes each occurrence. **Bulk component field** sets one field across the selected placements in one undo step.
+- Changing **Reference** preserves the source ID used by wires, wants and board handoff. **Reannotate project** allocates references across repeated sheets and respects **Lock reference**. An occurrence-specific override can be written as `keep = annotation(occurrence: "overview/right/Q1", reference: "Q17", locked: true)`.
+- In **Electrical Checks**, expand **Review finding** to change a rule's severity or waive that finding with a reason. The waiver matches its rule and complete object list, including sheet occurrence. Waived findings and their reasons remain visible. For example, `policy = erc_rule(rule: "UnconnectedPin", severity: "error")` promotes open pins to errors. `fixture = waiver(rule: "UnconnectedPin", objects: ["main/J1.P3"], reason: "Reserved fixture contact")` records a scoped exception. The JSON result distinguishes unknown evidence from failed checks.
+- Use **Replace symbol** in placement properties to compile a proposed substitution and review electrical changes. Pin aliases can preserve attachments through a logical pin rename. In **Link Library**, enter an existing namespace and another file to preview a library substitution. File-watcher refreshes also expose their electrical changes in **Electrical Checks**. Compare two saved designs or symbol libraries with `forgecad diff OLD.fg NEW.fg --json`.
+- In the symbol editor a pin can define alternate functions, each with its own electrical kind, wants and gives. Select a function in the placement properties. A peripheral signal assigned to multiple enabled pins and bus members shorted to the same net generate ERC findings. In source, `functions: {TX: function(kind: "output", gives: [serial])}` belongs to the pin and `functions: {PA0: TX}` belongs to a placement. Peripheral signal names used in checks match the selected function names.
+- A pin maps to its physical pin number by default. Use **Physical pads** to designate several footprint pads, for example `pads: ["2", "EP"]`. The board handoff includes stable occurrence IDs, visible references, pad-to-net assignments, fitted status, footprints and confirmed provider relationships with placement distance preferences.
+- The BOM dock creates and selects named assembly variants. A variant can omit or fit individual occurrences, including one occurrence of a repeated sheet. For example, `prototype = variant(omit: ["overview/right/Q1"])`. CLI and MCP selectors include `variants`, `bom prototype`, `bom-csv prototype`, `erc prototype` and `board prototype`. A DNP part retains its physical footprint and pad mapping.
+
+The `schematic` tool also accepts `plan-block copy|move SCOPE DX_MM DY_MM OBJECT...`, `plan-reannotate` for the whole project, and `plan-reannotate SHEET` for a definition. The plans use the same checked edit operations as the editor.

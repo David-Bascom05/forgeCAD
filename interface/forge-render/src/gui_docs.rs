@@ -246,7 +246,7 @@ impl Gui {
             let src = if lib {
                 "symbol_library\n"
             } else {
-                "schematic\nmain = sheet(title: \"Main sheet\")\n"
+                forge_lang::schematic::NEW_SCHEMATIC
             };
             self.shell.electronics = Some(
                 crate::shell::electronics::Editor::open(None, src.into()).expect("new electronics document"),
@@ -605,7 +605,7 @@ fn look(p: &Path) -> Seen {
 
 /// The folder a document's reads are watched inside: the repository it's in (the nearest
 /// folder up with a `.git`), else its own folder.
-fn root_of(path: &str) -> Option<PathBuf> {
+pub(crate) fn root_of(path: &str) -> Option<PathBuf> {
     let dir = folder_of(path)?;
     let repo = dir
         .ancestors()
