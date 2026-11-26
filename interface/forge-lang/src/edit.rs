@@ -1396,7 +1396,7 @@ pub fn apply_checked_in(src: &str, op: &Op, dir: Option<std::path::PathBuf>) -> 
 pub fn apply_checked_at(src: &str, op: &Op, at: &At) -> R<(String, Option<Reach>)> {
     if crate::pcb::is_document(src) {
         let next = apply_at(src, op, at)?;
-        crate::pcb::compile(&next, at.dir.as_deref(), at.root.as_deref())
+        crate::pcb::query(&next, at.dir.as_deref(), at.root.as_deref(), &[])
             .map_err(|e| Error::Schematic(Box::new(e)))?;
         return Ok((next, None));
     }
@@ -1501,7 +1501,7 @@ pub fn apply_all_checked_at(src: &str, ops: &[Op], at: &At) -> R<String> {
         text = apply_at(&text, op, at)?;
     }
     if crate::pcb::is_document(src) {
-        crate::pcb::compile(&text, at.dir.as_deref(), at.root.as_deref())
+        crate::pcb::query(&text, at.dir.as_deref(), at.root.as_deref(), &[])
             .map_err(|e| Error::Schematic(Box::new(e)))?;
         return Ok(text);
     }

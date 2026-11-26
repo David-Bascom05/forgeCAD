@@ -62,7 +62,10 @@ const TOOLS: [Tool; 23] = [
         1,
         &[
             ("file", "path to a PCB .fg"),
-            ("sel", "summary, stackup, routing, handoff [VARIANT] or drc"),
+            (
+                "sel",
+                "summary, stackup, routing, placements, pads, ratsnest, artwork top|bottom mask|paste|silk, artwork copper LAYER, connectivity, handoff [VARIANT] or drc",
+            ),
         ],
     ),
     (
@@ -155,7 +158,7 @@ const TOOLS: [Tool; 23] = [
         2,
         &[
             ("file", "path to a .fg part"),
-            ("format", "stl|3mf|obj|step|ap214|ap242|dxf|dwg"),
+            ("format", "stl|3mf|obj|step|ap214|ap242|dxf|dwg|pcb-fab"),
             (
                 "options",
                 "e.g. \"tol 0.05 angle 10\", \"ascii\" (STL), \"normals faces\" (OBJ), \"flat\" (an assembly's 3MF)",

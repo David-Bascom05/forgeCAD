@@ -17,6 +17,7 @@ path kernel/forge-asm
 path kernel/forge-bool
 path kernel/forge-bb
 path kernel/forge-brake
+path kernel/forge-cam-geom
 path kernel/forge-dirs
 path kernel/forge-draw
 path kernel/forge-dwg

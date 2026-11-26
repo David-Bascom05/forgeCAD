@@ -147,8 +147,7 @@ impl Session {
 
     fn pcb_reply(&self, path: &Path, src: &str, words: &[String]) -> Reply {
         use forge_lang::pcb;
-        let mut json = pcb::compile(src, path.parent(), self.root.as_deref())
-            .and_then(|board| pcb::response(&board, words))
+        let mut json = pcb::query(src, path.parent(), self.root.as_deref(), words)
             .unwrap_or_else(|err| err.json_for(pcb::SCHEMA));
         obj_push(&mut json, "version", version(src).into());
         Reply {
@@ -909,6 +908,59 @@ impl Session {
     /// STEP of the part, `stl|3mf|obj` its mesh (`export_mesh`), or `dxf [SHEET]`: a sheet's flat
     /// pattern. The file goes in the reply's bytes.
     fn export(&mut self, a: &Args) -> Result<Reply, String> {
+        if a.words.first().is_some_and(|w| w == "pcb-fab") {
+            if a.words.len() > 2 {
+                return Err("export FILE pcb-fab [VARIANT]".into());
+            }
+            let (path, src) = self.read(&a.file)?;
+            let files = forge_lang::pcb::compile(&src, path.parent(), self.root.as_deref())
+                .and_then(|b| b.fabrication_files(a.words.get(1).map(String::as_str)));
+            let files = match files {
+                Ok(f) => f,
+                Err(e) => {
+                    let json = e.json_for(forge_lang::pcb::SCHEMA);
+                    return Ok(Reply {
+                        ok: false,
+                        text: json.to_string(),
+                        json,
+                        png: None,
+                    });
+                }
+            };
+            let zip = forge_mesh::zip::write(
+                &files
+                    .iter()
+                    .map(|(n, data)| (n.as_str(), data.as_bytes()))
+                    .collect::<Vec<_>>(),
+            )
+            .map_err(|e| e.to_string())?;
+            let review = Json::parse(&files["review.json"]).map_err(|e| e.to_string())?;
+            let count = |v: Option<&Json>| match v {
+                Some(Json::Arr(list)) => list.len(),
+                _ => 0,
+            };
+            let findings = count(review.get("drc").and_then(|r| r.get("findings")));
+            let unplaced = count(review.get("unplaced"));
+            let json = Json::obj(vec![
+                ("ok", true.into()),
+                ("mime", "application/zip".into()),
+                ("drc_findings", findings.into()),
+                ("unplaced_components", unplaced.into()),
+                (
+                    "files",
+                    Json::Arr(files.keys().cloned().map(Into::into).collect()),
+                ),
+            ]);
+            return Ok(Reply {
+                ok: true,
+                text: format!(
+                    "{} files, {findings} DRC findings, {unplaced} unplaced components",
+                    files.len()
+                ),
+                json,
+                png: Some(zip),
+            });
+        }
         if a.words
             .first()
             .is_some_and(|w| forge_lang::meshfile::Format::of(w).is_some())

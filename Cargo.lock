@@ -392,6 +392,7 @@ dependencies = [
  "forge-asm",
  "forge-bool",
  "forge-brake",
+ "forge-cam-geom",
  "forge-dirs",
  "forge-draw",
  "forge-dwg",

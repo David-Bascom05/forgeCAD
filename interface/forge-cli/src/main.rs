@@ -45,7 +45,8 @@ fn usage() -> ExitCode {
          forgecad build|check|query|measure|render|export FILE.fg [ARGS] [--json] [--labels SEL] [--px N] [--at FEAT] [-o OUT]\n       \
          forgecad edit FILE.fg 'OP'.. [--base VERSION]   (typed ops, as a part's fixes give them; export F.fg stl|3mf|obj|urdf|dxf [SHEET])\n       \
          forgecad cam FILE.fg [sheet] [--json] [-o OUT]   (a machining document: certified toolpaths, the program or setup sheet)\n       \
-         forgecad pcb FILE.fg [summary|stackup|routing|handoff [VARIANT]|drc] [--json]\n       \
+         forgecad export FILE.fg pcb-fab [VARIANT] -o OUTPUT.zip\n       \
+         forgecad pcb FILE.fg [summary|stackup|routing|placements|pads|connectivity|ratsnest|artwork SIDE FILM|handoff [VARIANT]|drc] [--json]\n       \
          forgecad schematic FILE.fg [pin PATH [VARIANT]|tree PATH|sheet PATH|nets|diff-pairs|links|symbols|erc] [--json]\n       \
          forgecad bend FILE.fg [sheet|program] [--json] [-o OUT]   (a bending document: simulated; its setup sheet, or its press-brake program where the format is openly specified)\n       \
          forgecad diff A.fg B.fg [volume]   (what B changed from A: features, params, faces, volume)\n       \
@@ -806,6 +807,7 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
     if let Some(png) = &r.png {
         let ext = match cmd {
             "schematic" if a.words == ["pdf"] => "pdf",
+            "export" if a.words.first().is_some_and(|w| w == "pcb-fab") => "zip",
             "export" if a.words.first().is_some_and(|w| w == "dxf") => "dxf",
             "export" if a.words.first().is_some_and(|w| w == "dwg") => "dwg",
             "export" if a.words.first().is_some_and(|w| w == "stl") => "stl",

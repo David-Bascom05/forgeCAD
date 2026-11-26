@@ -26,7 +26,7 @@ pub use inspection::{Direction, Evidence, PinInspection, inspect_pin, wire_direc
 mod bom;
 pub mod datasheet;
 pub use crate::electronics::{Fault, Result, parameter_dimension};
-pub use bom::{BomLine, bom, bom_csv, bom_for};
+pub use bom::{BomLine, PartSpec, bom, bom_csv, bom_for};
 pub use reader::read;
 pub use report::response;
 use std::collections::{BTreeMap as Map, BTreeSet as Set};

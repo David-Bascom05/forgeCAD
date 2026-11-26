@@ -7,6 +7,41 @@ use crate::values::Dim;
 use std::{collections::BTreeSet, path::Path};
 
 const SIGNATURES: &[(&str, &[&str])] = &[
+    ("library", &["file"]),
+    ("net_class", &["nets", "min_width", "min_spacing"]),
+    (
+        "zone",
+        &[
+            "net",
+            "layer",
+            "points",
+            "clearance",
+            "priority",
+            "thermal_gap",
+            "spoke_width",
+        ],
+    ),
+    ("footprint", reader_layout::FOOTPRINT_ARGS),
+    (
+        "place",
+        &[
+            "footprint",
+            "occurrence",
+            "at",
+            "angle",
+            "side",
+            "bindings",
+            "reference",
+        ],
+    ),
+    ("npth", &["at", "to", "drill"]),
+    ("cutout", &["points"]),
+    ("copper_region", &["net", "layer", "points"]),
+    ("keepout", &["layer", "points"]),
+    ("silk_text", &["value", "at", "side", "height", "width", "angle"]),
+    ("silk_line", &["points", "side", "width"]),
+    ("mask_opening", &["side", "points"]),
+    ("paste_opening", &["side", "points"]),
     ("edge", &["points"]),
     ("copper", &["weight_oz_ft2", "thickness"]),
     ("dielectric", &["material", "thickness"]),
@@ -14,14 +49,26 @@ const SIGNATURES: &[(&str, &[&str])] = &[
     ("schematic", &["file"]),
     ("net", &["name", "terminal"]),
     ("track", &["net", "layer", "width", "points"]),
-    ("through_via", &["net", "at", "diameter", "drill"]),
+    (
+        "through_via",
+        &["net", "at", "diameter", "drill", "mask_top", "mask_bottom"],
+    ),
     (
         "process",
-        &["min_width", "min_spacing", "min_drill", "min_annular_ring"],
+        &[
+            "min_width",
+            "min_spacing",
+            "min_drill",
+            "min_annular_ring",
+            "min_mask_web",
+            "silk_clearance",
+            "min_edge",
+            "hole_clearance",
+        ],
     ),
 ];
 
-fn nm(mm: f64, expr: &Expr) -> Result<i64> {
+pub(super) fn nm(mm: f64, expr: &Expr) -> Result<i64> {
     let scaled = mm * 1_000_000.0;
     if scaled.abs() > 500_000_000.0 || (scaled - scaled.round()).abs() > 0.000001 {
         return Err(fault(
@@ -33,21 +80,35 @@ fn nm(mm: f64, expr: &Expr) -> Result<i64> {
     Ok(scaled.round() as i64)
 }
 
-fn length(e: &Expr, p: &Params) -> Result<i64> {
+pub(super) fn length(e: &Expr, p: &Params) -> Result<i64> {
     let v = nm(measure(e, p, Dim::Length)?, e)?;
     if v <= 0 {
         return Err(fault(e, "ExpectedPositiveLength", "use a positive length"));
     }
     Ok(v)
 }
-fn coordinate(e: &Expr, p: &Params) -> Result<Point> {
+pub(super) fn coordinate(e: &Expr, p: &Params) -> Result<Point> {
     let [x, y] = point(e, p)?;
     Ok([nm(x, e)?, nm(y, e)?])
 }
-fn points(e: &Expr, p: &Params) -> Result<Vec<Point>> {
-    list(e)?.iter().map(|v| coordinate(v, p)).collect()
+pub(super) fn points(e: &Expr, p: &Params) -> Result<Vec<Point>> {
+    let mut path = Vec::new();
+    for v in list(e)? {
+        if matches!(v.kind, ExprKind::Call(..)) {
+            let mut c = Call::with_signature(v, &[("arc", &["via", "to"])])?;
+            arc::append(
+                &mut path,
+                coordinate(c.req("via")?, p)?,
+                coordinate(c.req("to")?, p)?,
+                v.span,
+            )?;
+        } else {
+            path.push(coordinate(v, p)?);
+        }
+    }
+    Ok(path)
 }
-fn label(e: &Expr) -> Result<String> {
+pub(super) fn label(e: &Expr) -> Result<String> {
     let value = string(e)?;
     if value.trim().is_empty() {
         return Err(fault(e, "EmptyName", "supply a nonempty name"));
@@ -124,6 +185,9 @@ pub fn compile(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Boa
     if !matches!(&head.kind,StmtKind::Expr(Expr{kind:ExprKind::Name(n),..}) if n=="pcb") {
         return Err(Fault::new("ExpectedHeader", head.span, "expected pcb"));
     }
+    let mut imports = library::Imports::default();
+    let mut classes = BTreeMap::new();
+    let mut layout = Layout::default();
     let mut outline = None;
     let mut available = BTreeMap::new();
     let mut stack: Option<Vec<Layer>> = None;
@@ -159,6 +223,102 @@ pub fn compile(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Boa
         }
         let mut c = Call::with_signature(e, SIGNATURES)?;
         match c.name {
+            "library" => {
+                let file = label(c.req("file")?)?;
+                for (key, def) in imports.load(&file, dir, root, e.span)? {
+                    layout.footprints.insert(format!("{id}.{key}"), def);
+                }
+            }
+            "footprint" => {
+                layout
+                    .footprints
+                    .insert(id.clone(), reader_layout::package(&mut c, &params)?);
+            }
+            "place" => reader_layout::place(id, &mut c, &params, &mut layout, &mut nets, schematic.as_ref())?,
+            "npth" => {
+                layout.holes.insert(
+                    id.clone(),
+                    Hole {
+                        at: coordinate(c.req("at")?, &params)?,
+                        to: c.take("to").map(|v| coordinate(v, &params)).transpose()?,
+                        drill: length(c.req("drill")?, &params)?,
+                        span: stmt.span,
+                    },
+                );
+            }
+            "cutout" => {
+                layout
+                    .cutouts
+                    .insert(id.clone(), reader_layout::polygon(c.req("points")?, &params)?);
+            }
+            "zone" | "copper_region" | "keepout" => {
+                let layer_expr = c.req("layer")?;
+                let layer = reference(layer_expr)?;
+                if !stack.as_ref().is_some_and(|v| {
+                    v.iter()
+                        .any(|l| l.id == layer && matches!(l.material, LayerMaterial::Copper { .. }))
+                }) {
+                    return Err(fault(layer_expr, "ExpectedCopperLayer", layer));
+                }
+                let net = c.take("net").map(reference).transpose()?;
+                if c.name != "keepout" && net.as_ref().is_none_or(|n| !nets.contains_key(n)) {
+                    return Err(fault(
+                        e,
+                        "UnknownBoardNet",
+                        "copper region requires a declared net",
+                    ));
+                }
+                let polygon = reader_layout::polygon(c.req("points")?, &params)?;
+                if c.name == "zone" {
+                    let gap = length(c.req("clearance")?, &params)?;
+                    let priority = c
+                        .take("priority")
+                        .map(|v| measure(v, &params, Dim::Count))
+                        .transpose()?
+                        .unwrap_or(0.);
+                    if priority.fract() != 0. || priority.abs() > i32::MAX as f64 {
+                        return Err(fault(e, "ZonePriority", "use a whole priority"));
+                    }
+                    let thermal = match (c.take("thermal_gap"), c.take("spoke_width")) {
+                        (None, None) => None,
+                        (Some(g), Some(w)) => Some((length(g, &params)?, length(w, &params)?)),
+                        _ => {
+                            return Err(fault(
+                                e,
+                                "IncompleteThermal",
+                                "specify both thermal_gap and spoke_width for PTH relief",
+                            ));
+                        }
+                    };
+                    layout.zones.insert(
+                        id.clone(),
+                        Zone {
+                            layer,
+                            net: net.unwrap(),
+                            boundary: polygon,
+                            gap,
+                            priority: priority as i32,
+                            thermal,
+                            span: stmt.span,
+                        },
+                    );
+                } else {
+                    layout.areas.insert(
+                        id.clone(),
+                        Area {
+                            layer,
+                            net,
+                            polygon,
+                            span: stmt.span,
+                        },
+                    );
+                }
+            }
+            "silk_text" | "silk_line" | "mask_opening" | "paste_opening" => {
+                layout
+                    .graphics
+                    .insert(id.clone(), reader_layout::graphic(&mut c, &params)?);
+            }
             "edge" => {
                 if outline.is_some() {
                     return Err(fault(e, "DuplicateEdge", "one perimeter per rigid board"));
@@ -310,9 +470,24 @@ pub fn compile(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Boa
                             "drill must be smaller than land diameter",
                         ));
                     }
+                    let mask_top = reader_layout::margin(c.take("mask_top"), None, &params)?;
+                    let mask_bottom = reader_layout::margin(c.take("mask_bottom"), None, &params)?;
+                    if [mask_top, mask_bottom]
+                        .into_iter()
+                        .flatten()
+                        .any(|m| diameter_nm + 2 * m <= 0)
+                    {
+                        return Err(fault(
+                            e,
+                            "InvalidAperture",
+                            "via opening must have a positive diameter",
+                        ));
+                    }
                     vias.insert(
                         id.clone(),
                         ThroughVia {
+                            mask_top,
+                            mask_bottom,
                             net,
                             at,
                             diameter_nm,
@@ -322,12 +497,37 @@ pub fn compile(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Boa
                     );
                 }
             }
+            "net_class" => {
+                let mut members = BTreeSet::new();
+                for item in list(c.req("nets")?)? {
+                    let net = reference(item)?;
+                    if !nets.contains_key(&net) {
+                        return Err(fault(item, "UnknownBoardNet", net));
+                    }
+                    members.insert(net);
+                }
+                if members.is_empty() {
+                    return Err(fault(e, "EmptyNetClass", "select at least one declared net"));
+                }
+                classes.insert(
+                    id.clone(),
+                    NetClass {
+                        nets: members,
+                        min_width_nm: length(c.req("min_width")?, &params)?,
+                        min_spacing_nm: length(c.req("min_spacing")?, &params)?,
+                    },
+                );
+            }
             "process" => {
                 if process.is_some() {
                     return Err(fault(e, "DuplicateProcess", "one fabrication process per board"));
                 }
                 process = Some(Process {
                     id: id.clone(),
+                    min_edge_nm: c.take("min_edge").map(|e| length(e, &params)).transpose()?,
+                    hole_clearance_nm: c.take("hole_clearance").map(|e| length(e, &params)).transpose()?,
+                    min_mask_web_nm: c.take("min_mask_web").map(|e| length(e, &params)).transpose()?,
+                    silk_clearance_nm: c.take("silk_clearance").map(|e| length(e, &params)).transpose()?,
                     min_spacing_nm: length(c.req("min_spacing")?, &params)?,
                     min_width_nm: length(c.req("min_width")?, &params)?,
                     min_drill_nm: length(c.req("min_drill")?, &params)?,
@@ -338,13 +538,61 @@ pub fn compile(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Boa
         }
         c.end()?;
     }
-    Ok(Board {
-        outline: outline.ok_or_else(|| Fault::new("MissingEdge", head.span, "declare the board edge"))?,
+    // A placement can precede the public alias for its schematic net.
+    let aliases: BTreeMap<_, _> = nets
+        .iter()
+        .filter(|(k, _)| !k.starts_with('@'))
+        .map(|(k, n)| (n.name.clone(), k.clone()))
+        .collect();
+    let renamed: BTreeMap<_, _> = nets
+        .iter()
+        .filter(|(k, _)| k.starts_with('@'))
+        .filter_map(|(k, n)| Some((k.clone(), aliases.get(&n.name)?.clone())))
+        .collect();
+    for p in layout.pads.values_mut() {
+        if let Some(k) = renamed.get(&p.net) {
+            p.net = k.clone();
+        }
+    }
+    for k in renamed.keys() {
+        nets.remove(k);
+    }
+    let outline = outline.ok_or_else(|| Fault::new("MissingEdge", head.span, "declare the board edge"))?;
+    for (name, cut) in &layout.cutouts {
+        let shape = Shape::Region(cut.clone());
+        if !shape.within(&outline)
+            || layout
+                .cutouts
+                .range(..name.clone())
+                .any(|(_, other)| shape.near(&Shape::Region(other.clone()), 0, true))
+        {
+            return Err(Fault::new(
+                "InvalidCutout",
+                head.span,
+                format!("{name} must lie inside the perimeter and clear other cutouts"),
+            ));
+        }
+    }
+    let mut board = Board {
+        classes,
+        layout,
+        outline,
         layers: stack.ok_or_else(|| Fault::new("MissingStack", head.span, "declare an ordered stackup"))?,
         schematic,
         process,
         nets,
         tracks,
         vias,
-    })
+    };
+    for p in board.layout.pads.values() {
+        if p.drill.is_none() && board.surface_layer(p.side).is_none() {
+            return Err(Fault::new(
+                "MissingSurfaceCopper",
+                p.span,
+                "SMD pads require outer copper on their mounting face",
+            ));
+        }
+    }
+    board.refill()?;
+    Ok(board)
 }

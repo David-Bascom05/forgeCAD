@@ -13,7 +13,7 @@ The [PCB layout backend and manufacturer-rule study](pcb-layout-rules.md) record
 - **Check the installed connector and test access.** Sweep the mating plug through its insertion stroke and test the cable bend against the enclosure. Distinguish production-probe access on the assembled PCB from service-probe access after installation.
 - **Leave room for high-speed analysis.** Preserve package and layer delay, differential path identity, return-reference transitions and the mounted power loop. Timing budgets, impedance versus frequency and current-return simulation each require their own model and evidence. [Competitive references and proposed experiments](pcb-layout-rules.md#opportunities-worth-testing-with-designers)
 
-The first native rigid-board document defines a polygonal perimeter, ordered copper and dielectric layers, nominal foil weight and finished thickness. Named tracks and plated through vias can bind to a net by schematic occurrence and pin. The source example includes a four-layer stack, editable process minima and a routed layer transition. [Board example](../../examples/electronics/controller-board.fg) · [Language reference](../../interface/forge-lang/src/reference.md#pcb)
+The native rigid-board backend now runs a schematic-linked design through footprint placement, poured copper and physical connectivity to a fabrication ZIP. Mask, paste and silkscreen each have inspectable geometry on both faces. A four-layer test assembly exercises those layers and independently recovers the intended nets from plotted copper and drill data. [Implemented scope and readback](pcb-layout-rules.md#implemented-board-foundation) · [Fabrication fixture](../../examples/electronics/fabrication-controller.fg)
 
 ## First milestone
 

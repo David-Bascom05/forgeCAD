@@ -1,20 +1,30 @@
 //! A rigid board with one polygonal perimeter, a physical stack in top-to-bottom
 //! order and named copper routes. All planar geometry is stored on a 1 nm grid.
+mod arc;
 mod check;
 pub use check::{Check, Finding, Rule, Witness};
 mod geometry;
+mod library;
+pub use library::query;
+mod parts;
+mod pour;
+pub use parts::*;
+pub use pour::{Island, Zone};
+mod artwork;
+mod fabrication;
 mod reader;
+mod reader_layout;
 mod report;
 mod spacing;
 use crate::syntax::Span;
-pub use geometry::Point;
+pub use geometry::{Point, Shape};
 pub use reader::compile;
 pub use report::response;
 use std::collections::BTreeMap;
 
 pub const SCHEMA: &str = "forgecad.pcb/1";
 pub fn is_document(src: &str) -> bool {
-    crate::electronics::header(src) == Some("pcb")
+    matches!(crate::electronics::header(src), Some("pcb" | "footprint_library"))
 }
 
 #[derive(Debug)]
@@ -47,6 +57,8 @@ pub struct Track {
 
 #[derive(Debug)]
 pub struct ThroughVia {
+    pub mask_top: Option<i64>,
+    pub mask_bottom: Option<i64>,
     pub net: String,
     pub at: Point,
     pub diameter_nm: i64,
@@ -55,7 +67,17 @@ pub struct ThroughVia {
 }
 
 #[derive(Debug)]
+pub struct NetClass {
+    pub min_width_nm: i64,
+    pub min_spacing_nm: i64,
+    pub nets: std::collections::BTreeSet<String>,
+}
+#[derive(Debug)]
 pub struct Process {
+    pub min_edge_nm: Option<i64>,
+    pub hole_clearance_nm: Option<i64>,
+    pub min_mask_web_nm: Option<i64>,
+    pub silk_clearance_nm: Option<i64>,
     pub id: String,
     pub min_width_nm: i64,
     pub min_spacing_nm: i64,
@@ -72,6 +94,8 @@ pub struct SchematicSource {
 
 #[derive(Debug)]
 pub struct Board {
+    pub layout: Layout,
+    pub classes: BTreeMap<String, NetClass>,
     pub outline: Vec<Point>,
     pub layers: Vec<Layer>,
     pub nets: BTreeMap<String, Net>,

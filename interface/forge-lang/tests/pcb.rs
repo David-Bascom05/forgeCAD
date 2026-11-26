@@ -25,7 +25,7 @@ fn physical_stack_and_routed_net_are_independent_of_visible_names() {
     assert_ne!(b.nets["supply"].name, b.nets["ground"].name);
     assert_eq!(b.nets["supply"].terminal.as_deref(), Some("main/u.vdd"));
     assert_eq!(b.tracks["feed"].net, "supply");
-    assert_eq!(b.check().rules.len(), 5);
+    assert_eq!(b.check().rules.len(), 6);
     assert!(b.check().findings.is_empty());
     let result = pcb::response(&b, &["handoff".into()]).unwrap();
     let handoff = result.get("result").unwrap();
@@ -127,7 +127,7 @@ fn copper_envelope_checks_concavities_tangencies_and_negative_coordinates() {
     assert!(b.check().findings.is_empty());
     set(&mut b, tangent + 1);
     assert_eq!(b.check().findings.len(), 1);
-    assert_eq!(b.check().rules, vec![Rule::CopperOutsideEdge]);
+    assert_eq!(b.check().rules, vec![Rule::CopperOutsideEdge, Rule::ShortCircuit]);
 }
 
 #[test]

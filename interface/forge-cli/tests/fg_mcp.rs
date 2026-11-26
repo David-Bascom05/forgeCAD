@@ -887,3 +887,68 @@ fn a_pcb_edit_is_atomic_and_drc_uses_the_updated_geometry() {
     assert!(!err, "{r}");
     assert_eq!(std::fs::read_to_string(&path).unwrap(), src);
 }
+
+#[test]
+fn board_fabrication_uses_the_current_nested_package_revision() {
+    let dir = scratch("board-fab");
+    let src = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/electronics"));
+    for file in [
+        "fabrication-controller.fg",
+        "controller.fg",
+        "power-symbols.fg",
+        "footprints/controller.fg",
+        "footprints/passives/chips.fg",
+    ] {
+        let dest = dir.join(file);
+        std::fs::create_dir_all(dest.parent().unwrap()).unwrap();
+        std::fs::copy(src.join(file), dest).unwrap();
+    }
+    let mut server = Server::start("mcp", &dir);
+    let file = dir
+        .join("fabrication-controller.fg")
+        .to_string_lossy()
+        .into_owned();
+    let args = || vec![("file", file.clone().into()), ("sel", "artwork top paste".into())];
+    let (err, initial, _) = server.tool("pcb", args());
+    assert!(!err, "{initial}");
+    let lib = dir
+        .join("footprints/passives/chips.fg")
+        .to_string_lossy()
+        .into_owned();
+    let (err,reply,_)=server.tool("edit",vec![("file",lib.clone().into()),("op",Json::obj(vec![("op","SetArg".into()),("id","chip".into()),("arg","pads".into()),("text","[smd(number: \"1\", at: (0,-2), size: (1.4,1), paste: false), smd(number: \"2\", at: (0,2), size: (1.4,1), paste: false)]".into())]))]);
+    assert!(!err, "{reply}");
+    let (err, after, _) = server.tool("pcb", args());
+    assert!(!err, "{after}");
+    assert!(arr(&after, "result").is_empty());
+    assert_eq!(arr(&initial, "result").len(), 2);
+    let (err, reply, _) = server.tool(
+        "edit",
+        vec![
+            ("file", lib.into()),
+            ("op", Json::obj(vec![("op", "Undo".into())])),
+        ],
+    );
+    assert!(!err, "{reply}");
+    let (_, again, _) = server.tool("pcb", args());
+    assert_eq!(again.get("result"), initial.get("result"));
+    let output = dir.join("fabrication.zip");
+    let result = Command::new(env!("CARGO_BIN_EXE_forgecad"))
+        .args([
+            "export",
+            &file,
+            "pcb-fab",
+            "-o",
+            output.to_str().unwrap(),
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stdout)
+    );
+    let bytes = std::fs::read(output).unwrap();
+    let contents = forge_mesh::zip::read(&bytes, 2 * 1024 * 1024).unwrap();
+    assert!(contents.iter().any(|(name, _)| name == "top-mask.gbr"));
+}

@@ -1,0 +1,6 @@
+footprint_library
+passives = library(file: "passives/chips.fg")
+header = footprint(pads: [pth(number: "3", at: (0,-2), size: (1.6,1.6), drill: 0.8mm, mask: 0.06mm),
+                          pth(number: "1", at: (0,2), size: (1.6,1.6), drill: 0.8mm, mask: 0.06mm)])
+device = footprint(pads: [smd(number: "14", at: (0,2), size: (1.4,1), shape: "oval", mask: 0.05mm),
+                          smd(number: "7", at: (0,-2), size: (1.4,1), shape: "oval", mask: 0.05mm)])
