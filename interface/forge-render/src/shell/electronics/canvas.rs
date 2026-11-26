@@ -13,7 +13,8 @@ impl Editor {
             Move => "Click the new position",
             Intent => "Click the consumer pin, then the provider pin",
             Flow => "Click the source, then the destination",
-            Label | NoConnect => "Click a pin, port or junction",
+            Label => "Click a pin, port or junction",
+            NoConnect => "Click a pin to add or remove its no-connect marker",
             Bus => "Click member pins, then create the bus",
             Line | Rect | Circle => "Click the first point, then the second point",
             Arc => "Click the start, a point on the arc, then the end",
@@ -891,7 +892,19 @@ impl Editor {
                     ),
                 )
             }
-            NoConnect => ("nc", format!("no_connect(sheet: {sheet}, on: {})", need()?)),
+            NoConnect => {
+                let target = need()?;
+                let markers: Vec<_> = self.doc.rows.iter()
+                    .filter(|row| row.sheet == sheet && matches!(&row.item, Item::NoConnect(on) if on == target))
+                    .map(|row| Op::DeleteFeature { id: row.id.clone() })
+                    .collect();
+                if !markers.is_empty() {
+                    self.apply(markers)?;
+                    self.message = format!("Removed no-connect marker on {target}");
+                    return Ok(());
+                }
+                ("nc", format!("no_connect(sheet: {sheet}, on: {target})"))
+            }
             Note if self.form.text.trim().is_empty() => {
                 return Err("Enter the text before placing it.".into());
             }

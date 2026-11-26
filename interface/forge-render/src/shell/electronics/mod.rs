@@ -778,6 +778,24 @@ impl Editor {
 mod tests {
     use super::*;
     #[test]
+    fn no_connect_toggles_existing_markers_in_one_edit() {
+        let src = r#"schematic
+S = symbol(pins: {p: pin(number: "1", kind: "input", at: (0,0))})
+main = sheet()
+chip = place(sheet: main, symbol: S, at: (0,0))
+"#;
+        let mut e = Editor::open(None, src.into()).unwrap();
+        e.start(Tool::NoConnect);
+        e.click([0., 0.], Some("chip.p"), None).unwrap();
+        let marked = e.src.clone();
+        assert!(marked.contains("no_connect("));
+        e.click([0., 0.], Some("chip.p"), None).unwrap();
+        assert!(!e.src.contains("no_connect("));
+        e.step(false);
+        assert_eq!(e.src, marked);
+    }
+
+    #[test]
     fn new_roles_precede_every_local_symbol() {
         let mut e = Editor::open(
             None,
