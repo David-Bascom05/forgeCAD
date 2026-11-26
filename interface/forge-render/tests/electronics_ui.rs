@@ -95,6 +95,15 @@ fn inspect_pin_and_compare_signal_displays() {
     std::fs::write(&path, source).unwrap();
     h.gui.open(path.to_str().unwrap());
     h.step();
+    assert!(h.click("electronics:anchor:U1.VDD"));
+    h.step();
+    assert!(
+        h.placed("electronics:check:main/U1.VDD:@analog.local_bypass")
+            .is_some()
+    );
+    assert!(h.placed("electronics:rail:main/supply.net").is_some());
+    h.key(egui::Key::Escape);
+    h.step();
     let pin = h.placed("electronics:anchor:U1.VDD").unwrap().center();
     h.right_drag((pin.x, pin.y), (pin.x, pin.y));
     h.step();

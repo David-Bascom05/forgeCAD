@@ -8,7 +8,7 @@ mod reader;
 mod report;
 use crate::syntax::Span;
 mod inspection;
-pub use drawing::{graphic_page, sheet_page, sheet_selection_page, symbol_page};
+pub use drawing::{graphic_page, pin_inspection_page, sheet_page, sheet_selection_page, symbol_page};
 pub use graph::Circuit;
 pub use inspection::{Direction, Evidence, PinInspection, inspect_pin, wire_directions};
 mod bom;

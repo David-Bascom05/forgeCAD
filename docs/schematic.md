@@ -62,7 +62,7 @@ Choose **File → New Schematic** or **File → New Symbol Library**. Each opens
 
 ### Pin inspection and signal directions
 
-Right-click a pin to read its short library description and inspect **Needs** and **Provides**. A verified relationship names the other occurrence and pin. An electrically connected match without a confirmed assignment is a candidate. An assignment with a disconnected supply or invalid return is marked **Check wiring**. Selecting a reference opens that pin, including on another sheet. The canvas frames and highlights the participating symbols and their drawn paths. The checklist stays in the right dock. Escape closes inspection.
+Select or right-click a pin to open **Pin checklist** at the top of **Properties**. It shows the short library description and the verified count for **Needs** and **Provides**. A verified relationship names the other occurrence and pin. An electrically connected match without a confirmed assignment is a candidate. An assignment with a disconnected supply or invalid return is marked **Check wiring**. Selecting a reference opens that pin, including on another sheet. The canvas highlights the selected pin, its peers and their drawn paths, including the connected power symbol. Other pins on the same component and the bypass return stay dim. The return still participates in electrical verification. A connected power symbol is listed under a power need even if a source has yet to be assigned. The checklist stays in the right dock. Escape closes inspection.
 
 The symbol editor saves the description with the pin, for example `pin(number: "3", kind: "input", at: (-7, 3), description: "Noninverting input. Connect the filtered sensor signal here.")`. The CLI and MCP pin and symbol queries include this field.
 

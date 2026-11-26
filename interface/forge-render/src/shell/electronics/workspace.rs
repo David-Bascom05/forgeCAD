@@ -497,7 +497,9 @@ impl Shell {
             let r = Rect::from_min_max(pos2(view.right(), top), pos2(s.width(), bottom));
             let mut b = pane(ui, "electronics-inspector", r);
             ui.painter().vline(r.left(), r.y_range(), Stroke::new(1., t.line));
-            ScrollArea::vertical().show(&mut b, |ui| {
+            // A long parts list or component form must not leave a newly opened checklist scrolled away.
+            let scroll_id = ("properties", editor.focus_pin.as_ref().map(|f| &f.id));
+            ScrollArea::vertical().id_salt(scroll_id).show(&mut b, |ui| {
                 if narrow && ui.button("Back to sheet").clicked() {
                     editor.inspector_open = false;
                 }

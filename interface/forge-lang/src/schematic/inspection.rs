@@ -109,6 +109,8 @@ pub struct RoleCheck {
 #[derive(Default, Debug)]
 pub struct PinInspection {
     pub checks: Vec<RoleCheck>,
+    /// One connected power symbol per rail name, preferring the local drawn path.
+    pub rails: Map<String, String>,
     pub pins: Set<String>,
     pub wires: Set<String>,
 }
@@ -119,7 +121,7 @@ pub fn inspect_pin(c: &Circuit, pin: &str) -> Option<PinInspection> {
     let net = &c.nets[&c.net_of[pin]];
     let mut inspection = PinInspection::default();
     inspection.pins.insert(pin.to_owned());
-    let mut routes: Map<String, Set<String>> = Map::new();
+    let mut targets = Set::new();
     let invalid: Set<_> = c
         .issues
         .iter()
@@ -145,10 +147,6 @@ pub fn inspect_pin(c: &Circuit, pin: &str) -> Option<PinInspection> {
                     Evidence::Verified
                 };
                 peers.insert(other.clone(), state);
-                if let Some((a, b)) = &link.returns {
-                    inspection.pins.extend([a.clone(), b.clone()]);
-                    routes.entry(a.clone()).or_default().insert(b.clone());
-                }
             }
             for k in net {
                 if k != pin
@@ -159,11 +157,7 @@ pub fn inspect_pin(c: &Circuit, pin: &str) -> Option<PinInspection> {
                     peers.entry(k.clone()).or_insert(Evidence::Candidate);
                 }
             }
-            inspection.pins.extend(peers.keys().cloned());
-            routes
-                .entry(pin.into())
-                .or_default()
-                .extend(peers.keys().cloned());
+            targets.extend(peers.keys().filter(|k| c.net_of[*k] == c.net_of[pin]).cloned());
             inspection.checks.push(RoleCheck {
                 role: role.clone(),
                 need,
@@ -171,34 +165,48 @@ pub fn inspect_pin(c: &Circuit, pin: &str) -> Option<PinInspection> {
             });
         }
     }
-    // Build one predecessor tree per source. Virtual label/hierarchy edges participate
-    // in reachability; only actual wire segments become highlighted drawing objects.
-    let mut edges = Set::new();
-    for (root, targets) in &routes {
-        let mut parent = Map::from([(root.as_str(), root.as_str())]);
-        let mut queue = VecDeque::from([root.as_str()]);
-        while let Some(a) = queue.pop_front() {
-            for b in &c.adjacency[a] {
-                if let std::collections::btree_map::Entry::Vacant(slot) = parent.entry(b.as_str()) {
-                    slot.insert(a);
-                    queue.push_back(b);
+    // Start on the selected side. A return still affects ERC evidence, but belongs to
+    // a different net. Prefer visible wires before crossing a label or sheet boundary.
+    let scope = pin.rsplit_once('/')?.0;
+    let mut parent = Map::from([(pin, pin)]);
+    let mut local = VecDeque::from([pin]);
+    let mut remote = VecDeque::new();
+    let mut on_sheet = true;
+    while let Some(node) = local.pop_front().or_else(|| {
+        on_sheet = false;
+        remote.pop_front()
+    }) {
+        if let Some(name) = c.terminals.get(node).and_then(|t| t.power_net.as_ref()) {
+            inspection
+                .rails
+                .entry(name.clone())
+                .or_insert_with(|| node.into());
+        }
+        for next in &c.adjacency[node] {
+            let next = next.as_str();
+            if let std::collections::btree_map::Entry::Vacant(slot) = parent.entry(next) {
+                slot.insert(node);
+                if on_sheet && next.rsplit_once('/').is_some_and(|(s, _)| s == scope) {
+                    local.push_back(next);
+                } else {
+                    remote.push_back(next);
                 }
             }
         }
-        for target in targets {
-            let mut here = target.as_str();
-            while let Some(&prev) = parent.get(here) {
-                if prev == here {
-                    break;
-                }
-                for node in [prev, here] {
-                    if c.terminals.contains_key(node) {
-                        inspection.pins.insert(node.into());
-                    }
-                }
-                edges.insert((prev.min(here).to_owned(), prev.max(here).to_owned()));
-                here = prev;
+    }
+    targets.extend(inspection.rails.values().cloned());
+    let mut edges = Set::new();
+    for target in &targets {
+        let mut here = target.as_str();
+        while let Some(&prev) = parent.get(here) {
+            if c.terminals.contains_key(here) {
+                inspection.pins.insert(here.into());
             }
+            if prev == here {
+                break;
+            }
+            edges.insert((prev.min(here).to_owned(), prev.max(here).to_owned()));
+            here = prev;
         }
     }
     for (id, (a, b, _)) in &c.wires {

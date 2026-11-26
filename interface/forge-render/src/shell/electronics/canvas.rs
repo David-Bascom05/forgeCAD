@@ -410,33 +410,36 @@ impl Editor {
             ));
         }
         let hp = resp.interact_pointer_pos().or_else(|| resp.hover_pos());
+        let inspect = !self.library()
+            && (resp.secondary_clicked() || matches!(self.tool, Tool::Select | Tool::Properties));
         let near = hp.and_then(|p| {
             anchors
                 .iter()
                 .filter_map(|(k, q)| {
                     let dist = self.screen(*q).distance(p);
-                    (dist < 11.).then_some((dist, k.clone()))
+                    if dist >= 11. {
+                        return None;
+                    }
+                    // At a stacked anchor, inspect the physical pin before its rail marker
+                    // or junction. Other tools keep their ordinary endpoint picking order.
+                    let rank = if inspect {
+                        match self.circuit.terminals.get(&format!("{}/{}", self.subject, k)) {
+                            Some(t) => usize::from(t.power_net.is_some()),
+                            None => 2,
+                        }
+                    } else {
+                        0
+                    };
+                    Some((dist, rank, k))
                 })
-                .min_by(|a, b| a.0.total_cmp(&b.0))
-                .map(|a| a.1)
+                .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
+                .map(|(_, _, k)| k.clone())
         });
         if resp.secondary_clicked()
             && !self.library()
-            && let Some(point) = hp
+            && let Some(name) = &near
         {
-            // At a stacked anchor prefer a physical pin to its coincident power marker.
-            let closest = anchors
-                .iter()
-                .filter_map(|(k, q)| {
-                    let key = format!("{}/{}", self.subject, k);
-                    let terminal = self.circuit.terminals.get(&key)?;
-                    let dist = self.screen(*q).distance(point);
-                    (dist < 11.).then(|| (dist, self.doc.symbols[&terminal.symbol].power_net.is_some(), key))
-                })
-                .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-            if let Some((_, _, key)) = closest {
-                self.focus_on(&key);
-            }
+            self.focus_on(&format!("{}/{}", self.subject, name));
         }
         if let Some(anchor) = &near {
             resp.clone().on_hover_text(anchor);
@@ -775,7 +778,12 @@ impl Editor {
                     self.inspect();
                 } else if let Some(k) = near {
                     let (id, pin) = k.split_once('.').unwrap_or((k, ""));
-                    self.select(id, pin);
+                    let key = format!("{}/{k}", self.subject);
+                    if self.circuit.terminals.contains_key(&key) {
+                        self.focus_on(&key);
+                    } else {
+                        self.select(id, pin);
+                    }
                 } else {
                     self.select(picked.unwrap_or(""), "");
                 }
@@ -894,8 +902,13 @@ impl Editor {
             }
             NoConnect => {
                 let target = need()?;
-                let markers: Vec<_> = self.doc.rows.iter()
-                    .filter(|row| row.sheet == sheet && matches!(&row.item, Item::NoConnect(on) if on == target))
+                let markers: Vec<_> = self
+                    .doc
+                    .rows
+                    .iter()
+                    .filter(|row| {
+                        row.sheet == sheet && matches!(&row.item, Item::NoConnect(on) if on == target)
+                    })
                     .map(|row| Op::DeleteFeature { id: row.id.clone() })
                     .collect();
                 if !markers.is_empty() {

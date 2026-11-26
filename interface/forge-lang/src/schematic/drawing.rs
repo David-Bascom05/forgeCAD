@@ -246,6 +246,73 @@ pub fn sheet_selection_page(
     });
     Ok(page)
 }
+/// Foreground geometry for one pin. Keep component bodies and fields in context,
+/// but dim the labels and authored leads of the other terminals on each gate.
+pub fn pin_inspection_page(d: &Document, c: &Circuit, scope: &str, focus: &PinInspection) -> Result<Page> {
+    let sheet = c
+        .occurrences
+        .get(scope)
+        .ok_or_else(|| Fault::new("UnknownSheet", Span::default(), scope))?;
+    let mut gates = Map::new();
+    for id in &focus.pins {
+        let Some((owner, _)) = id.rsplit_once('.') else {
+            continue;
+        };
+        if owner.rsplit_once('/').is_some_and(|(s, _)| s == scope) {
+            let pin = &c.terminals[id];
+            let sym = &d.symbols[&pin.symbol];
+            gates.insert(c.origins[id].lo, (owner, &sym.pins[&pin.pin].unit, sym));
+        }
+    }
+    let mut endpoints = Set::new();
+    for wire in &focus.wires {
+        let (a, b, _) = &c.wires[wire];
+        endpoints.extend([a, b]);
+    }
+    let rows: Vec<_> = d.rows.iter().filter(|r| r.sheet == *sheet).collect();
+    let mut page = Page::default();
+    visit_rows(d, c, scope, &rows, |row, key, mut ink, text_ids| {
+        if focus.wires.contains(&key) {
+            page.strokes.append(&mut ink.strokes);
+            return;
+        }
+        if matches!(row.item, Item::Junction(_)) && endpoints.contains(&key) {
+            page.fills.append(&mut ink.fills);
+            return;
+        }
+        let Some(&(owner, unit, sym)) = gates.get(&row.span.lo) else {
+            return;
+        };
+        // Symbol leads are authored graphics. Match their open endpoints against
+        // this specific gate's transformed pin anchors, including rotated instances.
+        let inactive: Vec<_> = sym
+            .pins
+            .iter()
+            .filter(|(_, p)| &p.unit == unit)
+            .map(|(name, _)| format!("{owner}.{name}"))
+            .filter(|id| !focus.pins.contains(id))
+            .filter_map(|id| c.locations.get(&id).copied().map(pt))
+            .collect();
+        ink.strokes.retain(|s| match &s.geom {
+            Geom2::Poly(ps) if ps.first() != ps.last() => ![ps.first(), ps.last()]
+                .into_iter()
+                .flatten()
+                .any(|p| inactive.contains(p)),
+            Geom2::Line { a, b } => !inactive.contains(a) && !inactive.contains(b),
+            _ => true,
+        });
+        page.strokes.append(&mut ink.strokes);
+        page.fills.append(&mut ink.fills);
+        page.texts.extend(
+            ink.texts
+                .into_iter()
+                .zip(text_ids)
+                .filter(|(_, id)| !c.terminals.contains_key(id) || focus.pins.contains(id))
+                .map(|(text, _)| text),
+        );
+    });
+    Ok(page)
+}
 // The editor, SVG export and readability checks consume the same positioned primitives.
 fn visit_rows(
     d: &Document,

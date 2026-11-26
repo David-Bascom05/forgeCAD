@@ -52,8 +52,10 @@ async function capture(browser, base, width, height, file, row, name) {
     if (name === "schematic") {
       const click = (id, button = 0) => page.evaluate(([id, button]) => window.forgecad.fc.app_click(id, button, false), [id, button]);
       const shown = id => t.until(page, s => s.places.some(p => p.name === id), id, 20000);
-      await click("electronics:anchor:U1.VDD", 1);
+      await click("electronics:anchor:U1.VDD");
       await shown("electronics:inspection:main/U1.VDD");
+      await shown("electronics:check:main/U1.VDD:@analog.local_bypass");
+      await shown("electronics:rail:main/supply.net");
       await click("electronics:dock:Parts");
       await shown("electronics:part:analog.Amplifier");
       await click("electronics:grid");

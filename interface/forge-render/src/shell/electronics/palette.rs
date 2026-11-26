@@ -16,17 +16,7 @@ impl Editor {
             return;
         }
         self.select(component, pin);
-        let spans: std::collections::BTreeSet<_> = inspection
-            .pins
-            .iter()
-            .filter(|id| id.rsplit_once('/').is_some_and(|(sheet, _)| sheet == scope))
-            .filter_map(|p| self.circuit.origins.get(p))
-            .map(|s| s.lo)
-            .collect();
-        let page = sch::sheet_selection_page(&self.doc, &self.circuit, scope, |row, key| {
-            spans.contains(&row.span.lo) || inspection.wires.contains(key)
-        })
-        .unwrap_or_default();
+        let page = sch::pin_inspection_page(&self.doc, &self.circuit, scope, &inspection).unwrap_or_default();
         self.focus_pin = Some(PinFocus {
             id: id.into(),
             inspection,
@@ -235,7 +225,9 @@ impl Editor {
         let f = self.focus_pin.as_ref().unwrap();
         let p = &self.circuit.terminals[&f.id];
         let label = f.id.rsplit('/').next().unwrap_or(&f.id);
-        let heading = ui.heading(label);
+        let heading = ui.heading("Pin checklist");
+        ui.add_space(4.);
+        ui.strong(label);
         places.push((format!("electronics:inspection:{}", f.id), heading.rect));
         ui.weak(format!(
             "Pin {} · {}",
@@ -262,10 +254,19 @@ impl Editor {
         let mut next = None;
         for (need, title) in [(true, "Needs"), (false, "Provides")] {
             ui.separator();
-            ui.strong(title);
-            let mut any = false;
+            let count = f.inspection.checks.iter().filter(|r| r.need == need).count();
+            let verified = f
+                .inspection
+                .checks
+                .iter()
+                .filter(|r| r.need == need && r.peers.iter().any(|(_, e)| *e == sch::Evidence::Verified))
+                .count();
+            if count > 0 {
+                ui.strong(format!("{title}   {verified} / {count} verified"));
+            } else {
+                ui.strong(title);
+            }
             for check in f.inspection.checks.iter().filter(|r| r.need == need) {
-                any = true;
                 let role = self
                     .doc
                     .role_names
@@ -282,7 +283,7 @@ impl Editor {
                         sch::Rating::CapacitanceNf(nf) => title.push_str(&format!(" · {nf} nF")),
                     }
                 }
-                ui.add_space(4.);
+                ui.add_space(8.);
                 ui.horizontal(|ui| {
                     let (rect, _) = ui.allocate_exact_size(vec2(13., 13.), egui::Sense::hover());
                     let ink = if verified { t.success } else { t.ink2 };
@@ -300,10 +301,24 @@ impl Editor {
                         ));
                     }
                     ui.add_space(4.);
-                    ui.label(title).on_hover_text(&check.role.0);
+                    let row = ui.strong(title).on_hover_text(&check.role.0);
+                    places.push((format!("electronics:check:{}:{}", f.id, check.role.0), row.rect));
                 });
+                if need && matches!(spec.kind, sch::RoleKind::Power | sch::RoleKind::Return) {
+                    for (rail, pin) in &f.inspection.rails {
+                        let row = ui.label(format!("{rail} connected"));
+                        places.push((format!("electronics:rail:{pin}"), row.rect));
+                    }
+                }
                 if check.peers.is_empty() {
-                    ui.weak(if need { "No provider" } else { "No consumer" });
+                    let missing = if need && spec.kind == sch::RoleKind::Power {
+                        "No power source assigned"
+                    } else if need {
+                        "No provider"
+                    } else {
+                        "No consumer"
+                    };
+                    ui.colored_label(t.warn, missing);
                 }
                 for (peer, status) in &check.peers {
                     let (sheet, name) = peer.rsplit_once('/').unwrap_or(("", peer));
@@ -321,7 +336,7 @@ impl Editor {
                     });
                 }
             }
-            if !any {
+            if count == 0 {
                 ui.weak("None declared");
             }
         }

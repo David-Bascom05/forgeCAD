@@ -444,8 +444,30 @@ fn pin_inspection_preserves_evidence_in_both_directions() {
                     .any(|r| r.need == need && r.peers.contains(&(peer.into(), evidence)))
             );
             assert!(inspection.wires.contains("main/w11"));
+            assert!(inspection.wires.contains("main/w10"));
+            assert_eq!(inspection.rails["+3V3"], "main/supply.net");
+            assert!(!inspection.wires.contains("main/w12"));
+            assert!(!inspection.wires.contains("main/w14"));
+            assert!(!inspection.pins.contains("main/U1.VSS"));
             assert!(!inspection.pins.contains("main/R1.A"));
+            let page = schematic::pin_inspection_page(&doc, &c, "main", &inspection).unwrap();
+            assert!(page.texts.iter().any(|t| t.text == "+3V3"));
+            assert!(page.texts.iter().any(|t| t.text == "VDD (5)"));
+            assert!(!page.texts.iter().any(|t| t.text == "VSS (2)" || t.text == "GND"));
+            let vss = c.locations["main/U1.VSS"];
+            assert!(
+                !page
+                    .strokes
+                    .iter()
+                    .any(|s| s.geom.points(0.1).iter().any(|p| [p.x, p.y] == vss))
+            );
         }
+        let ret = schematic::inspect_pin(&c, "main/U1.VSS").unwrap();
+        assert_eq!(ret.rails["GND"], "main/ground.net");
+        assert!(!ret.pins.contains("main/C2.N")); // Another GND symbol across the global join.
+        assert!(!ret.pins.contains("main/U1.VDD"));
+        assert!(ret.wires.contains("main/w12"));
+        assert!(!ret.wires.contains("main/w10"));
     }
 }
 
