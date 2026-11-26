@@ -4,9 +4,15 @@ mod arc;
 mod check;
 pub use check::{Check, Finding, Rule, Witness};
 mod geometry;
+mod laminate;
 mod library;
+pub use laminate::{Finish, Laminate};
+mod layers;
+pub use layers::{CopperObject, DrawingRole, LayerGraphic, PairRole, PlotLayer};
 pub use library::query;
 mod parts;
+mod process;
+pub use process::{SelectedService, profiles};
 mod pour;
 pub use parts::*;
 pub use pour::{Island, Zone};
@@ -23,6 +29,9 @@ pub use report::response;
 use std::collections::BTreeMap;
 
 pub const SCHEMA: &str = "forgecad.pcb/1";
+pub fn is_board(src: &str) -> bool {
+    crate::electronics::header(src) == Some("pcb")
+}
 pub fn is_document(src: &str) -> bool {
     matches!(crate::electronics::header(src), Some("pcb" | "footprint_library"))
 }
@@ -35,6 +44,7 @@ pub enum LayerMaterial {
 
 #[derive(Debug)]
 pub struct Layer {
+    pub laminate: Laminate,
     pub id: String,
     pub thickness_nm: i64,
     pub material: LayerMaterial,
@@ -74,6 +84,9 @@ pub struct NetClass {
 }
 #[derive(Debug)]
 pub struct Process {
+    pub min_slot_nm: Option<i64>,
+    pub inner_drill_clearance_nm: Option<i64>,
+    pub selected: Option<SelectedService>,
     pub min_edge_nm: Option<i64>,
     pub hole_clearance_nm: Option<i64>,
     pub min_mask_web_nm: Option<i64>,

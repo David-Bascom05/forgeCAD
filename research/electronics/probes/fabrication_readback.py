@@ -1,6 +1,7 @@
 """Check the fabrication-controller ZIP independently. Verification-only: Gerbonara and Shapely.
 
 Usage: python fabrication_readback.py controller.zip
+       python fabrication_readback.py --filter-bank filter-bank.zip
 """
 import csv
 import io
@@ -29,12 +30,35 @@ def geometry(obj):
     return unary_union(pieces)
 
 
+def recover(plots, plated, slots):
+    # Recover conducting islands from copper after drilling. Join layers only at PTH walls.
+    holes = unary_union(plated + slots)
+    islands, layers = [], []
+    for n in sorted(n for n in plots if n.startswith('copper-L')):
+        copper = unary_union([geometry(o) for o in plots[n].objects]).difference(holes)
+        layer = list(copper.geoms) if copper.geom_type == 'MultiPolygon' else [copper]
+        layers.append(range(len(islands), len(islands) + len(layer)))
+        islands.extend(layer)
+    labels = list(range(len(islands)))
+    for hole in plated:
+        contacts = {labels[i] for i, island in enumerate(islands) if island.distance(hole.boundary) < 1e-6}
+        assert contacts
+        labels = [min(contacts) if label in contacts else label for label in labels]
+
+    def net(layer, x, y):
+        return next(labels[i] for i in layers[layer] if islands[i].covers(Point(x, y)))
+
+    return islands, layers, labels, net
+
+
 def check(archive):
     warnings.simplefilter('error', SyntaxWarning)
     with ZipFile(archive) as files:
         plots = {n: GerberFile.from_string(files.read(n).decode()) for n in files.namelist() if n.endswith('.gbr')}
         drills = {n: ExcellonFile.from_string(files.read(n).decode()) for n in files.namelist() if n.endswith('.drl')}
-        assert len(plots) == 11 and len(drills) == 2
+        assert len(plots) == 12 and len(drills) == 2
+        assert plots["documentation/drill-map.gbr"].file_attrs[".FileFunction"] == ("Drillmap",)
+        assert len(list(csv.DictReader(io.StringIO(files.read("documentation/drill-table.csv").decode())))) == 5
         assert json.loads(files.read('review.json'))['drc']['findings'] == []
         positions = list(csv.DictReader(io.StringIO(files.read('placements.csv').decode())))
         assert len(positions) == 3 and sum(p['Side'] == 'bottom' for p in positions) == 1
@@ -62,31 +86,47 @@ def check(archive):
     slots = [geometry(o) for o in drills['nonplated.drl'].objects]
     assert len(slots) == 1 and slots[0].bounds == (1.2, 1.2, 4.8, 2.8)
 
-    # Recover conducting islands from copper after drilling. Join layers only at PTH walls.
-    holes = unary_union(plated + slots)
-    islands, layers = [], []
-    for n in sorted(n for n in plots if n.startswith('copper-L')):
-        copper = image(n).difference(holes)
-        layer = list(copper.geoms) if copper.geom_type == 'MultiPolygon' else [copper]
-        layers.append(range(len(islands), len(islands) + len(layer)))
-        islands.extend(layer)
-    labels = list(range(len(islands)))
-    for hole in plated:
-        contacts = {labels[i] for i, island in enumerate(islands) if island.distance(hole.boundary) < 1e-6}
-        assert contacts
-        labels = [min(contacts) if label in contacts else label for label in labels]
-
-    def net(layer, x, y):
-        return next(labels[i] for i in layers[layer] if islands[i].covers(Point(x, y)))
-
+    islands, layers, labels, net = recover(plots, plated, slots)
     for y in (6, 10):
         assert net(0, 4.65, y) == net(0, 12, y) == net(3, 24, y)
     assert net(0, 12, 6) != net(0, 12, 10)
     assert net(1, 14, 8) == net(0, 12, 10)
     assert not any(islands[i].covers(Point(18.45, 6)) for i in layers[1])
     assert len(set(labels)) == 2
-    print('11 Gerbers, 2 drill files, 3 placements, 2 independently recovered nets')
+    print('12 Gerbers, 2 drill files, 3 placements, 2 independently recovered nets')
+
+
+def check_filter_bank(archive):
+    warnings.simplefilter('error', SyntaxWarning)
+    with ZipFile(archive) as files:
+        plots = {name: GerberFile.from_string(files.read(name).decode())
+                 for name in files.namelist() if name.endswith('.gbr')}
+        def holes(name):
+            drill = ExcellonFile.from_string(files.read(name).decode())
+            return [geometry(o) for o in drill.objects]
+        plated, nonplated = holes('plated.drl'), holes('nonplated.drl')
+        placements = list(csv.DictReader(io.StringIO(files.read('placements.csv').decode())))
+        assert len(placements) == 18 and len(plated) == 26 and len(nonplated) == 4
+        assert 'documentation/user.test_map.gbr' not in plots
+        assert plots['documentation/drill-map.gbr'].file_attrs['.FileFunction'] == ('Drillmap',)
+        assert plots['copper-L2-bottom.gbr'].file_attrs['.FileFunction'] == ('Copper', 'L2', 'Bot', 'Mixed')
+    _, _, labels, net = recover(plots, plated, nonplated)
+    distinct = set()
+    ground = net(0, 6.68, 25.32)
+    for channel in range(8):
+        y = 5 + channel * 2.54
+        source, load = net(0, 6.68, y), net(0, 45.32, y)
+        assert source == net(0, 17.05, y)
+        assert load == net(0, 18.95, y) == net(0, 32, y)
+        assert ground == net(0, 32, y - 1.34)
+        distinct.update((source, load))
+    assert ground == net(0, 45.32, 25.32) == net(1, 26, 14)
+    assert len(distinct) == 16 and ground not in distinct and len(set(labels)) == 17
+    print('Filter bank: 17 independently recovered nets, 18 placements, 26 plated and 4 nonplated bores')
 
 
 if __name__ == '__main__':
-    check(sys.argv[1])
+    if len(sys.argv) == 3 and sys.argv[1] == '--filter-bank':
+        check_filter_bank(sys.argv[2])
+    else:
+        check(sys.argv[1])

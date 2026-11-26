@@ -128,4 +128,11 @@ theorem footprint_doc_accepted : accepts "footprint_library
 chip = footprint(pads: [smd(number: \"1\", at: (0,0), size: (1,2), paste: -0.05mm)])
 " = true := by decide +kernel
 
+/-- Service selection, a custom layer and its geometry share the ordinary PCB grammar. -/
+theorem pcb_layer_doc_accepted : accepts "pcb
+shop = process(vendor: \"oshpark\", service: \"two-layer\")
+test = user_layer(name: \"Probe map\")
+target = layer_dot(layer: \"user.test\", at: (2,3), diameter: 1mm)
+" = true := by decide +kernel
+
 end ForgeLang.LL1.Documents

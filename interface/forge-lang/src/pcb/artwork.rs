@@ -11,7 +11,7 @@ pub struct Mark<'a> {
     pub shape: Shape,
 }
 impl<'a> Mark<'a> {
-    fn new(id: &'a str, net: Option<&'a str>, span: Span, shape: Shape) -> Self {
+    pub(super) fn new(id: &'a str, net: Option<&'a str>, span: Span, shape: Shape) -> Self {
         Self {
             id,
             net,
@@ -28,6 +28,14 @@ impl Board {
             Side::Bottom => self.layers.last(),
         }?;
         matches!(layer.material, LayerMaterial::Copper { .. }).then_some(&layer.id)
+    }
+    pub(super) fn is_inner_copper(&self, id: &str) -> bool {
+        self.surface_layer(Side::Top) != Some(id)
+            && self.surface_layer(Side::Bottom) != Some(id)
+            && self
+                .layers
+                .iter()
+                .any(|l| l.id == id && matches!(l.material, LayerMaterial::Copper { .. }))
     }
     pub(super) fn drills(&self) -> Vec<Mark<'_>> {
         self.vias

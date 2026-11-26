@@ -53,6 +53,7 @@ pub mod materials;
 mod measure_ui;
 pub mod occedit;
 pub mod panel;
+pub mod pcb;
 pub(crate) mod placed;
 mod ribbon;
 pub mod robot;
@@ -152,6 +153,8 @@ pub enum Action {
     /// An untitled Forge part, in a tab.
     New,
     NewElectronics(bool),
+    NewPcb,
+    Pcb(pcb::Command),
     AttachDatasheet,
     Electronics(electronics::Tool),
     Open,
@@ -445,6 +448,7 @@ pub struct Shell {
     pub new_drawing: Option<drawing::NewDrawing>,
     /// A DWG file is open: AutoCAD's layout instead of the model's (`dwgdoc.rs`).
     pub dwgdoc: Option<dwgdoc::DwgDoc>,
+    pub pcb: Option<pcb::Editor>,
     pub electronics: Option<electronics::Editor>,
     /// A robot document is open: its panel beside its source (`robot_ui.rs`).
     pub robot: Option<robot::RobotPanel>,
@@ -531,6 +535,7 @@ impl Default for Shell {
             drawing: None,
             new_drawing: None,
             dwgdoc: None,
+            pcb: None,
             electronics: None,
             robot: None,
             cam: None,
@@ -826,6 +831,10 @@ impl Shell {
         let s = ctx.content_rect();
         let p = ui.painter().clone();
         p.rect_filled(s, 0.0, t.bg);
+        if self.pcb.is_some() {
+            self.pcb_ui(ui);
+            return;
+        }
         if self.electronics.is_some() {
             self.electronics_ui(ui);
             return;
@@ -1178,6 +1187,7 @@ impl Shell {
                 continue;
             }
             let name: String = match k {
+                k if self.pcb.is_some() => ["PCB Layout", "Inspect", "View"][k].into(),
                 k if self.electronics.is_some() => {
                     electronics::tab_name(self.electronics.as_ref().unwrap().library(), k).to_owned()
                 }
@@ -1333,8 +1343,15 @@ impl Shell {
     /// In an environment, its own tabs then Inspect, View and Manage; else the design's, then
     /// Environments (Thermoform, Flat Pattern and the rest are entered from there).
     pub fn tab_order(&self) -> Vec<usize> {
-        if let Some(e)=&self.electronics {
-            return if e.library(){vec![0,1,2]}else{vec![0,3,1,2]};
+        if self.pcb.is_some() {
+            return vec![0, 1, 2];
+        }
+        if let Some(e) = &self.electronics {
+            return if e.library() {
+                vec![0, 1, 2]
+            } else {
+                vec![0, 3, 1, 2]
+            };
         }
         if let Some(v) = self.env_tabs() {
             return v;
@@ -1959,6 +1976,7 @@ impl Shell {
             let model_open = self.fg.is_some() && self.drawing.is_none();
             let mut items = vec![
                 ("New", Some(Action::New)),
+                ("New PCB", Some(Action::NewPcb)),
                 ("New Schematic", Some(Action::NewElectronics(false))),
                 ("New Symbol Library", Some(Action::NewElectronics(true))),
                 ("New Sheet Metal", Some(Action::Sheet(sheet::SheetCmd::NewPart))),
@@ -1967,9 +1985,10 @@ impl Shell {
             // a Forge file is written when asked (Ctrl+S too)
             items.push((
                 "Save",
-                (model_open || self.electronics.is_some()).then_some(Action::Fg(FgCmd::Save)),
+                (model_open || self.electronics.is_some() || self.pcb.is_some())
+                    .then_some(Action::Fg(FgCmd::Save)),
             ));
-            if self.electronics.is_some() {
+            if self.electronics.is_some() || self.pcb.is_some() {
                 items.push(("Save As…", Some(Action::SaveAs)));
             }
             items.push(("New Drawing…", model_open.then_some(Action::NewDrawing)));

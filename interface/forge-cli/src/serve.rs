@@ -64,7 +64,7 @@ const TOOLS: [Tool; 23] = [
             ("file", "path to a PCB .fg"),
             (
                 "sel",
-                "summary, stackup, routing, placements, pads, ratsnest, artwork top|bottom mask|paste|silk, artwork copper LAYER, connectivity, handoff [VARIANT] or drc",
+                "summary, layers, stackup, finishes, routing, placements, pads, ratsnest, artwork LAYER_ID, artwork top|bottom mask|paste|silk, artwork copper LAYER, connectivity, handoff [VARIANT] or drc",
             ),
         ],
     ),

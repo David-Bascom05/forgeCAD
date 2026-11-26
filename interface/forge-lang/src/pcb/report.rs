@@ -13,6 +13,23 @@ fn path(points: &[Point]) -> Json {
 }
 
 impl Board {
+    fn finishes(&self) -> Json {
+        Json::Arr(
+            self.layout
+                .finishes
+                .iter()
+                .map(|((side, film), f)| {
+                    Json::obj(vec![
+                        ("side", side.name().into()),
+                        ("kind", film.name().into()),
+                        ("material", f.material.clone().into()),
+                        ("color", f.color.as_deref().map_or(Json::Null, Into::into)),
+                        ("thickness_mm", mm(f.thickness_nm).into()),
+                    ])
+                })
+                .collect(),
+        )
+    }
     fn stackup(&self) -> Json {
         let mut depth = 0;
         Json::Arr(
@@ -23,6 +40,16 @@ impl Board {
                     depth += l.thickness_nm;
                     let mut fields = vec![
                         ("id", l.id.clone().into()),
+                        (
+                            "usage",
+                            l.laminate.usage.as_deref().map_or(Json::Null, Into::into),
+                        ),
+                        ("dk", l.laminate.dk.map_or(Json::Null, Into::into)),
+                        ("df", l.laminate.df.map_or(Json::Null, Into::into)),
+                        (
+                            "frequency_mhz",
+                            l.laminate.frequency_mhz.map_or(Json::Null, Into::into),
+                        ),
                         ("thickness_mm", mm(l.thickness_nm).into()),
                         ("top_depth_mm", mm(top).into()),
                         ("bottom_depth_mm", mm(depth).into()),
@@ -157,7 +184,7 @@ fn marks_json(ms: &[artwork::Mark<'_>]) -> Json {
 }
 /// A minimum-distance set of remaining pad-centre airwires, using physical islands
 /// as vertices. Prim's cut is updated only for the island most recently joined.
-fn ratsnest(board: &Board) -> Json {
+pub(super) fn airwires(board: &Board) -> Vec<(&str, &str, &str, i64)> {
     let mut report = Check {
         rules: vec![],
         findings: vec![],
@@ -201,18 +228,28 @@ fn ratsnest(board: &Board) -> Json {
                 .filter_map(|(j, v)| Some((j, (*v)?)))
                 .min_by_key(|(_, v)| *v)
                 .unwrap();
-            wires.push(Json::obj(vec![
-                ("net", net.into()),
-                ("from", a.into()),
-                ("to", b.into()),
-                ("from_mm", xy(board.layout.pads[a].at)),
-                ("to_mm", xy(board.layout.pads[b].at)),
-                ("length_mm", ((dist as f64).sqrt() / 1e6).into()),
-            ]));
+            wires.push((net, a, b, dist));
             current = j;
         }
     }
-    Json::Arr(wires)
+    wires
+}
+fn ratsnest(board: &Board) -> Json {
+    Json::Arr(
+        airwires(board)
+            .into_iter()
+            .map(|(net, a, b, dist)| {
+                Json::obj(vec![
+                    ("net", net.into()),
+                    ("from", a.into()),
+                    ("to", b.into()),
+                    ("from_mm", xy(board.layout.pads[a].at)),
+                    ("to_mm", xy(board.layout.pads[b].at)),
+                    ("length_mm", ((dist as f64).sqrt() / 1e6).into()),
+                ])
+            })
+            .collect(),
+    )
 }
 pub fn response(board: &Board, words: &[String]) -> Result<Json> {
     let mut ok = true;
@@ -258,6 +295,7 @@ pub fn response(board: &Board, words: &[String]) -> Result<Json> {
                 ),
             ),
             ("edge_mm", path(&board.outline)),
+            ("surface_finishes", board.finishes()),
             ("stackup", board.stackup()),
             (
                 "stack_thickness_mm",
@@ -275,6 +313,29 @@ pub fn response(board: &Board, words: &[String]) -> Result<Json> {
                 board.process.as_ref().map_or(Json::Null, |p| {
                     Json::obj(vec![
                         ("id", p.id.clone().into()),
+                        (
+                            "vendor",
+                            p.selected
+                                .as_ref()
+                                .map_or(Json::Null, |v| v.vendor.clone().into()),
+                        ),
+                        (
+                            "service",
+                            p.selected
+                                .as_ref()
+                                .map_or(Json::Null, |v| v.service.id.clone().into()),
+                        ),
+                        (
+                            "source",
+                            p.selected
+                                .as_ref()
+                                .map_or(Json::Null, |v| v.service.source.clone().into()),
+                        ),
+                        ("min_slot_mm", p.min_slot_nm.map_or(Json::Null, |n| mm(n).into())),
+                        (
+                            "inner_drill_clearance_mm",
+                            p.inner_drill_clearance_nm.map_or(Json::Null, |n| mm(n).into()),
+                        ),
                         ("min_edge_mm", p.min_edge_nm.map_or(Json::Null, |n| mm(n).into())),
                         (
                             "hole_clearance_mm",
@@ -327,6 +388,34 @@ pub fn response(board: &Board, words: &[String]) -> Result<Json> {
                 &source.circuit,
                 words.get(1).map(String::as_str),
             )?
+        }
+        "layers" if words.len() == 1 => Json::Arr(
+            board
+                .plot_layers()
+                .iter()
+                .map(|l| {
+                    Json::obj(vec![
+                        ("id", l.id().into()),
+                        ("name", l.title(board).into()),
+                        ("group", l.group().into()),
+                    ])
+                })
+                .collect(),
+        ),
+        "finishes" if words.len() == 1 => board.finishes(),
+        "artwork" if words.len() == 2 => {
+            let l = board
+                .plot_layers()
+                .into_iter()
+                .find(|l| l.id() == words[1])
+                .ok_or_else(|| {
+                    Fault::new(
+                        "UnknownArtworkLayer",
+                        Span::default(),
+                        "query layers for available IDs",
+                    )
+                })?;
+            marks_json(&board.plot(&l))
         }
         "artwork" if words.len() == 3 => {
             if words[1] == "copper"
@@ -431,7 +520,7 @@ pub fn response(board: &Board, words: &[String]) -> Result<Json> {
             return Err(Fault::new(
                 "UnknownBoardQuery",
                 Span::default(),
-                "choose summary, stackup, routing, placements, pads, ratsnest, artwork, connectivity, handoff [variant] or drc",
+                "choose summary, stackup, finishes, layers, routing, placements, pads, ratsnest, artwork, connectivity, handoff [variant] or drc",
             ));
         }
     };

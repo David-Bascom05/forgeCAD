@@ -53,7 +53,7 @@ fn drilled_and_assembled_outputs_share_one_datum_and_are_deterministic() {
     let b = board(EXAMPLE);
     let files = b.fabrication_files(None).unwrap();
     assert_eq!(files, b.fabrication_files(None).unwrap());
-    assert_eq!(files.keys().filter(|k| k.ends_with(".gbr")).count(), 11);
+    assert_eq!(files.keys().filter(|k| k.ends_with(".gbr")).count(), 12);
     assert!(files["top-mask.gbr"].contains("TF.FilePolarity,Negative"));
     assert!(files["bottom-paste.gbr"].contains("TF.FileFunction,Paste,Bot"));
     assert!(files["nonplated.drl"].contains("G00X2.000000Y2.000000\nM15\nG01X4.000000Y2.000000"));
@@ -227,4 +227,137 @@ fn variants_keep_the_board_artwork_and_filter_assembly() {
     assert!(base["bom.csv"].contains("packages.passives.chip"));
     assert!(!fitted["bom.csv"].contains("packages.passives.chip"));
     assert!(!fitted["placements.csv"].contains("main/c"));
+}
+
+#[test]
+fn layer_identity_placement_and_fabrication_policy() {
+    let source = r#"pcb
+perimeter = edge(points:[(0,0),(20,0),(20,15),(0,15)])
+top = copper(thickness:0.035mm,weight_oz_ft2:1)
+core = dielectric(kind:"core",material:"FR4",thickness:1.53mm,dk:4.2,df:0.018,frequency_mhz:1000)
+bottom = copper(thickness:0.035mm,weight_oz_ft2:1)
+stack = stackup(layers:[top,core,bottom])
+coat = surface_finish(kind:"mask",side:"top",material:"LPI",color:"purple",thickness:0.015mm)
+prototype = process(vendor:"oshpark",service:"two-layer",min_width:0.1mm)
+debug = user_layer(name:"Fixture notes")
+notes = layer_line(layer:"user.debug",points:[(1,1),(2,2)],width:0.1mm)
+probe = user_layer(name:"Probe map",plot:true)
+target = layer_text(layer:"user.probe",value:"TP1",at:(2,2),height:1mm,width:0.1mm)
+pkg = footprint(pads:[],artwork:[layer_line(layer:"adhesive",points:[(1,0),(2,0)],width:0.2mm)])
+placed = place(footprint:pkg,at:(10,5),side:"bottom",bindings:[])
+"#;
+    let b = board(source);
+    assert_eq!(b.layers[1].laminate.dk, Some(4.2));
+    assert_eq!(b.layout.finishes[&(Side::Top, Film::Mask)].thickness_nm, 15_000);
+    assert_eq!(b.process.as_ref().unwrap().min_width_nm, 152_400);
+    let glue = pcb::PlotLayer::Paired(Side::Bottom, pcb::PairRole::Adhesive);
+    assert_eq!(
+        b.plot(&glue)[0].shape,
+        Shape::Stroke {
+            axis: [[9_000_000, 5_000_000], [8_000_000, 5_000_000]],
+            width: 200_000
+        }
+    );
+    let f = b.fabrication_files(None).unwrap();
+    assert!(f["bottom-adhesive.gbr"].contains("Glue,Bot"));
+    assert!(!f.contains_key("top-adhesive.gbr"));
+    assert!(!f.contains_key("documentation/user.debug.gbr"));
+    assert!(f["documentation/user.probe.gbr"].contains("OtherDrawing,user.probe"));
+    assert!(b.plot_layers().contains(&pcb::PlotLayer::DrillGuide));
+    for (old, new, kind) in [
+        ("two-layer", "four-layer", "VendorStackMismatch"),
+        ("oshpark", "no-such-vendor", "UnknownPcbVendor"),
+        ("two-layer", "unknown", "UnknownPcbService"),
+        ("user.debug", "drawign", "UnknownDrawingLayer"),
+        ("dk:4.2", "dk:0.5", "InvalidLaminateProperty"),
+    ] {
+        assert_eq!(
+            pcb::compile(&source.replace(old, new), None, None)
+                .unwrap_err()
+                .kind,
+            kind
+        );
+    }
+}
+
+#[test]
+fn all_layer_and_selective_keepouts_and_margins() {
+    let src = format!(
+        "{EXAMPLE}\ngap = keepout(layer:\"all\", restrict:[\"via\"], points:[(11,5),(13,5),(13,7),(11,7)])"
+    );
+    assert!(!rules(&src).contains(&Rule::CopperInKeepout));
+    assert!(rules(&src.replace("restrict:[\"via\"]", "restrict:[\"smd\"]")).contains(&Rule::CopperInKeepout));
+    let src =
+        format!("{EXAMPLE}\nedge_limit = layer_line(layer:\"margin\", points:[(12,4),(12,8)],width:0.1mm)");
+    let b = board(&src);
+    assert!(
+        b.check()
+            .findings
+            .iter()
+            .any(|f| f.rule == Rule::MinEdgeClearance)
+    );
+}
+
+#[test]
+fn filter_bank_service_and_connectivity() {
+    let b = board(include_str!("../../../examples/electronics/filter-bank.fg"));
+    assert_eq!(
+        (
+            b.nets.len(),
+            b.layout.placements.len(),
+            b.layout.pads.len(),
+            b.vias.len()
+        ),
+        (17, 18, 50, 8)
+    );
+    assert!(b.check().findings.is_empty(), "{:?}", b.check().findings);
+    assert!(b.plot(&pcb::PlotLayer::Airwires).is_empty());
+    let f = b.fabrication_files(None).unwrap();
+    assert!(f.contains_key("documentation/top.fab.gbr"));
+    assert!(!f.contains_key("documentation/user.test_map.gbr"));
+}
+
+#[test]
+fn fenced_project_vendor_override_drives_real_drc() {
+    let dir = std::env::temp_dir().join(format!("forge-pcb-project-profile-{}", std::process::id()));
+    let vendors = dir.join("vendors");
+    std::fs::create_dir_all(&vendors).unwrap();
+    let custom = include_str!("../../../kernel/forge-vendor/data/pcbway.toml")
+        .replace("min_width = 0.1", "min_width = 0.6");
+    std::fs::write(vendors.join("local.toml"), custom).unwrap();
+    let src = r#"pcb
+edge1 = edge(points:[(0,0),(10,0),(10,10),(0,10)])
+top = copper(thickness:0.035mm,weight_oz_ft2:1)
+core = dielectric(thickness:1.53mm,material:"FR4")
+bottom = copper(thickness:0.035mm,weight_oz_ft2:1)
+stack = stackup(layers:[top,core,bottom])
+fab = process(vendor:"pcbway",service:"two-layer-1oz")
+rail = net(name:"VDD")
+trace1 = track(net:rail,layer:top,width:0.2mm,points:[(2,2),(5,5)])
+"#;
+    let b = pcb::compile(src, Some(&dir), Some(&dir)).unwrap();
+    assert_eq!(b.process.as_ref().unwrap().min_width_nm, 600_000);
+    assert!(b.check().findings.iter().any(|f| f.rule == Rule::MinTrackWidth));
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn service_applies_slot_and_inner_bore_rules_at_their_boundaries() {
+    let src = replace(
+        "prototype = process(",
+        "prototype = process(vendor: \"oshpark\", service: \"four-layer\", ",
+    );
+    let b = board(&src);
+    assert_eq!(
+        b.process.as_ref().unwrap().inner_drill_clearance_nm,
+        Some(254_000)
+    );
+    assert!(b.check().findings.is_empty(), "{:?}", b.check().findings);
+    assert!(rules(&src.replace("drill: 1.6mm", "drill: 0.507999mm")).contains(&Rule::MinSlotWidth));
+    assert!(!rules(&src.replace("drill: 1.6mm", "drill: 0.508mm")).contains(&Rule::MinSlotWidth));
+    let inner_trace = format!(
+        "{src}\nstray = track(net:ground,layer:inner,width:0.2mm,points:[(17,6.503999),(19,6.503999)])"
+    );
+    assert!(rules(&inner_trace).contains(&Rule::MinInnerDrillClearance));
+    assert!(!rules(&inner_trace.replace("6.503999", "6.504000")).contains(&Rule::MinInnerDrillClearance));
 }

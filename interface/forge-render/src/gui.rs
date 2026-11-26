@@ -488,20 +488,35 @@ impl Gui {
         }
         if path.ends_with(".fg")
             && let Ok(src) = forge_dirs::fs::read_to_string(path)
-            && forge_lang::schematic::is_document(&src)
         {
-            return match crate::shell::electronics::Editor::open(Some(path), src) {
-                Ok(editor) => {
-                    self.shell.name = name_of(path);
-                    self.shell.electronics = Some(editor);
-                    self.shell.tab = 0;
-                    true
-                }
-                Err(msg) => {
-                    self.shell.status = msg;
-                    false
-                }
-            };
+            if forge_lang::pcb::is_board(&src) {
+                return match crate::shell::pcb::Editor::open(Some(path), src) {
+                    Ok(e) => {
+                        self.shell.pcb = Some(e);
+                        self.shell.name = name_of(path);
+                        self.shell.tab = 0;
+                        true
+                    }
+                    Err(e) => {
+                        self.shell.status = e;
+                        false
+                    }
+                };
+            }
+            if forge_lang::schematic::is_document(&src) {
+                return match crate::shell::electronics::Editor::open(Some(path), src) {
+                    Ok(editor) => {
+                        self.shell.name = name_of(path);
+                        self.shell.electronics = Some(editor);
+                        self.shell.tab = 0;
+                        true
+                    }
+                    Err(msg) => {
+                        self.shell.status = msg;
+                        false
+                    }
+                };
+            }
         }
         // a drawing opens in the Drawing environment
         if path.ends_with(".fg")
@@ -1126,8 +1141,25 @@ impl Gui {
                     self.doc_later.push(c);
                     continue;
                 }
+                Action::NewPcb => {
+                    self.new_typed_document(crate::shell::docs::DocKind::Pcb);
+                    continue;
+                }
+                Action::Undo | Action::Redo if self.shell.pcb.is_some() => {
+                    self.shell.pcb.as_mut().unwrap().step(a == Action::Redo);
+                    self.sync_tab();
+                    continue;
+                }
+                Action::FitAll | Action::Home if self.shell.pcb.is_some() => {
+                    self.shell.pcb.as_mut().unwrap().fit = true;
+                    continue;
+                }
                 Action::NewElectronics(library) => {
-                    self.new_typed_document(Some(library));
+                    self.new_typed_document(if library {
+                        crate::shell::docs::DocKind::SymbolLibrary
+                    } else {
+                        crate::shell::docs::DocKind::Schematic
+                    });
                     continue;
                 }
                 Action::Undo | Action::Redo if self.shell.electronics.is_some() => {
@@ -1136,7 +1168,9 @@ impl Gui {
                     self.sync_tab();
                     continue;
                 }
-                Action::Fg(crate::shell::FgCmd::Save) if self.shell.electronics.is_some() => {
+                Action::Fg(crate::shell::FgCmd::Save)
+                    if self.shell.electronics.is_some() || self.shell.pcb.is_some() =>
+                {
                     self.fg_save();
                     continue;
                 }
@@ -3830,8 +3864,14 @@ impl Gui {
 
     /// Writes the Forge part's text to its file.
     pub fn fg_save(&mut self) {
-        if let Some(e) = &mut self.shell.electronics {
-            if let Some(path) = e.path.clone() {
+        let path = self
+            .shell
+            .pcb
+            .as_ref()
+            .map(|e| e.path.clone())
+            .or_else(|| self.shell.electronics.as_ref().map(|e| e.path.clone()));
+        if let Some(path) = path {
+            if let Some(path) = path {
                 self.save_as(&path);
             } else {
                 self.shell.out.push(Action::SaveAs);

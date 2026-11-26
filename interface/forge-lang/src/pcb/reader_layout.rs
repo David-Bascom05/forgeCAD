@@ -41,8 +41,9 @@ pub(super) fn polygon(e: &Expr, p: &Params) -> Result<Vec<Point>> {
     }
     Ok(path)
 }
-pub(super) const FOOTPRINT_ARGS: &[&str] = &["pads", "courtyard", "legend", "paste_windows"];
+pub(super) const FOOTPRINT_ARGS: &[&str] = &["pads", "artwork", "courtyard", "legend", "paste_windows"];
 pub(super) fn package(call: &mut Call<'_>, p: &Params) -> Result<Footprint> {
+    let artwork = layers::footprint_graphics(call, p)?;
     let courtyard = call.take("courtyard").map(|e| polygon(e, p)).transpose()?;
     let mut legend = Vec::new();
     if let Some(items) = call.take("legend") {
@@ -167,10 +168,16 @@ pub(super) fn package(call: &mut Call<'_>, p: &Params) -> Result<Footprint> {
         c.end()?;
         pads.push(def);
     }
-    if pads.is_empty() {
+    if pads.is_empty()
+        && artwork.is_empty()
+        && courtyard.is_none()
+        && legend.is_empty()
+        && paste_windows.is_empty()
+    {
         return Err(fault(e, "MissingPads", "declare at least one pad"));
     }
     Ok(Footprint {
+        artwork,
         pads,
         courtyard,
         legend,
@@ -364,6 +371,16 @@ pub(super) fn place(
                 film: Film::Silk,
                 side: pose.side,
                 shapes,
+                span: c.span,
+            },
+        );
+    }
+    for (i, (role, primitive)) in def.artwork.iter().enumerate() {
+        layout.layer_graphics.insert(
+            format!("{id}:artwork{i}"),
+            LayerGraphic {
+                layer: PlotLayer::Paired(pose.side, *role),
+                shapes: primitive.shapes(pose, &designator, c.span)?,
                 span: c.span,
             },
         );

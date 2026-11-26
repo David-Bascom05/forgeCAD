@@ -116,6 +116,7 @@ impl PadDef {
 }
 #[derive(Debug)]
 pub struct Footprint {
+    pub(super) artwork: Vec<(super::PairRole, super::layers::Primitive)>,
     pub pads: Vec<PadDef>,
     pub courtyard: Option<Vec<Point>>,
     pub legend: Vec<Legend>,
@@ -190,6 +191,8 @@ pub struct Hole {
 }
 #[derive(Debug)]
 pub struct Area {
+    /// Empty means every copper object.
+    pub restrict: std::collections::BTreeSet<super::CopperObject>,
     pub layer: String,
     pub net: Option<String>,
     pub polygon: Vec<Point>,
@@ -197,6 +200,9 @@ pub struct Area {
 }
 #[derive(Debug, Default)]
 pub struct Layout {
+    pub finishes: BTreeMap<(Side, Film), super::Finish>,
+    pub user_layers: BTreeMap<String, (String, bool)>,
+    pub layer_graphics: BTreeMap<String, super::LayerGraphic>,
     pub footprints: BTreeMap<String, Footprint>,
     pub placements: BTreeMap<String, Placement>,
     pub pads: BTreeMap<String, Pad>,

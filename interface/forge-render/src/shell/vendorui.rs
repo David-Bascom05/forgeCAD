@@ -349,7 +349,11 @@ impl Shell {
             .and_then(|s| s.vendor.as_ref())
             .map(|v| format!("{} {}", v.name, v.material));
         if ui_state.pick.is_none() {
-            ui_state.pick = profiles.list.first().map(|e| e.vendor.id.clone());
+            ui_state.pick = profiles
+                .list
+                .iter()
+                .find(|e| e.vendor.pcb.is_empty() || !e.vendor.materials.is_empty())
+                .map(|e| e.vendor.id.clone());
         }
         let mut close = false;
         let mut todo: Option<Later> = None;
@@ -398,7 +402,14 @@ impl Shell {
                     ui.vertical(|ui| {
                         ui.set_width(if narrow { ui.available_width() } else { 170.0 });
                         for lib in [Lib::Project, Lib::User, Lib::ForgeCad] {
-                            let here: Vec<_> = profiles.list.iter().filter(|e| e.lib == lib).collect();
+                            let here: Vec<_> = profiles
+                                .list
+                                .iter()
+                                .filter(|e| {
+                                    e.lib == lib
+                                        && (e.vendor.pcb.is_empty() || !e.vendor.materials.is_empty())
+                                })
+                                .collect();
                             if here.is_empty() {
                                 continue;
                             }

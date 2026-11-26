@@ -1,0 +1,18 @@
+format = 1
+id = "jlcpcb"
+name = "JLCPCB"
+units = "mm"
+source = "https://jlcpcb.com/capabilities/pcb-capabilities"
+taken = "2026-11-26"
+note = "Conservative two-layer FR-4, 1 oz, green mask preset. 0.15 mm common spacing covers ordinary different-net SMD pad spacing. The published trace floor is 0.10 mm. Uses a 0.30 mm drill and the recommended 0.25 mm PTH ring throughout. Special features and finishes have additional requirements. Verify with the vendor before ordering."
+
+[[pcb]]
+id = "two-layer-green"
+source = "https://jlcpcb.com/capabilities/pcb-capabilities"
+layers = 2
+outer_oz = 1
+min_width = 0.10
+min_spacing = 0.15
+min_drill = 0.30
+min_annular_ring = 0.25
+min_mask_web = 0.10

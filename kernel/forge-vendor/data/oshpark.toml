@@ -1,0 +1,35 @@
+format = 1
+id = "oshpark"
+name = "OSH Park"
+units = "in"
+source = "https://docs.oshpark.com/services/"
+taken = "2026-11-26"
+note = "Prototype services. Covers copper count and weight and the geometric minima below. Verify with the vendor before ordering."
+
+[[pcb]]
+id = "two-layer"
+source = "https://docs.oshpark.com/services/two-layer/"
+layers = 2
+outer_oz = 1
+min_width = 0.006
+min_spacing = 0.006
+min_drill = 0.010
+min_slot = 0.020
+min_annular_ring = 0.005
+min_edge = 0.015
+min_mask_web = 0.004
+
+[[pcb]]
+id = "four-layer"
+source = "https://docs.oshpark.com/services/four-layer/"
+layers = 4
+outer_oz = 1
+inner_oz = 0.5
+min_width = 0.005
+min_spacing = 0.005
+min_drill = 0.010
+min_slot = 0.020
+min_annular_ring = 0.004
+min_edge = 0.015
+min_mask_web = 0.004
+inner_drill_clearance = 0.010

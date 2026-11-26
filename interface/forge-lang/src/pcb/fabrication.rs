@@ -113,10 +113,16 @@ impl Board {
             } else {
                 "Inr"
             };
+            let usage = match l.laminate.usage.as_deref() {
+                Some("signal") => ",Signal",
+                Some("plane") => ",Plane",
+                Some("mixed") => ",Mixed",
+                _ => "",
+            };
             files.insert(
                 format!("copper-L{}-{}.gbr", i + 1, l.id),
                 gerber(
-                    &format!("Copper,L{},{pos}", i + 1),
+                    &format!("Copper,L{},{pos}{usage}", i + 1),
                     false,
                     &self
                         .copper(&l.id)
@@ -148,12 +154,90 @@ impl Board {
                 );
             }
         }
+        for layer in self.plot_layers() {
+            let (file, function) = match &layer {
+                PlotLayer::Paired(side, role) => {
+                    let pos = if *side == Side::Top { "Top" } else { "Bot" };
+                    let function = match role {
+                        PairRole::Adhesive => "Glue",
+                        PairRole::Carbon => "Carbonmask",
+                        PairRole::Silver => "Silvermask",
+                        PairRole::Gold => "Goldmask",
+                        PairRole::Tin => "Tinmask",
+                        PairRole::Heatsink => "Heatsinkmask",
+                        PairRole::Peelable => "Peelablemask",
+                        PairRole::Coating => "Other",
+                        _ => "",
+                    };
+                    if function.is_empty() {
+                        (
+                            format!("documentation/{}.gbr", layer.id()),
+                            if *role == PairRole::Assembly {
+                                format!("AssemblyDrawing,{pos}")
+                            } else {
+                                format!("OtherDrawing,{}", layer.id())
+                            },
+                        )
+                    } else {
+                        (
+                            format!("{}-{}.gbr", side.name(), role.name()),
+                            if *role == PairRole::Coating {
+                                format!("Other,ConformalCoating{pos}")
+                            } else {
+                                format!("{function},{pos}")
+                            },
+                        )
+                    }
+                }
+                PlotLayer::Drawing(DrawingRole::VScore) => {
+                    ("documentation/v_score.gbr".into(), "Vcutmap".into())
+                }
+                PlotLayer::User(id) if !self.layout.user_layers[id].1 => continue,
+                PlotLayer::Drawing(_) | PlotLayer::User(_) => (
+                    format!("documentation/{}.gbr", layer.id()),
+                    format!("OtherDrawing,{}", layer.id()),
+                ),
+                _ => continue,
+            };
+            let shapes: Vec<_> = self.plot(&layer).into_iter().map(|m| m.shape).collect();
+            if !shapes.is_empty() {
+                files.insert(file, gerber(&function, false, &shapes));
+            }
+        }
         let profile: Vec<_> = std::iter::once(&self.outline)
             .chain(self.layout.cutouts.values())
             .flat_map(|ps| geometry::sides(ps).map(|axis| Shape::Stroke { axis, width: 10_000 }))
             .collect();
         files.insert("profile.gbr".into(), gerber("Profile,NP", false, &profile));
         let bores = self.drills();
+        if !bores.is_empty() {
+            let mut drill_map = profile.clone();
+            let mut tools =
+                String::from("Object,Plating,Diameter_mm,Start_X_mm,Start_Y_mm,End_X_mm,End_Y_mm\n");
+            for bore in &bores {
+                let Shape::Stroke { axis: [a, b], width } = bore.shape else {
+                    unreachable!()
+                };
+                drill_map.push(bore.shape.clone());
+                writeln!(
+                    tools,
+                    "{},{},{},{},{},{},{}",
+                    csv(bore.id),
+                    if bore.net.is_some() { "PTH" } else { "NPTH" },
+                    mm(width),
+                    mm(a[0]),
+                    mm(a[1]),
+                    mm(b[0]),
+                    mm(b[1])
+                )
+                .unwrap();
+            }
+            files.insert(
+                "documentation/drill-map.gbr".into(),
+                gerber("Drillmap", false, &drill_map),
+            );
+            files.insert("documentation/drill-table.csv".into(), tools);
+        }
         for (name, style, plated) in [
             ("plated.drl", format!("Plated,1,{n},PTH"), true),
             ("nonplated.drl", format!("NonPlated,1,{n},NPTH"), false),

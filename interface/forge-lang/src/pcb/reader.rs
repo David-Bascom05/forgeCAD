@@ -37,14 +37,26 @@ const SIGNATURES: &[(&str, &[&str])] = &[
     ("npth", &["at", "to", "drill"]),
     ("cutout", &["points"]),
     ("copper_region", &["net", "layer", "points"]),
-    ("keepout", &["layer", "points"]),
+    ("keepout", &["layer", "points", "restrict"]),
     ("silk_text", &["value", "at", "side", "height", "width", "angle"]),
     ("silk_line", &["points", "side", "width"]),
     ("mask_opening", &["side", "points"]),
     ("paste_opening", &["side", "points"]),
+    ("user_layer", &["name", "plot"]),
+    ("layer_dot", layers::DOT),
+    ("layer_line", layers::LINE),
+    ("layer_region", layers::REGION),
+    ("layer_text", layers::TEXT),
     ("edge", &["points"]),
-    ("copper", &["weight_oz_ft2", "thickness"]),
-    ("dielectric", &["material", "thickness"]),
+    ("copper", &["weight_oz_ft2", "thickness", "kind"]),
+    (
+        "surface_finish",
+        &["side", "kind", "material", "thickness", "color"],
+    ),
+    (
+        "dielectric",
+        &["material", "thickness", "kind", "dk", "df", "frequency_mhz"],
+    ),
     ("stackup", &["layers"]),
     ("schematic", &["file"]),
     ("net", &["name", "terminal"]),
@@ -56,6 +68,10 @@ const SIGNATURES: &[(&str, &[&str])] = &[
     (
         "process",
         &[
+            "vendor",
+            "service",
+            "min_slot",
+            "inner_drill_clearance",
             "min_width",
             "min_spacing",
             "min_drill",
@@ -253,11 +269,18 @@ pub fn compile(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Boa
             }
             "zone" | "copper_region" | "keepout" => {
                 let layer_expr = c.req("layer")?;
-                let layer = reference(layer_expr)?;
-                if !stack.as_ref().is_some_and(|v| {
-                    v.iter()
-                        .any(|l| l.id == layer && matches!(l.material, LayerMaterial::Copper { .. }))
-                }) {
+                let layer = if c.name == "keepout" && matches!(&layer_expr.kind,ExprKind::Str(s) if s=="all")
+                {
+                    "*".into()
+                } else {
+                    reference(layer_expr)?
+                };
+                if layer != "*"
+                    && !stack.as_ref().is_some_and(|v| {
+                        v.iter()
+                            .any(|l| l.id == layer && matches!(l.material, LayerMaterial::Copper { .. }))
+                    })
+                {
                     return Err(fault(layer_expr, "ExpectedCopperLayer", layer));
                 }
                 let net = c.take("net").map(reference).transpose()?;
@@ -303,9 +326,30 @@ pub fn compile(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Boa
                         },
                     );
                 } else {
+                    let mut restrict = BTreeSet::new();
+                    if let Some(arg) = c.take("restrict") {
+                        for el in list(arg)? {
+                            let kind = string(el)?;
+                            restrict.insert(CopperObject::parse(&kind).ok_or_else(|| {
+                                fault(
+                                    el,
+                                    "UnknownKeepoutObject",
+                                    "choose track, via, smd, pth, region or pour",
+                                )
+                            })?);
+                        }
+                        if restrict.is_empty() {
+                            return Err(fault(
+                                arg,
+                                "EmptyKeepout",
+                                "list the restricted objects or omit restrict for all copper",
+                            ));
+                        }
+                    }
                     layout.areas.insert(
                         id.clone(),
                         Area {
+                            restrict,
                             layer,
                             net,
                             polygon,
@@ -318,6 +362,19 @@ pub fn compile(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Boa
                 layout
                     .graphics
                     .insert(id.clone(), reader_layout::graphic(&mut c, &params)?);
+            }
+            "user_layer" => {
+                let name = label(c.req("name")?)?;
+                let plot = c
+                    .take("plot")
+                    .map(crate::electronics::boolean)
+                    .transpose()?
+                    .unwrap_or(false);
+                layout.user_layers.insert(id.clone(), (name, plot));
+            }
+            "layer_dot" | "layer_text" | "layer_line" | "layer_region" => {
+                let g = layers::board_graphic(&mut c, &params, &layout)?;
+                layout.layer_graphics.insert(id.clone(), g);
             }
             "edge" => {
                 if outline.is_some() {
@@ -336,6 +393,12 @@ pub fn compile(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Boa
                     ));
                 }
                 outline = Some(path);
+            }
+            "surface_finish" => {
+                let (key, finish) = laminate::finish(&mut c, &params)?;
+                if layout.finishes.insert(key, finish).is_some() {
+                    return Err(fault(e, "DuplicateFinish", "one coating per face and role"));
+                }
             }
             "copper" | "dielectric" => {
                 if stack.is_some() {
@@ -361,6 +424,7 @@ pub fn compile(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Boa
                 available.insert(
                     id.clone(),
                     Layer {
+                        laminate: laminate::read(&mut c, &params)?,
                         id: id.clone(),
                         thickness_nm,
                         material,
@@ -522,17 +586,7 @@ pub fn compile(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Boa
                 if process.is_some() {
                     return Err(fault(e, "DuplicateProcess", "one fabrication process per board"));
                 }
-                process = Some(Process {
-                    id: id.clone(),
-                    min_edge_nm: c.take("min_edge").map(|e| length(e, &params)).transpose()?,
-                    hole_clearance_nm: c.take("hole_clearance").map(|e| length(e, &params)).transpose()?,
-                    min_mask_web_nm: c.take("min_mask_web").map(|e| length(e, &params)).transpose()?,
-                    silk_clearance_nm: c.take("silk_clearance").map(|e| length(e, &params)).transpose()?,
-                    min_spacing_nm: length(c.req("min_spacing")?, &params)?,
-                    min_width_nm: length(c.req("min_width")?, &params)?,
-                    min_drill_nm: length(c.req("min_drill")?, &params)?,
-                    min_annular_ring_nm: length(c.req("min_annular_ring")?, &params)?,
-                });
+                process = Some(process::read(&mut c, id, &params, dir, root)?);
             }
             _ => unreachable!("checked board signature"),
         }
@@ -584,6 +638,9 @@ pub fn compile(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Boa
         tracks,
         vias,
     };
+    if let Some(s) = board.process.as_ref().and_then(|p| p.selected.as_ref()) {
+        s.check_stack(&board.layers)?;
+    }
     for p in board.layout.pads.values() {
         if p.drill.is_none() && board.surface_layer(p.side).is_none() {
             return Err(Fault::new(

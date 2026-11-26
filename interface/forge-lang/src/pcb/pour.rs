@@ -224,6 +224,23 @@ impl Board {
                     .values()
                     .map(|p| (Shape::Region(p.clone()), edge_gap)),
             );
+            if self.is_inner_copper(&z.layer)
+                && let Some(min) = self.process.as_ref().and_then(|p| p.inner_drill_clearance_nm)
+            {
+                obstacles.extend(
+                    self.drills()
+                        .into_iter()
+                        .filter(|d| d.net.is_some() && d.net != Some(z.net.as_str()))
+                        .map(|d| (d.shape, min)),
+                );
+            }
+            obstacles.extend(
+                self.layout
+                    .layer_graphics
+                    .values()
+                    .filter(|g| g.layer == PlotLayer::Drawing(DrawingRole::Margin))
+                    .flat_map(|g| g.shapes.iter().cloned().map(|s| (s, edge_gap))),
+            );
             obstacles.extend(self.layout.holes.values().map(|h| {
                 (
                     Shape::Stroke {
@@ -242,7 +259,11 @@ impl Board {
                 self.layout
                     .areas
                     .values()
-                    .filter(|a| a.layer == z.layer && a.net.is_none())
+                    .filter(|a| {
+                        (a.layer == z.layer || a.layer == "*")
+                            && a.net.is_none()
+                            && (a.restrict.is_empty() || a.restrict.contains(&CopperObject::Pour))
+                    })
                     .map(|a| (Shape::Region(a.polygon.clone()), gap)),
             );
             obstacles.extend(

@@ -14,7 +14,10 @@ fn every_builtin_reads_and_writes_back_the_same() {
             "{file}"
         );
         assert!(
-            matches!(v.taken.as_deref(), Some("2026-11-22" | "2026-11-23")),
+            matches!(
+                v.taken.as_deref(),
+                Some("2026-11-22" | "2026-11-23" | "2026-11-26")
+            ),
             "{file}"
         );
         assert!(v.note.as_deref().is_some_and(|n| n.contains(VERIFY)), "{file}");

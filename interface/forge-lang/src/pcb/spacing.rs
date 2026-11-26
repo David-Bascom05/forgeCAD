@@ -2,7 +2,7 @@
 use super::{artwork::Mark, *};
 use std::collections::{BTreeMap, BTreeSet};
 
-fn pairs(items: &[Mark<'_>], gap: i64, mut visit: impl FnMut(usize, usize)) {
+pub(super) fn pairs(items: &[Mark<'_>], gap: i64, mut visit: impl FnMut(usize, usize)) {
     let mut bounds: Vec<_> = items
         .iter()
         .enumerate()
@@ -65,6 +65,16 @@ pub(super) fn inspect<'a>(board: &'a Board, report: &mut Check<'a>) -> Islands<'
             {
                 report.pair(Rule::MinEdgeClearance, a, "perimeter", &layer.id);
             }
+            for (id, g) in &board.layout.layer_graphics {
+                if g.layer == PlotLayer::Drawing(DrawingRole::Margin)
+                    && g.shapes.iter().any(|s| {
+                        let gap = board.process.as_ref().and_then(|p| p.min_edge_nm).unwrap_or(0);
+                        a.shape.near(s, gap, gap == 0)
+                    })
+                {
+                    report.pair(Rule::MinEdgeClearance, a, id, &layer.id);
+                }
+            }
             for (id, cut) in &board.layout.cutouts {
                 if a.shape.near(
                     &Shape::Region(cut.clone()),
@@ -90,8 +100,24 @@ pub(super) fn inspect<'a>(board: &'a Board, report: &mut Check<'a>) -> Islands<'
                     report.pair(Rule::CopperAtHole, a, id, &layer.id);
                 }
             }
+            let object = if board.tracks.contains_key(a.id) {
+                CopperObject::Track
+            } else if board.vias.contains_key(a.id) {
+                CopperObject::Via
+            } else if let Some(p) = board.layout.pads.get(a.id) {
+                if p.drill.is_some() {
+                    CopperObject::Pth
+                } else {
+                    CopperObject::Smd
+                }
+            } else if board.layout.fills.contains_key(a.id) {
+                CopperObject::Pour
+            } else {
+                CopperObject::Region
+            };
             for (id, area) in &board.layout.areas {
-                if area.layer == layer.id
+                if (area.layer == layer.id || area.layer == "*")
+                    && (area.restrict.is_empty() || area.restrict.contains(&object))
                     && area.net.is_none()
                     && a.shape.near(&Shape::Region(area.polygon.clone()), 0, true)
                 {

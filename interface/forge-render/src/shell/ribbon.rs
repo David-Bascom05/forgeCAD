@@ -231,6 +231,9 @@ fn groups(s: &Shell) -> Vec<Group> {
         small,
         icons: vec![],
     };
+    if let Some(editor) = &s.pcb {
+        return editor.groups(s.tab);
+    }
     if let Some(editor) = &s.electronics {
         return editor.groups(s.tab);
     }
@@ -596,7 +599,12 @@ fn why_off(name: &str) -> Option<&'static str> {
 
 /// The Sketch tab of a part (not a drawing's, an assembly's or another environment's).
 fn s_is_sketch_tab(s: &Shell) -> bool {
-    s.tab == 1 && s.electronics.is_none() && s.drawing.is_none() && s.dwgdoc.is_none() && !s.is_asm()
+    s.tab == 1
+        && s.pcb.is_none()
+        && s.electronics.is_none()
+        && s.drawing.is_none()
+        && s.dwgdoc.is_none()
+        && !s.is_asm()
 }
 
 const BIG_W: f32 = 54.0;
@@ -799,6 +807,7 @@ impl Shell {
         self.fg.is_none()
             && self.drawing.is_none()
             && self.dwgdoc.is_none()
+            && self.pcb.is_none()
             && self.electronics.is_none()
             && self.cam.is_none()
     }

@@ -213,6 +213,8 @@ impl Shell {
         let (line, key) = if let Some(Action::Electronics(tool)) = tool.action {
             let (key, description) = tool.shortcut();
             (description, Some(key.name().into()))
+        } else if let Some(Action::Pcb(cmd)) = tool.action {
+            (cmd.tip(), None)
         } else {
             (line, key_of(self, key))
         };

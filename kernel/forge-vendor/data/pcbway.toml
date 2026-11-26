@@ -1,0 +1,17 @@
+format = 1
+id = "pcbway"
+name = "PCBWay"
+units = "mm"
+source = "https://www.pcbway.com/capabilities.html"
+taken = "2026-11-26"
+note = "Selected two-layer, 1 oz prototype configuration. Uses a 0.20 mm drill floor to avoid the small-hole surcharge and a common 0.15 mm ring floor. Verify with the vendor before ordering."
+
+[[pcb]]
+id = "two-layer-1oz"
+source = "https://www.pcbway.com/capabilities.html"
+layers = 2
+outer_oz = 1
+min_width = 0.1
+min_spacing = 0.1
+min_drill = 0.2
+min_annular_ring = 0.15

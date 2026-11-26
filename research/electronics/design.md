@@ -15,6 +15,8 @@ The [PCB layout backend and manufacturer-rule study](pcb-layout-rules.md) record
 
 The native rigid-board backend now runs a schematic-linked design through footprint placement, poured copper and physical connectivity to a fabrication ZIP. Mask, paste and silkscreen each have inspectable geometry on both faces. A four-layer test assembly exercises those layers and independently recovers the intended nets from plotted copper and drill data. [Implemented scope and readback](pcb-layout-rules.md#implemented-board-foundation) · [Fabrication fixture](../../examples/electronics/fabrication-controller.fg)
 
+The native PCB Layout document uses the same plotted geometry and vendor service model as CLI and MCP. The layer audit covers paired technical and mechanical drawings, keepouts, drill guides, stack materials and user documentation. The first workspace exercises a routed 8-channel filter bank through the shared shell, properties and file lifecycle. [Layer audit and service coverage](pcb-layout-rules.md#layer-audit-and-editor-contract) · [Editor fixture](../../examples/electronics/filter-bank.fg)
+
 ## First milestone
 
 Determine how ForgeCAD can infer **which components serve which pins or functional groups**, and what that implies for placement, from an ordinary hand-drawn schematic. Start with bypass capacitors. Evaluate the inferred assignments against documented reference designs before looking at their layouts. The cross-view contract supports carrying those findings into the PCB. [Worked RP2040 example, inference design and benchmark](design-intent.md#inferring-which-pins-a-capacitor-serves)

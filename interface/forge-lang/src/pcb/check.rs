@@ -3,6 +3,8 @@ use super::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Rule {
+    MinSlotWidth,
+    MinInnerDrillClearance,
     MinHoleDrill,
     DrillOverlap,
     CourtyardOverlap,
@@ -26,6 +28,8 @@ pub enum Rule {
 impl Rule {
     pub fn name(self) -> &'static str {
         match self {
+            Self::MinSlotWidth => "MinSlotWidth",
+            Self::MinInnerDrillClearance => "MinInnerDrillClearance",
             Self::MinHoleDrill => "MinHoleDrill",
             Self::DrillOverlap => "DrillOverlap",
             Self::CourtyardOverlap => "CourtyardOverlap",
@@ -185,7 +189,13 @@ impl Board {
         if self.process.is_none() && !self.classes.is_empty() {
             report.rules.extend([Rule::MinTrackWidth, Rule::MinCopperSpacing]);
         }
-        if self.process.as_ref().is_some_and(|p| p.min_edge_nm.is_some()) {
+        if self.process.as_ref().is_some_and(|p| p.min_edge_nm.is_some())
+            || self
+                .layout
+                .layer_graphics
+                .values()
+                .any(|g| g.layer == PlotLayer::Drawing(DrawingRole::Margin))
+        {
             report.rules.push(Rule::MinEdgeClearance);
         }
         if self.layout.placements.values().any(|p| p.courtyard.is_some()) {
@@ -239,6 +249,36 @@ impl Board {
             report.rules.push(Rule::MinHoleDrill);
         }
         let drills = self.drills();
+        if let Some(gap) = self.process.as_ref().and_then(|p| p.inner_drill_clearance_nm) {
+            report.rules.push(Rule::MinInnerDrillClearance);
+            for l in self.layers.iter().filter(|l| self.is_inner_copper(&l.id)) {
+                let mut items = self.copper(&l.id);
+                let boundary = items.len();
+                items.extend(self.drills().into_iter().filter(|d| d.net.is_some()));
+                spacing::pairs(&items, gap, |i, j| {
+                    let (a, b) = if i < boundary && j >= boundary {
+                        (&items[i], &items[j])
+                    } else if j < boundary && i >= boundary {
+                        (&items[j], &items[i])
+                    } else {
+                        return;
+                    };
+                    if a.net != b.net && a.shape.near(&b.shape, gap, false) {
+                        report.spacing(Rule::MinInnerDrillClearance, a, b, &l.id, gap);
+                    }
+                });
+            }
+        }
+        if let Some(min) = self.process.as_ref().and_then(|p| p.min_slot_nm) {
+            report.rules.push(Rule::MinSlotWidth);
+            for d in &drills {
+                if let Shape::Stroke { axis: [a, b], width } = &d.shape
+                    && a != b
+                {
+                    report.minimum(d.id, d.span, Rule::MinSlotWidth, 2 * width, min);
+                }
+            }
+        }
         if drills.len() > 1 {
             report.rules.push(Rule::DrillOverlap);
             spacing::overlapping_drills(&drills, &mut report);
