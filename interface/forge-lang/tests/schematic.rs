@@ -356,7 +356,7 @@ fn sensor_interface_has_clear_print_and_four_physical_components() {
     // The example consumes an external 3V3 rail. Naming the rail must not fabricate a driver.
     assert_eq!(
         c.issues.iter().map(|i| i.kind).collect::<Vec<_>>(),
-        ["UnfulfilledWant"]
+        ["UnknownSupplyVoltage"]
     );
     assert_eq!(
         schematic::bom(&doc, &c)
@@ -578,4 +578,106 @@ fn reference_prefixes_are_checked_symbol_metadata() {
             "InvalidReferencePrefix"
         );
     }
+}
+
+#[test]
+fn supply_want_checks_the_actual_connected_voltage() {
+    let sheet = include_str!("../../../examples/electronics/analog/powered-amplifier.fg");
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/electronics/analog");
+    for (supply, status) in [
+        ("voltage_mv: 1800", "satisfied"),
+        ("voltage_mv: 3300", "satisfied"),
+        ("voltage_mv: 5500", "satisfied"),
+        ("voltage_mv: 12000", "out_of_range"),
+        ("voltage_mv: 1799", "out_of_range"),
+        ("voltage_range_v: [3.2, 3.4]", "satisfied"),
+        ("voltage_range_v: [5.4, 5.6]", "out_of_range"),
+    ] {
+        let src = sheet.replace("voltage_mv: 3300", supply);
+        let (d, c) = schematic::compile(&src, Some(&dir), None).unwrap();
+        let id = &d.role_names["analog.supply_voltage"];
+        let check = &c.voltages["main/U1.VDD"][id];
+        assert_eq!(check.status(), status);
+        assert_eq!(check.providers[0].pin, "main/J1.OUT");
+        let failed = status == "out_of_range";
+        assert_eq!(
+            c.issues
+                .iter()
+                .any(|i| i.kind == "VoltageOutOfRange" && i.objects == ["main/U1.VDD", "main/J1.OUT"]),
+            failed
+        );
+        let inspection = schematic::inspect_pin(&c, "main/U1.VDD").unwrap();
+        let expected = if failed {
+            schematic::Evidence::Invalid
+        } else {
+            schematic::Evidence::Verified
+        };
+        assert!(
+            inspection
+                .checks
+                .iter()
+                .any(|r| r.role == *id && r.peers == [("main/J1.OUT".into(), expected)])
+        );
+        let report = schematic::response(&d, &c, &["pin".into(), "main/U1.VDD".into()]).unwrap();
+        let Some(forge_agent::json::Json::Arr(checks)) =
+            report.get("result").and_then(|r| r.get("voltage_checks"))
+        else {
+            panic!("missing voltage checks from pin query");
+        };
+        assert_eq!(checks[0].get("status").and_then(|s| s.str()), Some(status));
+        let provider = schematic::inspect_pin(&c, "main/J1.OUT").unwrap();
+        assert!(
+            provider
+                .checks
+                .iter()
+                .any(|row| !row.need && row.peers.contains(&("main/U1.VDD".into(), expected)))
+        );
+    }
+    for change in [
+        sheet.replace("symbol: Supply, at:", "symbol: Supply, populated: false, at:"),
+        sheet.replace("feed = wire(sheet: main, from: J1.OUT, to: vdd)", ""),
+    ] {
+        let (d, c) = schematic::compile(&change, Some(&dir), None).unwrap();
+        assert_eq!(
+            c.voltages["main/U1.VDD"][&d.role_names["analog.supply_voltage"]].status(),
+            "unknown"
+        );
+    }
+    let mixed = format!(
+        r#"{sheet}
+high = role(kind: "power", voltage_mv: 12000)
+HighSource = symbol(pins: {{out: pin(number: "1", kind: "power_out", at: (0,0), gives: [high])}})
+J2 = place(sheet: main, symbol: HighSource, at: (40,30))
+overvoltage = wire(sheet: main, from: J2.out, to: vdd)
+"#
+    );
+    let (d, c) = schematic::compile(&mixed, Some(&dir), None).unwrap();
+    let result = &c.voltages["main/U1.VDD"][&d.role_names["analog.supply_voltage"]];
+    assert_eq!(result.status(), "out_of_range");
+    assert_eq!(result.providers.len(), 2);
+    let src = sheet.replace("voltage_mv: 3300", "voltage_range_v: [5.5,1.8]");
+    assert_eq!(
+        schematic::compile(&src, Some(&dir), None).unwrap_err().kind,
+        "InvalidVoltageRange"
+    );
+}
+
+#[test]
+fn peripheral_membership_is_scoped_to_the_symbol_and_survives_pin_renames() {
+    let src = r#"symbol_library
+MCU = symbol(peripherals: {I2C1: {SDA: [PA0], SCL: [PA1]}, UART2: {TX: [PA0]}}, pins: {
+    P0: pin(aliases:[PA0], number:"17", kind:"bidirectional", at:(0,0)),
+    PA1: pin(number:"18", kind:"bidirectional", at:(0,1))
+})
+"#;
+    let (d, _) = schematic::compile(src, None, None).unwrap();
+    let groups = &d.symbols["MCU"].peripherals;
+    assert!(groups["I2C1"]["SDA"].contains("P0"));
+    assert!(groups["UART2"]["TX"].contains("P0"));
+    assert!(groups["I2C1"]["SCL"].contains("PA1"));
+    let bad = src.replace("TX: [PA0]", "TX: [PA9]");
+    assert_eq!(
+        schematic::compile(&bad, None, None).unwrap_err().kind,
+        "UnknownPeripheralPin"
+    );
 }

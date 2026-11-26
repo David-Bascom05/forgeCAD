@@ -23,7 +23,7 @@ Selecting a pin exposes what its library definition wants and gives. Both may ap
 
 In the current backend, a want or give names a **declared role type**. For example, a regulator pin can give a 3.3 V rail and want a 100 nF bypass at the same time. Roles carry a stable identity, a checked kind and optional typed ratings. A fulfillment must match the same role identity at both endpoints. Libraries share an identity explicitly. CLI, canvas and MCP consumers read the same structured role objects, including units. The [native schematic reference](../../docs/schematic.md) gives the declarations and wire format.
 
-The next design lets a selected pin function state its accepted voltage range, required resistance through a fitted device, internal bias and applicable operating state. Each checklist result identifies the quantities and physical pins that justify it. [Datasheet requirements and alternate pin functions](design-intent.md#datasheet-requirements-and-alternate-pin-functions)
+Supply pins now declare accepted voltage ranges. The next design adds function-specific resistance through a fitted device, internal bias and applicable operating state. Each checklist result identifies the quantities and physical pins that justify it. [Datasheet requirements and alternate pin functions](design-intent.md#datasheet-requirements-and-alternate-pin-functions)
 
 Show a rooted view from any selected pin. Keep electrical attachments undirected, distinguish ordered functional stages from parallel peers, and represent shared nodes or feedback edges by reference. Reversing a wire gesture preserves connectivity and functional intent. PCB placement reads the confirmed endpoints and their preferred metric, including after reannotation.
 

@@ -16,6 +16,12 @@ fn role(id: &RoleId, d: &Document) -> Json {
             ("unit", "nF".into()),
             ("value", v.into()),
         ]),
+        Some(Rating::VoltageRange(v)) => Json::obj(vec![
+            ("kind", "voltage_range".into()),
+            ("unit", "V".into()),
+            ("min", v.min.into()),
+            ("max", v.max.into()),
+        ]),
         Some(Rating::VoltageMv(v)) => Json::obj(vec![
             ("kind", "voltage".into()),
             ("unit", "mV".into()),
@@ -54,6 +60,25 @@ fn graphic(g: &Graphic) -> Json {
 }
 fn symbol(id: &str, s: &Symbol, d: &Document) -> Json {
     Json::obj(vec![
+        (
+            "peripherals",
+            Json::Obj(
+                s.peripherals
+                    .iter()
+                    .map(|(id, signals)| {
+                        (
+                            id.clone(),
+                            Json::Obj(
+                                signals
+                                    .iter()
+                                    .map(|(signal, pins)| (signal.clone(), strings(pins)))
+                                    .collect(),
+                            ),
+                        )
+                    })
+                    .collect(),
+            ),
+        ),
         ("ref_prefix", s.ref_prefix.clone().into()),
         ("id", id.into()),
         (
@@ -457,6 +482,43 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
             }
             Ok(Json::obj(vec![
                 ("terminal", pin(k, p, d, c)),
+                (
+                    "voltage_checks",
+                    Json::Arr(
+                        c.voltages
+                            .get(*k)
+                            .into_iter()
+                            .flatten()
+                            .map(|(id, check)| {
+                                Json::obj(vec![
+                                    ("want", role(id, d)),
+                                    ("status", check.status().into()),
+                                    (
+                                        "providers",
+                                        Json::Arr(
+                                            check
+                                                .providers
+                                                .iter()
+                                                .map(|source| {
+                                                    Json::obj(vec![
+                                                        ("pin", source.pin.clone().into()),
+                                                        ("give", role(&source.role, d)),
+                                                        ("min_v", source.range.min.into()),
+                                                        ("max_v", source.range.max.into()),
+                                                        (
+                                                            "accepted",
+                                                            check.required.accepts(source.range).into(),
+                                                        ),
+                                                    ])
+                                                })
+                                                .collect(),
+                                        ),
+                                    ),
+                                ])
+                            })
+                            .collect(),
+                    ),
+                ),
                 ("fulfillments", Json::Arr(links)),
                 ("candidates", Json::Arr(candidates)),
             ]))

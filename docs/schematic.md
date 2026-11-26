@@ -24,6 +24,21 @@ Reg = symbol(pins: {
 
 A role declaration binds an identifier. Pin lists and `fulfill(role: ...)` take references to these declarations. The schema encodes a role as an object, for example `{"id":"@example.3v3","kind":"power","rating":{"kind":"voltage","unit":"mV","value":3300},"prefer_mm":null}`. A quoted role name in a pin list, an unknown role, a mismatch between a want and a give, and incompatible definitions of a shared key produce located compile errors. Distinct libraries can intentionally share a type by using the same explicit key and definition. Without a key the import namespace qualifies the role. The declared kind is one of `power`, `return`, `bypass`, `signal`, `clock`, `bias`, `termination`, `feedback`, `protection`, `reference`, or `interface`. Optional capacitance in nF applies to bypass roles, voltage in mV to power and reference roles. An optional positive length `prefer` records a project placement preference. The PCB consumer owns its eventual measurement.
 
+### Voltage wants and provides
+
+Attach a reusable operating range to a normal pin through its Wants list. A power source can declare a single voltage or a guaranteed range. All endpoints are inclusive.
+
+```fg
+operating_supply = role(kind: "power", voltage_range_v: [1.8, 5.5])
+regulated_output = role(kind: "power", voltage_mv: 3300)
+IC = symbol(pins: {VDD: pin(number: "5", kind: "power_in", at: (0,8), wants: [operating_supply])})
+Reg = symbol(pins: {OUT: pin(number: "1", kind: "power_out", at: (4,0), gives: [regulated_output])})
+```
+
+In the symbol editor, create a power role, enter **Minimum (V)** and **Maximum (V)**, then check **Wants** on the supply pin. The schematic checks the connected net automatically. The checklist shows the required interval and the pin and voltage of each fitted provider. A 3.3 V source satisfies this want. A 12 V source produces `VoltageOutOfRange`. A source range must fit entirely inside the wanted range. Without a declared source, ERC reports `UnknownSupplyVoltage`. Rail labels alone establish connectivity. This check assumes a shared voltage reference. The pin query exposes `voltage_checks` for CLI and MCP. [Powered TLV9001 example](../examples/electronics/analog/powered-amplifier.fg)
+
+A symbol can also declare `peripherals: {I2C1: {SDA: [PA0], SCL: [PA1]}, UART2: {TX: [PA0]}}`. Each signal lists the physical pins that can carry it. The reader resolves the names against this symbol and exposes the groups in the symbol query.
+
 A symbol's map keys are logical pin names. Each pin has a unique physical `number` string, sheet-local connection point, and electrical `kind` (`passive`, `input`, `output`, `bidirectional`, `power_in`, `power_out`, `open_drain`, `no_connect`). Optional `angle` gives the pin direction in degrees, counterclockwise from the positive X axis. Fractional and negative angles are accepted. A `unit` string groups pins into sub parts; the default is A. Graphics accept `line(from:, to:)`, `rect(from:, to:)`, `circle(at:, radius:)`, `arc(from:, mid:, to:)`, `polyline(points:)`, and `text(at:, value:)`, each optionally limited to one sub part. A library holds roles, shared numeric expressions and symbols. Import it into a schematic with `parts = library(file: "power-symbols.fg")`. Imports use the session's file fence.
 
 ## Sheets, connections and geometry

@@ -17,8 +17,31 @@ structure Nanofarads where
   value : Rat
 deriving DecidableEq
 
+/-- Inclusive bounds, in the same voltage unit on both sides of a pin connection. -/
+structure VoltageInterval where
+  lo : Rat
+  hi : Rat
+  ordered : lo ≤ hi
+deriving DecidableEq
+
+def VoltageInterval.contains (r : VoltageInterval) (v : Rat) : Prop := r.lo ≤ v ∧ v ≤ r.hi
+
+def acceptsVoltage (want give : VoltageInterval) : Bool :=
+  decide (want.lo ≤ give.lo ∧ give.hi ≤ want.hi)
+
+theorem acceptsVoltage_iff (want give : VoltageInterval) :
+    acceptsVoltage want give = true ↔ ∀ v, give.contains v → want.contains v := by
+  simp only [acceptsVoltage, decide_eq_true_eq]
+  constructor
+  · intro ⟨lo, hi⟩ v ⟨a, b⟩
+    exact ⟨Rat.le_trans lo a, Rat.le_trans b hi⟩
+  · intro h
+    exact ⟨(h give.lo ⟨Rat.le_refl, give.ordered⟩).1,
+           (h give.hi ⟨give.ordered, Rat.le_refl⟩).2⟩
+
 inductive RoleSpec where
   | power (voltage : Option Millivolts)
+  | powerRange (voltage : VoltageInterval)
   | reference (voltage : Option Millivolts)
   | bypass (capacitance : Option Nanofarads)
   | groundReturn | signal | clock | bias | termination | feedback | protection | interfaceRole

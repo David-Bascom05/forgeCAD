@@ -104,6 +104,8 @@ struct Inputs {
     return_to: String,
     preferred_distance: String,
     role_kind: String,
+    voltage_min: String,
+    voltage_max: String,
     role: String,
     group: String,
 }

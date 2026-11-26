@@ -6,6 +6,7 @@ pub struct Terminal {
     pub symbol: String,
     pub pin: String,
     pub power_net: Option<String>,
+    pub populated: bool,
     pub number: String,
     pub electrical: Electrical,
     pub wants: Set<RoleId>,
@@ -30,6 +31,7 @@ impl Issue {
     pub fn severity(&self) -> &'static str {
         match self.kind {
             "DriverConflict"
+            | "VoltageOutOfRange"
             | "ConnectedNoConnect"
             | "ReturnMismatch"
             | "DisconnectedFulfillment"
@@ -38,8 +40,35 @@ impl Issue {
         }
     }
 }
+#[derive(Debug)]
+pub struct VoltageProvider {
+    pub pin: String,
+    pub role: RoleId,
+    pub range: VoltageRange,
+}
+#[derive(Debug)]
+pub struct VoltageCheck {
+    pub required: VoltageRange,
+    pub providers: Vec<VoltageProvider>,
+}
+impl VoltageCheck {
+    pub fn status(&self) -> &'static str {
+        if self.providers.is_empty() {
+            "unknown"
+        } else if self
+            .providers
+            .iter()
+            .all(|source| self.required.accepts(source.range))
+        {
+            "satisfied"
+        } else {
+            "out_of_range"
+        }
+    }
+}
 #[derive(Default, Debug)]
 pub struct Circuit {
+    pub voltages: Map<String, Map<RoleId, VoltageCheck>>,
     pub origins: Map<String, Span>,
     attached: Set<String>,
     pub terminals: Map<String, Terminal>,
@@ -103,6 +132,7 @@ impl Circuit {
             return Err(Fault::new("SheetCycle", Span::default(), k));
         }
         c.partition();
+        c.check_voltages(doc);
         c.check();
         c.sort_findings();
         Ok(c)
@@ -133,8 +163,11 @@ impl Circuit {
         let placed: Map<_, _> = rows
             .iter()
             .filter_map(|r| {
-                if let Item::Place { symbol, .. } = &r.item {
-                    Some((r.id.as_str(), symbol))
+                if let Item::Place {
+                    symbol, populated, ..
+                } = &r.item
+                {
+                    Some((r.id.as_str(), (symbol, *populated)))
                 } else {
                     None
                 }
@@ -162,10 +195,10 @@ impl Circuit {
                 _ => None,
             };
             if let Some((owner, unit, at, angle, mirror)) = gate {
-                let symbol = placed
+                let &(symbol, populated) = placed
                     .get(owner.as_str())
                     .ok_or_else(|| Fault::new("UnknownOccurrence", row.span, owner))?;
-                let def = &doc.symbols[*symbol];
+                let def = &doc.symbols[symbol];
                 if !units.insert((owner.as_str(), unit.as_str())) {
                     return Err(Fault::new("DuplicateGate", row.span, format!("{owner}.{unit}")));
                 }
@@ -187,6 +220,7 @@ impl Circuit {
                     self.terminals.insert(
                         key,
                         Terminal {
+                            populated,
                             at: pos,
                             symbol: (*symbol).clone(),
                             pin: name.clone(),
@@ -231,7 +265,7 @@ impl Circuit {
                 _ => {}
             }
         }
-        for (owner, symbol) in placed {
+        for (owner, (symbol, _)) in placed {
             let missing: Set<_> = doc.symbols[symbol]
                 .pins
                 .values()
@@ -383,6 +417,73 @@ impl Circuit {
             self.nets.insert(start.clone(), members);
         }
     }
+    fn check_voltages(&mut self, doc: &Document) {
+        for members in self.nets.values() {
+            let mut sources = Vec::new();
+            let mut wants = Vec::new();
+            for id in members {
+                let Some(pin) = self.terminals.get(id).filter(|p| p.populated) else {
+                    continue;
+                };
+                for role in &pin.gives {
+                    let spec = &doc.roles[role];
+                    if spec.kind != RoleKind::Power {
+                        continue;
+                    }
+                    let voltage = match spec.rating {
+                        Some(Rating::VoltageMv(mv)) => VoltageRange {
+                            min: mv / 1000.,
+                            max: mv / 1000.,
+                        },
+                        Some(Rating::VoltageRange(range)) => range,
+                        _ => continue,
+                    };
+                    sources.push((id, role, voltage));
+                }
+                for role in &pin.wants {
+                    if let Some(Rating::VoltageRange(required)) = doc.roles[role].rating {
+                        wants.push((id, role, required));
+                    }
+                }
+            }
+            for (pin, role, required) in wants {
+                let mut check = VoltageCheck {
+                    required,
+                    providers: Vec::new(),
+                };
+                for &(peer, give, offered) in &sources {
+                    if peer == pin {
+                        continue;
+                    }
+                    check.providers.push(VoltageProvider {
+                        pin: peer.clone(),
+                        role: give.clone(),
+                        range: offered,
+                    });
+                    if !required.accepts(offered) {
+                        self.issues.push(Issue {
+                            kind: "VoltageOutOfRange",
+                            objects: vec![pin.clone(), peer.clone()],
+                            message: format!("{pin} wants {required}. {peer} provides {offered}."),
+                        });
+                    }
+                }
+                if check.providers.is_empty() {
+                    self.issues.push(Issue {
+                        kind: "UnknownSupplyVoltage",
+                        objects: vec![pin.clone()],
+                        message: format!(
+                            "{pin} wants {required}. No connected pin declares a supply voltage."
+                        ),
+                    });
+                }
+                self.voltages
+                    .entry(pin.clone())
+                    .or_default()
+                    .insert(role.clone(), check);
+            }
+        }
+    }
     fn check(&mut self) {
         let issue = |kind, objects, message: &str| Issue {
             kind,
@@ -457,7 +558,10 @@ impl Circuit {
         }
         for (id, p) in &self.terminals {
             for r in &p.wants {
-                if !satisfied.contains(&(id, r)) {
+                if p.populated
+                    && !self.voltages.get(id).is_some_and(|v| v.contains_key(r))
+                    && !satisfied.contains(&(id, r))
+                {
                     self.issues.push(issue(
                         "UnfulfilledWant",
                         vec![id.clone(), r.0.clone()],

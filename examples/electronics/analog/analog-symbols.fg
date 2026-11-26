@@ -1,6 +1,6 @@
 symbol_library
 
-rail = role(kind: "power", voltage_mv: 3300, key: "analog.supply3v3")
+supply_voltage = role(kind: "power", voltage_range_v: [1.8, 5.5])
 bypass = role(kind: "bypass", prefer: 3mm, key: "analog.local_bypass")
 
 Amplifier = symbol(
@@ -10,7 +10,7 @@ Amplifier = symbol(
     INP: pin(description: "Noninverting analog input. Connect the filtered sensor signal here.", number: "3", kind: "input", at: (-7, 3)),
     INM: pin(description: "Inverting analog input. Connect the feedback network here.", number: "4", kind: "input", at: (-7, -3)),
     OUT: pin(description: "Analog output. Feeds the load and feedback path.", number: "1", kind: "output", at: (9, 0)),
-    VDD: pin(description: "Positive supply. Bypass to VSS with a capacitor close to the device.", number: "5", kind: "power_in", at: (0, 8), wants: [rail, bypass]),
+    VDD: pin(description: "Positive supply. Bypass to VSS with a capacitor close to the device.", number: "5", kind: "power_in", at: (0, 8), wants: [supply_voltage, bypass]),
     VSS: pin(description: "Negative supply. Connect to ground for single-supply operation.", number: "2", kind: "passive", at: (0, -8))
   },
   graphics: [

@@ -41,7 +41,10 @@ impl Editor {
             let checks = || focus.inspection.checks.iter().filter(|c| c.need == need);
             let total = checks().count();
             let satisfied = checks()
-                .filter(|c| c.peers.iter().any(|(_, s)| *s == sch::Evidence::Verified))
+                .filter(|c| {
+                    c.peers.iter().any(|(_, s)| *s == sch::Evidence::Verified)
+                        && !c.peers.iter().any(|(_, s)| *s == sch::Evidence::Invalid)
+                })
                 .count();
             ui.add_space(theme::S2);
             ui.horizontal(|ui| {
@@ -72,10 +75,14 @@ impl Editor {
                     .unwrap_or_default()
                     + letters.as_str();
                 match spec.rating {
+                    Some(sch::Rating::VoltageRange(range)) => title.push_str(&format!(" · {range}")),
                     Some(sch::Rating::VoltageMv(mv)) => title.push_str(&format!(" · {} V", mv / 1000.)),
                     Some(sch::Rating::CapacitanceNf(nf)) => title.push_str(&format!(" · {nf} nF")),
                     None => {}
                 }
+                let voltage = need
+                    .then(|| self.circuit.voltages.get(&focus.id)?.get(&check.role))
+                    .flatten();
                 let verified = check.peers.iter().any(|(_, e)| *e == sch::Evidence::Verified);
                 let invalid = check.peers.iter().any(|(_, e)| *e == sch::Evidence::Invalid);
                 ui.add_space(theme::S1);
@@ -86,17 +93,20 @@ impl Editor {
                     .inner_margin(theme::S2 as i8)
                     .show(ui, |ui| {
                         ui.set_min_width(ui.available_width());
-                        let mut marked = verified;
-                        let toggle = ui.add(
+                        let mut marked = verified && !invalid;
+                        let toggle = ui.add_enabled(
+                            !check.measured,
                             egui::Checkbox::new(&mut marked, RichText::new(title).font(theme::title()))
-                                .indeterminate(invalid && !verified),
+                                .indeterminate(invalid),
                         );
                         places.push((
                             format!("electronics:check:{}:{}", focus.id, check.role.0),
                             toggle.rect,
                         ));
                         if toggle
-                            .on_hover_text(if invalid || verified {
+                            .on_hover_text(if check.measured {
+                                "Checked from the voltages provided on this net"
+                            } else if invalid || verified {
                                 "Manage this assignment"
                             } else if need {
                                 "Assign a provider"
@@ -132,11 +142,30 @@ impl Editor {
                                         sch::Evidence::Invalid => ("Check wiring", t.error),
                                         sch::Evidence::Candidate => ("Candidate", t.ink2),
                                     };
-                                    ui.colored_label(color, caption);
+                                    if let Some(check) = voltage {
+                                        for source in
+                                            check.providers.iter().filter(|source| &source.pin == peer)
+                                        {
+                                            let offered = source.range;
+                                            let fits = check.required.accepts(offered);
+                                            let text = if fits { "in range" } else { "out of range" };
+                                            let label = ui.colored_label(
+                                                if fits { t.success } else { t.error },
+                                                format!("{offered} · {text}"),
+                                            );
+                                            places.push((
+                                                format!("electronics:voltage:{}:{peer}:{fits}", focus.id),
+                                                label.rect,
+                                            ));
+                                        }
+                                    } else {
+                                        ui.colored_label(color, caption);
+                                    }
                                 });
                             }
                             if check.peers.is_empty() {
                                 let text = match (need, spec.kind) {
+                                    _ if voltage.is_some() => "No connected pin provides a known voltage",
                                     (true, sch::RoleKind::Power) => "No power source assigned",
                                     (true, _) => "No provider assigned",
                                     _ => "No consumer assigned",

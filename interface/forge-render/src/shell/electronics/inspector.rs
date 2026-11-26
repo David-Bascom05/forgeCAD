@@ -474,6 +474,15 @@ impl Editor {
             Tool::Library => format!("library(file: {})", quote(&f.text)),
             Tool::Role => {
                 let rating = match f.role_kind.as_str() {
+                    "power" if !f.voltage_min.is_empty() || !f.voltage_max.is_empty() => {
+                        if f.voltage_min.trim().is_empty()
+                            || f.voltage_max.trim().is_empty()
+                            || !f.value.trim().is_empty()
+                        {
+                            return Err("For a voltage range, enter both limits in volts and clear the single voltage.".into());
+                        }
+                        format!(", voltage_range_v: [{}, {}]", f.voltage_min, f.voltage_max)
+                    }
                     _ if f.value.trim().is_empty() => String::new(),
                     "bypass" => format!(", capacitance_nf: {}", f.value),
                     "power" | "reference" => format!(", voltage_mv: {}", f.value),
@@ -954,7 +963,11 @@ impl Editor {
                         match self.form.role_kind.as_str() {
                             "bypass" => field(ui, "Capacitance · nF (optional)", &mut self.form.value),
                             "power" | "reference" => {
-                                field(ui, "Voltage · mV (optional)", &mut self.form.value)
+                                field(ui, "Voltage · mV (optional)", &mut self.form.value);
+                                if self.form.role_kind == "power" {
+                                    field(ui, "Minimum (V)", &mut self.form.voltage_min);
+                                    field(ui, "Maximum (V)", &mut self.form.voltage_max);
+                                }
                             }
                             _ => {}
                         }

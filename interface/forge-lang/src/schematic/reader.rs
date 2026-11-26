@@ -320,7 +320,40 @@ fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
     } else {
         "U".into()
     };
+    // Each peripheral maps a signal to the physical pins that can carry it.
+    // Resolve historical names here too so a pin rename preserves membership.
+    let peripherals = call
+        .take("peripherals")
+        .map(|groups| {
+            map(groups, |signals| {
+                map(signals, |members| {
+                    let mut names = Set::new();
+                    for e in list(members)? {
+                        let id = reference(e)?;
+                        let name = pins
+                            .get_key_value(&id)
+                            .or_else(|| pins.iter().find(|(_, p)| p.aliases.contains(&id)))
+                            .ok_or_else(|| fault(e, "UnknownPeripheralPin", &id))?
+                            .0;
+                        if !names.insert(name.clone()) {
+                            return Err(fault(e, "DuplicatePeripheralPin", &id));
+                        }
+                    }
+                    if names.is_empty() {
+                        return Err(fault(
+                            members,
+                            "EmptyPeripheralSignal",
+                            "expected at least one pin",
+                        ));
+                    }
+                    Ok(names)
+                })
+            })
+        })
+        .transpose()?
+        .unwrap_or_default();
     Ok(Symbol {
+        peripherals,
         ref_prefix,
         power_net,
         pins,
@@ -569,6 +602,34 @@ pub fn read(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Docume
                             }
                         });
                     }
+                }
+                if let Some(arg) = c.take("voltage_range_v") {
+                    if kind != RoleKind::Power || rating.is_some() {
+                        return Err(fault(
+                            arg,
+                            "InvalidRoleRating",
+                            "use a single voltage rating on a power role",
+                        ));
+                    }
+                    let [min, max] = list(arg)? else {
+                        return Err(fault(
+                            arg,
+                            "InvalidVoltageRange",
+                            "expected [minimum, maximum] in volts",
+                        ));
+                    };
+                    let range = VoltageRange {
+                        min: measure(min, &params, Dim::Ratio)?,
+                        max: measure(max, &params, Dim::Ratio)?,
+                    };
+                    if range.min > range.max {
+                        return Err(fault(
+                            arg,
+                            "InvalidVoltageRange",
+                            "minimum voltage exceeds maximum",
+                        ));
+                    }
+                    rating = Some(Rating::VoltageRange(range));
                 }
                 let id = if let Some(key) = c.take("key") {
                     let text = string(key)?;

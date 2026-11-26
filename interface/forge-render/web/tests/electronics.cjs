@@ -88,10 +88,36 @@ async function capture(browser, base, width, height, file, row, name) {
     await page.close();
   }
 }
+async function checkSupply(browser, base) {
+  const page = await t.page(browser, base + "/?offscreen=1400x860&storage=memory");
+  try {
+    await t.until(page, s => s.ready, "app ready");
+    await page.evaluate(() => window.forgecad.loaded);
+    for (const [mv, fits] of [[3300, true], [12000, false]]) {
+      await page.evaluate(mv => {
+        const fc = window.forgecad.fc;
+        const dir = "/project/examples/electronics/analog/";
+        const source = new TextDecoder().decode(fc.fs_read(dir + "powered-amplifier.fg"));
+        const path = dir + "supply-" + mv + ".fg";
+        fc.fs_write(path, new TextEncoder().encode(source.replace("voltage_mv: 3300", "voltage_mv: " + mv)));
+        fc.app_open(path);
+      }, mv);
+      const anchor = "electronics:anchor:U1.VDD";
+      await t.until(page, s => s.places.some(p => p.name === anchor), anchor);
+      await page.evaluate(id => window.forgecad.fc.app_click(id, 0, false), anchor);
+      const result = "electronics:voltage:main/U1.VDD:main/J1.OUT:" + fits;
+      await t.until(page, s => s.places.some(p => p.name === result), result, 20000);
+      console.log(t.shot("web-supply-" + mv + ".png", await t.pixels(page)));
+    }
+  } finally {
+    await page.close();
+  }
+}
 async function run(browser, base) {
   await capture(browser, base, 1600, 1000, "sensor-interface", "electronics:component:U1", "schematic");
   await capture(browser, base, 1400, 860, "analog-symbols", "electronics:schpin:VDD", "symbol");
   await capture(browser, base, 1024, 700, "sensor-interface", "electronics:component:C2", "compact");
+  await checkSupply(browser, base);
 }
 module.exports = run;
 if (require.main === module) (async () => {

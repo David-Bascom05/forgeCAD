@@ -366,3 +366,40 @@ fn symbol_prefix_drives_placement_and_allows_a_manual_reference() {
     }
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn checklist_explains_the_connected_supply_voltage() {
+    let Ok(mut h) = Headless::new((1400., 860.), 1.) else {
+        return;
+    };
+    let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/electronics/analog");
+    let dir = forge_dirs::temp_dir().join(format!("forge-pin-voltage-{}", forge_dirs::process_id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::copy(base.join("analog-symbols.fg"), dir.join("analog-symbols.fg")).unwrap();
+    let original = std::fs::read_to_string(base.join("powered-amplifier.fg")).unwrap();
+    for (mv, fits) in [(3300, true), (12000, false)] {
+        let path = dir.join(format!("amplifier-{mv}mV.fg"));
+        std::fs::write(
+            &path,
+            original.replace("voltage_mv: 3300", &format!("voltage_mv: {mv}")),
+        )
+        .unwrap();
+        h.gui.open(path.to_str().unwrap());
+        h.step();
+        assert!(h.click("electronics:anchor:U1.VDD"));
+        h.step();
+        assert!(
+            h.placed(&format!("electronics:voltage:main/U1.VDD:main/J1.OUT:{fits}"))
+                .is_some()
+        );
+        if let Some(out) = std::env::var_os("FORGE_UI_SHOTS") {
+            std::fs::create_dir_all(&out).unwrap();
+            std::fs::write(
+                Path::new(&out).join(format!("native-supply-{mv}.png")),
+                h.png().unwrap(),
+            )
+            .unwrap();
+        }
+    }
+    std::fs::remove_dir_all(dir).unwrap();
+}

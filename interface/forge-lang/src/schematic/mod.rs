@@ -34,7 +34,17 @@ pub fn power_symbols() -> &'static std::collections::BTreeMap<String, String> {
 }
 pub const HEADERS: &[&str] = &["schematic", "symbol_library"];
 pub const ARGS: &[(&str, &[&str])] = &[
-    ("role", &["kind", "key", "capacitance_nf", "voltage_mv", "prefer"]),
+    (
+        "role",
+        &[
+            "kind",
+            "key",
+            "capacitance_nf",
+            "voltage_mv",
+            "voltage_range_v",
+            "prefer",
+        ],
+    ),
     (
         "symbol",
         &[
@@ -44,6 +54,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "fields",
             "power_net",
             "ref_prefix",
+            "peripherals",
         ],
     ),
     (
@@ -140,6 +151,27 @@ pub struct RoleId(pub String);
 pub enum Rating {
     CapacitanceNf(f64),
     VoltageMv(f64),
+    VoltageRange(VoltageRange),
+}
+/// Inclusive pin operating or provided voltage, expressed in volts.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct VoltageRange {
+    pub min: f64,
+    pub max: f64,
+}
+impl VoltageRange {
+    pub fn accepts(self, offered: Self) -> bool {
+        self.min <= offered.min && offered.max <= self.max
+    }
+}
+impl std::fmt::Display for VoltageRange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.min == self.max {
+            write!(f, "{} V", self.min)
+        } else {
+            write!(f, "{}–{} V", self.min, self.max)
+        }
+    }
 }
 #[derive(Clone, Debug, PartialEq)]
 pub struct Role {
@@ -177,6 +209,7 @@ pub enum Shape {
 #[derive(Clone, Debug)]
 pub struct Symbol {
     pub ref_prefix: String,
+    pub peripherals: Map<String, Map<String, Set<String>>>,
     pub power_net: Option<String>,
     pub fields: Map<String, String>,
     pub datasheet: Option<String>,

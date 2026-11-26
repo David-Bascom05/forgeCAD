@@ -104,6 +104,7 @@ pub enum Evidence {
 pub struct RoleCheck {
     pub role: RoleId,
     pub need: bool,
+    pub measured: bool,
     pub peers: Vec<(String, Evidence)>,
 }
 #[derive(Default, Debug)]
@@ -157,10 +158,49 @@ pub fn inspect_pin(c: &Circuit, pin: &str) -> Option<PinInspection> {
                     peers.entry(k.clone()).or_insert(Evidence::Candidate);
                 }
             }
+            let has_link = c
+                .relations
+                .get(pin)
+                .into_iter()
+                .flatten()
+                .any(|i| c.links[*i].role == *role);
+            let required = c.voltages.get(pin).and_then(|v| v.get(role)).filter(|_| need);
+            if required.is_some() {
+                peers.clear();
+            }
+            let mut measured = required.is_some();
+            let mut record = |other: &str, accepted: bool| {
+                let state = if accepted {
+                    Evidence::Verified
+                } else {
+                    Evidence::Invalid
+                };
+                let entry = peers.entry(other.to_owned()).or_insert(state);
+                if *entry != Evidence::Invalid {
+                    *entry = state;
+                }
+            };
+            if let Some(check) = required {
+                for source in &check.providers {
+                    record(&source.pin, check.required.accepts(source.range));
+                }
+            } else if !need {
+                for other in net {
+                    for check in c.voltages.get(other).into_iter().flat_map(|v| v.values()) {
+                        for source in &check.providers {
+                            if source.pin == pin && source.role == *role {
+                                measured = !has_link;
+                                record(other, check.required.accepts(source.range));
+                            }
+                        }
+                    }
+                }
+            }
             targets.extend(peers.keys().filter(|k| c.net_of[*k] == c.net_of[pin]).cloned());
             inspection.checks.push(RoleCheck {
                 role: role.clone(),
                 need,
+                measured,
                 peers: peers.into_iter().collect(),
             });
         }
