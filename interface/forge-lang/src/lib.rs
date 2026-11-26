@@ -44,6 +44,7 @@ pub mod refactor;
 pub mod release;
 pub mod report;
 pub mod robot;
+pub mod schematic;
 pub mod shapes;
 pub mod sheet;
 pub mod sketch;
