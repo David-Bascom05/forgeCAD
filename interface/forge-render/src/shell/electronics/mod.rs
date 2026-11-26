@@ -1,6 +1,8 @@
 //! Native electronic documents. The canvas, browser and inspector edit a single .fg source.
+mod annotation;
 mod canvas;
 mod inspector;
+mod palette;
 mod workspace;
 use super::{
     Action, Shell, Theme,
@@ -55,18 +57,26 @@ pub enum Tool {
     Intent,
     Bus,
     Flow,
+    Directions,
+    Dots,
 }
 pub fn tab_name(library: bool, tab: usize) -> &'static str {
     match tab {
         0 if library => "Symbol",
         0 => "Schematic",
         1 => "Inspect",
+        3 if !library => "Draw",
         _ => "View",
     }
 }
 
 #[derive(Default)]
 struct Inputs {
+    description: String,
+    power_symbol: Option<String>,
+    line_width: f64,
+    text_size: f64,
+    bold: bool,
     name: String,
     text: String,
     number: String,
@@ -94,6 +104,31 @@ struct Inputs {
     group: String,
 }
 
+#[derive(Default, Copy, Clone, PartialEq, Eq)]
+enum Dock {
+    Parts,
+    Power,
+    #[default]
+    Properties,
+}
+
+#[derive(Clone, Copy, Default)]
+struct SignalMarkers {
+    arrows: bool,
+    dots: bool,
+}
+impl SignalMarkers {
+    fn active(self) -> bool {
+        self.arrows || self.dots
+    }
+}
+
+struct PinFocus {
+    id: String,
+    inspection: sch::PinInspection,
+    page: forge_draw::Page,
+}
+
 pub struct Editor {
     pub path: Option<String>,
     src: String,
@@ -110,6 +145,16 @@ pub struct Editor {
     graphic: Option<usize>,
     symbol: String,
     search: String,
+    dock: Dock,
+    catalog_search: String,
+    preview: Option<(String, String, forge_draw::Page)>,
+    power_search: String,
+    power_aliases: Vec<String>,
+    catalog: Vec<(String, String)>,
+    collapsed: std::collections::BTreeSet<String>,
+    focus_pin: Option<PinFocus>,
+    markers: SignalMarkers,
+    directions: BTreeMap<String, sch::Direction>,
     tool: Tool,
     form: Inputs,
     first: Option<String>,
@@ -118,6 +163,8 @@ pub struct Editor {
     origin: Pos2,
     zoom: f32,
     grid: bool,
+    snap: bool,
+    pitch: f64,
     inspector_open: bool,
     message: String,
     pub open_file: Option<String>,
@@ -149,6 +196,25 @@ fn source_arg<'a>(statements: &'a [syntax::Stmt], id: &str, field: &str) -> Opti
             None
         }
     })
+}
+fn power_aliases(src: &str) -> Vec<String> {
+    let tree = syntax::parse(src).unwrap_or_default();
+    tree.iter()
+        .filter_map(|s| {
+            let StmtKind::Assign { name, value } = &s.kind else {
+                return None;
+            };
+            let ExprKind::Call(function, args) = &value.kind else {
+                return None;
+            };
+            let is_power = matches!(&function.kind, ExprKind::Name(n) if n == "library")
+                && args.iter().any(|arg| {
+                    arg.name.as_ref().is_some_and(|(k, _)| k == "file")
+                        && matches!(&arg.value.kind, ExprKind::Str(path) if path == "forge:power")
+                });
+            is_power.then(|| name.clone())
+        })
+        .collect()
 }
 fn coord(p: Point) -> String {
     format!("({}mm, {}mm)", p[0], p[1])
@@ -196,6 +262,16 @@ impl Editor {
             graphic: None,
             symbol: String::new(),
             search: String::new(),
+            dock: Dock::Properties,
+            catalog_search: String::new(),
+            preview: None,
+            power_search: String::new(),
+            power_aliases: vec![],
+            catalog: vec![],
+            collapsed: Default::default(),
+            focus_pin: None,
+            markers: Default::default(),
+            directions: Default::default(),
             tool: Tool::Select,
             form: Default::default(),
             first: None,
@@ -204,6 +280,8 @@ impl Editor {
             origin: Pos2::ZERO,
             zoom: 10.,
             grid: true,
+            snap: true,
+            pitch: 0.5,
             inspector_open: false,
             message: String::new(),
             open_file: None,
@@ -220,6 +298,8 @@ impl Editor {
         self.src != self.saved
     }
     fn refresh(&mut self) {
+        self.preview = None;
+        let focused = self.focus_pin.take().map(|f| f.id);
         if self.doc.library {
             if !self.doc.symbols.contains_key(&self.subject) {
                 self.subject = self.doc.symbols.keys().next().cloned().unwrap_or_default();
@@ -257,8 +337,20 @@ impl Editor {
                     .cloned()
                     .unwrap_or_default();
             }
-            if !self.doc.symbols.contains_key(&self.symbol) {
-                self.symbol = self.doc.symbols.keys().next().cloned().unwrap_or_default();
+            self.power_aliases = power_aliases(&self.src);
+            if self
+                .doc
+                .symbols
+                .get(&self.symbol)
+                .is_none_or(|s| s.power_net.is_some())
+            {
+                self.symbol = self
+                    .doc
+                    .symbols
+                    .iter()
+                    .find(|(_, s)| s.power_net.is_none())
+                    .map(|(id, _)| id.clone())
+                    .unwrap_or_default();
             }
             if !self
                 .doc
@@ -270,6 +362,28 @@ impl Editor {
                 self.pin.clear();
             }
             self.page = sch::sheet_page(&self.doc, &self.circuit, &self.subject).unwrap_or_default();
+            self.catalog = self
+                .doc
+                .symbols
+                .iter()
+                .filter(|(_, s)| s.power_net.is_none())
+                .map(|(name, s)| {
+                    let mut terms = vec![name.as_str()];
+                    terms.extend(s.fields.values().map(String::as_str));
+                    terms.extend(
+                        s.pins
+                            .iter()
+                            .flat_map(|(n, p)| [n.as_str(), p.description.as_str()]),
+                    );
+                    (name.clone(), terms.join(" ").to_lowercase())
+                })
+                .collect();
+            if self.markers.active() {
+                self.directions = sch::wire_directions(&self.circuit);
+            }
+            if let Some(id) = focused {
+                self.focus_on(&id);
+            }
         }
     }
     fn install(&mut self, src: String) -> Result<()> {
@@ -425,6 +539,30 @@ impl Editor {
         }])
     }
     fn start(&mut self, t: Tool) {
+        if matches!(t, Tool::Directions | Tool::Dots) {
+            let was_active = self.markers.active();
+            let setting = if t == Tool::Dots {
+                &mut self.markers.dots
+            } else {
+                &mut self.markers.arrows
+            };
+            *setting = !*setting;
+            if !was_active {
+                self.directions = sch::wire_directions(&self.circuit);
+            } else if !self.markers.active() {
+                self.directions.clear();
+            }
+            return;
+        }
+        if self.focus_pin.take().is_some() {
+            self.fit = true;
+        }
+        self.dock = match t {
+            Tool::Place => Dock::Parts,
+            Tool::Power => Dock::Power,
+            _ => Dock::Properties,
+        };
+
         self.first = None;
         self.points.clear();
         self.message.clear();
@@ -452,6 +590,8 @@ impl Editor {
             }
             _ => {
                 self.form = Inputs {
+                    text_size: 1.55,
+                    line_width: 0.25,
                     electrical: "passive".into(),
                     unit: self.unit.clone(),
                     role_kind: "bypass".into(),
@@ -504,7 +644,11 @@ impl Editor {
         if !self.pin.is_empty() {
             let key = format!("{}/{}.{}", self.subject, self.selected, self.pin);
             if let Some(span) = self.circuit.origins.get(&key)
-                && let Some(row) = self.doc.rows.iter().find(|r| r.span == *span && r.sheet == self.sheet())
+                && let Some(row) = self
+                    .doc
+                    .rows
+                    .iter()
+                    .find(|r| r.span == *span && r.sheet == self.sheet())
             {
                 return &row.id;
             }
@@ -693,6 +837,26 @@ a = port(sheet:main, at:(3,2))
         assert_eq!(e.src, first);
         e.step(false);
         assert_eq!(e.src, src);
+    }
+
+    #[test]
+    fn custom_power_uses_its_library_pin_and_unit() {
+        let mut e = Editor::open(
+            None,
+            r#"schematic
+main=sheet()
+VEE=symbol(power_net:"VEE",pins:{return_pin:pin(number:"1",unit:"B",kind:"passive",at:(2,3))})
+j=junction(sheet:main,at:(5,10))
+"#
+            .into(),
+        )
+        .unwrap();
+        e.start(Tool::Power);
+        e.form.power_symbol = Some("VEE".into());
+        e.click([5., 10.], Some("j"), None).unwrap();
+        assert_eq!(e.circuit.locations["main/PWR1.return_pin"], [5., 10.]);
+        assert!(e.circuit.is_attached("main/PWR1.return_pin"));
+        assert!(!e.src.contains("forge:power"));
     }
 
     #[test]

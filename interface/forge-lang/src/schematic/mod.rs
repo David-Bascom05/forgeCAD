@@ -7,8 +7,10 @@ mod move_cache;
 mod reader;
 mod report;
 use crate::syntax::Span;
-pub use drawing::{graphic_page, sheet_page, symbol_page};
+mod inspection;
+pub use drawing::{graphic_page, sheet_page, sheet_selection_page, symbol_page};
 pub use graph::Circuit;
+pub use inspection::{Direction, Evidence, PinInspection, inspect_pin, wire_directions};
 mod bom;
 pub mod datasheet;
 pub use bom::{BomLine, bom, bom_csv};
@@ -39,13 +41,22 @@ pub const ARGS: &[(&str, &[&str])] = &[
     ),
     (
         "pin",
-        &["number", "kind", "at", "angle", "wants", "gives", "unit"],
+        &[
+            "number",
+            "kind",
+            "at",
+            "angle",
+            "wants",
+            "gives",
+            "unit",
+            "description",
+        ],
     ),
-    ("line", &["from", "to", "unit"]),
-    ("rect", &["from", "to", "unit"]),
-    ("arc", &["from", "mid", "to", "unit"]),
+    ("line", &["from", "to", "unit", "sheet", "width"]),
+    ("rect", &["from", "to", "unit", "sheet", "width"]),
+    ("arc", &["from", "mid", "to", "unit", "sheet", "width"]),
     ("polyline", &["points", "unit"]),
-    ("circle", &["at", "radius", "unit"]),
+    ("circle", &["at", "radius", "unit", "sheet", "width"]),
     ("text", &["at", "value", "unit"]),
     ("library", &["file"]),
     ("sheet", &["title"]),
@@ -75,7 +86,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
     ("wire", &["sheet", "from", "to", "via"]),
     ("label", &["sheet", "on", "value", "global", "at"]),
     ("no_connect", &["sheet", "on"]),
-    ("note", &["sheet", "at", "value"]),
+    ("note", &["sheet", "at", "value", "size", "bold"]),
     ("flow", &["sheet", "from", "to"]),
     ("bus", &["sheet", "members"]),
     (
@@ -131,6 +142,7 @@ pub struct Role {
 
 #[derive(Clone, Debug)]
 pub struct Pin {
+    pub description: String,
     pub number: String,
     pub unit: String,
     pub electrical: Electrical,
@@ -209,7 +221,16 @@ pub enum Item {
         at: Point,
     },
     NoConnect(String),
-    Note(Point, String),
+    Note {
+        at: Point,
+        text: String,
+        size: f64,
+        bold: bool,
+    },
+    Drawing {
+        shape: Shape,
+        width: f64,
+    },
     Fulfill {
         want: String,
         give: String,

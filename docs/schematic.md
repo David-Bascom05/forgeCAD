@@ -53,12 +53,33 @@ The session cache recognizes a change confined to the literal coordinates of a p
 
 ## Editing in ForgeCAD
 
-Choose **File → New Schematic** or **File → New Symbol Library**. Each opens a document tab. Save both files in the project before linking the library. In the schematic, **Link Library** takes its relative filename and a local name. **Place Symbol** shows the definitions in the linked library. Clicking a library in the document browser opens its symbol editor. The [sensor interface](../examples/electronics/analog/sensor-interface.fg) and its [library](../examples/electronics/analog/analog-symbols.fg) are a working pair.
+Choose **File → New Schematic** or **File → New Symbol Library**. Each opens a document tab. Save both files in the project before linking the library. In the schematic, **Link Library** takes its relative filename and a local name. **Place Symbol** shows the definitions in the linked library. The left tree navigates sheet occurrences. **Parts** in the right dock searches document and linked-library symbols by name, pin description, and custom fields such as MPN. Select a result to preview and place it, or open the library from the same dock. The [sensor interface](../examples/electronics/analog/sensor-interface.fg) and its [library](../examples/electronics/analog/analog-symbols.fg) are a working pair.
 
 - Use **Wire** to pick the first pin, any bends, and the destination. Finish on an existing wire to branch it. **Junction** splits an existing segment. Moving a connected component keeps its wires attached. A plain crossing leaves the nets independent.
 - **Assign Role** records a typed provider and consumer, with optional return pins and a preferred separation. Select a pin to inspect its declared roles and candidate providers. **Inspect → Electrical Checks** shows electrical and readability findings.
 - In a library, select a symbol, place its pins and draw its outline. Select a pin to set its number, unit, orientation, electrical kind, wants and gives. Select a graphic to edit its coordinates. The library and all its instances share the same geometry.
 - When a whole sheet is fitted, fine pin labels appear as you zoom in. Hover over an endpoint to identify it at any scale. The scroll wheel zooms around the pointer, middle drag pans, and **View → Fit All** frames the drawing. Hover over a ribbon tool to see its shortcut. Escape cancels the current tool. Source edits use the document's undo and redo history.
+
+### Pin inspection and signal directions
+
+Right-click a pin to read its short library description and inspect **Needs** and **Provides**. A verified relationship names the other occurrence and pin. An electrically connected match without a confirmed assignment is a candidate. An assignment with a disconnected supply or invalid return is marked **Check wiring**. Selecting a reference opens that pin, including on another sheet. The canvas frames and highlights the participating symbols and their drawn paths. The checklist stays in the right dock. Escape closes inspection.
+
+The symbol editor saves the description with the pin, for example `pin(number: "3", kind: "input", at: (-7, 3), description: "Noninverting input. Connect the filtered sensor signal here.")`. The CLI and MCP pin and symbol queries include this field.
+
+**View → Direction Arrows** (F6) and **Moving Dots** (F7) toggle independently. Green follows a known driver or an explicit `flow` along the connected net. Red markers travel both ways on a multiple-driver net or a wire with conflicting direction evidence. An undetermined wire stays unmarked. The markers move at a fixed screen speed to show logical direction.
+
+### Drawing and grid
+
+**Draw** provides line, rectangle, circle, three-point arc and text tools. Pick two corners for a box, a center and circumference point for a circle, or start, middle and end for an arc. Set stroke width or text height and bold in Properties before placing. Select the graphic to edit its points, radius or appearance, move it, or delete it. The same geometry and text print to SVG. Graphic strokes can cross pins and wires without joining nets. A graphical frame can enclose annotations, and a stroke crossing text produces a readability warning.
+
+The grid control below the canvas accepts metric presets, 10/25/50/100 mil presets, and a custom pitch in millimetres. **Snap** and grid visibility are independent. The grid and snap share the sheet origin and pitch. Zooming out thins the displayed dots by powers of two while retaining the selected snap pitch. The placement cursor shows the point a click will use. Drawing also snaps to nearby pin anchors, shape endpoints, box corners and circle quadrants. Wires attach exactly to the chosen terminal even for an off-grid pin.
+
+```text
+frame = rect(sheet: main, from: (0, 0), to: (40, 20), width: 0.3mm)
+title = note(sheet: main, at: (2, 15), value: "Analog input", size: 2.8mm, bold: true)
+```
+
+The [two-channel filter example](../examples/electronics/analog/filter-sheets.fg) repeats one annotated filter sheet twice and defines the signal flow through its input and output wires.
 
 ### Reading and placing fields and net names
 
@@ -71,7 +92,7 @@ On a physical symbol the larger field is its reference designator, and the next 
 | Port | Outlined tag with a flat attachment edge | Exposes a terminal on a hierarchical sheet. A parent wire attaches to the instance's port, such as `channel.out`. |
 | Power | Rail arrow or ground symbol with its net name | Joins the same global net as a global label of that name. |
 
-**Power** includes +3V3, +5V, +12V, VCC, VDD, GND, AGND and DGND. Click an existing terminal to attach the symbol in one edit, or place it on the grid and wire it later. Power symbols have one passive pin and are excluded from the BOM. Power sources such as regulators declare their own driver pins. The command inserts the bundled library into the document on first use. The same design can be written directly in the language.
+**Power** includes +3V3, +5V, +12V, VCC, VDD, GND, AGND and DGND. The Power tab also searches custom power symbols declared by the document or its linked libraries. Click an existing terminal to attach the symbol in one edit, or place it on the grid and wire it later. Power symbols have one passive pin and are excluded from the BOM. Power sources such as regulators declare their own driver pins. The command inserts the bundled library into the document on first use. The same design can be written directly in the language.
 
 ```text
 power = library(file: "forge:power")

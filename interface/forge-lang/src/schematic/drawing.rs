@@ -221,13 +221,25 @@ pub fn symbol_page(d: &Document, id: &str, unit: &str) -> Result<Page> {
     Ok(page)
 }
 pub fn sheet_page(d: &Document, c: &Circuit, scope: &str) -> Result<Page> {
+    sheet_selection_page(d, c, scope, |_, _| true)
+}
+/// Project selected rows with the full sheet's gate and attachment context.
+pub fn sheet_selection_page(
+    d: &Document,
+    c: &Circuit,
+    scope: &str,
+    include: impl Fn(&Row, &str) -> bool,
+) -> Result<Page> {
     let sheet = c
         .occurrences
         .get(scope)
         .ok_or_else(|| Fault::new("UnknownSheet", Span::default(), scope))?;
     let rows = d.rows.iter().filter(|r| r.sheet == *sheet).collect::<Vec<_>>();
     let mut page = Page::default();
-    visit_rows(d, c, scope, &rows, |_, _, mut ink, _| {
+    visit_rows(d, c, scope, &rows, |row, key, mut ink, _| {
+        if !include(row, &key) {
+            return;
+        }
         page.texts.append(&mut ink.texts);
         page.strokes.append(&mut ink.strokes);
         page.fills.append(&mut ink.fills);
@@ -330,7 +342,23 @@ fn visit_rows(
                 if *global { Tag::Global } else { Tag::Local },
                 right_wires.contains(format!("{scope}/{target}").as_str()),
             ),
-            Item::Note(at, s) => text(&mut page, pt(*at), VALUE_HEIGHT, s),
+            Item::Note {
+                at,
+                text: s,
+                size,
+                bold,
+            } => {
+                text(&mut page, pt(*at), *size, s);
+                if *bold && let Some(t) = page.texts.last_mut() {
+                    t.pen = Pen::BoldText;
+                }
+            }
+            Item::Drawing { shape, width } => {
+                graphic(&mut page, shape, pt);
+                for stroke in &mut page.strokes {
+                    stroke.pen = Pen::Annotation((width * 1000.).round().max(1.) as u32);
+                }
+            }
             Item::Junction(at) => {
                 let a = pt(*at);
                 page.fills.push((
@@ -477,7 +505,7 @@ struct PrintedItem {
 }
 enum Ink {
     Text(String),
-    Outline(Vec<Point2>),
+    Outline(Vec<Point2>, f64, bool),
 }
 fn inside(points: &[Point2], p: Point2) -> bool {
     if points.len() < 4 || (points[0] - points[points.len() - 1]).length() > 1e-7 {
@@ -535,24 +563,28 @@ fn collect_ink(items: &mut Vec<PrintedItem>, owner: String, page: Page, ids: Vec
     let outlines = page
         .strokes
         .into_iter()
-        .map(|s| s.geom)
+        .map(|s| {
+            let graphic = matches!(s.pen, Pen::Annotation(_));
+            let pad = if graphic { s.pen.width() / 2. } else { 0.08 };
+            (s.geom, pad, graphic)
+        })
         .chain(page.fills.into_iter().filter_map(|(_, mut points)| {
             points.push(*points.first()?);
-            Some(Geom2::Poly(points))
+            Some((Geom2::Poly(points), 0.08, false))
         }));
-    for geometry in outlines {
+    for (geometry, pad, annotation) in outlines {
         let (a, b) = geometry.bounds();
         // Small stroke allowance also handles the zero-width bounds of a vertical wire.
         let extent = Extent {
-            left: a.x - 0.08,
-            right: b.x + 0.08,
-            bottom: a.y - 0.08,
-            top: b.y + 0.08,
+            left: a.x - pad,
+            right: b.x + pad,
+            bottom: a.y - pad,
+            top: b.y + pad,
         };
         items.push(PrintedItem {
             extent,
             owner: owner.clone(),
-            kind: Ink::Outline(geometry.points(0.03)),
+            kind: Ink::Outline(geometry.points(0.03), pad, annotation),
         });
     }
 }
@@ -579,20 +611,24 @@ fn intersections(mut items: Vec<PrintedItem>) -> Vec<super::graph::Issue> {
                 (Ink::Text(x), Ink::Text(y)) => ("TextBoundsOverlap", x.min(y), x.max(y)),
                 _ => {
                     let (txt, line) = if is_text { (a, b) } else { (b, a) };
-                    let (Ink::Text(id), Ink::Outline(pts)) = (&txt.kind, &line.kind) else {
+                    let (Ink::Text(id), Ink::Outline(pts, pad, annotation)) = (&txt.kind, &line.kind) else {
                         continue;
                     };
                     let bounds = txt.extent;
                     let ink_bounds = Extent {
-                        left: bounds.left - 0.08,
-                        right: bounds.right + 0.08,
-                        bottom: bounds.bottom - 0.08,
-                        top: bounds.top + 0.08,
+                        left: bounds.left - pad,
+                        right: bounds.right + pad,
+                        bottom: bounds.bottom - pad,
+                        top: bounds.top + pad,
                     };
                     let crosses = pts.windows(2).any(|s| ink_bounds.cuts(s[0], s[1]));
                     let intentional =
                         txt.owner == line.owner && (id == &line.owner || id.contains(":graphic"));
-                    if !crosses && (intentional || !inside(pts, Point2::new(bounds.left, bounds.bottom))) {
+                    if !crosses
+                        && (*annotation
+                            || intentional
+                            || !inside(pts, Point2::new(bounds.left, bounds.bottom)))
+                    {
                         continue;
                     }
                     ("TextGeometryOverlap", id, &line.owner)

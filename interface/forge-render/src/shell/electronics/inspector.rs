@@ -83,6 +83,7 @@ impl Editor {
                 if let Some(p) = sym.pins.get(&self.pin) {
                     self.form.name = self.pin.clone();
                     self.form.number = p.number.clone();
+                    self.form.description = p.description.clone();
                     self.form.electrical = p.electrical.word().into();
                     self.form.unit = p.unit.clone();
                     self.form.angle = p.angle as i32;
@@ -124,7 +125,19 @@ impl Editor {
                     self.form.populated = *populated;
                     self.form.in_bom = *in_bom;
                 }
-                Item::Note(_, s) => self.form.text = s.clone(),
+                Item::Note { at, text, size, bold } => {
+                    self.form.text = text.clone();
+                    self.form.text_size = *size;
+                    self.form.bold = *bold;
+                    self.form.geometry = vec![*at];
+                }
+                Item::Drawing { shape, width } => {
+                    self.form.line_width = *width;
+                    self.form.geometry = annotation::control_points(shape);
+                    if let sch::Shape::Circle(_, r) = shape {
+                        self.form.radius = *r;
+                    }
+                }
                 Item::Label { text, global, .. } => {
                     self.form.text = text.clone();
                     self.form.global = *global;
@@ -148,14 +161,15 @@ impl Editor {
             return Err("This pin name already exists.".into());
         }
         let body = format!(
-            "pin(number: {}, kind: {}, at: {}, unit: {}, angle: {}deg, wants: [{}], gives: [{}])",
+            "pin(number: {}, kind: {}, at: {}, unit: {}, angle: {}deg, wants: [{}], gives: [{}], description: {})",
             quote(&f.number),
             quote(&f.electrical),
             coord(at),
             quote(&f.unit),
             f.angle,
             f.wants.join(", "),
-            f.gives.join(", ")
+            f.gives.join(", "),
+            quote(&f.description)
         );
         let k = f.name.clone();
         self.change_member("pins", Some(&k), None, Some(body))
@@ -216,6 +230,7 @@ impl Editor {
             .map(str::to_string)
             .to_vec(),
         );
+        field(ui, "Description", &mut f.description);
         field(ui, "Unit", &mut f.unit);
         ComboBox::from_label("Direction")
             .selected_text(format!("{}°", f.angle))
@@ -275,6 +290,23 @@ impl Editor {
                         }
                     }
                 }
+                Item::Drawing { shape, width } => {
+                    ops.extend(annotation::geometry_args(id, shape, &f.geometry, f.radius));
+                    if *width != f.line_width {
+                        ops.push(arg(id, "width", format!("{}mm", f.line_width)));
+                    }
+                }
+                Item::Note { at, size, bold, .. } => {
+                    if *at != f.geometry[0] {
+                        ops.push(arg(id, "at", coord(f.geometry[0])));
+                    }
+                    if *size != f.text_size {
+                        ops.push(arg(id, "size", format!("{}mm", f.text_size)));
+                    }
+                    if *bold != f.bold {
+                        ops.push(arg(id, "bold", f.bold.to_string()));
+                    }
+                }
                 Item::Label { global, .. } if *global != f.global => {
                     ops.push(arg(id, "global", f.global.to_string()))
                 }
@@ -304,7 +336,7 @@ impl Editor {
             .doc
             .rows
             .iter()
-            .any(|r| &r.id == id && matches!(r.item, Item::Label { .. } | Item::Note(..)))
+            .any(|r| &r.id == id && matches!(r.item, Item::Label { .. } | Item::Note{..}))
         {
             ops.push(arg(id, "value", quote(&f.text)));
         }
@@ -388,45 +420,23 @@ impl Editor {
         self.refresh();
         self.start(Tool::Properties);
     }
-    fn selected_pin_detail(&self, ui: &mut Ui) {
-        let path = format!("{}/{}.{}", self.subject, self.selected, self.pin);
-        let Some(p) = self.circuit.terminals.get(&path) else {
-            return;
-        };
-        ui.strong(format!("{}.{} · pin {}", self.selected, self.pin, p.number));
-        ui.label(format!("Electrical type · {}", p.electrical.word()));
-        for (label, ids) in [("Wants", &p.wants), ("Gives", &p.gives)] {
-            for id in ids {
-                ui.label(format!("{label} · {}", id.0));
-            }
-        }
-        if let Ok(json) = sch::response(&self.doc, &self.circuit, &["pin".into(), path])
-            && let Some(info) = json.get("result")
-        {
-            for (field, key) in [("fulfillments", "id"), ("candidates", "give")] {
-                if let Some(forge_agent::json::Json::Arr(v)) = info.get(field)
-                    && !v.is_empty()
-                {
-                    ui.strong(if field == "candidates" {
-                        "Candidate providers"
-                    } else {
-                        "Confirmed relationships"
-                    });
-                    for item in v {
-                        let name = item.get(key).and_then(|s| s.str()).unwrap_or("");
-                        let ev = item.get("evidence").and_then(|s| s.str()).unwrap_or("");
-                        ui.label(format!("{name} {}", ev.replace('_', " ")));
-                    }
-                }
+    fn selected_pin_detail(&mut self, ui: &mut Ui) {
+        let id = format!("{}/{}.{}", self.subject, self.selected, self.pin);
+        if let Some(p) = self.circuit.terminals.get(&id) {
+            ui.strong(format!(
+                "{} · pin {} · {}",
+                self.pin,
+                p.number,
+                p.electrical.word()
+            ));
+            if ui.link("Inspect pin relationships").clicked() {
+                self.focus_on(&id);
             }
         }
     }
     pub(super) fn inspector(&mut self, ui: &mut Ui, t: &Theme) {
-        let sheet = ux::Sheet::new(
-            t,
-            ux::System::of_doc("mm"),
-            self.path.as_deref().unwrap_or("").trim(),
-        );
+        let path = self.path.clone().unwrap_or_default();
+        let sheet = ux::Sheet::new(t, ux::System::of_doc("mm"), path.trim());
         sheet.section(
             ui,
             if matches!(self.tool, Tool::Select | Tool::Properties) {
@@ -613,7 +623,14 @@ impl Editor {
                         }
                         sheet.section(ui, "Custom fields");
                         custom(ui, &mut self.form.fields);
-                    } else if matches!(part, Some(Item::Note(..) | Item::Label { .. })) {
+                    } else if let Some(Item::Drawing { shape, .. }) = part {
+                        annotation::controls(ui, &mut self.form, Some(shape));
+                    } else if matches!(part, Some(Item::Note { .. } | Item::Label { .. })) {
+                        if matches!(part, Some(Item::Note { .. })) {
+                            annotation::text_controls(ui, &mut self.form);
+                            annotation::point_fields(ui, &mut self.form.geometry);
+                        }
+
                         field(ui, "Text", &mut self.form.text);
                         if matches!(part, Some(Item::Label { .. })) {
                             label_scope(ui, &mut self.form.global);
@@ -678,7 +695,11 @@ impl Editor {
                     self.doc.sheets.keys().cloned().collect(),
                 );
             }
+            Line | Rect | Circle | Arc if !self.library() => annotation::controls(ui, &mut self.form, None),
             Note | Text | Label => {
+                if self.tool == Note {
+                    annotation::text_controls(ui, &mut self.form);
+                }
                 field(ui, "Text", &mut self.form.text);
                 if self.tool == Label {
                     label_scope(ui, &mut self.form.global);

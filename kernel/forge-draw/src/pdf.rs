@@ -121,6 +121,7 @@ fn content(p: &Page) -> String {
     }
     for t in &p.texts {
         let c = t.pen.colour();
+        let font = if t.pen == crate::Pen::BoldText { "F2" } else { "F1" };
         let size = t.h / 0.718;
         let w = text_width(&t.text, t.h);
         let shift = match t.align {
@@ -132,7 +133,7 @@ fn content(p: &Page) -> String {
         let at = t.at + forge_math::Vec2::new(co, s) * shift;
         let _ = writeln!(
             o,
-            "BT {} {} {} rg /F1 {} Tf {} {} {} {} {} {} Tm {} Tj ET",
+            "BT {} {} {} rg /{font} {} Tf {} {} {} {} {} {} Tm {} Tj ET",
             n(c[0]),
             n(c[1]),
             n(c[2]),
@@ -161,8 +162,13 @@ pub fn pdf(pages: &[Page]) -> Vec<u8> {
     ));
     objs.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>".into());
     for (k, p) in pages.iter().enumerate() {
+        let bold = if p.texts.iter().any(|t| t.pen == crate::Pen::BoldText) {
+            " /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>"
+        } else {
+            ""
+        };
         objs.push(format!(
-            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {} {}] /Resources << /Font << /F1 3 0 R >> >> /Contents {} 0 R >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {} {}] /Resources << /Font << /F1 3 0 R{bold} >> >> /Contents {} 0 R >>",
             n(p.w * PT),
             n(p.h * PT),
             5 + 2 * k

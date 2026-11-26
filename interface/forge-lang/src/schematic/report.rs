@@ -63,6 +63,7 @@ fn symbol(id: &str, s: &Symbol, d: &Document) -> Json {
                     .map(|(id, p)| {
                         Json::obj(vec![
                             ("id", id.clone().into()),
+                            ("description", p.description.clone().into()),
                             ("number", p.number.clone().into()),
                             ("unit", p.unit.clone().into()),
                             ("electrical", p.electrical.word().into()),
@@ -235,7 +236,28 @@ fn scene(row: &Row) -> Json {
             ],
         ),
         Item::NoConnect(on) => ("no_connect", vec![("on", on.clone().into())]),
-        Item::Note(at, text) => ("note", vec![("at", point(*at)), ("value", text.clone().into())]),
+        Item::Note { at, text, size, bold } => (
+            "note",
+            vec![
+                ("at", point(*at)),
+                ("value", text.clone().into()),
+                ("size", (*size).into()),
+                ("bold", (*bold).into()),
+            ],
+        ),
+        Item::Drawing { shape, width } => (
+            "drawing",
+            vec![
+                (
+                    "shape",
+                    graphic(&Graphic {
+                        unit: None,
+                        shape: shape.clone(),
+                    }),
+                ),
+                ("width", (*width).into()),
+            ],
+        ),
         Item::Fulfill { .. } => ("fulfill", vec![]),
     };
     fields.extend([
@@ -250,6 +272,10 @@ fn pin(id: &str, p: &Terminal, d: &Document, c: &Circuit) -> Json {
     Json::obj(vec![
         ("id", id.into()),
         ("pin", p.pin.clone().into()),
+        (
+            "description",
+            d.symbols[&p.symbol].pins[&p.pin].description.clone().into(),
+        ),
         ("number", p.number.clone().into()),
         ("symbol", p.symbol.clone().into()),
         ("at", point(p.at)),

@@ -26,32 +26,54 @@ async function capture(browser, base, width, height, file, row, name) {
     await page.evaluate(f => window.forgecad.fc.app_open("/project/examples/electronics/analog/" + f + ".fg"), file);
     const state = await t.until(page, s => s.places.some(p => p.name === row), row, 45000);
     await page.evaluate(id => window.forgecad.fc.app_click(id, 0, false), row);
-    // Input arrives on successive frames. Wait for the selected row to acquire the
-    // same highlight as its active sheet or symbol before reading back the whole window.
-    const parent = file === "analog-symbols" ? "electronics:schchip:Amplifier" : "electronics:sheet:main";
-    const rectangles = [row,parent].map(id => state.places.find(p => p.name === id).rect);
-    await page.waitForFunction(async rects => {
-      const image = await window.forgecad.pixels();
-      if (!image) return false;
-      const colour = ([x,y,w]) => {
-        const offset = 4 * (Math.floor(y + 3) * image.width + Math.floor(x + w - 6));
-        const p = image.rgba;
-        return (p[offset] << 16) | (p[offset + 1] << 8) | p[offset + 2];
-      };
-      return colour(rects[0]) === colour(rects[1]);
-    }, rectangles, {timeout:20000});
+    if (file === "sensor-interface") {
+      const selected = row.replace(":component:", ":selected:");
+      await t.until(page, s => s.places.some(p => p.name === selected), selected);
+    } else {
+      // Input arrives on successive frames. Wait for the selected row to acquire the
+      // same highlight as its active sheet or symbol before reading back the whole window.
+      const parent = file === "analog-symbols" ? "electronics:schchip:Amplifier" : "electronics:sheet:main";
+      const rectangles = [row,parent].map(id => state.places.find(p => p.name === id).rect);
+      await page.waitForFunction(async rects => {
+        const image = await window.forgecad.pixels();
+        if (!image) return false;
+        const colour = ([x,y,w]) => {
+          const offset = 4 * (Math.floor(y + 3) * image.width + Math.floor(x + w - 6));
+          const p = image.rgba;
+          return (p[offset] << 16) | (p[offset + 1] << 8) | p[offset + 2];
+        };
+        return colour(rects[0]) === colour(rects[1]);
+      }, rectangles, {timeout:20000});
+    }
     const frame = await t.pixels(page);
     if (frame.width !== width || frame.height !== height || frame.colours < 12) throw Error("Incomplete editor frame");
     console.log(t.shot("web-" + name + ".png", frame));
     if (name === "symbol") await verifyAttachedPdf(page);
+    if (name === "schematic") {
+      const click = (id, button = 0) => page.evaluate(([id, button]) => window.forgecad.fc.app_click(id, button, false), [id, button]);
+      const shown = id => t.until(page, s => s.places.some(p => p.name === id), id, 20000);
+      await click("electronics:anchor:U1.VDD", 1);
+      await shown("electronics:inspection:main/U1.VDD");
+      await click("electronics:dock:Parts");
+      await shown("electronics:part:analog.Amplifier");
+      await click("electronics:grid");
+      await shown("electronics:grid:50 mil");
+      // The bottom-edge popup measures its contents on its first frame and then
+      // moves above the button. Click its final screen position.
+      await page.evaluate(async () => {
+        for (let i = 0; i < 3; i++) await window.forgecad.pixels();
+      });
+      await click("electronics:grid:50 mil");
+      await shown("electronics:pitch:1.27");
+    }
   } finally {
     await page.close();
   }
 }
 async function run(browser, base) {
-  await capture(browser, base, 1600, 1000, "sensor-interface", "electronics:schchip:U1", "schematic");
+  await capture(browser, base, 1600, 1000, "sensor-interface", "electronics:component:U1", "schematic");
   await capture(browser, base, 1400, 860, "analog-symbols", "electronics:schpin:VDD", "symbol");
-  await capture(browser, base, 1024, 700, "sensor-interface", "electronics:schchip:C2", "compact");
+  await capture(browser, base, 1024, 700, "sensor-interface", "electronics:component:C2", "compact");
 }
 module.exports = run;
 if (require.main === module) (async () => {

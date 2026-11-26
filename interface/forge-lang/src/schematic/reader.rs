@@ -199,6 +199,28 @@ fn roles(e: Option<&Expr>, doc: &Document) -> Result<Set<RoleId>> {
     }
     Ok(result)
 }
+fn graphic_shape(c: &mut Call<'_>, p: &Params, span: Span) -> Result<Shape> {
+    Ok(match c.name {
+        "line" => Shape::Line(point(c.req("from")?, p)?, point(c.req("to")?, p)?),
+        "rect" => Shape::Rect(point(c.req("from")?, p)?, point(c.req("to")?, p)?),
+        "circle" => Shape::Circle(point(c.req("at")?, p)?, positive(c.req("radius")?, p)?),
+        "text" => Shape::Text(point(c.req("at")?, p)?, string(c.req("value")?)?),
+        "arc" => Shape::Arc(
+            point(c.req("from")?, p)?,
+            point(c.req("mid")?, p)?,
+            point(c.req("to")?, p)?,
+        ),
+        "polyline" => {
+            let e = c.req("points")?;
+            let points = list(e)?.iter().map(|e| point(e, p)).collect::<Result<Vec<_>>>()?;
+            if points.len() < 2 {
+                return Err(fault(e, "TooFewPoints", "a polyline needs at least two points"));
+            }
+            Shape::Polyline(points)
+        }
+        _ => return Err(Fault::new("UnknownGraphic", span, c.name)),
+    })
+}
 fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
     let e = call.req("pins")?;
     let E::Map(entries) = &e.kind else {
@@ -219,6 +241,7 @@ fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
         let word = string(k)?;
         let electrical = Electrical::parse(&word).ok_or_else(|| fault(k, "UnknownElectricalKind", word))?;
         let pin = Pin {
+            description: c.take("description").map(string).transpose()?.unwrap_or_default(),
             number: n,
             unit: c
                 .take("unit")
@@ -241,26 +264,7 @@ fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
         for expr in list(g)? {
             let mut c = Call::new(expr)?;
             let unit = c.take("unit").map(string).transpose()?;
-            let shape = match c.name {
-                "line" => Shape::Line(point(c.req("from")?, p)?, point(c.req("to")?, p)?),
-                "rect" => Shape::Rect(point(c.req("from")?, p)?, point(c.req("to")?, p)?),
-                "circle" => Shape::Circle(point(c.req("at")?, p)?, positive(c.req("radius")?, p)?),
-                "text" => Shape::Text(point(c.req("at")?, p)?, string(c.req("value")?)?),
-                "arc" => Shape::Arc(
-                    point(c.req("from")?, p)?,
-                    point(c.req("mid")?, p)?,
-                    point(c.req("to")?, p)?,
-                ),
-                "polyline" => {
-                    let e = c.req("points")?;
-                    let points = list(e)?.iter().map(|e| point(e, p)).collect::<Result<Vec<_>>>()?;
-                    if points.len() < 2 {
-                        return Err(fault(e, "TooFewPoints", "a polyline needs at least two points"));
-                    }
-                    Shape::Polyline(points)
-                }
-                _ => return Err(fault(expr, "UnknownGraphic", c.name)),
-            };
+            let shape = graphic_shape(&mut c, p, expr.span)?;
             graphics.push(Graphic { unit, shape });
             c.end()?;
         }
@@ -398,7 +402,24 @@ fn item(c: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Item> {
             }
         }
         "no_connect" => Item::NoConnect(reference(c.req("on")?)?),
-        "note" => Item::Note(point(c.req("at")?, p)?, string(c.req("value")?)?),
+        "note" => Item::Note {
+            at: point(c.req("at")?, p)?,
+            text: string(c.req("value")?)?,
+            size: c
+                .take("size")
+                .map(|e| positive(e, p))
+                .transpose()?
+                .unwrap_or(1.55),
+            bold: c.take("bold").map(boolean).transpose()?.unwrap_or(false),
+        },
+        "line" | "rect" | "circle" | "arc" => Item::Drawing {
+            shape: graphic_shape(c, p, Span::default())?,
+            width: c
+                .take("width")
+                .map(|e| positive(e, p))
+                .transpose()?
+                .unwrap_or(0.25),
+        },
         "fulfill" => {
             let e = c.req("role")?;
             let role = resolve_role(e, doc)?;

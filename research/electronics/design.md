@@ -62,7 +62,7 @@ The board should be a third, linked layout document. A package on the board shou
 The [editing guide](../../docs/schematic.md#editing-in-forgecad) includes the sensor interface example. Backend and GUI tests exercise saving and reopening the source, building the connectivity graph, and resolving the effective BOM. The editor compiles committed changes. The release criteria for frame-rate checking on a populated board still require measurement with actual board geometry.
 
 
-The review set uses the same analog interface in both renderers. It opens the component and pin through the document browser at three window sizes.
+The review set uses the same analog interface in both renderers. It selects schematic components on the canvas and library pins in the symbol editor at three window sizes.
 
 | Window | Desktop | Browser |
 | --- | --- | --- |
@@ -71,3 +71,7 @@ The review set uses the same analog interface in both renderers. It opens the co
 | Schematic, C2 selected, 1024 × 700 | [Compact desktop](shots/native-compact.png) | [Compact browser](shots/web-compact.png) |
 
 The [readability example](shots/native-readability.png) places the note `scope_probe` across the output wire `w7`. Electrical Checks links to each object. Moving the note clear of that wire removes the overlap warning and preserves the electrical net.
+
+The left tree follows sheet occurrences, including repeated instances. The right dock provides part and power search and the selected object's properties. Right-clicking a pin resolves typed assignments, same-net candidates and return paths before drawing a focused view. The signal overlay reuses resolved wire directions as the display clock advances. Arrows and dots can be enabled independently. Decorative sheet geometry shares the print-space readability checks and remains outside the net graph.
+
+[Pin inspection](shots/native-pin-inspection.png) · [Parts browser](shots/native-parts.png) · [Signal animation](shots/signal-directions.gif) · [Drawing tools and grid](shots/native-drawing-grid.png)

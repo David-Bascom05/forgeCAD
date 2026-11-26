@@ -406,3 +406,109 @@ signal = port(sheet:child, at:(0,16))
     );
     assert!(page.texts.iter().any(|t| t.text == "sense" && t.at.y > 0.));
 }
+
+#[test]
+fn pin_inspection_preserves_evidence_in_both_directions() {
+    use schematic::Evidence;
+    let file = include_str!("../../../examples/electronics/analog/sensor-interface.fg");
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/electronics/analog");
+    for (source, evidence) in [
+        (file.to_owned(), Evidence::Verified),
+        (
+            file.replace("return_to: U1.VSS", "return_to: U1.OUT"),
+            Evidence::Invalid,
+        ),
+        (
+            file.lines()
+                .filter(|s| !s.starts_with("local_cap ="))
+                .collect::<Vec<_>>()
+                .join("\n"),
+            Evidence::Candidate,
+        ),
+    ] {
+        let (doc, c) = schematic::compile(&source, Some(&dir), None).unwrap();
+        assert!(
+            doc.symbols["analog.Amplifier"].pins["VDD"]
+                .description
+                .contains("Bypass")
+        );
+        for (id, need, peer) in [
+            ("main/U1.VDD", true, "main/C2.P"),
+            ("main/C2.P", false, "main/U1.VDD"),
+        ] {
+            let inspection = schematic::inspect_pin(&c, id).unwrap();
+            assert!(
+                inspection
+                    .checks
+                    .iter()
+                    .any(|r| r.need == need && r.peers.contains(&(peer.into(), evidence)))
+            );
+            assert!(inspection.wires.contains("main/w11"));
+            assert!(!inspection.pins.contains("main/R1.A"));
+        }
+    }
+}
+
+#[test]
+fn signal_directions_respect_bends_branches_opposed_flows_and_unknowns() {
+    use schematic::Direction::*;
+    let file = include_str!("../../../examples/electronics/analog/sensor-interface.fg");
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/electronics/analog");
+    for (extra, expected) in [
+        ("", Forward),
+        ("\nopposed=flow(sheet:main,from:output,to:feedback)", Conflict),
+    ] {
+        let (_, c) = schematic::compile(&format!("{file}{extra}"), Some(&dir), None).unwrap();
+        let d = schematic::wire_directions(&c);
+        assert_eq!(d["main/w7"], expected);
+        assert_eq!(d["main/w8"], Forward);
+        assert!(!d.contains_key("main/w10")); // Passive power symbols do not establish drive direction.
+    }
+    let src = "schematic\nmain=sheet()\nD=symbol(pins:{x:pin(number:\"1\",kind:\"output\",at:(0,0))})\na=place(sheet:main,symbol:D,at:(0,0))\nb=place(sheet:main,symbol:D,at:(5,0))\nj=junction(sheet:main,at:(2,0))\nw=wire(sheet:main,from:j,to:a.x)\n";
+    assert_eq!(
+        schematic::wire_directions(&run(src).unwrap().1)["main/w"],
+        Reverse
+    );
+    let joined = format!("{src}v=wire(sheet:main,from:j,to:b.x)");
+    assert_eq!(
+        schematic::wire_directions(&run(&joined).unwrap().1)["main/w"],
+        Conflict
+    );
+}
+
+#[test]
+fn sheet_annotations_round_trip_styles_without_creating_connections() {
+    use forge_draw::Pen;
+    let file = include_str!("../../../examples/electronics/analog/filter-sheets.fg");
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/electronics/analog");
+    let (doc, c) = schematic::compile(file, Some(&dir), None).unwrap();
+    let bare = file.split("outline =").next().unwrap();
+    assert_eq!(
+        c.net_of,
+        schematic::compile(bare, Some(&dir), None).unwrap().1.net_of
+    );
+    assert!(
+        !c.issues.iter().any(|i| i.kind == "TextGeometryOverlap"),
+        "{:?}",
+        c.issues
+    );
+    let page = schematic::sheet_page(&doc, &c, "main/left_filter").unwrap();
+    assert!(page.strokes.iter().any(|s| s.pen == Pen::Annotation(450)));
+    assert!(
+        page.texts
+            .iter()
+            .any(|t| t.text == "Analog input filter" && t.h == 2.8 && t.pen == Pen::BoldText)
+    );
+    let svg = schematic::response(&doc, &c, &["svg".into(), "main/right_filter".into()]).unwrap();
+    let svg = svg.get("result").unwrap().str().unwrap_or("");
+    assert!(
+        svg.contains("font-weight=\"bold\"") && svg.contains("stroke-width=\"0.45\""),
+        "{svg}"
+    );
+    for bad in [
+        file.replace("size: 2.8mm", "size: -2mm"),
+        file.replace("width: 0.3mm", "width: 3deg"),
+    ] {
+        assert!(schematic::compile(&bad, Some(&dir), None).is_err());
+    }
+}

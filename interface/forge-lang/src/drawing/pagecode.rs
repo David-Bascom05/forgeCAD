@@ -20,11 +20,22 @@ const PENS: [Pen; 10] = [
 const ALIGNS: [Align; 3] = [Align::Left, Align::Centre, Align::Right];
 
 fn pen(o: &mut Out, p: Pen) {
-    o.u64(PENS.iter().position(|x| *x == p).unwrap_or(0) as u64);
+    match p {
+        Pen::Annotation(um) => {
+            o.u64(10);
+            o.u64(um.into());
+        }
+        Pen::BoldText => o.u64(11),
+        _ => o.u64(PENS.iter().position(|x| *x == p).expect("standard pen") as u64),
+    }
 }
 
 fn read_pen(i: &mut In) -> Option<Pen> {
-    PENS.get(usize::try_from(i.u64()?).ok()?).copied()
+    match i.u64()? {
+        10 => Some(Pen::Annotation(i.u64()?.try_into().ok()?)),
+        11 => Some(Pen::BoldText),
+        n => PENS.get(usize::try_from(n).ok()?).copied(),
+    }
 }
 
 fn pt(o: &mut Out, p: Point2) {

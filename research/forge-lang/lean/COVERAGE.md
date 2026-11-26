@@ -111,12 +111,12 @@ extension so far:
 |---|---|---|---|---|
 | args | `schematic::role` | `kind`, `key`, `capacitance_nf`, `voltage_mv`, `prefer` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::symbol` | `pins`, `graphics`, `fields`, `datasheet`, `power_net` | schematic::ARGS and checked reader | GAP record decoding in Rust |
-| args | `schematic::pin` | `number`, `kind`, `at`, `angle`, `wants`, `gives`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
-| args | `schematic::line` | `from`, `to`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
-| args | `schematic::rect` | `from`, `to`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
-| args | `schematic::arc` | `from`, `mid`, `to`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::pin` | `number`, `kind`, `at`, `angle`, `wants`, `gives`, `unit`, `description` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::line` | `from`, `to`, `unit`, `sheet`, `width` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::rect` | `from`, `to`, `unit`, `sheet`, `width` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::arc` | `from`, `mid`, `to`, `unit`, `sheet`, `width` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::polyline` | `points`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
-| args | `schematic::circle` | `at`, `radius`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::circle` | `at`, `radius`, `unit`, `sheet`, `width` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::text` | `at`, `value`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::library` | `file` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::sheet` | `title` | schematic::ARGS and checked reader | GAP record decoding in Rust |
@@ -128,7 +128,7 @@ extension so far:
 | args | `schematic::wire` | `sheet`, `from`, `to`, `via` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::label` | `sheet`, `on`, `value`, `global`, `at` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::no_connect` | `sheet`, `on` | schematic::ARGS and checked reader | GAP record decoding in Rust |
-| args | `schematic::note` | `sheet`, `at`, `value` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::note` | `sheet`, `at`, `value`, `size`, `bold` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::flow` | `sheet`, `from`, `to` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::bus` | `sheet`, `members` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::fulfill` | `sheet`, `want`, `give`, `role`, `return_from`, `return_to`, `prefer` | schematic::ARGS and checked reader | GAP record decoding in Rust |

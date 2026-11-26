@@ -1333,8 +1333,8 @@ impl Shell {
     /// In an environment, its own tabs then Inspect, View and Manage; else the design's, then
     /// Environments (Thermoform, Flat Pattern and the rest are entered from there).
     pub fn tab_order(&self) -> Vec<usize> {
-        if self.electronics.is_some() {
-            return vec![0, 1, 2];
+        if let Some(e)=&self.electronics {
+            return if e.library(){vec![0,1,2]}else{vec![0,3,1,2]};
         }
         if let Some(v) = self.env_tabs() {
             return v;

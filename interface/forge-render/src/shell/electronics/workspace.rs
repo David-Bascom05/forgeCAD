@@ -52,10 +52,15 @@ impl Tool {
                 "Review fitted components and copy their purchasing data as CSV.",
             ),
             Fit => (egui::Key::F, "Fit the drawing to the canvas."),
-            Grid => (egui::Key::Q, "Toggle the drawing grid and placement snapping."),
+            Grid => (egui::Key::Q, "Show or hide the sheet grid."),
             Properties => (egui::Key::I, "Inspect and edit the selected object."),
             Intent => (egui::Key::U, "Assign a typed provider to a consumer pin."),
             Bus => (egui::Key::D, "Pick connections for a named bus."),
+            Dots => (egui::Key::F7, "Animate dots along known signal paths."),
+            Directions => (
+                egui::Key::F6,
+                "Animate known directions along wires. Red opposing arrows mark a conflict.",
+            ),
             Flow => (egui::Key::O, "Record signal flow between two terminals."),
             NewSymbol => (egui::Key::N, "Add a named symbol definition to the library."),
             Pin => (
@@ -84,7 +89,7 @@ impl Tool {
             Label => ("Net Label", "text"),
             Port => ("Port", "schpin"),
             NoConnect => ("No Connect", "close"),
-            Note => ("Note", "markup"),
+            Note => ("Text", "text"),
             Move => ("Move", "move"),
             Rotate => ("Rotate", "rotate"),
             Mirror => ("Mirror", "mirror"),
@@ -108,6 +113,8 @@ impl Tool {
             Properties => ("Properties", "params"),
             Intent => ("Assign Role", "connector"),
             Bus => ("Bus", "schbus"),
+            Directions => ("Direction Arrows", "arrowmark"),
+            Dots => ("Moving Dots", "schdots"),
             Flow => ("Signal Flow", "schwire"),
         }
     }
@@ -122,7 +129,10 @@ impl Editor {
                     name,
                     icon,
                     action: Some(Action::Electronics(*t)),
-                    on: self.tool == *t || (*t == Grid && self.grid),
+                    on: self.tool == *t
+                        || (*t == Grid && self.grid)
+                        || (*t == Directions && self.markers.arrows)
+                        || (*t == Dots && self.markers.dots),
                 }
             };
             Group {
@@ -137,7 +147,7 @@ impl Editor {
                 group("Place", &[Place, Wire, Power], &[Junction, Label, Port]),
                 group("Connections", &[Intent], &[NoConnect, Bus, Flow]),
                 group("Modify", &[Move], &[Rotate, Mirror, Delete]),
-                group("Sheets", &[Sheet], &[Subsheet, Gate, Note]),
+                group("Sheets", &[Sheet], &[Subsheet, Gate]),
                 group("Library", &[Library], &[]),
             ],
             (0, true) => vec![
@@ -145,8 +155,17 @@ impl Editor {
                 group("Graphics", &[Line, Rect, Circle], &[Arc, Text]),
                 group("Modify", &[Properties], &[Move, Delete]),
             ],
+            (3, false) => vec![
+                group("Geometry", &[Line, Rect, Circle], &[Arc]),
+                group("Annotation", &[Note], &[]),
+                group("Modify", &[Properties, Move], &[Delete]),
+            ],
             (1, false) => vec![group("Inspect", &[Properties, Checks, Bom], &[])],
             (1, true) => vec![group("Inspect", &[Properties, Checks], &[])],
+            (2, false) => vec![
+                group("Navigate", &[Fit, Grid, Select], &[]),
+                group("Signals", &[Directions, Dots], &[]),
+            ],
             _ => vec![group("Navigate", &[Fit, Grid, Select], &[])],
         }
     }
@@ -237,70 +256,79 @@ impl Editor {
                 }
             }
         } else {
-            section(ui, "Sheets");
-            let sheets = self.circuit.occurrences.keys().cloned().collect::<Vec<_>>();
-            for id in sheets {
-                if row(places, ui, t, &id, "sheet", self.subject == id, "sheet") {
-                    self.subject = id;
-                    self.fit = true;
-                    self.selected.clear();
-                    self.pin.clear();
-                    self.start(Tool::Select);
-                    self.refresh();
-                }
+            section(ui, "Sheet hierarchy");
+            // Iterate subtrees explicitly: lexicographic path ordering can interleave roots
+            // such as a and a_2 with descendants of a.
+            let mut children: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+            for path in self.circuit.occurrences.keys() {
+                children
+                    .entry(path.rsplit_once('/').map_or("", |(parent, _)| parent))
+                    .or_default()
+                    .push(path);
             }
-            section(ui, "Components");
-            let rows = self
-                .doc
-                .rows
-                .iter()
-                .filter(|r| r.sheet == self.sheet())
-                .map(|r| {
-                    (
-                        r.id.clone(),
-                        match &r.item {
-                            Item::Place { symbol, .. } => Some(symbol.clone()),
-                            Item::Gate { of, unit, .. } => Some(format!("{of}.{unit}")),
-                            _ => None,
-                        },
-                    )
-                })
-                .collect::<Vec<_>>();
-            for (id, kind) in &rows {
-                if let Some(k) = kind
-                    && row(
+            let mut pending: Vec<_> = children
+                .get("")
+                .into_iter()
+                .flatten()
+                .rev()
+                .map(|&p| (p, 0))
+                .collect();
+            let mut chosen = None;
+            while let Some((id, depth)) = pending.pop() {
+                let label = id.rsplit('/').next().unwrap_or(id);
+                let has_children = children.contains_key(id);
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 2.;
+                    ui.add_space(12. * depth as f32);
+                    if has_children {
+                        let (rect, resp) = ui.allocate_exact_size(vec2(14., 20.), Sense::click());
+                        egui::collapsing_header::paint_default_icon(
+                            ui,
+                            if self.collapsed.contains(id) { 0. } else { 1. },
+                            &resp,
+                        );
+                        places.push((format!("electronics:expand:{id}"), rect));
+                        if resp.clicked() && !self.collapsed.remove(id) {
+                            self.collapsed.insert(id.into());
+                        }
+                    } else {
+                        ui.add_space(16.);
+                    }
+                    let def = &self.circuit.occurrences[id];
+                    let title = &self.doc.sheets[def];
+                    if row(
                         places,
                         ui,
                         t,
-                        id,
-                        k.rsplit('.').next().unwrap_or(k),
-                        self.selected == *id,
-                        "schchip",
-                    )
-                {
-                    self.select(id, "");
+                        label,
+                        if title == label { "" } else { title },
+                        self.subject == id,
+                        "sheet",
+                    ) {
+                        chosen = Some(id.to_owned());
+                    }
+                    if let Some((key, _)) = places.last_mut() {
+                        *key = format!("electronics:sheet:{id}");
+                    }
+                });
+                if !self.collapsed.contains(id) {
+                    pending.extend(
+                        children
+                            .get(id)
+                            .into_iter()
+                            .flatten()
+                            .rev()
+                            .map(|&p| (p, depth + 1)),
+                    );
                 }
             }
-            egui::CollapsingHeader::new("Connections and notes").show(ui, |ui| {
-                for (id, k) in &rows {
-                    if k.is_none() && row(places, ui, t, id, "", self.selected == *id, "schwire") {
-                        self.select(id, "");
-                    }
-                }
-            });
-            section(ui, "Symbol libraries");
-            for path in self.dependencies() {
-                if row(
-                    places,
-                    ui,
-                    t,
-                    path.file_stem().and_then(|s| s.to_str()).unwrap_or("Library"),
-                    "open",
-                    false,
-                    "folder",
-                ) {
-                    self.open_file = Some(path.to_string_lossy().into());
-                }
+            if let Some(id) = chosen {
+                self.subject = id;
+                self.selected.clear();
+                self.pin.clear();
+                self.start(Tool::Select);
+                self.refresh();
+                self.fit = true;
             }
         }
     }
@@ -311,7 +339,7 @@ impl Editor {
         self.start(Tool::Select);
     }
 }
-fn row(
+pub(super) fn row(
     places: &mut Vec<(String, Rect)>,
     ui: &mut Ui,
     t: &Theme,
@@ -392,13 +420,25 @@ impl Shell {
                     Tool::Intent,
                     Tool::Bus,
                     Tool::Flow,
+                    Tool::Directions,
+                    Tool::Dots,
                 ][..]
             };
             tools.extend_from_slice(specific);
             tools.extend([Tool::Move, Tool::Delete, Tool::Fit, Tool::Grid, Tool::Properties]);
+            if !e.library() && self.tab == 3 {
+                tools.retain(|t| !matches!(t, Tool::Label | Tool::Rotate | Tool::Place));
+            }
             for cmd in tools {
                 if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, cmd.shortcut().0)) {
                     self.out.push(Action::Electronics(cmd));
+                }
+            }
+            if !e.library() && self.tab == 3 {
+                for cmd in [Tool::Line, Tool::Rect, Tool::Circle, Tool::Arc] {
+                    if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, cmd.shortcut().0)) {
+                        self.out.push(Action::Electronics(cmd));
+                    }
                 }
             }
             self.shortcuts(&ctx);
@@ -410,7 +450,9 @@ impl Shell {
         self.out.retain(|a| {
             if let Action::Electronics(cmd) = a {
                 editor.start(*cmd);
-                editor.inspector_open = true;
+                if !matches!(cmd, Tool::Directions | Tool::Dots) {
+                    editor.inspector_open = true;
+                }
                 false
             } else {
                 true
@@ -431,7 +473,7 @@ impl Shell {
         } else {
             (s.width() * 0.25).clamp(240., 344.).min(s.width() * 0.8)
         };
-        let view = Rect::from_min_max(pos2(left, top), pos2(s.width() - right, bottom));
+        let view = Rect::from_min_max(pos2(left, top), pos2(s.width() - right, (bottom - 29.).max(top)));
         self.view_rect = view;
         self.view_owned = true;
         let pane = |ui: &mut Ui, id: &str, r: Rect| {
@@ -447,7 +489,10 @@ impl Shell {
             ScrollArea::vertical().show(&mut b, |ui| editor.browser(ui, &t, &mut self.places));
             self.side_splitter(ui, r, s.width());
         }
-        editor.canvas(ui, view, &t);
+        editor.canvas(ui, view, &t, &mut self.places);
+        let strip = Rect::from_min_max(view.left_bottom(), pos2(view.right(), bottom));
+        let mut grid_ui = pane(ui, "electronics-grid", strip);
+        editor.grid_controls(&mut grid_ui, &mut self.places);
         if right > 0. {
             let r = Rect::from_min_max(pos2(view.right(), top), pos2(s.width(), bottom));
             let mut b = pane(ui, "electronics-inspector", r);
@@ -459,7 +504,7 @@ impl Shell {
                 if narrow {
                     ui.collapsing("Document browser", |ui| editor.browser(ui, &t, &mut self.places));
                 }
-                editor.inspector(ui, &t);
+                editor.dock_ui(ui, &t, &mut self.places);
             });
         }
         if narrow && right == 0. {
