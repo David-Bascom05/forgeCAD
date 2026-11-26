@@ -1,0 +1,51 @@
+name: Merge queue performance profiles
+on:
+  push:
+    branches: [diagnostics/queue-profiles]
+permissions:
+  contents: read
+jobs:
+  profiles:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        revision:
+          - 3d718a28016a1dd9f67b3f1d8b825686210999fd
+          - b23ecc5fbe38abae27a883933a1b51975d17a673
+          - ec1b7a4fefb0d8b66cdb50566bd7f5e1f38f5391
+          - c91d600057d6f151086415228d5deb6be3032888
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_RELEASE_DEBUG: 0
+      GATE_COUNTER: callgrind
+      GATE_EXACT: 1
+      GATE_JOBS: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.revision }}
+          fetch-depth: 0
+          persist-credentials: false
+      - run: sudo apt-get update -q && sudo apt-get install -y -q valgrind
+      - name: Collect each benchmark's instruction profile
+        shell: bash
+        run: |
+          mkdir -p /tmp/train-profiles
+          export GATE_CPU=$(python3 -c 'import os; print(min(os.sched_getaffinity(0)))')
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('tools/speed/gate.sh')
+          s = p.read_text()
+          old = '--callgrind-out-file=/dev/null $only'
+          assert s.count(old) == 1
+          p.write_text(s.replace(old, '--callgrind-out-file="/tmp/train-profiles/$(basename "$1")-${2:-none}-${3:-none}-${4:-none}.cg" $only'))
+          PY
+          sh tools/speed/gate.sh --save
+          cp tools/speed/{baseline-valgrind,bits}.txt /tmp/train-profiles/
+          tar -czf "$RUNNER_TEMP/profiles.tgz" -C /tmp/train-profiles .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: profiles-${{ matrix.revision }}
+          path: ${{ runner.temp }}/profiles.tgz
