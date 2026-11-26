@@ -243,5 +243,5 @@ fn a_return_pin_cannot_confirm_its_own_connection() {
     let src = DESIGN.replace("return_from: c.minus", "return_from: u.vss");
     let (_, c) = run(&src).unwrap();
     assert!(c.issues.iter().any(|i| i.kind == "ReturnMismatch"));
-    assert!(c.issues.iter().any(|i| i.kind == "UnfulfilledRole"));
+    assert!(c.issues.iter().any(|i| i.kind == "UnfulfilledWant"));
 }
