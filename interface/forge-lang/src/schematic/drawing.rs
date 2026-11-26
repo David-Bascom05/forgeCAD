@@ -54,29 +54,38 @@ pub(super) fn pin_label(pin: &Pin, name: &str) -> (Point, String) {
         format!("{name} ({})", pin.number),
     )
 }
+fn graphic(page: &mut Page, shape: &Shape, f: impl Fn(Point) -> Point2) {
+    match shape {
+        Shape::Line(a, b) => path(page, vec![f(*a), f(*b)]),
+        Shape::Rect(a, b) => path(page, vec![f(*a), f([a[0], b[1]]), f(*b), f([b[0], a[1]]), f(*a)]),
+        Shape::Circle(a, r) => stroke(
+            page,
+            Geom2::Conic {
+                c: f(*a),
+                u: Vec2::new(*r, 0.),
+                v: Vec2::new(0., *r),
+                t0: 0.,
+                t1: TAU,
+            },
+        ),
+        Shape::Text(a, t) => text(page, f(*a), 1.2, t),
+        Shape::Arc(a, m, b) => arc(page, f(*a), f(*m), f(*b)),
+        Shape::Polyline(ps) => path(page, ps.iter().copied().map(f).collect()),
+    }
+}
+/// Drawing primitives for hit testing or highlighting a single library graphic.
+pub fn graphic_page(shape: &Shape) -> Page {
+    let mut page = Page::default();
+    graphic(&mut page, shape, pt);
+    page
+}
 fn glyph(page: &mut Page, s: &Symbol, unit: &str, at: Point, angle: f64, mirror: bool) {
     let f = |p: Point| pt(super::graph::transform(p, at, angle, mirror));
     for g in &s.graphics {
         if g.unit.as_deref().is_some_and(|u| u != unit) {
             continue;
         }
-        match &g.shape {
-            Shape::Line(a, b) => path(page, vec![f(*a), f(*b)]),
-            Shape::Rect(a, b) => path(page, vec![f(*a), f([a[0], b[1]]), f(*b), f([b[0], a[1]]), f(*a)]),
-            Shape::Circle(a, r) => stroke(
-                page,
-                Geom2::Conic {
-                    c: f(*a),
-                    u: Vec2::new(*r, 0.),
-                    v: Vec2::new(0., *r),
-                    t0: 0.,
-                    t1: TAU,
-                },
-            ),
-            Shape::Text(a, t) => text(page, f(*a), 1.2, t),
-            Shape::Arc(a, m, b) => arc(page, f(*a), f(*m), f(*b)),
-            Shape::Polyline(ps) => path(page, ps.iter().copied().map(f).collect()),
-        }
+        graphic(page, &g.shape, f);
     }
     for (name, p) in &s.pins {
         if p.unit == unit {
@@ -85,6 +94,16 @@ fn glyph(page: &mut Page, s: &Symbol, unit: &str, at: Point, angle: f64, mirror:
             text(page, f(tip), 0.8, &label);
         }
     }
+}
+/// Position the reference above the symbol body and clear of a vertical pin at its origin.
+fn reference_at(symbol: &Symbol, unit: &str, at: Point, angle: f64, mirror: bool) -> Point2 {
+    let rise = symbol
+        .pins
+        .values()
+        .filter(|p| p.unit == unit)
+        .map(|p| super::graph::transform(p.at, at, angle, mirror)[1] - at[1])
+        .fold(0., f64::max);
+    pt(at) + Vec2::new(1.2, (rise * 0.7 + 0.9).max(1.6))
 }
 fn fit(mut p: Page) -> String {
     let (mut x0, mut y0, mut x1, mut y1) =
@@ -129,7 +148,7 @@ fn fit(mut p: Page) -> String {
     }
     forge_draw::svg::svg(&p)
 }
-pub(super) fn symbol_svg(d: &Document, id: &str, unit: &str) -> Result<String> {
+pub fn symbol_page(d: &Document, id: &str, unit: &str) -> Result<Page> {
     let s = d
         .symbols
         .get(id)
@@ -139,9 +158,9 @@ pub(super) fn symbol_svg(d: &Document, id: &str, unit: &str) -> Result<String> {
     }
     let mut page = Page::default();
     glyph(&mut page, s, unit, [0., 0.], 0., false);
-    Ok(fit(page))
+    Ok(page)
 }
-pub(super) fn sheet_svg(d: &Document, c: &Circuit, scope: &str) -> Result<String> {
+pub fn sheet_page(d: &Document, c: &Circuit, scope: &str) -> Result<Page> {
     let sheet = c
         .occurrences
         .get(scope)
@@ -173,7 +192,7 @@ pub(super) fn sheet_svg(d: &Document, c: &Circuit, scope: &str) -> Result<String
                 glyph(&mut page, &d.symbols[symbol], unit, *at, *angle, *mirror);
                 text(
                     &mut page,
-                    pt(*at) + Vec2::new(0., 1.5),
+                    reference_at(&d.symbols[symbol], unit, *at, *angle, *mirror),
                     1.,
                     &format!("{} {value}", row.id),
                 );
@@ -188,7 +207,7 @@ pub(super) fn sheet_svg(d: &Document, c: &Circuit, scope: &str) -> Result<String
                 glyph(&mut page, &d.symbols[placed[of]], unit, *at, *angle, *mirror);
                 text(
                     &mut page,
-                    pt(*at) + Vec2::new(0., 1.5),
+                    reference_at(&d.symbols[placed[of]], unit, *at, *angle, *mirror),
                     1.,
                     &format!("{of}.{unit}"),
                 );
@@ -224,7 +243,7 @@ pub(super) fn sheet_svg(d: &Document, c: &Circuit, scope: &str) -> Result<String
             _ => {}
         }
     }
-    Ok(fit(page))
+    Ok(page)
 }
 
 /// Use the same print coordinates and text widths for diagnostics and export.
@@ -267,4 +286,11 @@ pub(super) fn check_text(boxes: &Map<String, TextBounds>, issues: &mut Vec<super
             }
         }
     }
+}
+
+pub(super) fn symbol_svg(d: &Document, id: &str, unit: &str) -> Result<String> {
+    symbol_page(d, id, unit).map(fit)
+}
+pub(super) fn sheet_svg(d: &Document, c: &Circuit, scope: &str) -> Result<String> {
+    sheet_page(d, c, scope).map(fit)
 }

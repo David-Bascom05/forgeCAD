@@ -224,3 +224,44 @@ fn cached_moves_equal_fresh_results_in_every_sheet_occurrence() {
         }
     }
 }
+
+#[test]
+fn fitted_bom_resolves_metadata_across_sheet_occurrences_and_gates() {
+    let source = r#"schematic
+parts = library(file: "analog/analog-symbols.fg")
+S = symbol(pins: {a: pin(number: "1", kind: "input", at: (0,0)), b: pin(number: "2", kind: "output", unit: "B", at: (0,0))})
+root = sheet()
+cell = sheet()
+left = subsheet(sheet: root, of: cell, at: (0,0))
+right = subsheet(sheet: root, of: cell, at: (10,0))
+U1 = place(sheet: cell, symbol: parts.Amplifier, at: (0,0), fields: {Manufacturer: "Local, Inc.", Package: "DBV"})
+U2 = place(sheet: cell, symbol: S, at: (10,0))
+gateB = gate(sheet: cell, of: U2, unit: "B", at: (20,0))
+spare = place(sheet: cell, symbol: S, at: (30,0), populated: false)
+fixture = place(sheet: cell, symbol: S, at: (40,0), in_bom: false)
+"#;
+    let (d, c) = run(source).unwrap();
+    let lines = schematic::bom(&d, &c);
+    assert_eq!(lines.len(), 2);
+    assert!(lines.iter().all(|l| l.references.len() == 2));
+    let amp = lines.iter().find(|l| l.part.symbol == "parts.Amplifier").unwrap();
+    assert_eq!(amp.references, ["root/left/U1", "root/right/U1"]);
+    assert_eq!(amp.part.fields["Manufacturer"], "Local, Inc.");
+    assert_eq!(amp.part.fields["MPN"], "TLV9001IDBVR");
+    assert!(amp.part.datasheet.as_ref().unwrap().ends_with("tlv9001.pdf"));
+    assert!(schematic::bom_csv(&lines).contains("\"Local, Inc.\""));
+}
+
+#[test]
+fn pdf_attachments_are_addressed_by_content() {
+    use schematic::datasheet::store_pdf;
+    let dir = std::env::temp_dir().join(format!("forge-pdf-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let owner = dir.join("library.fg");
+    let bytes = b"%PDF-1.4\n%%EOF";
+    let path = store_pdf(&owner, bytes).unwrap();
+    assert_eq!(store_pdf(&owner, bytes).unwrap(), path);
+    assert!(store_pdf(&owner, b"other").is_err());
+    assert_eq!(std::fs::read(dir.join(path)).unwrap(), bytes);
+    std::fs::remove_dir_all(dir).unwrap();
+}

@@ -7,7 +7,11 @@ mod move_cache;
 mod reader;
 mod report;
 use crate::syntax::Span;
+pub use drawing::{graphic_page, sheet_page, symbol_page};
 pub use graph::Circuit;
+mod bom;
+pub mod datasheet;
+pub use bom::{BomLine, bom, bom_csv};
 pub use reader::{parameter_dimension, read};
 pub use report::response;
 use std::collections::{BTreeMap as Map, BTreeSet as Set};
@@ -16,7 +20,7 @@ use std::path::Path;
 pub const HEADERS: &[&str] = &["schematic", "symbol_library"];
 pub const ARGS: &[(&str, &[&str])] = &[
     ("role", &["kind", "key", "capacitance_nf", "voltage_mv", "prefer"]),
-    ("symbol", &["pins", "graphics"]),
+    ("symbol", &["pins", "graphics", "datasheet", "fields"]),
     (
         "pin",
         &["number", "kind", "at", "angle", "wants", "gives", "unit"],
@@ -37,6 +41,10 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "unit",
             "value",
             "footprint",
+            "fields",
+            "datasheet",
+            "populated",
+            "in_bom",
             "at",
             "angle",
             "mirror",
@@ -129,6 +137,8 @@ pub enum Shape {
 }
 #[derive(Clone, Debug)]
 pub struct Symbol {
+    pub fields: Map<String, String>,
+    pub datasheet: Option<String>,
     pub pins: Map<String, Pin>,
     pub graphics: Vec<Graphic>,
 }
@@ -139,6 +149,10 @@ pub enum Item {
         unit: String,
         value: String,
         footprint: Option<String>,
+        fields: Map<String, String>,
+        datasheet: Option<String>,
+        populated: bool,
+        in_bom: bool,
         at: Point,
         angle: f64,
         mirror: bool,
@@ -294,5 +308,11 @@ impl Cache {
             compile(&text, file.parent(), root)?;
         }
         Ok(reply)
+    }
+}
+
+impl Document {
+    pub fn library_paths(&self) -> impl Iterator<Item = &Path> {
+        self.imports.iter().map(|(_, path)| path.as_path())
     }
 }

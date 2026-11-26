@@ -50,3 +50,24 @@ MCP `plan_bypass` takes the file, qualified consumer and return pin, symbol and 
 The [Lean model](../research/forge-lang/lean/ForgeLang/Schematic.lean) proves nominal role admissibility, preservation of wiring by role confirmation, and invariant reachability when a wire is reversed. Grammar witnesses use the shared .fg parser model. The Rust tests compare net partitions against an independent transitive-closure oracle and exercise hierarchy, gate placement and role refusals. The MCP integration test plans, commits, rejects a bad edit, undoes, and invalidates a changed library. The [coverage ledger](../research/forge-lang/lean/COVERAGE.md) identifies the remaining Rust-to-model proof gaps.
 
 The session cache recognizes a change confined to the literal coordinates of a placement. It updates pin positions and print-bounds findings on each affected sheet occurrence, preserves confirmed links and electrical partitions, and adjusts source locations. Changes to wiring, parameters or imported symbols use a fresh compilation. The regression suite compares cached results, source locations and SVG against fresh compilation across repeated sheets and invalid edits. The [latency probe](../research/electronics/probes/README.md#native-schematic-response-time) exercises this path through MCP.
+
+## Editing in ForgeCAD
+
+Choose **File → New Schematic** or **File → New Symbol Library**. Each opens a document tab. Save both files in the project before linking the library. In the schematic, **Link Library** takes its relative filename and a local name. **Place Symbol** shows the definitions in the linked library. Clicking a library in the document browser opens its symbol editor. The [sensor interface](../examples/electronics/analog/sensor-interface.fg) and its [library](../examples/electronics/analog/analog-symbols.fg) are a working pair.
+
+- Use **Wire** to pick the first pin, any bends, and the destination. Finish on an existing wire to branch it. **Junction** splits an existing segment. Moving a connected component keeps its wires attached. A plain crossing leaves the nets independent.
+- **Assign Role** records a typed provider and consumer, with optional return pins and a preferred separation. Select a pin to inspect its declared roles and candidate providers. **Inspect → Electrical Checks** shows electrical and readability findings.
+- In a library, select a symbol, place its pins and draw its outline. Select a pin to set its number, unit, orientation, electrical kind, wants and gives. Select a graphic to edit its coordinates. The library and all its instances share the same geometry.
+- When a whole sheet is fitted, fine pin labels appear as you zoom in. Hover over an endpoint to identify it at any scale. The scroll wheel zooms around the pointer, middle drag pans, and **View → Fit All** frames the drawing. Hover over a ribbon tool to see its shortcut. Escape cancels the current tool. Source edits use the document's undo and redo history.
+
+### Purchasing data and datasheets
+
+Symbols accept a map of custom string fields and a datasheet reference. Placements can override individual fields and the datasheet. Field names are Forge identifiers. For example, a library can define `fields: {MPN: "TLV9001IDBVR", Manufacturer: "Texas Instruments"}`. A placement can add `fields: {Supplier: "Stockroom"}` while retaining both library fields. Value and footprint are placement properties.
+
+**Attach PDF** on a saved symbol or placement stores the PDF bytes in the document’s `datasheets/` folder under a SHA-256 filename and records the relative path. Importing identical bytes reuses the file. A datasheet URL is stored as text. Share the project directory, including its libraries and attachments.
+
+**Inspect → Bill of Materials** groups fitted physical occurrences by effective specification and copies CSV with the custom fields as columns. Multiple gates count once per component, and repeated sheets contribute separate occurrence paths. `populated: false` and `in_bom: false` independently exclude placements. The same data is available through the MCP schematic queries `bom` and `bom-csv`, or from the CLI.
+
+```sh
+forgecad schematic examples/electronics/analog/sensor-interface.fg bom-csv -o sensor-bom.csv
+```

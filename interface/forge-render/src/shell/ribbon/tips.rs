@@ -210,7 +210,12 @@ impl Shell {
         {
             ui.label(RichText::new(why).font(sans(12.0)).color(t.warn));
         }
-        let key = key_of(self, key);
+        let (line, key) = if let Some(Action::Electronics(tool)) = tool.action {
+            let (key, description) = tool.shortcut();
+            (description, Some(key.name().into()))
+        } else {
+            (line, key_of(self, key))
+        };
         ui.horizontal(|ui| {
             ui.label(RichText::new(tool.name).font(semi(13.0)).color(t.ink));
             if let Some(k) = &key {

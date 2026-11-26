@@ -784,11 +784,11 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
     let r = fg::Session::new(None, true).run(cmd, &a, &forge_agent::json::Json::Null);
     let mut text = if json { r.json.to_string() } else { r.text };
     if cmd == "schematic"
-        && matches!(a.words.first().map(String::as_str), Some("svg" | "symbol-svg"))
-        && let Some(svg) = r.json.get("result").and_then(forge_agent::json::Json::str)
+        && matches!(a.words.first().map(String::as_str), Some("svg" | "symbol-svg" | "bom-csv"))
+        && let Some(content) = r.json.get("result").and_then(forge_agent::json::Json::str)
     {
         if let Some(path) = out.as_deref() {
-            if let Err(e) = std::fs::write(path, svg) {
+            if let Err(e) = std::fs::write(path, content) {
                 eprintln!("writing {path}: {e}");
                 return ExitCode::FAILURE;
             }
@@ -796,7 +796,7 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
                 text = format!("wrote {path}");
             }
         } else if !json {
-            text = svg.to_owned();
+            text = content.to_owned();
         }
     }
     if let Some(png) = &r.png {

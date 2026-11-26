@@ -265,7 +265,16 @@ fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
             c.end()?;
         }
     }
-    Ok(Symbol { pins, graphics })
+    Ok(Symbol {
+        pins,
+        graphics,
+        fields: fields(call)?,
+        datasheet: call
+            .take("datasheet")
+            .map(string)
+            .transpose()?
+            .filter(|s| !s.is_empty()),
+    })
 }
 fn map<T>(e: &Expr, mut f: impl FnMut(&Expr) -> Result<T>) -> Result<Map<String, T>> {
     let E::Map(entries) = &e.kind else {
@@ -278,6 +287,12 @@ fn map<T>(e: &Expr, mut f: impl FnMut(&Expr) -> Result<T>) -> Result<Map<String,
         }
     }
     Ok(out)
+}
+fn fields(c: &mut Call<'_>) -> Result<Map<String, String>> {
+    Ok(c.take("fields")
+        .map(|v| map(v, string))
+        .transpose()?
+        .unwrap_or_default())
 }
 fn item(c: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Item> {
     Ok(match c.name {
@@ -296,6 +311,14 @@ fn item(c: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Item> {
                     .unwrap_or_else(|| "A".into()),
                 value: c.take("value").map(string).transpose()?.unwrap_or_default(),
                 footprint: c.take("footprint").map(string).transpose()?,
+                fields: fields(c)?,
+                datasheet: c
+                    .take("datasheet")
+                    .map(string)
+                    .transpose()?
+                    .filter(|s| !s.is_empty()),
+                populated: c.take("populated").map(boolean).transpose()?.unwrap_or(true),
+                in_bom: c.take("in_bom").map(boolean).transpose()?.unwrap_or(true),
                 at: point(c.req("at")?, p)?,
                 angle: rotation(c.take("angle"), p)?,
                 mirror: c.take("mirror").map(boolean).transpose()?.unwrap_or(false),
@@ -507,6 +530,14 @@ pub fn read(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Docume
                     register_role(&mut doc, format!("{name}.{alias}"), qualify(id), ty, e)?;
                 }
                 for (id, mut sym) in library.symbols {
+                    if let Some(link) = &mut sym.datasheet
+                        && !link.contains("://")
+                        && !Path::new(link).is_absolute()
+                        && let Some(parent) = Path::new(&file).parent()
+                    {
+                        *link = parent.join(&*link).to_string_lossy().replace('\\', "/");
+                    }
+
                     for pin in sym.pins.values_mut() {
                         for roles in [&mut pin.wants, &mut pin.gives] {
                             *roles = std::mem::take(roles).into_iter().map(&qualify).collect();

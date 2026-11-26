@@ -58,13 +58,13 @@ const TOOLS: [Tool; 22] = [
     ),
     (
         "schematic",
-        "Inspect a native schematic or symbol library. Typed roles, pin candidates, confirmed links, net partitions, sheet geometry, ERC and rooted wiring. Use edit for checked source changes.",
+        "Inspect a native schematic or symbol library. Typed roles, pin candidates, confirmed links, net partitions, sheet geometry, ERC, rooted wiring and the fitted BOM. Use edit for checked source changes.",
         1,
         &[
             ("file", "path to .fg"),
             (
                 "sel",
-                "summary, symbols, symbol ID, sheet PATH, erc, nets, links, pin PATH or tree PATH",
+                "summary, symbols, symbol ID, sheet PATH, erc, nets, links, pin PATH, tree PATH, bom or bom-csv",
             ),
         ],
     ),

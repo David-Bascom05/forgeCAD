@@ -75,6 +75,8 @@ fn symbol(id: &str, s: &Symbol, d: &Document) -> Json {
                     .collect(),
             ),
         ),
+        ("datasheet", s.datasheet.clone().map_or(Json::Null, Into::into)),
+        ("fields", super::bom::field_json(&s.fields)),
         ("graphics", Json::Arr(s.graphics.iter().map(graphic).collect())),
     ])
 }
@@ -135,9 +137,17 @@ fn scene(row: &Row) -> Json {
             at,
             angle,
             mirror,
+            fields,
+            datasheet,
+            populated,
+            in_bom,
         } => (
             "place",
             vec![
+                ("fields", super::bom::field_json(fields)),
+                ("datasheet", datasheet.clone().map_or(Json::Null, Into::into)),
+                ("populated", (*populated).into()),
+                ("in_bom", (*in_bom).into()),
                 ("unit", unit.clone().into()),
                 ("value", value.clone().into()),
                 ("footprint", footprint.clone().map_or(Json::Null, Into::into)),
@@ -294,6 +304,10 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
                     ])
                 })
                 .collect(),
+        )),
+        ["bom-csv"] => Ok(super::bom_csv(&super::bom(d, c)).into()),
+        ["bom"] => Ok(Json::Arr(
+            super::bom(d, c).iter().map(|line| line.json()).collect(),
         )),
         ["components"] => {
             let mut components = Vec::new();

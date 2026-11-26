@@ -45,3 +45,27 @@ The first professional pilot should use a previously shipped board with its appr
 - Which electronics query should be the first to carry a Lean proof and a Rust differential oracle? The via clearance probe provides a small worked candidate.
 
 The [implementation sequence, fixtures and public operation contracts](backend.md#11-verification-scale-and-sequencing) describe how to grow beyond this first board.
+
+## Editor boundaries and backend readiness
+
+Schematics and symbol libraries are separate editable Forge documents. Opening one selects its own canvas, ribbon, browser and properties in the existing window. This follows the drawing document and tab lifecycle described in the [UI standard](../../docs/ux/STANDARD.md). A schematic places references to library symbols. A library save can refresh the schematic across open tabs. The file on disk is the same source used by the CLI and MCP.
+
+The board should be a third, linked layout document. A package on the board should resolve a physical component occurrence and its logical pin to a footprint and pad. The board should own the stackup, footprints, routing and physical constraints. Its generated mechanical representation can then be placed in an assembly and expose connector interfaces to a harness. Keep preferred component proximity and return paths attached to typed schematic relationships so they survive movement on a sheet. Implement persistent physical identity and pin-to-pad resolution before offering a board workspace.
+
+| Area | Available in this implementation | Work still needed |
+| --- | --- | --- |
+| Symbols and parts | Project-local reusable library files, multiple units, numbered pins, graphic primitives, typed wants and gives, fields and datasheets | Searchable managed catalogs, lifecycle and approved alternates, footprint library and pin-to-pad validation |
+| Schematics | Hierarchical sheets, gates, wires, junctions, labels, buses, ports, notes, named nets, functional links, ERC and source-backed undo | Multi-sheet physical reannotation, bulk and multi-object editing, interactive wire dragging, project-scale cross-probing |
+| Purchasing | Inherited string fields with occurrence overrides, content-addressed local PDFs, URL references, fitted and BOM flags, grouped occurrence-correct BOM with CSV | Named assembly variants, supplier data pipelines and release snapshots that include referenced assets |
+| Layout and performance | Logical occurrences, terminals, connections, confirmed placement preferences, dimensional coordinates | Copper and clearance geometry, routing, placement checking, stable ECO interchange and measured interactive budgets on large designs |
+
+The [editing guide](../../docs/schematic.md#editing-in-forgecad) includes the sensor interface example. Backend and GUI tests exercise saving and reopening the source, building the connectivity graph, and resolving the effective BOM. The editor compiles committed changes. The release criteria for frame-rate checking on a populated board still require measurement with actual board geometry.
+
+
+The review set uses the same analog interface in both renderers. It opens the component and pin through the document browser at three window sizes.
+
+| Window | Desktop | Browser |
+| --- | --- | --- |
+| Schematic, U1 selected, 1600 × 1000 | [Desktop schematic](shots/native-schematic.png) | [Browser schematic](shots/web-schematic.png) |
+| Symbol, VDD selected, 1400 × 860 | [Desktop symbol](shots/native-symbol.png) | [Browser symbol](shots/web-symbol.png) |
+| Schematic, C2 selected, 1024 × 700 | [Compact desktop](shots/native-compact.png) | [Compact browser](shots/web-compact.png) |
