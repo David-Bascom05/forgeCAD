@@ -2326,12 +2326,13 @@ impl Session {
             && l.ready()
             && !self.previewing
             && self.until().is_none()
-            && l.text() == self.src
+            && let (server_seq, server_text) = l.snapshot()
+            && server_text == self.src
         {
             // a build of exactly the server's text at its seq, whole (not rolled back by an end
             // of part, not a preview): its hash is reported (clients review M3; an assembly's
             // sibling parts are read from this disk and can still lag the server's)
-            self.sync_builds.push((self.seq, l.seq()));
+            self.sync_builds.push((self.seq, server_seq));
             if self.sync_builds.len() > 64 {
                 self.sync_builds.remove(0);
             }
