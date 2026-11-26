@@ -1,20 +1,20 @@
 use super::*;
 use crate::shell::{theme, ux};
 use egui::{ComboBox, RichText};
-fn property_row<R>(ui: &mut Ui, label: &str, control: impl FnOnce(&mut Ui, egui::Id) -> R) -> R {
+fn property_row<R>(ui: &mut Ui, label: &str, control: impl FnOnce(&mut Ui, egui::Response) -> R) -> R {
     ui.horizontal(|ui| {
         let width = (ui.available_width() * 0.35).min(116.);
-        let id = ui
+        let caption = ui
             .allocate_ui_with_layout(
                 vec2(width, theme::CONTROL_H),
                 egui::Layout::left_to_right(egui::Align::Center),
                 |ui| {
                     ui.set_width(width);
-                    ui.label(RichText::new(label).font(theme::small())).id
+                    ui.label(RichText::new(label).font(theme::small()))
                 },
             )
             .inner;
-        control(ui, id)
+        control(ui, caption)
     })
     .inner
 }
@@ -22,18 +22,34 @@ fn field(ui: &mut Ui, label: &str, value: &mut String) {
     text_control(ui, label, value);
 }
 fn text_control(ui: &mut Ui, label: &str, value: &mut String) -> egui::Response {
-    property_row(ui, label, |ui, id| {
+    property_row(ui, label, |ui, caption| {
         ui.add_sized(
             [ui.available_width(), theme::CONTROL_H],
             egui::TextEdit::singleline(value),
         )
-        .labelled_by(id)
+        .labelled_by(caption.id)
         .on_hover_text(value.as_str())
     })
 }
 
+fn checkbox(ui: &mut Ui, label: &str, value: &mut bool) -> egui::Response {
+    property_row(ui, label, |ui, caption| {
+        let caption = caption.interact(egui::Sense::click());
+        if caption.clicked() {
+            *value = !*value;
+        }
+        let mut response = ui
+            .add(egui::Checkbox::without_text(value))
+            .labelled_by(caption.id);
+        if caption.clicked() {
+            response.mark_changed();
+        }
+        response
+    })
+}
+
 fn choice(ui: &mut Ui, label: &str, value: &mut String, items: Vec<String>) {
-    property_row(ui, label, |ui, id| {
+    property_row(ui, label, |ui, caption| {
         ComboBox::from_id_salt(label)
             .selected_text(if value.is_empty() {
                 "Choose…"
@@ -47,7 +63,7 @@ fn choice(ui: &mut Ui, label: &str, value: &mut String, items: Vec<String>) {
                 }
             })
             .response
-            .labelled_by(id);
+            .labelled_by(caption.id);
     });
 }
 fn custom(ui: &mut Ui, rows: &mut Vec<(String, String)>) {
@@ -703,7 +719,7 @@ impl Editor {
                         ui.label(format!("Global power net · {net}"));
                     } else if self.library() || matches!(part, Some(Item::Place { .. })) {
                         if let Some(Item::Place { symbol, .. }) = part {
-                            ui.label(format!("Symbol · {symbol}"));
+                            property_row(ui, "Symbol", |ui, _| ui.label(symbol));
                             field(ui, "Value", &mut self.form.value);
                             ui.collapsing("Field positions", |ui| {
                                 for (label, offset) in [
@@ -711,8 +727,7 @@ impl Editor {
                                     ("Value", &mut self.form.value_offset),
                                 ] {
                                     let mut manual = offset.is_some();
-                                    if ui
-                                        .checkbox(&mut manual, format!("Position {label} manually"))
+                                    if checkbox(ui, &format!("Manual {label} position"), &mut manual)
                                         .changed()
                                     {
                                         *offset = manual.then_some([0., 0.]);
@@ -733,8 +748,8 @@ impl Editor {
                             });
                             sheet.section(ui, "Assembly");
                             field(ui, "Footprint", &mut self.form.footprint);
-                            ui.checkbox(&mut self.form.populated, "Populated");
-                            ui.checkbox(&mut self.form.in_bom, "Include in BOM");
+                            checkbox(ui, "Populated", &mut self.form.populated);
+                            checkbox(ui, "Include in BOM", &mut self.form.in_bom);
                         }
                         if let Some(Item::Place { symbol, .. }) = part {
                             let base = &self.doc.symbols[symbol];
