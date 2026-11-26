@@ -585,6 +585,10 @@ fn check_crossings(loops: &[ProfileLoop]) -> Result<(), ExtractError> {
         Pairs::Listed(crossing_candidates(&all).into_iter())
     };
     for (i, j) in pairs {
+        let hit = hits(&shapes[i], &shapes[j]);
+        if matches!(&hit, Hit::Points(points) if points.is_empty()) {
+            continue;
+        }
         let (si, sj) = (&all[i].0, &all[j].0);
         let ends = [si.start(), si.end(), sj.start(), sj.end()];
         // the ends of the first the second shares (at most two: no list made for them)
@@ -600,7 +604,6 @@ fn check_crossings(loops: &[ProfileLoop]) -> Result<(), ExtractError> {
         // a tangent joint solved to ~1e-9 mm still splits into two roots up to sqrt(2 r delta) apart
         let near = 1e-6 + (2.0 * radius(&shapes[i]).max(radius(&shapes[j])) * 1e-8).sqrt();
         let same = all[i].2 == all[j].2;
-        let hit = hits(&shapes[i], &shapes[j]);
         let bad = match &hit {
             Hit::Overlap => true,
             Hit::Points(ps) => ps.iter().any(|p| {
