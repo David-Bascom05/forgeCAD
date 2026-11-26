@@ -9,14 +9,14 @@
 //! the stock and measures what stands above the roughing floor away from the boss and the
 //! stock's edge, where every pass and ring reaches.
 mod common;
-use forge_cam::engage::{HeightMap, Profile};
+use forge_cam::engage::{HeightMap, Profile, Tiles};
 use forge_cam::ops::PMove;
 use forge_math::ipow::Powi as _;
 use std::path::Path;
 
 /// Sweeps a → b in pieces of at most 2 mm: the model visits a segment's whole box, so a long
 /// diagonal link or rapid would visit most of it for nothing; the pieces sweep the same.
-fn sweep_short(map: &mut HeightMap, a: [f64; 3], b: [f64; 3], prof: &Profile) {
+fn sweep_short(map: &mut HeightMap, tiles: &mut Tiles, a: [f64; 3], b: [f64; 3], prof: &Profile) {
     let l = ((b[0] - a[0]).ipow(2) + (b[1] - a[1]).ipow(2)).sqrt();
     let n = (l / 2.0).ceil().max(1.0) as usize;
     let mut p = a;
@@ -31,7 +31,7 @@ fn sweep_short(map: &mut HeightMap, a: [f64; 3], b: [f64; 3], prof: &Profile) {
                 a[2] + s * (b[2] - a[2]),
             ]
         };
-        map.sweep(p, q, prof);
+        map.sweep_in(p, q, prof, Some(tiles));
         p = q;
     }
 }
@@ -74,6 +74,11 @@ fn left_above(
     assert!(cam.ok || cam.errors.is_empty(), "{doc} {min:?}: {:?}", cam.errors);
     let h = 0.1;
     let mut map = HeightMap::new(min, max, h);
+    // The oracle measures only cells above the roughing floor. Cutting any cell
+    // below that floor cannot change the result. The tile index then skips cells
+    // already cut low enough without changing any sampled heights above the floor.
+    map.bottom = floor;
+    let mut tiles = Tiles::of(&map);
     for name in ["skim", "rough"] {
         let o = cam
             .ops
@@ -95,7 +100,7 @@ fn left_above(
             for m in &p.moves {
                 match *m {
                     PMove::Rapid { to } | PMove::Line { to, .. } => {
-                        sweep_short(&mut map, at, to, &prof);
+                        sweep_short(&mut map, &mut tiles, at, to, &prof);
                         at = to;
                     }
                     PMove::Arc { to, c, cw, .. } => {
@@ -126,7 +131,7 @@ fn left_above(
                                     at[2] + s * (to[2] - at[2]),
                                 ]
                             };
-                            sweep_short(&mut map, prev, q, &prof);
+                            sweep_short(&mut map, &mut tiles, prev, q, &prof);
                             prev = q;
                         }
                         at = to;

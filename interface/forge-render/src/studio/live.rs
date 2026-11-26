@@ -61,6 +61,10 @@ impl Pace {
 /// (a page's frames go out without waiting, so their times answer late: a fit to each overshoots).
 #[derive(Default)]
 struct Frames {
+    /// Trace and denoise bands have different costs. Keep the other phase's fitted width
+    /// so cheap denoising cannot raise the first trace frame's workload.
+    denoising: bool,
+    other_rows: Option<u32>,
     /// When the last frame began, and the rows it sent.
     at: Option<(f64, u32)>,
     /// The frame's place in the 16 (0 and 1: no rows).
@@ -75,7 +79,17 @@ struct Frames {
 impl Frames {
     /// A frame begins in a picture `h` rows high: the last one's time taken, the pace fitted.
     /// True: send no rows this frame.
-    fn tick(&mut self, pace: &mut Pace, h: u32) -> bool {
+    fn tick(&mut self, pace: &mut Pace, h: u32, denoising: bool) -> bool {
+        if denoising != self.denoising {
+            self.denoising = denoising;
+            if let Some(previous) = self.other_rows.replace(pace.rows) {
+                pace.rows = previous.min(h.max(8));
+            }
+            // Discard the mixed window. A measured bare frame applies in both phases.
+            self.at = None;
+            self.k = if self.bare.is_some() { 2 } else { 0 };
+            self.sum = (0.0, 0.0, 0);
+        }
         let now = crate::viewer::now_ms();
         if let Some((at, sent)) = self.at
             && now - at < 5000.0
@@ -236,7 +250,7 @@ impl Live {
             false
         };
         #[cfg(target_arch = "wasm32")]
-        let probe = self.frames.tick(&mut self.pace, size.1);
+        let probe = self.frames.tick(&mut self.pace, size.1, self.stage.is_some());
         if probe {
             return true;
         }
