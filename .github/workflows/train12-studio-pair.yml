@@ -45,15 +45,47 @@ jobs:
           run-id: 45762286596
           name: forgecad
           path: paired/bin
-      - name: Interleave unchanged Studio tests on the same runner
+      - name: Capture live frame cadence and queue completion on both artifacts
         env:
           FORGECAD: ${{ github.workspace }}/paired/bin/forgecad
         shell: bash
         run: |
-          chmod +x "$FORGECAD" paired/bin/forge-server
-          lscpu | sed -n '/Model name/p'
+          chmod +x "$FORGECAD"
+          python3 - <<'PYTHON'
+          from pathlib import Path
+          p = Path("interface/forge-render/web/tests/studio_live.cjs")
+          s = p.read_text()
+          s = s.replace('const st = await t.until', """await p.evaluate(() => {
+              const events = window.studioEvents = [];
+              const proto = GPUQueue.prototype;
+              const done = proto.onSubmittedWorkDone;
+              proto.onSubmittedWorkDone = function(...args) {
+                const start = performance.now();
+                const result = done.apply(this, args);
+                result.then(() => events.push([start, performance.now()]));
+                return result;
+              };
+            });
+            const st = await t.until""")
+          s = s.replace('await pause(10000);', """const cadence = await p.evaluate(async () => {
+              const rows = [];
+              let last = -1;
+              const start = performance.now();
+              while (performance.now() - start < 30000) {
+                const state = window.forgecad.state();
+                if (last !== state.frames) {
+                  rows.push([performance.now(), state.frames, state.studio.rows, state.studio.traced]);
+                  last = state.frames;
+                }
+                await new Promise(resolve => setTimeout(resolve, 50));
+              }
+              return { rows, queue: window.studioEvents.filter(e => e[0] >= start) };
+            });
+            console.log('RAW_CADENCE', JSON.stringify(cadence));""")
+          p.write_text(s)
+          PYTHON
           rc=0
-          for side in base candidate candidate base; do
+          for side in base candidate; do
             echo "::group::$side"
             node interface/forge-render/web/tests/studio_live.cjs "$GITHUB_WORKSPACE/paired/$side" || rc=1
             echo "::endgroup::"
