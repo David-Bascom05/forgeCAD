@@ -8,9 +8,78 @@ enum Action {
     Assign(String, bool),
     Manage(sch::RoleId, bool),
     Remove(String),
+    SetRole {
+        role: sch::RoleId,
+        want: bool,
+        enabled: bool,
+    },
+    NewRole,
 }
 
 impl Editor {
+    fn set_placement_role(
+        &mut self,
+        terminal: &str,
+        role: &sch::RoleId,
+        want: bool,
+        enabled: bool,
+    ) -> Result<()> {
+        let (owner, pin) = terminal
+            .rsplit_once('/')
+            .and_then(|(_, name)| name.split_once('.'))
+            .ok_or("Select a placed pin.")?;
+        let Some(Item::Place {
+            symbol, wants, gives, ..
+        }) = self.doc.rows.iter().find(|r| r.id == owner).map(|r| &r.item)
+        else {
+            return Err("Select a component placement.".into());
+        };
+        let field = if want { "wants" } else { "gives" };
+        let mut roles = (if want { wants } else { gives })
+            .get(pin)
+            .cloned()
+            .unwrap_or_default();
+        if enabled {
+            roles.insert(role.clone());
+        } else {
+            roles.remove(role);
+        }
+        let mut names = Vec::new();
+        for role in roles {
+            let (name, _) = self
+                .doc
+                .role_names
+                .iter()
+                .find(|(_, id)| **id == role)
+                .ok_or("Unknown role")?;
+            names.push(name.as_str());
+        }
+        let list = format!("[{}]", names.join(", "));
+        let tree = syntax::parse(&self.src).map_err(|e| e.text())?;
+        let value = if let Some(expr) = source_arg(&tree, owner, field) {
+            let ExprKind::Map(members) = &expr.kind else {
+                return Err("Expected a pin map.".into());
+            };
+            let start = expr.span.lo as usize;
+            let mut text = self.src[start..expr.span.hi as usize].to_owned();
+            let aliases = &self.doc.symbols[symbol].pins[pin].aliases;
+            if let Some((_, old)) = members
+                .iter()
+                .find(|(name, _)| name == pin || aliases.contains(name))
+            {
+                text.replace_range(old.span.lo as usize - start..old.span.hi as usize - start, &list);
+            } else {
+                let separator = if members.is_empty() { "" } else { ", " };
+                // Inserting at the front also accepts a trailing comma on the original map.
+                text.insert_str(1, &format!("{pin}: {list}{separator}"));
+            }
+            text
+        } else {
+            format!("{{{pin}: {list}}}")
+        };
+        self.apply(vec![arg(owner, field, value)])
+    }
+
     pub(super) fn checklist(&mut self, ui: &mut Ui, t: &Theme, places: &mut Vec<(String, Rect)>) {
         let focus = self.focus_pin.as_ref().unwrap();
         let pin = &self.circuit.terminals[&focus.id];
@@ -201,6 +270,64 @@ impl Editor {
             }
         }
         ui.add_space(theme::S3);
+        let placement = ui.collapsing("Placement roles", |ui| {
+            if self
+                .circuit
+                .occurrences
+                .values()
+                .filter(|s| s.as_str() == self.sheet())
+                .count()
+                > 1
+            {
+                ui.weak("Applies to this placement in every instance of this sheet.");
+            }
+            egui::Grid::new("placement-pin-roles").show(ui, |ui| {
+                ui.strong("Role");
+                ui.strong("Wants");
+                ui.strong("Provides");
+                ui.end_row();
+                let mut seen = std::collections::BTreeSet::new();
+                for (label, role) in &self.doc.role_names {
+                    if !seen.insert(role) {
+                        continue;
+                    }
+                    ui.label(label);
+                    for (want, defaults, effective) in [
+                        (true, &definition.wants, &pin.wants),
+                        (false, &definition.gives, &pin.gives),
+                    ] {
+                        let inherited = defaults.contains(role);
+                        let mut enabled = effective.contains(role);
+                        let response = ui
+                            .add_enabled(!inherited, egui::Checkbox::without_text(&mut enabled))
+                            .on_hover_text(if inherited {
+                                "Defined on the library pin"
+                            } else {
+                                "Set on this placement"
+                            });
+                        places.push((
+                            format!("electronics:placement-role:{want}:{label}"),
+                            response.rect,
+                        ));
+                        if response.changed() {
+                            action = Some(Action::SetRole {
+                                role: role.clone(),
+                                want,
+                                enabled,
+                            });
+                        }
+                    }
+                    ui.end_row();
+                }
+            });
+            if ui.button("New role…").clicked() {
+                action = Some(Action::NewRole);
+            }
+        });
+        places.push((
+            "electronics:placement-roles".into(),
+            placement.header_response.rect,
+        ));
         if ui.button("Close pin inspection").clicked() {
             self.start(Tool::Select);
             return;
@@ -236,6 +363,13 @@ impl Editor {
                     self.message = err;
                 }
             }
+            Some(Action::SetRole { role, want, enabled }) => {
+                let terminal = focus.id.clone();
+                if let Err(e) = self.set_placement_role(&terminal, &role, want, enabled) {
+                    self.message = e;
+                }
+            }
+            Some(Action::NewRole) => self.start(Tool::Role),
             None => {}
         }
     }

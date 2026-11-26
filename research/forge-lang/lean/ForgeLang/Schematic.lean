@@ -59,6 +59,18 @@ structure Port where
   gives : List RoleId
 deriving DecidableEq
 
+/-- Roles on a placement add to the reusable library pin. Membership is set-like. -/
+def effectivePort (library placement : Port) : Port :=
+  ⟨library.wants ++ placement.wants, library.gives ++ placement.gives⟩
+
+theorem effective_wants (library placement : Port) (r : RoleId) :
+    r ∈ (effectivePort library placement).wants ↔ r ∈ library.wants ∨ r ∈ placement.wants := by
+  simp [effectivePort]
+
+theorem effective_gives (library placement : Port) (r : RoleId) :
+    r ∈ (effectivePort library placement).gives ↔ r ∈ library.gives ∨ r ∈ placement.gives := by
+  simp [effectivePort]
+
 structure Binding where
   consumer : Terminal
   provider : Terminal

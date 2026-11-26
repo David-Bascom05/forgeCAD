@@ -93,6 +93,8 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "in_bom",
             "ref_offset",
             "value_offset",
+            "wants",
+            "gives",
             "at",
             "angle",
             "mirror",
@@ -220,6 +222,8 @@ pub struct Symbol {
 pub enum Item {
     Place {
         symbol: String,
+        wants: Map<String, Set<RoleId>>,
+        gives: Map<String, Set<RoleId>>,
         unit: String,
         value: String,
         footprint: Option<String>,

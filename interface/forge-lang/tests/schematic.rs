@@ -598,12 +598,12 @@ fn supply_want_checks_the_actual_connected_voltage() {
         let id = &d.role_names["analog.supply_voltage"];
         let check = &c.voltages["main/U1.VDD"][id];
         assert_eq!(check.status(), status);
-        assert_eq!(check.providers[0].pin, "main/J1.OUT");
+        assert_eq!(check.providers[0].pin, "main/J1.P1");
         let failed = status == "out_of_range";
         assert_eq!(
             c.issues
                 .iter()
-                .any(|i| i.kind == "VoltageOutOfRange" && i.objects == ["main/U1.VDD", "main/J1.OUT"]),
+                .any(|i| i.kind == "VoltageOutOfRange" && i.objects == ["main/U1.VDD", "main/J1.P1"]),
             failed
         );
         let inspection = schematic::inspect_pin(&c, "main/U1.VDD").unwrap();
@@ -616,7 +616,7 @@ fn supply_want_checks_the_actual_connected_voltage() {
             inspection
                 .checks
                 .iter()
-                .any(|r| r.role == *id && r.peers == [("main/J1.OUT".into(), expected)])
+                .any(|r| r.role == *id && r.peers == [("main/J1.P1".into(), expected)])
         );
         let report = schematic::response(&d, &c, &["pin".into(), "main/U1.VDD".into()]).unwrap();
         let Some(forge_agent::json::Json::Arr(checks)) =
@@ -625,7 +625,7 @@ fn supply_want_checks_the_actual_connected_voltage() {
             panic!("missing voltage checks from pin query");
         };
         assert_eq!(checks[0].get("status").and_then(|s| s.str()), Some(status));
-        let provider = schematic::inspect_pin(&c, "main/J1.OUT").unwrap();
+        let provider = schematic::inspect_pin(&c, "main/J1.P1").unwrap();
         assert!(
             provider
                 .checks
@@ -634,8 +634,11 @@ fn supply_want_checks_the_actual_connected_voltage() {
         );
     }
     for change in [
-        sheet.replace("symbol: Supply, at:", "symbol: Supply, populated: false, at:"),
-        sheet.replace("feed = wire(sheet: main, from: J1.OUT, to: vdd)", ""),
+        sheet.replace(
+            "symbol: analog.Connector2, gives:",
+            "symbol: analog.Connector2, populated: false, gives:",
+        ),
+        sheet.replace("feed = wire(sheet: main, from: J1.P1, to: vdd)", ""),
     ] {
         let (d, c) = schematic::compile(&change, Some(&dir), None).unwrap();
         assert_eq!(
@@ -680,4 +683,46 @@ MCU = symbol(peripherals: {I2C1: {SDA: [PA0], SCL: [PA1]}, UART2: {TX: [PA0]}}, 
         schematic::compile(&bad, None, None).unwrap_err().kind,
         "UnknownPeripheralPin"
     );
+}
+
+#[test]
+fn connector_roles_belong_to_the_placement_and_inherit_opt_in_symbol_roles() {
+    let sheet = r#"schematic
+main = sheet()
+source = role(kind:"power", voltage_mv:3300)
+sink = role(kind:"power", voltage_range_v:[1.8,5.5])
+keyed = role(kind:"interface")
+Connector = symbol(ref_prefix:"J", pins:{contact:pin(number:"1",aliases:[p],kind:"passive",at:(0,0)), shield:pin(number:"2",kind:"passive",at:(0,1),wants:[keyed])})
+J1 = place(sheet:main,symbol:Connector,at:(0,0),gives:{p:[source]})
+J2 = place(sheet:main,symbol:Connector,at:(12,0),wants:{contact:[sink]})
+J3 = place(sheet:main,symbol:Connector,at:(30,0))
+link = wire(sheet:main,from:J1.contact,to:J2.contact)
+"#;
+    let (d, c) = schematic::compile(sheet, None, None).unwrap();
+    assert!(d.symbols["Connector"].pins["contact"].gives.is_empty());
+    assert!(c.terminals["main/J1.contact"].wants.is_empty());
+    assert!(c.terminals["main/J2.contact"].gives.is_empty());
+    let spare = &c.terminals["main/J3.contact"];
+    assert!(spare.gives.is_empty() && spare.wants.is_empty());
+    assert_eq!(
+        c.voltages["main/J2.contact"][&d.role_names["sink"]].status(),
+        "satisfied"
+    );
+    assert!(
+        c.terminals["main/J3.shield"]
+            .wants
+            .contains(&d.role_names["keyed"])
+    );
+    for (replacement, kind) in [
+        ("bogus:[source]", "UnknownPin"),
+        ("p:[missing]", "UnknownRole"),
+        ("p:[source],contact:[source]", "DuplicatePin"),
+    ] {
+        assert_eq!(
+            schematic::compile(&sheet.replace("p:[source]", replacement), None, None)
+                .unwrap_err()
+                .kind,
+            kind
+        );
+    }
 }

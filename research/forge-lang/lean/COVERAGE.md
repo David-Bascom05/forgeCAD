@@ -120,7 +120,7 @@ extension so far:
 | args | `schematic::text` | `at`, `value`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::library` | `file` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::sheet` | `title` | schematic::ARGS and checked reader | GAP record decoding in Rust |
-| args | `schematic::place` | `sheet`, `symbol`, `unit`, `value`, `footprint`, `fields`, `datasheet`, `populated`, `in_bom`, `ref_offset`, `value_offset`, `at`, `angle`, `mirror` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::place` | `sheet`, `symbol`, `unit`, `value`, `footprint`, `fields`, `datasheet`, `populated`, `in_bom`, `ref_offset`, `value_offset`, `wants`, `gives`, `at`, `angle`, `mirror` | schematic::ARGS and checked reader | `Schematic.effective_wants` and `Schematic.effective_gives` for role inheritance. GAP record decoding in Rust |
 | args | `schematic::gate` | `sheet`, `of`, `unit`, `at`, `angle`, `mirror` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::subsheet` | `sheet`, `of`, `at`, `ports` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::junction` | `sheet`, `at` | schematic::ARGS and checked reader | GAP record decoding in Rust |

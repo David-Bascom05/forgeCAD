@@ -164,10 +164,14 @@ impl Circuit {
             .iter()
             .filter_map(|r| {
                 if let Item::Place {
-                    symbol, populated, ..
+                    symbol,
+                    populated,
+                    wants,
+                    gives,
+                    ..
                 } = &r.item
                 {
-                    Some((r.id.as_str(), (symbol, *populated)))
+                    Some((r.id.as_str(), (symbol, *populated, wants, gives)))
                 } else {
                     None
                 }
@@ -195,7 +199,7 @@ impl Circuit {
                 _ => None,
             };
             if let Some((owner, unit, at, angle, mirror)) = gate {
-                let &(symbol, populated) = placed
+                let &(symbol, populated, wants, gives) = placed
                     .get(owner.as_str())
                     .ok_or_else(|| Fault::new("UnknownOccurrence", row.span, owner))?;
                 let def = &doc.symbols[symbol];
@@ -227,8 +231,18 @@ impl Circuit {
                             power_net: def.power_net.clone(),
                             number: pin.number.clone(),
                             electrical: pin.electrical,
-                            wants: pin.wants.clone(),
-                            gives: pin.gives.clone(),
+                            wants: pin
+                                .wants
+                                .iter()
+                                .chain(wants.get(name).into_iter().flatten())
+                                .cloned()
+                                .collect(),
+                            gives: pin
+                                .gives
+                                .iter()
+                                .chain(gives.get(name).into_iter().flatten())
+                                .cloned()
+                                .collect(),
                         },
                     );
                 }
@@ -265,7 +279,7 @@ impl Circuit {
                 _ => {}
             }
         }
-        for (owner, (symbol, _)) in placed {
+        for (owner, (symbol, ..)) in placed {
             let missing: Set<_> = doc.symbols[symbol]
                 .pins
                 .values()

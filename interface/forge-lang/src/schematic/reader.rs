@@ -389,15 +389,41 @@ fn field_offset(expr: Option<&Expr>, p: &Params) -> Result<Option<Point>> {
         .map(|e| point(e, p))
         .transpose()
 }
+fn placement_roles(
+    input: Option<&Expr>,
+    symbol: &Symbol,
+    doc: &Document,
+) -> Result<Map<String, Set<RoleId>>> {
+    let Some(input) = input else {
+        return Ok(Map::new());
+    };
+    let bindings = map(input, |e| roles(Some(e), doc))?;
+    let mut result = Map::new();
+    for (key, set) in bindings {
+        let pin = symbol
+            .pins
+            .get_key_value(&key)
+            .or_else(|| symbol.pins.iter().find(|(_, p)| p.aliases.contains(&key)))
+            .ok_or_else(|| fault(input, "UnknownPin", &key))?
+            .0;
+        if result.insert(pin.clone(), set).is_some() {
+            return Err(fault(input, "DuplicatePin", &key));
+        }
+    }
+    Ok(result)
+}
 fn item(c: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Item> {
     Ok(match c.name {
         "place" => {
             let e = c.req("symbol")?;
             let sym = reference(e)?;
-            if !doc.symbols.contains_key(&sym) {
-                return Err(fault(e, "UnknownSymbol", sym));
-            }
+            let def = doc
+                .symbols
+                .get(&sym)
+                .ok_or_else(|| fault(e, "UnknownSymbol", &sym))?;
             Item::Place {
+                wants: placement_roles(c.take("wants"), def, doc)?,
+                gives: placement_roles(c.take("gives"), def, doc)?,
                 symbol: sym,
                 unit: c
                     .take("unit")

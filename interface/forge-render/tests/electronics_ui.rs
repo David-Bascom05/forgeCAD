@@ -389,7 +389,7 @@ fn checklist_explains_the_connected_supply_voltage() {
         assert!(h.click("electronics:anchor:U1.VDD"));
         h.step();
         assert!(
-            h.placed(&format!("electronics:voltage:main/U1.VDD:main/J1.OUT:{fits}"))
+            h.placed(&format!("electronics:voltage:main/U1.VDD:main/J1.P1:{fits}"))
                 .is_some()
         );
         if let Some(out) = std::env::var_os("FORGE_UI_SHOTS") {
@@ -399,6 +399,52 @@ fn checklist_explains_the_connected_supply_voltage() {
                 h.png().unwrap(),
             )
             .unwrap();
+        }
+        if fits {
+            // Pin inspection refits the canvas on the next frame.
+            h.step();
+            h.step();
+            assert!(h.click("electronics:anchor:J1.P1"));
+            h.step();
+            assert!(h.placed("electronics:inspection:main/J1.P1").is_some());
+            assert!(h.click("electronics:placement-roles"));
+            for _ in 0..15 {
+                h.step();
+            }
+            let toggle = "electronics:placement-role:false:source";
+            if let Some(out) = std::env::var_os("FORGE_UI_SHOTS") {
+                std::fs::write(
+                    Path::new(&out).join("native-connector-roles.png"),
+                    h.png().unwrap(),
+                )
+                .unwrap();
+            }
+            assert!(h.click(toggle));
+            // The supply row appears or disappears and moves the controls below it.
+            for _ in 0..3 {
+                h.step();
+            }
+            h.gui.fg_save();
+            let saved = std::fs::read_to_string(&path).unwrap();
+            let (doc, circuit) = forge_lang::schematic::compile(&saved, Some(&dir), None).unwrap();
+            assert!(circuit.terminals["main/J1.P1"].gives.is_empty());
+            assert_eq!(
+                circuit.voltages["main/U1.VDD"][&doc.role_names["analog.supply_voltage"]].status(),
+                "unknown"
+            );
+            assert!(h.click(toggle));
+            // The supply row appears or disappears and moves the controls below it.
+            for _ in 0..3 {
+                h.step();
+            }
+            h.gui.fg_save();
+            let saved = std::fs::read_to_string(&path).unwrap();
+            let (doc, circuit) = forge_lang::schematic::compile(&saved, Some(&dir), None).unwrap();
+            assert_eq!(
+                circuit.voltages["main/U1.VDD"][&doc.role_names["analog.supply_voltage"]].status(),
+                "satisfied"
+            );
+            assert!(doc.symbols["analog.Connector2"].pins["P1"].gives.is_empty());
         }
     }
     std::fs::remove_dir_all(dir).unwrap();

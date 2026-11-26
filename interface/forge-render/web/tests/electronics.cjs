@@ -105,7 +105,7 @@ async function checkSupply(browser, base) {
       const anchor = "electronics:anchor:U1.VDD";
       await t.until(page, s => s.places.some(p => p.name === anchor), anchor);
       await page.evaluate(id => window.forgecad.fc.app_click(id, 0, false), anchor);
-      const result = "electronics:voltage:main/U1.VDD:main/J1.OUT:" + fits;
+      const result = "electronics:voltage:main/U1.VDD:main/J1.P1:" + fits;
       await t.until(page, s => s.places.some(p => p.name === result), result, 20000);
       console.log(t.shot("web-supply-" + mv + ".png", await t.pixels(page)));
     }

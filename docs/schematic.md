@@ -24,6 +24,18 @@ Reg = symbol(pins: {
 
 A role declaration binds an identifier. Pin lists and `fulfill(role: ...)` take references to these declarations. The schema encodes a role as an object, for example `{"id":"@example.3v3","kind":"power","rating":{"kind":"voltage","unit":"mV","value":3300},"prefer_mm":null}`. A quoted role name in a pin list, an unknown role, a mismatch between a want and a give, and incompatible definitions of a shared key produce located compile errors. Distinct libraries can intentionally share a type by using the same explicit key and definition. Without a key the import namespace qualifies the role. The declared kind is one of `power`, `return`, `bypass`, `signal`, `clock`, `bias`, `termination`, `feedback`, `protection`, `reference`, or `interface`. Optional capacitance in nF applies to bypass roles, voltage in mV to power and reference roles. An optional positive length `prefer` records a project placement preference. The PCB consumer owns its eventual measurement.
 
+### Connector pin roles
+
+A generic connector starts with numbered passive contacts and empty wants and provides. Put the external circuit's signal or supply on the placed connector. In the schematic, select the contact, expand **Placement roles**, and check **Wants** or **Provides** for that pin. **New role…** declares a typed role in the schematic.
+
+```fg
+incoming = role(kind: "power", voltage_mv: 3300)
+J1 = place(sheet: main, symbol: analog.Connector2, at: (0,0), gives: {P1: [incoming]})
+J2 = place(sheet: main, symbol: analog.Connector2, at: (20,0))
+```
+
+Here J1 pin 1 declares that the attached equipment supplies 3.3 V. J2 inherits the connector's passive contacts. For a dedicated connector with a fixed interface, the library author can specify pin roles once. Each placement inherits those roles and can add its own. A contact's hardware voltage rating is a limit on the connector, independent of the voltage supplied by the external circuit. Like the wiring, a role on a placement in a repeated sheet definition applies in each instance of that sheet.
+
 ### Voltage wants and provides
 
 Attach a reusable operating range to a normal pin through its Wants list. A power source can declare a single voltage or a guaranteed range. All endpoints are inclusive.

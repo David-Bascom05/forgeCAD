@@ -19,6 +19,8 @@ Determine how ForgeCAD can infer **which components serve which pins or function
 
 ## Starting from a pin
 
+Reusable connector symbols default to passive contacts. The schematic placement owns the board-specific pinout and the external circuit's wants and provides. For example, J1 pin 1 can bring 3.3 V into a board while pin 1 on another copy carries a signal. A library may declare a stable interface for a purpose-built connector. Electrical ratings of the hardware describe the contact's limits and are separate from the external supply available on a placement.
+
 Selecting a pin exposes what its library definition wants and gives. Both may apply to one pin. A regulator output gives power and can want a local output capacitor. A passive terminal acquires a job when it fulfills a particular want. **Add bypass capacitor** should create the occurrence, connect supply and return, and record which pin or pin group it serves in one undoable source edit. The designer can make the same connection freehand and inspect suggested associations.
 
 In the current backend, a want or give names a **declared role type**. For example, a regulator pin can give a 3.3 V rail and want a 100 nF bypass at the same time. Roles carry a stable identity, a checked kind and optional typed ratings. A fulfillment must match the same role identity at both endpoints. Libraries share an identity explicitly. CLI, canvas and MCP consumers read the same structured role objects, including units. The [native schematic reference](../../docs/schematic.md) gives the declarations and wire format.
@@ -80,4 +82,6 @@ The left tree follows sheet occurrences, including repeated instances. The right
 
 [Editing a pin name and direction](shots/native-pin-edit.png) · [Reference prefix in symbol properties](shots/native-reference-prefix.png)
 
-The TLV9001 VDD checklist uses the same library symbol and wiring in both captures. Changing J1.OUT from 3.3 V to 12 V fails only the 1.8–5.5 V supply check. [3.3 V source](shots/web-supply-3300.png) · [12 V source](shots/web-supply-12000.png)
+The TLV9001 VDD checklist uses the same library symbol and wiring in both captures. Changing J1.P1 from 3.3 V to 12 V fails only the 1.8–5.5 V supply check. [3.3 V source](shots/web-supply-3300.png) · [12 V source](shots/web-supply-12000.png)
+
+J1 uses a generic two-contact connector. The external supply is declared on its first contact in the schematic. [J1 placement roles](shots/native-connector-roles.png)

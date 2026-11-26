@@ -30,3 +30,7 @@ Capacitor = symbol(ref_prefix: "C", pins: {
     N: pin(description: "Connect to the local return.", number: "2", kind: "passive", at: (0, -4))
   }, graphics: [line(from:(0,4),to:(0,0.55)),line(from:(-2.5,0.55),to:(2.5,0.55)),
                  line(from:(-2.5,-0.55),to:(2.5,-0.55)),line(from:(0,-0.55),to:(0,-4))])
+Connector2 = symbol(ref_prefix: "J", pins: {
+  P1: pin(number: "1", kind: "passive", at: (4,0)),
+  P2: pin(number: "2", kind: "passive", at: (4,-5))
+}, graphics: [rect(from: (-3,-7), to: (2,2)), line(from: (2,0), to: (4,0)), line(from: (2,-5), to: (4,-5))])

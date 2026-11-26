@@ -545,7 +545,7 @@ impl Editor {
                 .map_err(|e| e.text())?
                 .into_iter()
                 .find_map(|stmt| match stmt.kind {
-                    StmtKind::Assign { name, .. } if self.doc.symbols.contains_key(&name) => Some(name),
+                    StmtKind::Assign { name, value } if matches!(&value.kind, ExprKind::Call(head, _) if matches!(&head.kind, ExprKind::Name(n) if n == "symbol" || n == "place")) => Some(name),
                     _ => None,
                 })
         } else {

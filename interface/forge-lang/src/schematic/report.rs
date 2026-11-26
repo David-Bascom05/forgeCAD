@@ -161,10 +161,20 @@ fn findings(c: &Circuit) -> Json {
     )
 }
 
+fn placement_roles(roles: &Map<String, Set<RoleId>>) -> Json {
+    Json::Obj(
+        roles
+            .iter()
+            .map(|(pin, roles)| (pin.clone(), strings(roles.iter().map(|r| &r.0))))
+            .collect(),
+    )
+}
 fn scene(row: &Row) -> Json {
     let (kind, mut fields) = match &row.item {
         Item::Place {
             symbol,
+            wants,
+            gives,
             unit,
             value,
             footprint,
@@ -180,6 +190,8 @@ fn scene(row: &Row) -> Json {
         } => (
             "place",
             vec![
+                ("wants", placement_roles(wants)),
+                ("gives", placement_roles(gives)),
                 ("ref_offset", ref_offset.map_or(Json::Null, point)),
                 ("value_offset", value_offset.map_or(Json::Null, point)),
                 ("fields", super::bom::field_json(fields)),
