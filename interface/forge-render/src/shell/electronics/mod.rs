@@ -499,6 +499,19 @@ impl Editor {
             }
         }
     }
+    /// A terminal is named for its electrical component, but can be drawn on another gate row.
+    fn geometric_selection(&self) -> &str {
+        if !self.pin.is_empty() {
+            let key = format!("{}/{}.{}", self.subject, self.selected, self.pin);
+            if let Some(span) = self.circuit.origins.get(&key)
+                && let Some(row) = self.doc.rows.iter().find(|r| r.span == *span && r.sheet == self.sheet())
+            {
+                return &row.id;
+            }
+        }
+        &self.selected
+    }
+
     fn modify(&mut self, t: Tool) -> Result<()> {
         if self.library() {
             if t == Tool::Delete {
@@ -516,7 +529,11 @@ impl Editor {
             }
             return Err("Select a placement in a schematic.".into());
         }
-        let id = self.selected.clone();
+        let id = if matches!(t, Tool::Rotate | Tool::Mirror) {
+            self.geometric_selection().to_owned()
+        } else {
+            self.selected.clone()
+        };
         let Some(row) = self.doc.rows.iter().find(|r| r.id == id) else {
             return Err("Select an object first.".into());
         };
@@ -628,6 +645,28 @@ mod tests {
         e.form.role_kind = "power".into();
         e.create_record().unwrap();
         assert!(e.src.find("rail =").unwrap() < e.src.find("Z =").unwrap());
+    }
+
+    #[test]
+    fn a_unit_pin_edits_the_displayed_gate_and_keeps_its_component_identity() {
+        let src = r#"schematic
+S = symbol(pins: {a: pin(unit: "A", number: "1", kind: "input", at: (2,0)), b: pin(unit: "B", number: "2", kind: "output", at: (1,0))})
+top = sheet()
+chip = place(sheet: top, symbol: S, at: (0,0), angle: 90deg)
+second = gate(sheet: top, of: chip, unit: "B", at: (10,0))
+"#;
+        let mut e = Editor::open(None, src.into()).unwrap();
+        e.start(Tool::Move);
+        e.click([11., 0.], Some("chip.b"), None).unwrap();
+        assert_eq!(e.selected, "chip");
+        assert_eq!(e.geometric_selection(), "second");
+        e.click([20., 0.], None, None).unwrap();
+        assert_eq!(e.circuit.locations["top/chip.b"], [21., 0.]);
+        e.modify(Tool::Rotate).unwrap();
+        assert_eq!(e.circuit.locations["top/chip.b"], [20., 1.]);
+        e.modify(Tool::Mirror).unwrap();
+        assert_eq!(e.circuit.locations["top/chip.b"], [20., -1.]);
+        assert_eq!(e.circuit.locations["top/chip.a"], [0., 2.]);
     }
 
     #[test]

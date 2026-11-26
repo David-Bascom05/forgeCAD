@@ -566,13 +566,17 @@ impl Editor {
                     self.save_pin(p)?;
                 } else {
                     if self.selected.is_empty() {
-                        self.selected = picked
-                            .or(near.map(|s| s.split('.').next().unwrap_or(s)))
-                            .ok_or("Select an object first.")?
-                            .into();
+                        if let Some(endpoint) = near {
+                            let (id, pin) = endpoint.split_once('.').unwrap_or((endpoint, ""));
+                            self.selected = id.into();
+                            self.pin = pin.into();
+                        } else {
+                            self.selected = picked.ok_or("Select an object first.")?.into();
+                            self.pin.clear();
+                        }
                         return Ok(());
                     }
-                    self.apply(vec![arg(&self.selected, "at", at)])?;
+                    self.apply(vec![arg(self.geometric_selection(), "at", at)])?;
                 }
                 self.start(Select);
                 return Ok(());
