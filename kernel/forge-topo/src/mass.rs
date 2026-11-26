@@ -2539,7 +2539,7 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
             cx.inner = Inner::Cheb(tiles, all);
         }
     }
-    let mut units: Vec<Acc> = Vec::new();
+    let mut units: Vec<Acc> = Vec::with_capacity(loops.iter().map(|l| l.runs.len()).sum());
     // a loop that left the fit's box (near a pole, where the angle wanders) is measured again by
     // columns alone: a fit past its box is no answer, and mixing the two does not cancel
     loop {
