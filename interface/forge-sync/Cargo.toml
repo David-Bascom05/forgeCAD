@@ -1,0 +1,21 @@
+[package]
+name = "forge-sync"
+description = "Hosted forgeCAD's protocol: the server-ordered log of typed edit ops, rebase, and the client and sequencer state machines (sans I/O)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# No I/O, no threads, no sockets: the host (forge-server, the desktop app, the browser build)
+# feeds messages in and sends what it is told to. Nothing in the speed gate's binaries links it.
+build = "build.rs"
+
+[dependencies]
+forge-lang = { path = "../forge-lang" }
+forge-agent = { path = "../forge-agent" }
+forge-keep = { path = "../forge-keep" }
+forge-math = { path = "../../kernel/forge-math" }
+forge-topo = { path = "../../kernel/forge-topo" }
+
+[lints]
+workspace = true

@@ -59,6 +59,78 @@ pub const CSP: &str = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval';
      img-src 'self' blob: data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; \
      base-uri 'none'; frame-ancestors 'none'";
 
+/// [`CSP`], with the hosted sync server's origin (`--sync`) as the one other place the page may
+/// connect to: its WebSocket (research/hosted). Nothing else is widened.
+pub fn csp(sync: Option<&str>) -> String {
+    match sync {
+        Some(o) => CSP.replace("connect-src 'self'", &format!("connect-src 'self' {o}")),
+        None => CSP.to_string(),
+    }
+}
+
+/// `--sync`'s URL as a CSP origin (`ws://HOST:PORT`, `wss://HOST:PORT`), parsed strictly: a
+/// ws:// or wss:// scheme; a host that is a DNS name (letters, digits, '-', dot-separated labels),
+/// an IPv4 address or a bracketed IPv6 one; an optional port of 1-65535; nothing else (nothing
+/// that could end or add a directive). Cleartext ws:// only to a loopback host: elsewhere the sync
+/// traffic, and any `?sync=` token, would cross the network unencrypted (the security review).
+fn sync_origin(url: &str) -> Result<String, String> {
+    let (scheme, rest) = url
+        .split_once("://")
+        .filter(|(s, _)| *s == "ws" || *s == "wss")
+        .ok_or("--sync: a ws:// or wss:// URL")?;
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let bad = || format!("--sync: {authority:?} is not HOST or HOST:PORT");
+    // the host, and what follows it
+    let (host, after, loopback) = if let Some(v6) = authority.strip_prefix('[') {
+        let (ip, after) = v6.split_once(']').ok_or_else(bad)?;
+        let ip: std::net::Ipv6Addr = ip.parse().map_err(|_| bad())?;
+        (format!("[{ip}]"), after, ip.is_loopback())
+    } else {
+        let (h, after) = match authority.find(':') {
+            Some(k) => (&authority[..k], &authority[k..]),
+            None => (authority, ""),
+        };
+        let name_ok = !h.is_empty()
+            && h.len() <= 253
+            && h.split('.').all(|l| {
+                !l.is_empty()
+                    && l.len() <= 63
+                    && !l.starts_with('-')
+                    && !l.ends_with('-')
+                    && l.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+            });
+        if !name_ok {
+            return Err(bad());
+        }
+        let loopback =
+            h.eq_ignore_ascii_case("localhost") || h.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback());
+        (h.to_ascii_lowercase(), after, loopback)
+    };
+    // the port: none, or ':' and 1-65535 in digits only
+    let port = match after {
+        "" => String::new(),
+        p => {
+            let digits = p.strip_prefix(':').ok_or_else(bad)?;
+            let ok = !digits.is_empty()
+                && digits.len() <= 5
+                && digits.chars().all(|c| c.is_ascii_digit())
+                && digits.parse::<u32>().is_ok_and(|n| (1..=65535).contains(&n));
+            if !ok {
+                return Err(bad());
+            }
+            format!(":{digits}")
+        }
+    };
+    if scheme == "ws" && !loopback {
+        return Err(
+            "--sync: wss:// for a server on another host (ws:// would send the sync traffic and its \
+                    token in clear); ws:// is for this machine (localhost, 127.0.0.1, [::1])"
+                .into(),
+        );
+    }
+    Ok(format!("{scheme}://{host}{port}"))
+}
+
 pub struct Config {
     pub root: PathBuf,
     pub app: Option<PathBuf>,
@@ -68,12 +140,15 @@ pub struct Config {
     pub writable: bool,
     /// `--agent`: the page's agent is the person's Claude Code, run here (agent_bridge.rs).
     pub agent: Option<Arc<crate::agent_bridge::Agent>>,
+    /// `--sync URL`: the hosted sync server the page's `?sync=` may connect to (its origin is
+    /// added to the page's connect-src, header and <meta> both).
+    pub sync: Option<String>,
     /// How long a request's head may take from its first byte (`HEAD_TIME`; less in tests).
     pub head_time: std::time::Duration,
 }
 
-const USAGE: &str =
-    "forgecad web DIR [--port P] [--bind ADDR] [--token T] [--app WEBDIR] [--read-only] [--agent]";
+const USAGE: &str = "forgecad web DIR [--port P] [--bind ADDR] [--token T] [--app WEBDIR] [--read-only] [--agent] \
+     [--sync ws://HOST:PORT/sync]";
 
 /// The command line's words after `web`.
 pub fn main(args: &[String]) -> ExitCode {
@@ -98,6 +173,7 @@ fn parse(args: &[String]) -> Result<Config, String> {
     let (mut root, mut app, mut bind, mut port, mut token, mut writable) =
         (None, None, IpAddr::from([127, 0, 0, 1]), 8080u16, None, true);
     let mut agent = false;
+    let mut sync = None;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         let mut val = |name: &str| it.next().cloned().ok_or(format!("{name} takes a value"));
@@ -108,6 +184,7 @@ fn parse(args: &[String]) -> Result<Config, String> {
             "--app" => app = Some(PathBuf::from(val("--app")?)),
             "--read-only" => writable = false,
             "--agent" => agent = true,
+            "--sync" => sync = Some(sync_origin(&val("--sync")?)?),
             s if s.starts_with("--") => return Err(format!("{s}: not an option")),
             s if root.is_none() => root = Some(PathBuf::from(s)),
             s => return Err(format!("{s}: one folder only")),
@@ -143,6 +220,7 @@ fn parse(args: &[String]) -> Result<Config, String> {
         token,
         writable,
         agent,
+        sync,
         head_time: HEAD_TIME,
     })
 }
@@ -430,12 +508,12 @@ fn read_request(r: &mut BufReader<TcpStream>, c: &Config) -> Result<Option<Reque
 
 /// The response; to a HEAD its head only (its Content-Length still the body's): a body sent
 /// would be read as the next response on a kept connection.
-fn write_response(s: &mut TcpStream, r: &Response, keep: bool, head: bool) -> std::io::Result<()> {
+fn write_response(s: &mut TcpStream, r: &Response, keep: bool, head: bool, csp: &str) -> std::io::Result<()> {
     let mut text = format!(
         "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nX-Content-Type-Options: nosniff\r\n\
          Cache-Control: no-cache\r\nCross-Origin-Opener-Policy: same-origin\r\n\
          Cross-Origin-Embedder-Policy: require-corp\r\nReferrer-Policy: no-referrer\r\n\
-         Content-Security-Policy: {CSP}\r\nConnection: {}\r\n",
+         Content-Security-Policy: {csp}\r\nConnection: {}\r\n",
         r.status,
         reason(r.status),
         r.kind,
@@ -456,6 +534,7 @@ fn write_response(s: &mut TcpStream, r: &Response, keep: bool, head: bool) -> st
 fn connection(s: TcpStream, c: &Config, lock: &Mutex<()>) -> std::io::Result<()> {
     let mut out = s.try_clone()?;
     let mut r = BufReader::new(s);
+    let csp = csp(c.sync.as_deref());
     loop {
         let (resp, keep, head) = match read_request(&mut r, c) {
             Ok(None) => return Ok(()),
@@ -466,7 +545,7 @@ fn connection(s: TcpStream, c: &Config, lock: &Mutex<()>) -> std::io::Result<()>
                     && let Some(a) = &c.agent
                 {
                     return match agent_gate(&q, a) {
-                        Err(e) => write_response(&mut out, &e, false, false),
+                        Err(e) => write_response(&mut out, &e, false, false, &csp),
                         Ok(client) => stream_events(&mut out, a, &q, &client),
                     };
                 }
@@ -477,7 +556,7 @@ fn connection(s: TcpStream, c: &Config, lock: &Mutex<()>) -> std::io::Result<()>
             }
             Err(e) => (e, false, false),
         };
-        write_response(&mut out, &resp, keep, head)?;
+        write_response(&mut out, &resp, keep, head, &csp)?;
         if !keep {
             return Ok(());
         }
@@ -1193,12 +1272,23 @@ fn static_file(c: &Config, path: &str) -> Response {
     };
     let p = app.join(&rel);
     match std::fs::read(&p) {
-        Ok(b) if p.is_file() => Response {
-            status: 200,
-            kind: mime(&p),
-            headers: vec![],
-            body: b,
-        },
+        Ok(mut b) if p.is_file() => {
+            // the page's own <meta> policy is enforced too: it names the sync server as well
+            if rel == std::path::Path::new("index.html")
+                && let Some(o) = &c.sync
+                && let Ok(t) = String::from_utf8(b.clone())
+            {
+                b = t
+                    .replacen("connect-src 'self'", &format!("connect-src 'self' {o}"), 1)
+                    .into_bytes();
+            }
+            Response {
+                status: 200,
+                kind: mime(&p),
+                headers: vec![],
+                body: b,
+            }
+        }
         _ => error(404, "no such file"),
     }
 }
@@ -1207,6 +1297,74 @@ fn static_file(c: &Config, path: &str) -> Response {
 #[cfg(all(test, not(target_os = "wasi")))]
 mod tests {
     use super::*;
+
+    /// --sync widens connect-src by the sync server's origin only, and takes nothing that could
+    /// end or add a directive.
+    #[test]
+    fn sync_adds_one_origin_to_connect_src() {
+        assert_eq!(
+            sync_origin("ws://127.0.0.1:7878/sync").unwrap(),
+            "ws://127.0.0.1:7878"
+        );
+        assert_eq!(
+            sync_origin("ws://localhost:7878/sync").unwrap(),
+            "ws://localhost:7878"
+        );
+        assert_eq!(sync_origin("ws://[::1]:7878/sync").unwrap(), "ws://[::1]:7878");
+        assert_eq!(
+            sync_origin("wss://cad.example:443/sync").unwrap(),
+            "wss://cad.example:443"
+        );
+        assert_eq!(
+            sync_origin("wss://cad.example/sync").unwrap(),
+            "wss://cad.example"
+        );
+        assert_eq!(
+            sync_origin("wss://[2001:db8::1]:8443/sync").unwrap(),
+            "wss://[2001:db8::1]:8443"
+        );
+        for bad in [
+            "http://x/sync",
+            "ws://",
+            "ws://a;script-src *",
+            "ws://a b",
+            "ws://a'/x",
+            "javascript:x",
+        ] {
+            assert!(sync_origin(bad).is_err(), "{bad}");
+        }
+        // strict: a numeric port 1-65535, a well-formed host or [IPv6] (the security review)
+        for bad in [
+            "wss://a:b:c",
+            "wss://:80",
+            "wss://a:",
+            "wss://[",
+            "wss://[::1",
+            "wss://[nope]:1",
+            "wss://a:0",
+            "wss://a:65536",
+            "wss://a:+80",
+            "wss://a..b",
+            "wss://-a.b",
+            "wss://a:80x",
+            "wss://[::1]x",
+        ] {
+            assert!(sync_origin(bad).is_err(), "{bad}");
+        }
+        // cleartext only to this machine
+        for remote in [
+            "ws://cad.example:7878/sync",
+            "ws://10.0.0.9:7878/sync",
+            "ws://[2001:db8::1]:1/sync",
+        ] {
+            let e = sync_origin(remote).unwrap_err();
+            assert!(e.contains("wss://"), "{remote}: {e}");
+        }
+        let c = csp(Some("ws://127.0.0.1:7878"));
+        assert!(c.contains("connect-src 'self' ws://127.0.0.1:7878;"), "{c}");
+        assert_eq!(c.replace(" ws://127.0.0.1:7878", ""), CSP);
+        assert_eq!(csp(None), CSP);
+    }
 
     #[test]
     fn a_path_never_leaves_the_folder() {
@@ -1610,6 +1768,7 @@ mod tests {
             token: token.map(str::to_string),
             writable,
             agent: None,
+            sync: None,
             // a slow request's test needn't wait 30 s
             head_time: std::time::Duration::from_secs(2),
         });

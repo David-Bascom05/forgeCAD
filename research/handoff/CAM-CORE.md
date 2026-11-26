@@ -1,0 +1,182 @@
+# CAM-CORE handoff (2026-11-25, wind-down)
+
+CAM-CORE owned forge-cam's core: adaptive clearing, pockets and `clear()`, the engagement model
+(engage.rs) and its feeds, the certifier's closed forms (forge-cam-geom), fixtures, and the
+forge-cam-lang plumbing around them. This note covers what was in flight when the wind-down came:
+the branches, their state, what is unmerged, what to do next, and the risks.
+Shas are as pushed, on main c135b274 (train 7) unless said.
+
+## Branches and where they stand
+
+| branch @ sha | what | state |
+|---|---|---|
+| `cam/adaptive-cap-warning` @ 38e413d4 | forge-cam-lang warns when adaptive's level cutting goes over its `engagement:` cap (UX-LEAD's wording); forge-cam-quality guard over every benchmark part (`CAP_KNOWN`, folded into `chip_load_and_equal_work`'s measure; arcs measured whole) | landed, train 8 |
+| `cam/fixture-box-mu` @ f357f65f | a shaped fixture piece's box grows by its faces' mu (it shrank: the machine-sim collision boxes were not conservative) | landed, train 9 |
+| `cam/clear-degenerate` @ 56ca6ad8 | rptu1 `nut` (clear): a line cut again the other way is air, same-height rapids go straight. Re-cut 161 → 1 mm; rapids 593 → 397 mm (crazy.rs KNOWN edited on the branch, after main brought crazy-guards) | PRE-VERIFY GREEN, train 10 |
+| `cam/engage-conservative` @ 11eb7fcb | the engagement read of the feeds never under-reads (each edge point dilated by half a cell); flange/plate_break .nc regenerated (feed words only, all lower) | PRE-VERIFY GREEN, train 10 |
+| `cam/adaptive-ties` @ edc2f3d8 | adaptive reports stock left after every pass and ring | accepted GREEN for train 12 (full run RED on one forge-render bend-sim test main passed, `a_ghost_is_drawn_at_its_opacity`; 5/5 clean reruns and the tool's render-only rerun GREEN; TRAIN-CONDUCTOR took it as a suspected bendsim test race) |
+| `cam/adaptive-pass-start` @ 9c2afe11 (+ this note) | the round-box fix, below | on main 10d87778; pre-verify after 9c2afe11, for train 12 |
+
+## Unmerged and not ready
+
+- **`cam/adaptive-pass-start`**: the round-box fix. A level is cleared whatever the stock box's
+  numbers:
+  - In air, a start's heading is the first of 10°, 5° and straight on (toward the material)
+    whose engagement ahead (out to a radius past first contact, at most 4r) keeps the cap; none:
+    the one meeting least. It never turns away: the first version also tried −5° to −20°, and
+    those passes ended where no link at depth reached the next start (deep_open_slot 61 retracts
+    for 64 passes, main 12; adaptive's time doubled there). Without the look-ahead the round
+    boxes do not finish in 600 s.
+  - A level sweeps again while material more than 4r from the walls exceeds 4 cells (main: 10r²).
+    This is what clears deep_boss (over the cap 893 → 77 mm) and costs adaptive CPU (more sweeps:
+    real clearing main left undone).
+  - Stock left is reported (`left_uncut`).
+  - `retract_link`'s crossing-height scan stops once the height reaches the stock's highest cell
+    (+ CLEAR) or the retract height (it cannot change after): paths identical over every adaptive
+    document in the repo (17), 12 round-box cases and the memo test; adaptive CPU over the
+    benchmark 142 → 114 s.
+  - Tests: interface/forge-cam-lang/tests/adaptive_round_boxes.rs, 6 cases (each a whole deep_boss
+    clearing, under 3.3 s alone). The over-round boxes and zigzag's off-round ones (3.8–4.8 s alone,
+    over the test budget) are left out; making adaptive faster brings them back (one line each).
+  - CAP_KNOWN re-listed at the figures this branch measures.
+
+  Cost, reported not targeted: deep_boss_n_adaptive t_stop 648 → about 1045 s (measured on f8fb1b4d),
+  same volume removed. It is the cap's honest price: holding 40° with r = 3 needs at least ~6,960 mm
+  of cutting where main fits 4,333 mm only by breaking the cap, its rings slotting at up to 180°.
+- **`cam/adaptive-pass-start-wip` @ 67bf955d**: the pass step-read fix, with a differential test,
+  `passes_hold_the_cap_by_an_independent_measure`.
+  - The planner read each step's engagement at its end along the chord. The posted path is arcs
+    through the step ends, so the heading there is turned further into a turn, and a stock corner
+    can meet the edge between ends.
+  - Measured passes reached 51.5° under a 40° cap. With the fix the worst is 46.5°, within the
+    two models' stated rounding.
+  - **Not landing**: it breaks forge-cam-quality's micro-move guard (deep_open_slot_p_zigzag 14 of
+    89 cutting moves under 1 mm; was 5). The stricter read stalls passes at the margin ring's
+    corners into 2–3-step nibbles.
+  - A half-turn end read was tried: it misses both bounds by a hair (micro 11/91, differential
+    0.2 mm over).
+  - Next: avoid the nibble passes rather than the read, by letting a stalled pass in a corner
+    turn on, or by fitting the short polylines.
+  - The branch also carries the look-ahead and leftover commits above, and TQ's 68000590; rebase
+    only the step-read commit onto `cam/adaptive-pass-start`.
+- **`cam/loop-band-budget-wip` @ 9022ad8e**: prototype. G4's leftover-band offset under a
+  refined-bits budget (`Ctx::refined_bits`, `offset_within(max_bits)`, ~500k; normal docs peak at
+  285,696, the bad case 1,402,624), falling back to the conservative credit with a note.
+  - It waits on EXACT-CORE's exact-core/ties in main (566d28e4 or later, not 3098a105).
+  - **It edits forge-cam-geom/src/real.rs, which EXACT-CORE asked CAM-CORE not to touch**: move
+    `refined_bits` to EXACT-CORE or agree it with them first.
+- **`cam/exact-box` @ 543ac97f**: the exact part box from the model (tasks: exact box back in after
+  engage-conservative).
+  - Held back from train 7 when forge-cam-quality was not run before handoff.
+  - Needs main merged (after engage-conservative lands), the quality guards, and a judged
+    re-bless of pins and .nc.
+
+## Not started (in scope or promised)
+
+- **Real workholding on 3 examples: done, handed to WORKHOLDING to land** with their chain (the
+  coordinator's ruling: the docs need `cam/workholding-any2`, which is not in main).
+  - flange, plate_break and block_m6 are held in `vise("haas-vise-05-0404", across: "x", ..)`.
+  - The stock is deeper under the part and the jaws grip only its bottom, so their tops stand 3 mm
+    under the part. The profile/clear goes 0.5 mm into the skin, the part stays on it, and the
+    skin is faced off in a second setup (said in each file, not in the example).
+  - Tested on any2 @11c7a3b2: each certifies, ok, all ops built, 0.22–0.44 s.
+  - Exact edits:
+    - flange: header as sent; op1 `below: 8` with `clamp: 5`.
+    - plate_break and block_m6: a workholding note; op1 `below: 6` with `clamp: 3`.
+  - .nc: plate_break byte-identical. flange differs only in the four bolt-circle G81 depths,
+    Z-22.9 → Z-22.983: the through-drill was clipped by the 3 mm skin and now reaches its full
+    depth (intended).
+  - A true two-setup flange (op2 turned over into the vise) was tried. `facing` in op2 against the
+    real vise ran over 2 minutes; this is reported to WORKHOLDING. My op2 heights were also in the
+    wrong frame.
+  - The other five examples without workholding (mold_core, mold_core_finish, plate_mark,
+    slot_plate, well_island) remain; the mould cores want `plate(..)` (below).
+- **rptu1 `nut` rapids**: still 397 mm against crazy.rs's 300 mm bound. The rest is each level's
+  trip to the slot's far end for the islands' corner arcs, which touch the stock's box but remove
+  nothing. trim_air's air test is the stock box, so it cannot tell. A stock-aware air test (the
+  level's own cut so far), or ordering a level's loops to end where the next level starts, would
+  fix it. Tell TOOLPATH-QUALITY to drop the `recut` KNOWN entry and set `rapids` to 397 when
+  `cam/clear-degenerate` lands.
+- **TQ's rounds hook**: two rounds of sweeps and rings per adaptive level, the wall pass after the
+  last. The decision point is the `next_sweep!` macro in adaptive.rs (~line 664). Not done; TQ
+  owns the ring redesign (option B).
+- **2.5D pocket per-level sections**: the pocket takes one mid-height section for all levels, so on
+  the manifold's `well` (26 → 8, island top 20) it leaves a Ø12 column above the island. Use the
+  section of each level band. Tell CAM-2D-FINISH, who will re-check `shal`.
+- **axisplane tests' cost**: two tests take about 4.7 s each, over the 2 s budget. My guess, not
+  measured: the branch and bound running to its 100k budget on ties it cannot decide; give that
+  check a smaller budget without weakening it.
+- **CAM-SPEED**: retract_link/top0 (43 % of adaptive's time on deep_boss) is theirs, after
+  `cam/adaptive-pass-start` lands, byte-identical with a differential test. Levels share one
+  stock map, so parallel levels need an all-levels-from-the-stock-vs-chained differential first.
+  David has ruled that bit-identity across thread counts is not required, only correctness.
+
+Older branches of mine that show open (`cam/bits-pin`, `move-memo`, `origin-snap`, `sheet-cycle`,
+`t5-parity`, `tools-cli`, `ui-cert-words`) are from trains 4–7, believed landed through their
+squash merges. They have not been checked one by one: the train records are the source of truth.
+`cam/bits-pin` is a stale one-line re-pin.
+
+- **`fixture: plate(NAME, ..)` / `zero_point(NAME, ..)`** (forge-cam-lang, ours): needed for the
+  mould cores on a real plate.
+  - WORKHOLDING's recipe: resolve the name in the workholding library as `vise_record` does, then
+    `forge_workholding::mill::fixture_plate` or `::zero_point` (each returns a `Placed`), then
+    `Fixture::from_workholding`.
+  - No Haas plate has a library record yet (05-0301…0321 are catalogued in
+    research/cam/workholding-haas.md on cam/workholding-haas; a record needs the real mounting
+    grid and clamp keep-outs).
+  - Until then, a vise with soft jaws or a stand-in plate record is honest, if the doc says which.
+
+- **Passes ending exactly the fixture clearance from a toleranced fixture face** (WORKHOLDING's
+  finding, holding their default2).
+  - The Haas jaws' inner faces carry μ = 1e-5. Facing/clear passes that overrun the stock edge
+    (= the jaw face) end exactly the clearance from it, inside the checker's undecidable band
+    (limit ± μ). certify_bb then spends its full budget, about 5 s a move: over 180 s on a
+    two-setup flange.
+  - Fix (a), CAM-CORE's: keep passes off a fixture by clearance + the fixture faces' largest μ +
+    a little. Not the probing `clear_gap`; find where facing/clear size their region past the
+    stock against the fixture. It moves paths on every doc with a fixture, so it needs a judged
+    re-bless.
+  - Fix (b), EXACT-CORE's or WORKHOLDING's: certify_bb returns Undecided once a sub-resolution
+    cell lies wholly in the band.
+  - Details in research/handoff/WORKHOLDING.md on cam/workholding-default2.
+  - The coordinator's ruling: hand (a) off. Real vises stay opt-in by name
+    (`vise("haas-vise-05-0404", ..)`, `fixture: workholding(..)`) until (a) or (b) lands.
+    WORKHOLDING's default2, which makes them the default, stays held until then.
+  - Where to look for (a): facing's and clear's regions past the stock (`clear` reaches 2r past
+    the stock box: lib.rs's "clear" op builds the outer loop at stock ± 2r) and pocket_in's
+    trim_air/side entries (ops.rs). The overrun's end against a jaw face at the stock edge is what
+    must sit clearance + max μ + room away.
+  - Also seen, cause unconfirmed: the two-setup flange's op2 (the part turned over into the vise,
+    `back = facing(op2, tool: t1, to: 0, step: 1)`) reports ok = false in 1.8 s even with the
+    stand-in vise. My hypothesis: op2's heights were written for the wrong frame (its `rest`
+    contour planned a plunge 4.25 mm into the part). So likely the doc, not the planner; check
+    what op2's frame puts at z 0 before blaming either.
+
+## Risks
+
+- **"Held by the fixture" tests boxes, not bodies** (forge-cam-lang lib.rs ~2845, the leftover
+  reasons). A leftover band below the jaw top and within clearance of a fixture *box* is excused.
+  With a real model (haas-vise-05-0404: 3522 faces), the box is an enclosure that reaches past the
+  body, so it excuses more leftover than the body would. That bears on "stock cleared or
+  reported". It should test the faces (a box-to-face distance per band, shaped faces included).
+  Not small; not done.
+
+- **Adaptive is slower on purpose, and the cap is still broken on most parts.**
+  - Rings (plain offsets half a diameter apart: 90° by construction) and the helix's bottom turn
+    are what break the cap now; passes hold it to within a few degrees.
+  - The cap guard lists 17 ops, the warning reports them, and the bottom turn should be counted as
+    entry (agreed with the coordinator, not done; its feed is the slot chip, checked).
+  - TQ's ring redesign is the real fix.
+- **trim_air's repeat test is now approximate** (1e-5 mm). It can only turn a near-repeat into air,
+  which leaves at most a sliver far under tolerance, and what replaces the run is certified. But
+  the merged straight rapids now cross where the old waypoints went round. They are certified, so
+  a fixture above the retract plane would show as a refusal, not a crash.
+- **The pre-verify tool**:
+  - Use tools/preverify 13d78f06 or later; earlier versions passed steps that did not compile.
+  - Give each run a fresh CARGO_TARGET_DIR: an old main-comparison build left stale binaries with
+    a deleted worktree's paths.
+  - Keep 12 GB free.
+  - Run nothing heavy beside it: forge-render has timing-ratio tests that fail under load.
+- **Engagement model vs quality model**: two models with different cells and read radii. The
+  differential test on the WIP branch states the tolerance from both cells. Keep such a test in
+  any engagement change.

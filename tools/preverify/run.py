@@ -245,8 +245,26 @@ def relative(name, cmd_for, pkgs_of):
     try:
         env = base_env()
         with open(log, "w") as fh:
-            for c, d in cmd_for(sorted(pk_fail)):
-                subprocess.run(c, cwd=os.path.join(wt, d), env=env, stdout=fh, stderr=subprocess.STDOUT)
+            if name != "render":
+                metadata = subprocess.run(
+                    ["cargo", "metadata", "--no-deps", "--locked", "--format-version", "1"],
+                    cwd=wt, env=env, stdout=subprocess.PIPE, stderr=fh, text=True,
+                )
+                if metadata.returncode:
+                    e["why_red"] = "could not read the base workspace"
+                    e["base_log"] = log
+                    return
+                workspace = json.loads(metadata.stdout)
+                members = set(workspace["workspace_members"])
+                available = {p["name"] for p in workspace["packages"] if p["id"] in members}
+                missing = pk_fail - available
+                if missing:
+                    fh.write(f"Packages absent on base: {', '.join(sorted(missing))}\n")
+                    fh.flush()
+                pk_fail &= available
+            if name == "render" or pk_fail:
+                for c, d in cmd_for(sorted(pk_fail)):
+                    subprocess.run(c, cwd=os.path.join(wt, d), env=env, stdout=fh, stderr=subprocess.STDOUT)
     finally:
         subprocess.run(["git", "worktree", "remove", "--force", wt])
     base_alone = {}

@@ -87,4 +87,43 @@ impl Shell {
             fg.issues_list = true;
         }
     }
+
+    /// Over the view's top, under the build banner's place: "Syncing paused" and why, for as
+    /// long as a served part is not syncing (its edits stay local).
+    pub(super) fn sync_banner(&mut self, ui: &mut egui::Ui) {
+        let t = self.theme;
+        let v = self.view_rect;
+        let Some(why) = self.fg.as_ref().and_then(|f| f.sync_paused.clone()) else {
+            return;
+        };
+        let max_w = (v.width() - 2.0 * 120.0).clamp(240.0, 720.0);
+        let head = ui.fonts_mut(|f| f.layout_no_wrap("Syncing paused".into(), theme::medium(13.0), t.warn));
+        let room = max_w - head.size().x - 18.0 - 2.0 * S2 - 2.0 * S3;
+        let body = ui.fonts_mut(|f| {
+            let mut job = egui::text::LayoutJob::simple_singleline(why.clone(), theme::small(), t.ink);
+            job.wrap = egui::text::TextWrapping::truncate_at_width(room.max(40.0));
+            f.layout_job(job)
+        });
+        let h = theme::CONTROL_H + 2.0 * S1 + 2.0;
+        let w = 2.0 * S3 + 18.0 + S2 + head.size().x + S2 + body.size().x;
+        let top = v.top() + 10.0 + h + S2;
+        let r = Rect::from_min_size(pos2(v.center().x - w * 0.5, top), vec2(w, h));
+        let p = ui.painter().clone();
+        p.rect_filled(r.translate(vec2(0.0, 2.0)).expand(1.0), theme::R2, t.shadow);
+        p.rect_filled(r, theme::R2, t.surface);
+        p.rect_stroke(r, theme::R2, Stroke::new(1.0, t.warn), StrokeKind::Inside);
+        let mut x = r.left() + S3;
+        super::icons::draw(&p, pos2(x, r.center().y - 9.0), 18.0, "warning", 1.5, t.warn);
+        x += 18.0 + S2;
+        let hw = head.size();
+        p.galley(pos2(x, r.center().y - hw.y * 0.5), head, t.warn);
+        x += hw.x + S2;
+        let bw = body.size();
+        p.galley(pos2(x, r.center().y - bw.y * 0.5), body, t.ink);
+        // the whole reason, where it's cut short
+        ui.interact(r, ui.scope_id().with("sync-banner"), Sense::hover())
+            .on_hover_text(&why);
+        self.view_blocks.push(r);
+        self.note("sync-banner", r);
+    }
 }

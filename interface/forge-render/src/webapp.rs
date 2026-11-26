@@ -969,6 +969,19 @@ fn state_json(g: &Gui, canvas: Json) -> String {
         ("seq", doc.map_or(Json::Null, |s| num(s.seq as f64))),
         ("done", doc.map_or(Json::Null, |s| num(s.done as f64))),
         ("dirty", doc.is_some_and(|s| s.dirty()).into()),
+        // a served part: the link's state and the text's hash (a test compares tabs by it)
+        (
+            "sync",
+            doc.and_then(|s| s.sync.as_ref().map(|l| (s, l))).map_or(Json::Null, |(s, l)| {
+                Json::obj(vec![
+                    ("ready", l.ready().into()),
+                    ("seq", num(l.seq() as f64)),
+                    ("pending", num(l.pending() as f64)),
+                    ("text", format!("{:016x}", forge_sync::text_hash(&s.src)).into()),
+                    ("note", s.sync_said.clone().map_or(Json::Null, Json::from)),
+                ])
+            }),
+        ),
         // the Agent tab, as a test reads it: each entry's kind and words, a question waiting
         ("agent", agent_json(&g.shell.agent)),
         // the Versions panel's word: history kept or not, and why not

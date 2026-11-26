@@ -27,6 +27,17 @@
 #                           the same kernel code, compiled without AVX.
 # Unset, perf is used when it counts instructions:u and callgrind otherwise. The callgrind gate
 # takes ~20 min on 4 busy cores. GATE_REPS=3 keeps the least of 3 counts, for a line near 0.5%.
+# Exact callgrind only:
+#   GATE_JOBS=N  count the lines N at a time, each worker on its own CPU (GATE_CPU, GATE_CPU+1, ..)
+#                and its own temp folder: the same counts as one at a time (exact counts do not
+#                depend on load or on which CPU), in the same order. Lines are dealt longest first
+#                (by the baseline's counts) to the least loaded worker. Default 1.
+#   GATE_MEMO=DIR  counts and bits of a build already counted ON THIS MACHINE, by the hash of
+#                everything a count is a function of: the three binaries, the preload, the bench
+#                parts, this script, valgrind, the shared libraries the binaries load, the kernel
+#                release and the CPU's model and flags. An identical build (a branch that touches
+#                no crate the gate's binaries are made from; main counted again) gets the stored
+#                counts instead of a recount; anything else is counted and stored. Off by default.
 #
 # The callgrind counts are exact: the same binary gives the same count on every line, the bench
 # parts' too, from any checkout, at any load. Each counted run is made alike:
@@ -89,8 +100,9 @@ case $counter in
         # result cache (FORGECAD_CACHE=off): forge-lang keeps assemblies' results under
         # $HOME/.cache, which every gate and run shares; no bench part is an assembly today, so it
         # is never read, but a count must not depend on what an earlier run left there)
+        # (GATE_JOBS: each worker its own, tm0..tm9, a name of the same length)
         (cd / && env -i PATH=/usr/bin:/bin HOME=/tmp LD_PRELOAD="$bin/fixedrandom.so" \
-          FORGE_BENCH_PARTS="$bin/parts" TMPDIR="$bin/tmp" FORGECAD_CACHE=off taskset -c "${GATE_CPU:-0}" setarch -R \
+          FORGE_BENCH_PARTS="$bin/parts" TMPDIR="$bin/${tmpname:-tmp}" FORGECAD_CACHE=off taskset -c "${GATE_CPU:-0}" setarch -R \
           valgrind --fair-sched=yes --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null $only "$@")
       else
         valgrind --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null $vgonly "$@"
@@ -119,17 +131,22 @@ if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
   # Built from one fixed source path, whatever the checkout's: the binaries carry their sources'
   # paths (CARGO_MANIFEST_DIR in benchparts, and each path crate's metadata hash, which names its
   # symbols), so two checkouts at paths of different lengths build binaries whose counts differ.
-  # The checkout's files (tracked, and untracked ones not ignored: the work in progress) are copied
-  # there with their times, under a lock (gates may run at once: each builds in turn, then counts
-  # in parallel), and built into this checkout's own target directory, so neither side of a
-  # comparison reuses the other's build.
+  # The checkout's files (tracked, and untracked ones not ignored: the work in progress) are synced
+  # there under a lock (gates may run at once: each builds in turn, then counts in parallel), and
+  # built into this checkout's own target directory, so neither side of a comparison reuses the
+  # other's build. Synced (srcsync.py), not emptied and re-extracted: a file whose bytes match is
+  # left as it is, so a build reuses this checkout's crates that did not change (re-extracting gave
+  # every directory a new time, and forge-lang's build script, which watches a directory, rebuilt
+  # forge-lang and all after it, ~200 s, on every gate). That is safe for exact counts: the
+  # release build is reproducible (the same sources at this path give the same bytes), so an
+  # incremental build is the clean build's binary; checked, 99/99 counts and bits equal
+  # (FAST-VERIFY, 2026-11-24), and GATE_MEMO's key is the binaries' own hash in any case.
   src=/tmp/forge-gate-src
   checkout=$PWD
   exec 9>"$src.lock"
   flock 9
-  rm -rf "$src"
-  mkdir "$src"
-  git ls-files -co --exclude-standard -z | tar --null -T - -cf - | tar -xf - -C "$src"
+  mkdir -p "$src"
+  git ls-files -co --exclude-standard -z | python3 -I "$dir/srcsync.py" "$src"
   (cd "$src" && cargo build -q --release -p forge-model --example regen1 --example bits \
     && cargo build -q --release -p forge-lang --example benchparts) || exit 1
 else
@@ -199,16 +216,49 @@ if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
   bin=$gatedir
 fi
 now=$(mktemp)
+jobs=${GATE_JOBS:-1}
+# (at most 10: the workers' temp folders tm0..tm9 have the length of `tmp`)
+if [ "$jobs" -gt 10 ]; then jobs=10; fi
+if [ "$counter" != callgrind ] || [ "$exact" != 1 ]; then jobs=1; fi
+joblist=$(mktemp)
+# one line of the gate: counted now (one at a time), or listed for the workers (GATE_JOBS)
+line() {
+  key=$1; shift
+  if [ "$jobs" -gt 1 ]; then
+    printf '%s|%s|%s\n' "$key" "$vgonly" "$*" >> "$joblist"
+  else
+    n=$(count "$@")
+    echo "$key ${n:-FAIL}" >> "$now"
+  fi
+}
+# GATE_MEMO: the key of this build on this machine
+memokey=
+if [ -n "${GATE_MEMO:-}" ] && [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
+  memokey=$( {
+    sha256sum "$bin/regen1" "$bin/bits" "$bin/benchparts" "$bin/fixedrandom.so" | cut -c1-64
+    (cd "$bin/parts" && sha256sum ./*.fg)
+    sha256sum < "$0"
+    valgrind --version
+    ldd "$bin/regen1" "$bin/bits" "$bin/benchparts" | awk '/=> \//{print $3}' | sort -u | xargs sha256sum | cut -c1-64
+    uname -r
+    grep -m1 '^model name' /proc/cpuinfo; grep -m1 '^flags' /proc/cpuinfo
+    echo "reps ${GATE_REPS:-1}"
+  } | sha256sum | cut -c1-64)
+  mkdir -p "$GATE_MEMO"
+fi
+if [ -n "$memokey" ] && [ -s "$GATE_MEMO/$memokey.counts" ] && [ -s "$GATE_MEMO/$memokey.bits" ]; then
+  echo "memo: $memokey (an identical build counted on this machine: its counts and bits)"
+  cp "$GATE_MEMO/$memokey.counts" "$now"
+else
 # each binary's main alone, given nothing to build (exact counts start at main, so start-up work
 # that moves with the binary's layout, glibc reading /proc/self/maps for the main thread's stack
 # guard say, is in no line): a constant, which band.py still takes off both sides' whole-process
 # lines; with counts from before this gate (start-up included) it is what keeps them comparable
-echo "noop regen1 $(count "$bin/regen1" noop)" >> "$now"
-echo "noop benchparts $(count "$bin/benchparts" noop)" >> "$now"
+line "noop regen1" "$bin/regen1" noop
+line "noop benchparts" "$bin/benchparts" noop
 for p in torture plate shaft housing coplanar patterns mixed hole-grid tour upto upto-flat; do
   for m in seq nary1; do
-    n=$(count "$bin/regen1" $p $m)
-    echo "$p $m ${n:-FAIL}" >> "$now"
+    line "$p $m" "$bin/regen1" $p $m
   done
 done
 # the real parts (interface/forge-lang/parts/bench/*.fg): the kernel's regen of the features each
@@ -219,17 +269,21 @@ done
 # that build and the rebuild after one dimension changed, `cli` the cold build with the CLI's
 # checks: what the .fg front end costs on top of the kernel, held from growing
 for p in gearbox volute crank valve heatsink quadarm conrod jack frame manifold bracket insert clamp hub guard; do
-  base=$(count "$bin/benchparts" resolve $p)
-  echo "$p app ${base:-FAIL}" >> "$now"
+  if [ "$counter" = callgrind ]; then
+    line "$p app" "$bin/benchparts" resolve $p
+  else
+    base=$(count "$bin/benchparts" resolve $p)
+    echo "$p app ${base:-FAIL}" >> "$now"
+  fi
   for m in edit cli; do
-    n=$(count "$bin/benchparts" $m $p)
-    echo "$p $m ${n:-FAIL}" >> "$now"
+    line "$p $m" "$bin/benchparts" $m $p
   done
   for m in seq nary1; do
     if [ "$counter" = callgrind ]; then
       vgonly='--toggle-collect=*benchparts::regen'
-      n=$(count "$bin/benchparts" run $p $m)
+      line "$p $m" "$bin/benchparts" run $p $m
       vgonly=
+      continue
     else
       n=$(count "$bin/benchparts" run $p $m)
       if [ -n "$n" ] && [ -n "$base" ]; then n=$((n - base)); else n=; fi
@@ -237,12 +291,51 @@ for p in gearbox volute crank valve heatsink quadarm conrod jack frame manifold 
     echo "$p $m ${n:-FAIL}" >> "$now"
   done
 done
+if [ "$jobs" -gt 1 ]; then
+  # longest first (the baseline's count; a line it lacks first of all) to the least loaded worker;
+  # each line keeps its number, so the result is in the order of a count one at a time
+  weights=$baseline; if [ -f "${1:-}" ]; then weights=$1; fi; if [ ! -f "$weights" ]; then weights=/dev/null; fi
+  awk -F'|' -v wf="$weights" 'BEGIN{while((getline l < wf) > 0){split(l,f," "); w[f[1]" "f[2]]=f[3]}}
+    {print (($1 in w)?w[$1]:9e18) "\t" FNR "\t" $0}' "$joblist" | sort -t "$(printf '\t')" -k1,1nr |
+    awk -F'\t' -v n="$jobs" -v out="$joblist" '{b=0; for(i=1;i<n;i++) if(load[i]<load[b]) b=i
+      load[b]+=$1; print $2 "|" $3 > (out "." b)}'
+  cpu0=${GATE_CPU:-0}; ncpu=$(nproc)
+  if [ "$jobs" -gt "$ncpu" ]; then
+    echo "GATE_JOBS=$jobs is more than the $ncpu CPUs: workers share CPUs (the same counts, slower)" >&2
+  fi
+  w=0
+  while [ "$w" -lt "$jobs" ]; do
+    touch "$joblist.$w"
+    ( GATE_CPU=$(( (cpu0 + w) % ncpu )); tmpname=tm$w; mkdir -p "$bin/$tmpname/forge-benchparts"
+      while IFS='|' read -r i key vgonly cmd; do
+        # (cmd word-split on purpose: its words are the binary, under /tmp/forge-gate.XXXXXX,
+        # and the part and mode names, none with a space)
+        # shellcheck disable=SC2086
+        n=$(count $cmd)
+        echo "$i $key ${n:-FAIL}"
+      done < "$joblist.$w" > "$now.$w" ) &
+    w=$((w + 1))
+  done
+  wait
+  cat "$now".[0-9]* | sort -n | cut -d' ' -f2- > "$now"
+  rm -f "$now".[0-9]* "$joblist".[0-9]*
+fi
+fi
+rm -f "$joblist"
 # (the parts from this checkout: the binaries' own source path is the shared build folder, which a
 # gate starting while this one counts empties and refills; its bits then failed, or were cut short)
 bits() { "$bin/bits"; FORGE_BENCH_PARTS="$PWD/interface/forge-lang/parts/bench" "$bin/benchparts" bits; }
+bitsnow=$(mktemp)
+if [ -n "$memokey" ] && [ -s "$GATE_MEMO/$memokey.bits" ]; then cp "$GATE_MEMO/$memokey.bits" "$bitsnow"; else bits > "$bitsnow"; fi
+# stored only whole: every line counted, bits written
+if [ -n "$memokey" ] && ! grep -q FAIL "$now" && [ -s "$bitsnow" ] && [ ! -s "$GATE_MEMO/$memokey.counts" ]; then
+  cp "$now" "$GATE_MEMO/$memokey.counts.$$" && cp "$bitsnow" "$GATE_MEMO/$memokey.bits.$$" &&
+    mv "$GATE_MEMO/$memokey.bits.$$" "$GATE_MEMO/$memokey.bits" &&
+    mv "$GATE_MEMO/$memokey.counts.$$" "$GATE_MEMO/$memokey.counts"
+fi
 if [ "$1" = --save ]; then
   mv "$now" "$baseline"
-  bits > "$dir/bits.txt"
+  mv "$bitsnow" "$dir/bits.txt"
   echo "saved $baseline $dir/bits.txt"
   exit 0
 fi
@@ -265,6 +358,7 @@ awk -v strict="$strict" -v syn="$synthetic" 'NR==FNR{b[$1" "$2]=$3;next}
    f=($3=="FAIL"||over)?"  REGRESSED":(diag?"  (diagnostic)":""); if($3=="FAIL"||over)bad=1
    printf "%-9s %-6s %14s  base %14s  %+6.2f%%%s\n",$1,$2,$3,o,d,f}END{exit bad}' "${1:-$baseline}" "$now" || status=1
 rm -f "$now"
-if bits | diff "$dir/bits.txt" - > /dev/null; then echo "bits: identical"; else
-  echo "bits: CHANGED"; bits | diff "$dir/bits.txt" - | grep '^[<>]' || true; status=$((status | 2)); fi
+if diff "$dir/bits.txt" "$bitsnow" > /dev/null; then echo "bits: identical"; else
+  echo "bits: CHANGED"; diff "$dir/bits.txt" "$bitsnow" | grep '^[<>]' || true; status=$((status | 2)); fi
+rm -f "$bitsnow"
 exit $status
