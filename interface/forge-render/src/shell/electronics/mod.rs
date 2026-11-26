@@ -24,6 +24,7 @@ type Result<T> = std::result::Result<T, String>;
 pub enum Tool {
     Select,
     Place,
+    Power,
     Wire,
     Junction,
     Label,
@@ -72,6 +73,8 @@ struct Inputs {
     electrical: String,
     unit: String,
     value: String,
+    ref_offset: Option<Point>,
+    value_offset: Option<Point>,
     footprint: String,
     datasheet: String,
     fields: Vec<(String, String)>,
@@ -475,6 +478,9 @@ impl Editor {
                         .find(|n| !s.pins.values().any(|p| &p.number == n))
                         .unwrap();
                 }
+                if t == Tool::Power {
+                    self.form.text = "GND".into();
+                }
                 if t == Tool::Label {
                     self.form.text = "VCC".into();
                 }
@@ -622,6 +628,32 @@ mod tests {
         e.form.role_kind = "power".into();
         e.create_record().unwrap();
         assert!(e.src.find("rail =").unwrap() < e.src.find("Z =").unwrap());
+    }
+
+    #[test]
+    fn power_placement_snaps_connects_and_reuses_its_library() {
+        let src = "schematic
+main = sheet()
+a = port(sheet:main, at:(3,2))
+";
+        let mut e = Editor::open(None, src.into()).unwrap();
+        e.start(Tool::Power);
+        e.click([2.9, 2.1], Some("a"), None).unwrap();
+        let first = e.src.clone();
+        assert_eq!(e.circuit.locations["main/PWR1.net"], [3., 2.]);
+        assert!(e.circuit.is_attached("main/PWR1.net"));
+        e.start(Tool::Power);
+        e.click([10., 2.], None, None).unwrap();
+        assert_eq!(e.src.matches("forge:power").count(), 1);
+        assert_eq!(
+            e.circuit.net_of["main/PWR1.net"],
+            e.circuit.net_of["main/PWR2.net"]
+        );
+        assert!(!e.circuit.is_attached("main/PWR2.net"));
+        e.step(false);
+        assert_eq!(e.src, first);
+        e.step(false);
+        assert_eq!(e.src, src);
     }
 
     #[test]

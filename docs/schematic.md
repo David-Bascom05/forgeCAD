@@ -1,6 +1,6 @@
 # Native schematics and symbols
 
-A schematic compiles to sheet occurrences, electrical nets, drawable geometry and functional relationships. Pin requirements and offerings carry nominal role IDs and a checked role kind. The same symbol can want and give several roles. The [controller](../examples/electronics/controller.fg) uses the [power symbol library](../examples/electronics/power-symbols.fg).
+A schematic compiles to sheet occurrences, electrical nets, drawable geometry and functional relationships. Pin requirements and offerings carry nominal role IDs and a checked role kind. The same symbol can want and give several roles. The [controller](../examples/electronics/controller.fg) uses an [example library of power-circuit components](../examples/electronics/power-symbols.fg).
 
 ```sh
 forgecad build examples/electronics/controller.fg --json
@@ -32,7 +32,7 @@ A symbol's map keys are logical pin names. Each pin has a unique physical `numbe
 - Connect `wire(sheet:, from:, to:, via: [...])` between explicitly named terminals, junctions and ports. Coordinates give the presentation. Endpoint attachment gives conductivity. Crossing two wires leaves their nets separate. A `junction(sheet:, at:)` shared by the wires joins them. `no_connect(sheet:, on:)` marks an intentionally unused pin.
 - `label(sheet:, on:, value:, at:, global: true)` connects like names throughout the project. The default scope is one sheet occurrence. `note(sheet:, value:, at:)` adds text. `bus(sheet:, members: {scl: u.scl, sda: u.sda})` groups named endpoints while retaining their separate nets.
 - A definition with `out = port(sheet: cell, at: (0, 0))` exposes that port at each `channel = subsheet(sheet: main, of: cell, at: (10, 10), ports: {out: (2, 0)})`. A wire on main refers to `channel.out`. The `ports` map is optional and supplies parent-side offsets. Sheet definitions can repeat, and cyclic instantiation is refused. Queries use qualified paths such as `main/channel/u.out`.
-- `flow(sheet:, from:, to:)` records an ordered functional stage. `fulfill(sheet:, want:, give:, role:, return_from:, return_to:, prefer:)` binds a provider to a consumer for a declared role. The return pair and preference are optional. Wiring still comes from explicit electrical attachments. ERC checks supply/signal connectivity, the declared return paths, conflicting labels/drivers, connected no-connects, unconnected pins and unmet wants. Overlapping pin name, label and note layout boxes have their own readability finding. Pin inspection ranks a direct wire first, then a drawn path through explicit junctions by segment count, then a shared net. Confirmation records the designer’s choice.
+- `flow(sheet:, from:, to:)` records an ordered functional stage. `fulfill(sheet:, want:, give:, role:, return_from:, return_to:, prefer:)` binds a provider to a consumer for a declared role. The return pair and preference are optional. Wiring still comes from explicit electrical attachments. ERC checks supply/signal connectivity, the declared return paths, conflicting labels/drivers, connected no-connects, unconnected pins and unmet wants. Readability checks report overlapping printed fields, pin names, labels and notes (`TextBoundsOverlap`), and text crossing wires or symbol graphics or obscuring a symbol body (`TextGeometryOverlap`). Each warning identifies both objects. Pin inspection ranks a direct wire first, then a drawn path through explicit junctions by segment count, then a shared net. Confirmation records the designer’s choice.
 - Coordinates support mm, inches and shared dimensional expressions using the existing .fg dimensional arithmetic. Sheet presentation, logical nets and functional links can be queried separately.
 
 ## Agent and CLI tools
@@ -59,6 +59,25 @@ Choose **File → New Schematic** or **File → New Symbol Library**. Each opens
 - **Assign Role** records a typed provider and consumer, with optional return pins and a preferred separation. Select a pin to inspect its declared roles and candidate providers. **Inspect → Electrical Checks** shows electrical and readability findings.
 - In a library, select a symbol, place its pins and draw its outline. Select a pin to set its number, unit, orientation, electrical kind, wants and gives. Select a graphic to edit its coordinates. The library and all its instances share the same geometry.
 - When a whole sheet is fitted, fine pin labels appear as you zoom in. Hover over an endpoint to identify it at any scale. The scroll wheel zooms around the pointer, middle drag pans, and **View → Fit All** frames the drawing. Hover over a ribbon tool to see its shortcut. Escape cancels the current tool. Source edits use the document's undo and redo history.
+
+### Reading and placing fields and net names
+
+On a physical symbol the larger field is its reference designator, and the next field is its value. Select the component and use **Field positions** in Properties to move either field independently. The source arguments `ref_offset` and `value_offset` measure from the component origin in sheet axes. Set either to `auto` to restore its default position. A hollow circle in the schematic marks a pin with no drawn attachment. Wiring it, attaching a label or marking it no-connect clears that circle. The symbol editor shows all pin anchors.
+
+| Tool | Appearance | Electrical scope |
+| --- | --- | --- |
+| Label → Local label | Plain text above its anchor | Equal names join within one sheet occurrence. |
+| Label → Global label | Outlined tag with a point at the attachment | Equal names join across the design. |
+| Port | Outlined tag with a flat attachment edge | Exposes a terminal on a hierarchical sheet. A parent wire attaches to the instance's port, such as `channel.out`. |
+| Power | Rail arrow or ground symbol with its net name | Joins the same global net as a global label of that name. |
+
+**Power** includes +3V3, +5V, +12V, VCC, VDD, GND, AGND and DGND. Click an existing terminal to attach the symbol in one edit, or place it on the grid and wire it later. Power symbols have one passive pin and are excluded from the BOM. Power sources such as regulators declare their own driver pins. The command inserts the bundled library into the document on first use. The same design can be written directly in the language.
+
+```text
+power = library(file: "forge:power")
+vcc = place(sheet: main, symbol: power.V3V3, at: (10, 12))
+feed = wire(sheet: main, from: vcc.net, to: U1.VDD)
+```
 
 ### Purchasing data and datasheets
 

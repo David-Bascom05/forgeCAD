@@ -55,6 +55,9 @@ pub fn bom(doc: &Document, c: &Circuit) -> Vec<BomLine> {
             } = &row.item
             {
                 let lib = &doc.symbols[symbol];
+                if lib.power_net.is_some() {
+                    continue;
+                }
                 let mut merged = lib.fields.clone();
                 merged.extend(fields.clone());
                 let part = PartSpec {

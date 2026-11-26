@@ -40,7 +40,7 @@ impl Issue {
 #[derive(Default, Debug)]
 pub struct Circuit {
     pub origins: Map<String, Span>,
-    pub(super) text_bounds: Map<String, Map<String, super::drawing::TextBounds>>,
+    attached: Set<String>,
     pub terminals: Map<String, Terminal>,
     pub locations: Map<String, Point>,
     pub occurrences: Map<String, String>,
@@ -75,6 +75,11 @@ pub(super) fn transform(local: Point, at: Point, angle: f64, mirror: bool) -> Po
 impl Circuit {
     pub fn build(doc: &Document) -> Result<Self> {
         let mut c = Self::default();
+        if doc.library {
+            c.issues = super::drawing::library_readability(doc);
+            c.sort_findings();
+            return Ok(c);
+        }
         let mut by_sheet: Map<&str, Vec<&Row>> = Map::new();
         let mut children: Set<&str> = Set::new();
         for row in &doc.rows {
@@ -123,7 +128,7 @@ impl Circuit {
         seen.insert(sheet.to_string());
         self.occurrences.insert(scope.into(), sheet.into());
         let rows = by_sheet.get(sheet).map(Vec::as_slice).unwrap_or_default();
-        let mut pin_labels = Vec::new();
+
         let placed: Map<_, _> = rows
             .iter()
             .filter_map(|r| {
@@ -170,9 +175,14 @@ impl Circuit {
                     let key = format!("{scope}/{owner}.{name}");
                     self.origins.insert(key.clone(), row.span);
                     let pos = transform(pin.at, at, angle, mirror);
-                    let (tip, label) = super::drawing::pin_label(pin, name);
-                    pin_labels.push((key.clone(), transform(tip, at, angle, mirror), label));
+
                     self.node(key.clone(), pos);
+                    if let Some(net) = &def.power_net {
+                        let rail = format!("@global:{net}");
+                        self.labels.insert(rail.clone(), net.clone());
+                        self.origins.entry(rail.clone()).or_insert(row.span);
+                        self.edge(&key, &rail);
+                    }
                     self.terminals.insert(
                         key,
                         Terminal {
@@ -219,9 +229,6 @@ impl Circuit {
                 _ => {}
             }
         }
-        let boxes = super::drawing::text_bounds(rows, scope, pin_labels);
-        super::drawing::check_text(&boxes, &mut self.issues);
-        self.text_bounds.insert(scope.to_owned(), boxes);
         for (owner, symbol) in placed {
             let missing: Set<_> = doc.symbols[symbol]
                 .pins
@@ -273,6 +280,7 @@ impl Circuit {
                     if a == b {
                         return Err(Fault::new("SelfWire", row.span, from));
                     }
+                    self.attached.extend([a.clone(), b.clone()]);
                     self.edge(&a, &b);
                     self.wires.insert(id, (a, b, via.clone()));
                 }
@@ -287,6 +295,7 @@ impl Circuit {
                     };
                     self.origins.entry(key.clone()).or_insert(row.span);
                     self.labels.insert(key.clone(), text.clone());
+                    self.attached.insert(a.clone());
                     self.edge(&a, &key);
                 }
                 Item::NoConnect(target) => {
@@ -331,8 +340,13 @@ impl Circuit {
                 _ => {}
             }
         }
+        let findings = super::drawing::readability(doc, self, scope, rows);
+        self.issues.extend(findings);
         active.remove(sheet);
         Ok(())
+    }
+    pub fn is_attached(&self, endpoint: &str) -> bool {
+        self.attached.contains(endpoint) || self.nc.contains(endpoint)
     }
     fn node(&mut self, id: String, at: Point) {
         self.locations.insert(id.clone(), at);
@@ -374,7 +388,7 @@ impl Circuit {
             message: message.into(),
         };
         for (id, pin) in &self.terminals {
-            let connected = !self.adjacency[id].is_empty();
+            let connected = self.attached.contains(id);
             if connected && (self.nc.contains(id) || pin.electrical == Electrical::Unused) {
                 self.issues.push(issue(
                     "ConnectedNoConnect",

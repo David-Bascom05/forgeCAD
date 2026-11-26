@@ -1,6 +1,6 @@
 use super::*;
 use crate::shell::theme;
-use egui::{Align2, Color32, Sense, Shape, Stroke};
+use egui::{Color32, Sense, Shape, Stroke};
 impl Editor {
     pub(super) fn prompt(&self) -> &str {
         use Tool::*;
@@ -252,13 +252,27 @@ impl Editor {
             if !self.library() && text.h < 1. && size < 11. {
                 continue;
             }
-            painter.text(
-                self.screen([text.at.x, text.at.y]),
-                Align2::LEFT_BOTTOM,
-                &text.text,
-                theme::sans(size.clamp(11., 35.)),
-                ink,
-            );
+            let h = text.h as f32 * self.zoom;
+            let w = forge_draw::page::text_width(&text.text, text.h) as f32 * self.zoom;
+            let baseline = self.screen([text.at.x, text.at.y]);
+            if !r.intersects(Rect::from_two_pos(baseline, baseline + vec2(w, -h))) {
+                continue;
+            }
+            // Use print-space bounds at every zoom. egui's line box includes leading;
+            // the actual glyph mesh gives us its visible baseline and cap height.
+            let galley =
+                painter.layout_no_wrap(text.text.clone(), theme::sans((h / 0.72).clamp(11., 96.)), ink);
+            let bounds = galley.mesh_bounds;
+            if !bounds.is_positive() {
+                continue;
+            }
+            let scale = (h / bounds.height()).min(w / bounds.width());
+            let mut glyphs = Shape::galley(Pos2::ZERO, galley, ink);
+            glyphs.transform(egui::emath::TSTransform {
+                scaling: scale,
+                translation: baseline.to_vec2() - bounds.left_bottom().to_vec2() * scale,
+            });
+            painter.add(glyphs);
         }
         let anchors = self.anchors();
         let hp = resp.hover_pos();
@@ -278,6 +292,12 @@ impl Editor {
         for (k, q) in &anchors {
             let selected =
                 !self.pin.is_empty() && (k == &self.pin || k == &format!("{}.{}", self.selected, self.pin));
+            if !self.library() {
+                let key = format!("{}/{}", self.subject, k);
+                if self.circuit.is_attached(&key) || !self.circuit.terminals.contains_key(&key) {
+                    continue;
+                }
+            }
             painter.circle_stroke(
                 self.screen(*q),
                 if selected || near.as_ref() == Some(k) {
@@ -430,6 +450,60 @@ impl Editor {
         self.message = format!("Added junction {junction}");
         Ok(())
     }
+    fn place_power(&mut self, p: Point, near: Option<&str>) -> Result<()> {
+        let tree = syntax::parse(&self.src).map_err(|e| e.text())?;
+        let existing = tree.iter().find_map(|s| {
+            let StmtKind::Assign { name, value } = &s.kind else {
+                return None;
+            };
+            let ExprKind::Call(function, args) = &value.kind else {
+                return None;
+            };
+            let is_power = matches!(&function.kind, ExprKind::Name(n) if n == "library")
+                && args.iter().any(|arg| {
+                    arg.name.as_ref().is_some_and(|(k, _)| k == "file")
+                        && matches!(&arg.value.kind, ExprKind::Str(path) if path == "forge:power")
+                });
+            is_power.then(|| name.clone())
+        });
+        let mut ops = Vec::new();
+        let alias = existing.unwrap_or_else(|| {
+            let alias = self.fresh("power");
+            ops.push(Op::AddFeature {
+                before: None,
+                text: format!(r#"{alias} = library(file: "forge:power")"#),
+            });
+            alias
+        });
+        let symbol = sch::power_symbols()
+            .get(&self.form.text)
+            .ok_or("Choose a power net.")?;
+        let name = self.fresh("PWR");
+        let sheet = self.sheet();
+        let anchor = near
+            .map(|key| self.circuit.locations[&format!("{}/{}", self.subject, key)])
+            .unwrap_or(p);
+        ops.push(Op::AddFeature {
+            before: None,
+            text: format!(
+                "{name} = place(sheet: {sheet}, symbol: {alias}.{symbol}, at: {})",
+                coord(anchor)
+            ),
+        });
+        if let Some(endpoint) = near {
+            ops.push(Op::AddFeature {
+                before: None,
+                text: format!(
+                    "{} = wire(sheet: {sheet}, from: {endpoint}, to: {name}.net)",
+                    self.fresh("w")
+                ),
+            });
+        }
+        self.apply(ops)?;
+        self.selected = name;
+        self.start(Tool::Select);
+        Ok(())
+    }
     pub(super) fn click(&mut self, p: Point, near: Option<&str>, picked: Option<&str>) -> Result<()> {
         use Tool::*;
         let at = coord(p);
@@ -503,6 +577,7 @@ impl Editor {
                 self.start(Select);
                 return Ok(());
             }
+            Power => return self.place_power(p, near),
             Place => {
                 let name = self.form.name.clone();
                 let symbol = &self.symbol;
@@ -539,15 +614,18 @@ impl Editor {
                 self.start(Select);
                 return Ok(());
             }
-            Label => (
-                "net",
-                format!(
-                    "label(sheet: {sheet}, on: {}, value: {}, global: {}, at: {at})",
-                    need()?,
-                    quote(&self.form.text),
-                    self.form.global
-                ),
-            ),
+            Label => {
+                let target = need()?;
+                let anchor = coord(self.circuit.locations[&format!("{}/{target}", self.subject)]);
+                (
+                    "net",
+                    format!(
+                        "label(sheet: {sheet}, on: {target}, value: {}, global: {}, at: {anchor})",
+                        quote(&self.form.text),
+                        self.form.global
+                    ),
+                )
+            }
             NoConnect => ("nc", format!("no_connect(sheet: {sheet}, on: {})", need()?)),
             Note => (
                 "note",

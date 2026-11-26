@@ -288,3 +288,121 @@ fn pdf_attachments_are_addressed_by_content() {
     assert_eq!(std::fs::read(dir.join(path)).unwrap(), bytes);
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn printed_fields_and_geometry_warnings_use_the_same_layout() {
+    let src = r#"schematic
+top = sheet()
+S = symbol(pins: {}, graphics: [rect(from:(-4,-3),to:(4,3))])
+U1 = place(sheet:top,symbol:S,at:(0,0),value:"Device",ref_offset:(-2,-1),value_offset:(10,6))
+a = junction(sheet:top,at:(8,0))
+b = junction(sheet:top,at:(20,12))
+w = wire(sheet:top,from:a,to:b)
+hits = note(sheet:top,at:(12,4),value:"X")
+clear = note(sheet:top,at:(9,10),value:"X")
+j = junction(sheet:top,at:(30,30))
+mark = note(sheet:top,at:(30,29.9),value:"X")
+"#;
+    let (d, c) = run(src).unwrap();
+    let warn = |a: &str, b: &str| {
+        c.issues
+            .iter()
+            .any(|i| i.kind == "TextGeometryOverlap" && i.severity() == "warning" && i.objects == [a, b])
+    };
+    assert!(warn("top/U1:reference", "top/U1"));
+    assert!(warn("top/hits", "top/w"));
+    assert!(!warn("top/clear", "top/w"));
+    assert!(warn("top/mark", "top/j"));
+    let page = schematic::sheet_page(&d, &c, "top").unwrap();
+    let field = |s: &str| page.texts.iter().find(|t| t.text == s).unwrap();
+    assert!(field("U1").h > field("Device").h);
+    assert_eq!(field("Device").at.x, 10.);
+}
+
+#[test]
+fn power_symbols_name_global_nets_and_attachment_markers_follow_the_drawing() {
+    let src = r#"schematic
+p=library(file:"forge:power")
+top=sheet()
+child=sheet()
+sub=subsheet(sheet:top,of:child,at:(40,0))
+one=place(sheet:top,symbol:p.GND,at:(0,0))
+two=place(sheet:child,symbol:p.GND,at:(0,0))
+av=place(sheet:top,symbol:p.AGND,at:(10,0))
+j=junction(sheet:top,at:(0,3))
+w=wire(sheet:top,from:j,to:one.net)
+"#;
+    let (d, c) = run(src).unwrap();
+    assert_eq!(c.net_of["top/one.net"], c.net_of["top/sub/two.net"]);
+    assert_ne!(c.net_of["top/one.net"], c.net_of["top/av.net"]);
+    assert!(c.is_attached("top/one.net"));
+    assert!(!c.is_attached("top/sub/two.net"));
+    assert!(schematic::bom(&d, &c).is_empty());
+    assert!(
+        c.issues
+            .iter()
+            .any(|i| i.kind == "UnconnectedPin" && i.objects == ["top/av.net"])
+    );
+    let page = schematic::sheet_page(&d, &c, "top").unwrap();
+    assert!(page.texts.iter().any(|t| t.text == "GND"));
+    assert!(!page.texts.iter().any(|t| t.text == "one"));
+}
+
+#[test]
+fn sensor_interface_has_clear_print_and_four_physical_components() {
+    let source = include_str!("../../../examples/electronics/analog/sensor-interface.fg");
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/electronics/analog");
+    let (doc, c) = schematic::compile(source, Some(&dir), None).unwrap();
+    // The example consumes an external 3V3 rail. Naming the rail must not fabricate a driver.
+    assert_eq!(
+        c.issues.iter().map(|i| i.kind).collect::<Vec<_>>(),
+        ["UnfulfilledWant"]
+    );
+    assert_eq!(
+        schematic::bom(&doc, &c)
+            .iter()
+            .map(|l| l.references.len())
+            .sum::<usize>(),
+        4
+    );
+}
+
+#[test]
+fn local_global_and_hierarchical_labels_have_distinct_drawings_and_scopes() {
+    let src = r#"schematic
+top = sheet()
+child = sheet()
+instance = subsheet(sheet:top, of:child, at:(100,0))
+a = junction(sheet:top, at:(0,0))
+b = junction(sheet:child, at:(0,0))
+g = junction(sheet:child, at:(0,8))
+h = junction(sheet:top, at:(0,8))
+l1 = label(sheet:top, on:a, at:(0,0), value:"sense")
+l2 = label(sheet:child, on:b, at:(0,0), value:"sense")
+g1 = label(sheet:top, on:h, at:(0,8), value:"enable", global:true)
+g2 = label(sheet:child, on:g, at:(0,8), value:"enable", global:true)
+signal = port(sheet:child, at:(0,16))
+"#;
+    let (doc, circuit) = run(src).unwrap();
+    assert_ne!(circuit.net_of["top/a"], circuit.net_of["top/instance/b"]);
+    assert_eq!(circuit.net_of["top/h"], circuit.net_of["top/instance/g"]);
+    assert_eq!(
+        circuit.net_of["top/instance.signal"],
+        circuit.net_of["top/instance/signal"]
+    );
+    let page = schematic::sheet_page(&doc, &circuit, "top/instance").unwrap();
+    // Junction dots are fills. Only the global and hierarchical tags introduce outline strokes.
+    let outlines: Vec<_> = page.strokes.iter().map(|s| s.geom.points(0.03)).collect();
+    assert_eq!(outlines.len(), 2);
+    assert!(
+        outlines
+            .iter()
+            .any(|p| p[0].x == 0. && p[0].y == 8. && p[1].x > 0.)
+    );
+    assert!(
+        outlines
+            .iter()
+            .any(|p| p[0].x == p[1].x && p[0].y < 16. && p[1].y > 16.)
+    );
+    assert!(page.texts.iter().any(|t| t.text == "sense" && t.at.y > 0.));
+}

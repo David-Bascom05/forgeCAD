@@ -75,6 +75,7 @@ fn symbol(id: &str, s: &Symbol, d: &Document) -> Json {
                     .collect(),
             ),
         ),
+        ("power_net", s.power_net.clone().map_or(Json::Null, Into::into)),
         ("datasheet", s.datasheet.clone().map_or(Json::Null, Into::into)),
         ("fields", super::bom::field_json(&s.fields)),
         ("graphics", Json::Arr(s.graphics.iter().map(graphic).collect())),
@@ -110,12 +111,17 @@ fn findings(c: &Circuit) -> Json {
                             i.objects
                                 .iter()
                                 .filter_map(|id| {
-                                    c.origins.get(id).map(|s| {
-                                        Json::obj(vec![
-                                            ("id", id.clone().into()),
-                                            ("span", crate::error::span_json(*s)),
-                                        ])
-                                    })
+                                    c.origins
+                                        .get(id)
+                                        .or_else(|| {
+                                            id.split_once(':').and_then(|(owner, _)| c.origins.get(owner))
+                                        })
+                                        .map(|s| {
+                                            Json::obj(vec![
+                                                ("id", id.clone().into()),
+                                                ("span", crate::error::span_json(*s)),
+                                            ])
+                                        })
                                 })
                                 .collect(),
                         ),
@@ -141,9 +147,13 @@ fn scene(row: &Row) -> Json {
             datasheet,
             populated,
             in_bom,
+            ref_offset,
+            value_offset,
         } => (
             "place",
             vec![
+                ("ref_offset", ref_offset.map_or(Json::Null, point)),
+                ("value_offset", value_offset.map_or(Json::Null, point)),
                 ("fields", super::bom::field_json(fields)),
                 ("datasheet", datasheet.clone().map_or(Json::Null, Into::into)),
                 ("populated", (*populated).into()),
@@ -320,6 +330,9 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
                         ..
                     } = &row.item
                     {
+                        if d.symbols[symbol].power_net.is_some() {
+                            continue;
+                        }
                         components.push(Json::obj(vec![
                             ("occurrence", format!("{scope}/{}", row.id).into()),
                             ("symbol", symbol.clone().into()),

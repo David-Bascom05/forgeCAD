@@ -8,14 +8,16 @@ MCU = symbol(
     vdd: pin(number: "14", kind: "power_in", at: (0, 4), wants: [local_bypass, supply_3v3]),
     vss: pin(number: "7", kind: "passive", at: (0, -4))
   },
-  graphics: [rect(from: (-3, -3), to: (3, 3)), text(at: (0, 0), value: "MCU")]
+  graphics: [rect(from: (-3, -3), to: (3, 3)), line(from: (0, 4), to: (0, 3)),
+             line(from: (0, -4), to: (0, -3)), text(at: (0, 0), value: "MCU")]
 )
 Cap = symbol(
   pins: {
     plus: pin(number: "1", kind: "passive", at: (0, 2), gives: [local_bypass]),
     minus: pin(number: "2", kind: "passive", at: (0, -2))
   },
-  graphics: [line(from: (-1, 0.3), to: (1, 0.3)), line(from: (-1, -0.3), to: (1, -0.3))]
+  graphics: [line(from: (-1, 0.3), to: (1, 0.3)), line(from: (-1, -0.3), to: (1, -0.3)),
+             line(from: (0, 2), to: (0, 0.3)), line(from: (0, -2), to: (0, -0.3))]
 )
 Reg = symbol(pins: {
   out: pin(number: "3", kind: "power_out", at: (2, 0), gives: [supply_3v3], wants: [local_bypass]),

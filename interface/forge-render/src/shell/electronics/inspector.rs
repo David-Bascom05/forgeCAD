@@ -111,8 +111,12 @@ impl Editor {
                     fields,
                     populated,
                     in_bom,
+                    ref_offset,
+                    value_offset,
                     ..
                 } => {
+                    self.form.ref_offset = *ref_offset;
+                    self.form.value_offset = *value_offset;
                     self.form.value = value.clone();
                     self.form.footprint = footprint.clone().unwrap_or_default();
                     self.form.datasheet = datasheet.clone().unwrap_or_default();
@@ -120,7 +124,11 @@ impl Editor {
                     self.form.populated = *populated;
                     self.form.in_bom = *in_bom;
                 }
-                Item::Note(_, s) | Item::Label { text: s, .. } => self.form.text = s.clone(),
+                Item::Note(_, s) => self.form.text = s.clone(),
+                Item::Label { text, global, .. } => {
+                    self.form.text = text.clone();
+                    self.form.global = *global;
+                }
                 _ => {}
             }
         }
@@ -251,12 +259,34 @@ impl Editor {
             &self.selected
         };
         let mut ops = vec![];
+        if let Some(row) = self.doc.rows.iter().find(|r| &r.id == id) {
+            match &row.item {
+                Item::Place {
+                    ref_offset,
+                    value_offset,
+                    ..
+                } => {
+                    for (key, old, new) in [
+                        ("ref_offset", ref_offset, f.ref_offset),
+                        ("value_offset", value_offset, f.value_offset),
+                    ] {
+                        if *old != new {
+                            ops.push(arg(id, key, new.map_or_else(|| "auto".into(), coord)));
+                        }
+                    }
+                }
+                Item::Label { global, .. } if *global != f.global => {
+                    ops.push(arg(id, "global", f.global.to_string()))
+                }
+                _ => {}
+            }
+        }
         if self.library()
             || self
                 .doc
                 .rows
                 .iter()
-                .any(|r| &r.id == id && matches!(r.item, Item::Place { .. }))
+                .any(|r| &r.id == id && matches!(&r.item, Item::Place { symbol, .. } if self.doc.symbols[symbol].power_net.is_none()))
         {
             ops.push(arg(id, "fields", field_text(&f.fields)?));
             ops.push(arg(id, "datasheet", quote(&f.datasheet)));
@@ -336,6 +366,28 @@ impl Editor {
         self.start(Tool::Select);
         Ok(())
     }
+    fn follow_finding(&mut self, id: &str) {
+        let Some((scope, object)) = id.rsplit_once('/') else {
+            return;
+        };
+        let (record, field) = object.split_once(':').unwrap_or((object, ""));
+        let (name, pin) = record.split_once('.').unwrap_or((record, ""));
+        if self.library() && self.doc.symbols.contains_key(scope) {
+            self.subject = scope.into();
+            self.unit = name.into();
+            self.pin = pin.into();
+            self.graphic = field.strip_prefix("graphic").and_then(|i| i.parse().ok());
+        } else if self.circuit.occurrences.contains_key(scope) {
+            self.subject = scope.into();
+            self.selected = name.into();
+            self.pin = pin.into();
+            self.graphic = None;
+        } else {
+            return;
+        }
+        self.refresh();
+        self.start(Tool::Properties);
+    }
     fn selected_pin_detail(&self, ui: &mut Ui) {
         let path = format!("{}/{}.{}", self.subject, self.selected, self.pin);
         let Some(p) = self.circuit.terminals.get(&path) else {
@@ -385,6 +437,23 @@ impl Editor {
         );
         let mut result = Ok(());
         use Tool::*;
+        let collisions = self
+            .circuit
+            .issues
+            .iter()
+            .filter(|i| matches!(i.kind, "TextBoundsOverlap" | "TextGeometryOverlap"))
+            .count();
+        if self.tool != Checks
+            && collisions > 0
+            && ui
+                .link(format!(
+                    "⚠ {collisions} readability warning{}",
+                    if collisions == 1 { "" } else { "s" }
+                ))
+                .clicked()
+        {
+            self.tool = Checks;
+        }
         match self.tool {
             Checks => {
                 ui.label(format!("{} findings", self.circuit.issues.len()));
@@ -398,13 +467,8 @@ impl Editor {
                     ui.separator();
                     ui.colored_label(if severity == "error" { t.error } else { t.warn }, msg);
                     for id in ids {
-                        if ui.link(&id).clicked()
-                            && let Some((scope, k)) = id.rsplit_once('/')
-                            && self.circuit.occurrences.contains_key(scope)
-                        {
-                            self.subject = scope.into();
-                            self.selected = k.split('.').next().unwrap_or(k).into();
-                            self.refresh();
+                        if ui.link(&id).clicked() {
+                            self.follow_finding(&id);
                         }
                     }
                 }
@@ -483,7 +547,11 @@ impl Editor {
                         .iter()
                         .find(|r| r.id == self.selected)
                         .map(|r| &r.item);
-                    if self.library() || matches!(part, Some(Item::Place { .. })) {
+                    if let Some(Item::Place { symbol, .. }) = part
+                        && let Some(net) = &self.doc.symbols[symbol].power_net
+                    {
+                        ui.label(format!("Global power net · {net}"));
+                    } else if self.library() || matches!(part, Some(Item::Place { .. })) {
                         if let Some(Item::Place { symbol, .. }) = part {
                             ui.label(format!("Symbol · {symbol}"));
                             let base = &self.doc.symbols[symbol];
@@ -505,6 +573,32 @@ impl Editor {
                                     });
                             }
                             field(ui, "Value", &mut self.form.value);
+                            ui.collapsing("Field positions", |ui| {
+                                for (label, offset) in [
+                                    ("Reference", &mut self.form.ref_offset),
+                                    ("Value", &mut self.form.value_offset),
+                                ] {
+                                    let mut manual = offset.is_some();
+                                    if ui
+                                        .checkbox(&mut manual, format!("Position {label} manually"))
+                                        .changed()
+                                    {
+                                        *offset = manual.then_some([0., 0.]);
+                                    }
+                                    if let Some(p) = offset {
+                                        ui.horizontal(|ui| {
+                                            for (axis, value) in ["X", "Y"].into_iter().zip(p) {
+                                                ui.add(
+                                                    egui::DragValue::new(value)
+                                                        .prefix(axis)
+                                                        .speed(0.1)
+                                                        .suffix(" mm"),
+                                                );
+                                            }
+                                        });
+                                    }
+                                }
+                            });
                             field(ui, "Footprint", &mut self.form.footprint);
                             ui.checkbox(&mut self.form.populated, "Populated");
                             ui.checkbox(&mut self.form.in_bom, "Include in BOM");
@@ -521,6 +615,9 @@ impl Editor {
                         custom(ui, &mut self.form.fields);
                     } else if matches!(part, Some(Item::Note(..) | Item::Label { .. })) {
                         field(ui, "Text", &mut self.form.text);
+                        if matches!(part, Some(Item::Label { .. })) {
+                            label_scope(ui, &mut self.form.global);
+                        }
                     }
                     if ui.button("Apply changes").clicked() {
                         result = self.save_properties();
@@ -546,6 +643,12 @@ impl Editor {
                 }
             }
             Pin => self.pin_form(ui),
+            Power => choice(
+                ui,
+                "Power net",
+                &mut self.form.text,
+                sch::power_symbols().keys().cloned().collect(),
+            ),
             Place => {
                 choice(
                     ui,
@@ -578,7 +681,7 @@ impl Editor {
             Note | Text | Label => {
                 field(ui, "Text", &mut self.form.text);
                 if self.tool == Label {
-                    ui.checkbox(&mut self.form.global, "Global net label");
+                    label_scope(ui, &mut self.form.global);
                 }
             }
             Port => field(ui, "Port name", &mut self.form.name),
@@ -673,4 +776,11 @@ impl Editor {
             self.message = e;
         }
     }
+}
+
+fn label_scope(ui: &mut Ui, global: &mut bool) {
+    ui.horizontal(|ui| {
+        ui.selectable_value(global, false, "Local label");
+        ui.selectable_value(global, true, "Global label");
+    });
 }

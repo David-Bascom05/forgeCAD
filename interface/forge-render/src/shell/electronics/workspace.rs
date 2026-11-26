@@ -9,6 +9,10 @@ impl Tool {
                 egui::Key::Escape,
                 "Return to selection and cancel the current tool.",
             ),
+            Power => (
+                egui::Key::V,
+                "Place a named supply or ground. Pick a pin to attach it directly.",
+            ),
             Place => (egui::Key::A, "Place a component from a linked symbol library."),
             Wire => (
                 egui::Key::W,
@@ -73,6 +77,7 @@ impl Tool {
         use Tool::*;
         match self {
             Select => ("Select", "select"),
+            Power => ("Power", "schpower"),
             Place => ("Place Symbol", "schchip"),
             Wire => ("Wire", "schwire"),
             Junction => ("Junction", "schjunction"),
@@ -129,7 +134,7 @@ impl Editor {
         };
         match (tab, self.library()) {
             (0, false) => vec![
-                group("Place", &[Place, Wire], &[Junction, Label, Port]),
+                group("Place", &[Place, Wire, Power], &[Junction, Label, Port]),
                 group("Connections", &[Intent], &[NoConnect, Bus, Flow]),
                 group("Modify", &[Move], &[Rotate, Mirror, Delete]),
                 group("Sheets", &[Sheet], &[Subsheet, Gate, Note]),
@@ -141,7 +146,7 @@ impl Editor {
                 group("Modify", &[Properties], &[Move, Delete]),
             ],
             (1, false) => vec![group("Inspect", &[Properties, Checks, Bom], &[])],
-            (1, true) => vec![group("Inspect", &[Properties], &[])],
+            (1, true) => vec![group("Inspect", &[Properties, Checks], &[])],
             _ => vec![group("Navigate", &[Fit, Grid, Select], &[])],
         }
     }
@@ -369,6 +374,7 @@ impl Shell {
             } else {
                 &[
                     Tool::Place,
+                    Tool::Power,
                     Tool::Wire,
                     Tool::Junction,
                     Tool::Label,

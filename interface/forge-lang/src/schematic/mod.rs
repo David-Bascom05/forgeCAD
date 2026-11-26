@@ -17,10 +17,26 @@ pub use report::response;
 use std::collections::{BTreeMap as Map, BTreeSet as Set};
 use std::path::Path;
 
+pub const POWER_LIBRARY: &str = include_str!("power.fg");
+pub fn power_symbols() -> &'static std::collections::BTreeMap<String, String> {
+    static NAMES: std::sync::OnceLock<std::collections::BTreeMap<String, String>> =
+        std::sync::OnceLock::new();
+    NAMES.get_or_init(|| {
+        read(POWER_LIBRARY, None, None)
+            .expect("bundled power library")
+            .symbols
+            .into_iter()
+            .filter_map(|(id, s)| Some((s.power_net?, id)))
+            .collect()
+    })
+}
 pub const HEADERS: &[&str] = &["schematic", "symbol_library"];
 pub const ARGS: &[(&str, &[&str])] = &[
     ("role", &["kind", "key", "capacitance_nf", "voltage_mv", "prefer"]),
-    ("symbol", &["pins", "graphics", "datasheet", "fields"]),
+    (
+        "symbol",
+        &["pins", "graphics", "datasheet", "fields", "power_net"],
+    ),
     (
         "pin",
         &["number", "kind", "at", "angle", "wants", "gives", "unit"],
@@ -45,6 +61,8 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "datasheet",
             "populated",
             "in_bom",
+            "ref_offset",
+            "value_offset",
             "at",
             "angle",
             "mirror",
@@ -137,6 +155,7 @@ pub enum Shape {
 }
 #[derive(Clone, Debug)]
 pub struct Symbol {
+    pub power_net: Option<String>,
     pub fields: Map<String, String>,
     pub datasheet: Option<String>,
     pub pins: Map<String, Pin>,
@@ -153,6 +172,8 @@ pub enum Item {
         datasheet: Option<String>,
         populated: bool,
         in_bom: bool,
+        ref_offset: Option<Point>,
+        value_offset: Option<Point>,
         at: Point,
         angle: f64,
         mirror: bool,

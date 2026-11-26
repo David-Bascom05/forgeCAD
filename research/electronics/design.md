@@ -54,8 +54,8 @@ The board should be a third, linked layout document. A package on the board shou
 
 | Area | Available in this implementation | Work still needed |
 | --- | --- | --- |
-| Symbols and parts | Project-local reusable library files, multiple units, numbered pins, graphic primitives, typed wants and gives, fields and datasheets | Searchable managed catalogs, lifecycle and approved alternates, footprint library and pin-to-pad validation |
-| Schematics | Hierarchical sheets, gates, wires, junctions, labels, buses, ports, notes, named nets, functional links, ERC and source-backed undo | Multi-sheet physical reannotation, bulk and multi-object editing, interactive wire dragging, project-scale cross-probing |
+| Symbols and parts | Bundled power and ground symbols, project-local reusable library files, multiple units, numbered pins, graphic primitives, typed wants and gives, fields and datasheets | Searchable managed catalogs, lifecycle and approved alternates, footprint library and pin-to-pad validation |
+| Schematics | Hierarchical sheets, gates, wires, junctions, labels, buses, ports, notes, named nets, functional links, ERC, independently positioned reference and value fields, text collision warnings and source-backed undo | Multi-sheet physical reannotation, bulk and multi-object editing, interactive wire dragging, project-scale cross-probing |
 | Purchasing | Inherited string fields with occurrence overrides, content-addressed local PDFs, URL references, fitted and BOM flags, grouped occurrence-correct BOM with CSV | Named assembly variants, supplier data pipelines and release snapshots that include referenced assets |
 | Layout and performance | Logical occurrences, terminals, connections, confirmed placement preferences, dimensional coordinates | Copper and clearance geometry, routing, placement checking, stable ECO interchange and measured interactive budgets on large designs |
 
@@ -69,3 +69,5 @@ The review set uses the same analog interface in both renderers. It opens the co
 | Schematic, U1 selected, 1600 × 1000 | [Desktop schematic](shots/native-schematic.png) | [Browser schematic](shots/web-schematic.png) |
 | Symbol, VDD selected, 1400 × 860 | [Desktop symbol](shots/native-symbol.png) | [Browser symbol](shots/web-symbol.png) |
 | Schematic, C2 selected, 1024 × 700 | [Compact desktop](shots/native-compact.png) | [Compact browser](shots/web-compact.png) |
+
+The [readability example](shots/native-readability.png) places the note `scope_probe` across the output wire `w7`. Electrical Checks links to each object. Moving the note clear of that wire removes the overlap warning and preserves the electrical net.

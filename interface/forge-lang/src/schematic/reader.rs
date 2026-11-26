@@ -265,7 +265,24 @@ fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
             c.end()?;
         }
     }
+    let power_net = if let Some(e) = call.take("power_net") {
+        let name = string(e)?;
+        if name.trim().is_empty()
+            || pins.len() != 1
+            || pins.values().any(|p| p.electrical != Electrical::Passive)
+        {
+            return Err(fault(
+                e,
+                "InvalidPowerSymbol",
+                "A power symbol needs one passive pin and a nonempty net name",
+            ));
+        }
+        Some(name)
+    } else {
+        None
+    };
     Ok(Symbol {
+        power_net,
         pins,
         graphics,
         fields: fields(call)?,
@@ -294,6 +311,11 @@ fn fields(c: &mut Call<'_>) -> Result<Map<String, String>> {
         .transpose()?
         .unwrap_or_default())
 }
+fn field_offset(expr: Option<&Expr>, p: &Params) -> Result<Option<Point>> {
+    expr.filter(|e| !matches!(&e.kind,E::Name(n) if n=="auto"))
+        .map(|e| point(e, p))
+        .transpose()
+}
 fn item(c: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Item> {
     Ok(match c.name {
         "place" => {
@@ -310,7 +332,13 @@ fn item(c: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Item> {
                     .transpose()?
                     .unwrap_or_else(|| "A".into()),
                 value: c.take("value").map(string).transpose()?.unwrap_or_default(),
-                footprint: c.take("footprint").map(string).transpose()?.filter(|s| !s.is_empty()),
+                footprint: c
+                    .take("footprint")
+                    .map(string)
+                    .transpose()?
+                    .filter(|s| !s.is_empty()),
+                ref_offset: field_offset(c.take("ref_offset"), p)?,
+                value_offset: field_offset(c.take("value_offset"), p)?,
                 fields: fields(c)?,
                 datasheet: c
                     .take("datasheet")
@@ -517,7 +545,11 @@ pub fn read(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Docume
             "library" if !library => {
                 let e = c.req("file")?;
                 let file = string(e)?;
-                let library = load_library(&file, dir, root, e, &mut doc.imports)?;
+                let library = if file == "forge:power" {
+                    read(POWER_LIBRARY, None, None)?
+                } else {
+                    load_library(&file, dir, root, e, &mut doc.imports)?
+                };
                 let qualify = |id: RoleId| {
                     if id.0.starts_with('@') {
                         id
