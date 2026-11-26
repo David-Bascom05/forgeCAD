@@ -6,6 +6,11 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+# the sampling before the chord-tolerance floor (a cylinder's rows 2 r du apart however small r,
+# an intersection curve one point per chain link at least): for one train, to compare
+old-sampling = []
+
 [dependencies]
 forge-math = { path = "../forge-math" }
 forge-geom = { path = "../forge-geom" }

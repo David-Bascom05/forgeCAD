@@ -295,6 +295,90 @@ fn uv_scale(s: &Surface) -> (f64, f64) {
 }
 
 /// Grid steps for points inside a face, where the surface curves in both directions.
+/// An intersection curve's interior samples at fewer equal steps than one per chain link (`old`,
+/// what `edge_segments` asks), where that is enough: each step's chord, between the edge's ends or
+/// the curve's own points (`IntCurve::eval`, as `sample_interior` makes them), holds every chain
+/// point from the link before the step to the link after it within `chord - sag` (the true curve
+/// lies within `sag` of its chain's links, and a link whose ends lie within d of the chord lies
+/// within d of it: so the true curve lies within `chord` of the chord), and turns no more than
+/// half of `max_angle` from it at any of them. This bounds the angle between any two tangents. Fewest steps first (as many links to a step as the sag
+/// allows, `sqrt(chord / sag)`), more by half again until they hold; None where only `old` holds,
+/// for a closed chain, or with `old-sampling`. VF-5_40_SS_TR #252821's slots: chains of 2,000
+/// links over 6 mm put 4,845 points micrometres apart on a plane whose chord is 1 mm, and its
+/// boundary could not be recovered within its budget.
+fn chain_samples(
+    c: &forge_geom::intcurve::IntCurve,
+    range: forge_math::Interval,
+    old: usize,
+    start: forge_math::Point3,
+    end: forge_math::Point3,
+    chord: f64,
+    max_angle: f64,
+) -> Option<Vec<forge_math::Point3>> {
+    if cfg!(feature = "old-sampling") || c.closed || c.sag >= chord || old < 3 {
+        return None;
+    }
+    let links = c.pts.len().checked_sub(1)?;
+    let (lo, hi) = (range.lo, range.hi);
+    if !(lo >= 0.0 && hi <= links as f64 && lo < hi) {
+        return None;
+    }
+    let room = chord - c.sag;
+    let cos_turn = forge_math::dmath::cos(0.5 * max_angle);
+    let per = (chord / c.sag.max(forge_math::tol::LINEAR)).sqrt();
+    let mut n = ((range.width() / per).ceil() as usize).max(2);
+    while n < old {
+        let dt = range.width() / n as f64;
+        let inner: Vec<forge_math::Point3> = (1..n).map(|k| c.eval(lo + dt * k as f64)).collect();
+        let at = |k: usize| match k {
+            0 => start,
+            k if k == n => end,
+            k => inner[k - 1],
+        };
+        let holds = (0..n).all(|k| {
+            let (a, b) = (at(k), at(k + 1));
+            let ab = b - a;
+            let len2 = ab.dot(ab);
+            if len2 <= 0.0 {
+                return false;
+            }
+            let dir = ab * (1.0 / len2.sqrt());
+            let (t0, t1) = (lo + dt * k as f64, lo + dt * (k + 1) as f64);
+            let (i0, i1) = ((t0.floor() as usize).min(links), (t1.ceil() as usize).min(links));
+            (i0..=i1).all(|i| {
+                let p = c.pts[i];
+                // the distance from the segment ab
+                let s = ((p - a).dot(ab) / len2).clamp(0.0, 1.0);
+                let off = (p - (a + ab * s)).length();
+                off <= room && c.tans[i].dot(dir) >= cos_turn
+            })
+        });
+        if holds {
+            return Some(inner);
+        }
+        n += n.div_ceil(2);
+    }
+    None
+}
+
+/// A cylinder's row spacing (`dv`, along its axis), no closer than the chord tolerance needs. Rows
+/// 2 r du apart keep its triangles shapely, but under a radius smaller than the chord the whole
+/// cylinder lies within the tolerance of a flat strip and rows buy no accuracy (no chord across it
+/// strays, so nothing is refined): a 0.025 mm fillet 663 mm long (ST-30-35Y #716088) was 50,000
+/// rows, and a solid of such fillets ran its drawing's budget out. Rows still bound how far a long
+/// straight boundary edge's chord reaches across the band's triangles when it is put in (recovering
+/// it costs about the square of the rows it passes: EC-1600ZT #263173's 2.5 m rails of 0.8 mm
+/// radius, at rows 2 c max_angle apart, still 3,277 rows each and the budget run out). There rows
+/// are 4 chords apart: some 430 on such a rail. At r >= c nothing changes. (`old-sampling`: as
+/// before.)
+fn row_floor(r: f64, dv: f64, q: &Quality) -> f64 {
+    if cfg!(feature = "old-sampling") || r >= q.chord {
+        dv
+    } else {
+        dv.max(4.0 * q.chord)
+    }
+}
+
 fn interior_steps(s: &Surface, q: &Quality) -> Option<(f64, f64)> {
     match s {
         Surface::Plane(_) => None,
@@ -302,7 +386,10 @@ fn interior_steps(s: &Surface, q: &Quality) -> Option<(f64, f64)> {
         // (rows four columns apart let refinement near a boundary run on, splitting edges
         // into ones as long, and leave triangles across two columns: 3.5 chords deep;
         // research/mesh-bounds/)
-        Surface::Cylinder(c) => Some((arc_step(c.radius, q), 2.0 * c.radius * arc_step(c.radius, q))),
+        Surface::Cylinder(c) => {
+            let du = arc_step(c.radius, q);
+            Some((du, row_floor(c.radius, 2.0 * c.radius * du, q)))
+        }
         Surface::Cone(c) => {
             let r = c.radius.max(1.0);
             Some((arc_step(r, q), 2.0 * r * arc_step(r, q)))
@@ -1001,6 +1088,67 @@ impl Samples {
 }
 
 fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, TessError> {
+    // an intersection curve with fewer chords (`chain_samples`) can lay a thin face's boundary
+    // across itself where its chain did not (a face drawn so parts from the next), and a face
+    // zipped from its boundary alone is refined no further (HRP-2 #366427: a 46 mm triangle across
+    // a curved face, 9.8 mm off it). Each such face's coarsened edges take their old samples
+    // again (as do the coarsened edges of a face along an open mesh edge, or unsettled: neither is
+    // a mesh within the chord), and the body is drawn again, once
+    let mut keep = vec![false; body.edges.len()];
+    // each drawing under a budget of its own, and only the one kept charged: a body drawn twice
+    // spends no more for it (ST-28:28Y #436428 and VF-1 #478688 ran a read's budget out so)
+    let attempt = |keep: &[bool]| {
+        if !forge_geom::budget::limited() {
+            return (0, tessellate_once(body, q, mend, keep));
+        }
+        forge_geom::budget::isolated(forge_geom::budget::left(), || tessellate_once(body, q, mend, keep))
+    };
+    let (spent, first) = attempt(&keep);
+    let (mesh, tangled, coarse, open) = match first {
+        Ok(x) => x,
+        Err(e) => {
+            forge_geom::budget::spend_many(spent);
+            return Err(e);
+        }
+    };
+    let mut again = false;
+    let mut faces = tangled;
+    faces.extend(open.into_iter().map(|f| f as u32));
+    faces.sort_unstable();
+    faces.dedup();
+    for f in faces {
+        for &l in &body.face(FaceId(f)).loops {
+            for c in body.lp(l).coedges() {
+                let e = body.coedge(c).edge.index();
+                if coarse[e] && !keep[e] {
+                    keep[e] = true;
+                    again = true;
+                }
+            }
+        }
+    }
+    if !again {
+        forge_geom::budget::spend_many(spent);
+        return Ok(mesh);
+    }
+    let (spent, second) = attempt(&keep);
+    forge_geom::budget::spend_many(spent);
+    second.map(|(m, ..)| m)
+}
+
+/// `tessellate_with` once: the mesh, the faces drawn tangled or zipped, the edges sampled with
+/// fewer chords than one per chain link, and the faces along an open mesh edge or unsettled
+/// (where any edge was); `keep`: edges to sample as before.
+#[allow(clippy::type_complexity)]
+fn tessellate_once(
+    body: &Body,
+    q: &Quality,
+    mend: bool,
+    keep: &[bool],
+) -> Result<(TriMesh, Vec<u32>, Vec<bool>, Vec<usize>), TessError> {
+    let mut tangled: Vec<u32> = Vec::new();
+    let mut open: Vec<usize> = Vec::new();
+    let mut coarse = vec![false; body.edges.len()];
     let mut mesh = TriMesh::default();
     let vertex_index: Vec<u32> = body.vertices.iter().map(|v| mesh.add_vertex(v.point)).collect();
 
@@ -1024,9 +1172,28 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
                 error: CdtError::Internal(Fault::EdgeTooFine),
             });
         }
+        // an intersection curve whose chain is far finer than the chord: as few chords as hold
+        // (`chain_samples`), each worked out once
+        let floored = match &edge.curve {
+            Curve::Intersection(c) if !keep[e.index()] => chain_samples(
+                c,
+                edge.range,
+                n,
+                body.vertex(edge.start).point,
+                body.vertex(edge.end).point,
+                if fine { 0.5 * q.chord } else { q.chord },
+                q.max_angle,
+            ),
+            _ => None,
+        };
+        coarse[e.index()] = floored.is_some();
+        let n = floored.as_ref().map_or(n, |x| x.len() + 1);
         let mut s = Vec::with_capacity(n + 1);
         s.push((edge.range.lo, vertex_index[edge.start.index()]));
-        edge.curve.sample_interior(edge.range, n, &mut trig, &mut pts);
+        match floored {
+            Some(x) => pts = x,
+            None => edge.curve.sample_interior(edge.range, n, &mut trig, &mut pts),
+        }
         if let Curve::Hyperbola(_) = edge.curve {
             edge.curve.sample_params(edge.range, n, &mut params);
         }
@@ -1175,15 +1342,18 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
                     mend,
                     &mut out,
                 )
-                .map(|()| out.part)
+                .map(|t| (out.part, t))
             },
             Result::is_err,
         );
         for (k, out) in outs.into_iter().enumerate() {
-            let part = out.map_err(|error| TessError::Face {
+            let (part, t) = out.map_err(|error| TessError::Face {
                 face: FaceId(k as u32),
                 error,
             })?;
+            if t {
+                tangled.push(k as u32);
+            }
             let shift = mesh.positions.len() as u32 - nb;
             mesh.positions.extend(part.positions);
             mesh.triangles.extend(
@@ -1198,15 +1368,34 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
         for (i, prep) in preps.into_iter().enumerate() {
             let f = FaceId(i as u32);
             let prep = prep.expect("every face drawn");
-            mesh_face(body, f, prep, &segments, q, mend, &mut mesh)
-                .map_err(|error| TessError::Face { face: f, error })?;
+            if mesh_face(body, f, prep, &segments, q, mend, &mut mesh)
+                .map_err(|error| TessError::Face { face: f, error })?
+            {
+                tangled.push(f.0);
+            }
         }
     }
     mesh.edges = edge_samples
         .iter()
         .map(|s| s.iter().map(|&(_, v)| v).collect())
         .collect();
-    Ok(mesh)
+    // and the faces along an open mesh edge (they do not meet there) or left unsettled (refined
+    // only as far as its cap): theirs are not meshes within the chord either
+    if coarse.iter().any(|&c| c) {
+        let open_edges = mesh.open_edges();
+        if !open_edges.is_empty() {
+            for (t, tri) in mesh.triangles.iter().enumerate() {
+                for k in 0..3 {
+                    if open_edges.binary_search(&(tri[k], tri[(k + 1) % 3])).is_ok() {
+                        open.push(mesh.face_of[t] as usize);
+                        break;
+                    }
+                }
+            }
+        }
+        open.extend(mesh.unsettled.iter().map(|&f| f as usize));
+    }
+    Ok((mesh, tangled, coarse, open))
 }
 
 /// A file's body of at least this many faces has its faces drawn on all cores.
@@ -1743,8 +1932,11 @@ fn mesh_face(
     q: &Quality,
     mend: bool,
     mesh: &mut impl Out,
-) -> Result<(), CdtError> {
+) -> Result<bool, CdtError> {
     let face = body.face(f);
+    // drawn as its boundary lies, crossing itself where laid flat (parted from the next face), or
+    // zipped from its boundary alone: either way only as good as its boundary's samples
+    let mut tangled = false;
     let surface = &face.surface;
     let Prep {
         su,
@@ -1772,7 +1964,7 @@ fn mesh_face(
             }
             mesh.tri(if face.same_sense { [a, b, c] } else { [a, c, b] }, f.0);
         }
-        return Ok(());
+        return Ok(false);
     }
 
     // a swept face square in its parameters (a blend cut square at its ends): a grid of columns
@@ -1786,7 +1978,7 @@ fn mesh_face(
             for [a, b, c] in tris {
                 mesh.tri(if face.same_sense { [a, b, c] } else { [a, c, b] }, f.0);
             }
-            return Ok(());
+            return Ok(false);
         }
     }
 
@@ -2125,6 +2317,9 @@ fn mesh_face(
         [lp] if interior.is_empty() && twice.is_empty() => zip(&scaled, lp, &strays),
         _ => None,
     };
+    // a zipped face is triangles straight between its boundary's samples, refined no further:
+    // only as close to its surface as its boundary is dense
+    tangled |= zipped.is_some();
     // (a file's face whose refinement does not settle is drawn as far as it got, and said to be)
     let mut settled = true;
     let mut far = |tangled: bool| -> Result<Triangulation, CdtError> {
@@ -2150,7 +2345,10 @@ fn mesh_face(
         Ok(t) => t,
         // a file's edges that meet only within their tolerance can cross in the plane of the
         // triangulation: drawn as they are, the mesh parts from the next face by that little
-        Err(_) if mend => far(true)?,
+        Err(_) if mend => {
+            tangled = true;
+            far(true)?
+        }
         Err(e) => {
             if let Some(path) = std::env::var_os("FORGE_CDT_DUMP") {
                 let pts: Vec<String> = scaled.iter().map(|p| format!("{:e},{:e}", p.x, p.y)).collect();
@@ -2201,7 +2399,7 @@ fn mesh_face(
         let t = if face.same_sense { [a, b, c] } else { [a, c, b] };
         mesh.tri(t, f.0);
     }
-    Ok(())
+    Ok(tangled)
 }
 
 /// A loop without its runs there and back (`x y x` is `x`), round its end too.
@@ -2993,6 +3191,42 @@ mod tests {
     use forge_math::rng::Rng;
     use forge_math::{Frame, Point3, Vec3};
     use forge_ops::{Profile, extrude};
+
+    #[test]
+    #[cfg(not(feature = "old-sampling"))]
+    fn coarsened_chain_bounds_the_turn_across_each_chord() {
+        let radius = 100.0;
+        let angle = dmath::PI / 12.0;
+        let (points, tangents) = (0..=1000)
+            .map(|i| {
+                let (s, c) = dmath::sin_cos(i as f64 * dmath::PI / 2000.0);
+                (Point3::new(radius * c, radius * s, 0.0), Vec3::new(-s, c, 0.0))
+            })
+            .unzip();
+        let curve = forge_geom::intcurve::IntCurve::new(
+            Surface::Cylinder(forge_geom::Cylinder {
+                frame: Frame::WORLD,
+                radius,
+            }),
+            Surface::Plane(forge_geom::Plane { frame: Frame::WORLD }),
+            points,
+            tangents,
+            false,
+            0.000056,
+        );
+        let inner = chain_samples(
+            &curve,
+            forge_math::Interval::new(0.0, 1000.0),
+            1000,
+            curve.pts[0],
+            curve.pts[1000],
+            10.0,
+            angle,
+        )
+        .expect("the quarter circle can be coarsened");
+        // These are equal parameter steps around a quarter circle.
+        assert!(dmath::PI / (2.0 * (inner.len() + 1) as f64) <= angle);
+    }
 
     /// A parabola's and a hyperbola's chords stray from them by no more than the chord and turn by
     /// no more than the angle, at every tolerance, near the vertex and far out (where a fixed count

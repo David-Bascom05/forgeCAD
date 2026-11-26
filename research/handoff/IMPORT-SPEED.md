@@ -62,6 +62,18 @@ Each of these is bit-identical by construction, and was diffed over the whole co
 
 ## Open threads, in the order I would pick them up
 
+**(0) A face's mass pieces on all cores: reverted (b269a169), to be redone within the speed band.**
+34b2a9b7 split a face's integral over its loop pieces on all cores (HAB3232's four B-spline faces,
+12-22 s each, in parallel; digests identical). The speed gate counts on one core, where the split
+is pure overhead, and its `cli` lines (the cold build with the CLI's checks, which work out mass)
+rose 0.19-1.25% against a band of 0.03%. Gating the parallel path on `par::threads() > 1` and
+building its groups only then left valve +0.11% and bracket +0.43% (callgrind by function: heap
+churn from the `Share` vectors, `Share::add_to` not inlined, `InnerOf`'s deref in `Ctx::g`). The
+way back: leave `face_integrals`' one-by-one loop exactly as it was before 34b2a9b7 (integrate
+adding into the run's `Acc` directly, `Rc`, `Cell`) and put the parallel path in a separate
+function taken only above `PAR_PIECES` with more than one thread, its own `Near`/`Arc` way copies
+built there. The one-core build then runs the old instructions, and the gate cannot see it.
+
 **(a) One projection pass shared by the speck check and the edge tolerances.** CANCELLED by the
 coordinator in the wind-down; not started. Both phases project edge samples onto each face the edge
 bounds (speck: 8x `default_segments` per edge, chained round the loop; tolerances: 16 or 256 from
@@ -146,10 +158,53 @@ after each fix. Four causes:
 | A. a loop's slit of no width (out and back along two edges lying on each other within the file's uncertainty) | 1 (HRT160-2 #13299) | reader | **fixed**: `heal.rs cancel_slits`, 52c2877c; unit test incl. a 1e-3 slit left alone; HRT160-2 now 5 solids, 0 refused, app read 211 s -> 0.24 s; corpus differential queued |
 | B. a small-radius cylinder gridded to its radius (`interior_steps`: rows 2·r·du apart even when r ≪ chord: 50k–100k rows per fillet) | 10 (ST-30-35Y x2, GM-1-5AX, GM-1XT-5AX, DM-1, EC-1600ZT, HFL-3015D-6, HFL-6512T, HRP-2, cobot_pkg-7) | mesher | waiting on the coordinator's rigor ruling: the fix (no row spacing below the chord tolerance) changes every such fillet's mesh |
 | C. an intersection-curve edge sampled one point per chain link at least (`edge_segments`: 2,000 links over 6 mm -> 4,845 boundary points on a 1 mm-chord plane; CDT recovery thrashes) | 1 (VF-5_40_SS_TR #252821) | mesher | same family and same ruling as B |
-| D. a face whose surface the file puts 5 m from its edges (B-spline patch read correctly; edges 5,040 mm off it) | 1 (VS-3 #478011) | the file | not repairable exactly; proposed: refuse early with the true reason (today: "too long to measure") |
+| D. a face whose surface the file puts 5 m from its edges (B-spline patch read correctly; edges 5,040 mm off it) | 1 (VS-3 #478011) | the file | **done** on `import/faces`: refused before healing with the true reason (`FAR_FACE_MM`/`FAR_FACE_PART`, `far_gap`); see below |
 
 Tools: `tools/kernel-stress/extract.py FILE ENTITY OUT` takes one solid out of a file; then read it
 with the measures skipped (a scratch patch of `finish`, env `FORGE_NOCHECK`) and mesh it per solid
 to find its first failing face; log the interior grid sizes and per-stage spends in `tessellate.rs`
 to see where the budget goes. Whatever is fixed needs the full differential with the repository's
 fixtures and the app's 16x path, as above.
+
+### D's differential
+
+D refuses a solid when a face's edges lie farther than both 1 mm and 1% of the part's diagonal
+from its surface. The quick measure (`measure_gaps`, `surface.distance`) can be fooled: a NURBS
+nearest-point search may settle on a far sheet of the surface. So a face it calls far is measured
+again (`far_gap`: a 64 x 64 parameter grid, then a projection from the nearest grid point), and
+only that is believed (05c6e6d4). Corpus and fixtures: VS-3 #478011 (4.2 m; refused before, now
+saying why), VS-3 #738262 (3.9 m) and Cobot #226368 (face #1170897, 3.0 mm, the same on a
+600 x 600 grid: a thin strip with one edge's end 3 mm off it) newly refused; TRT100 #225539 (9.4 mm
+by the quick measure alone) was the false alarm that led to `far_gap`, and reads as before.
+
+The coordinator's condition for landing D: a solid it refuses must not vanish from the app. So
+`forge_step::draw_far_refused` (f5171b10) re-reads, for a viewer only, the solids D refused: each
+healed without the far face, its edges' tolerances recorded, drawn under what healing left of the
+read's budget. `import` is untouched. `model_files::read` draws them, and `read_noting` gives
+attach() the note "<part> is drawn without face #N, which can't be read: ...". Shots in
+research/import-speed/far-face/. Two traps: drawing the far face itself (VS-3 #478011) takes
+minutes and fails, and so does drawing without the edges' tolerances (the mesher meets an edge off
+its faces only by them). VS-3 #478011 is still not drawn, as before D, in 7.4 s.
+
+### STEP's Unicode escapes are never decoded (its own change, agreed with the coordinator)
+
+`part21::File::str_of` returns a string's bytes as written, so `\X2\00d600e1...\X0\` (UTF-16),
+`\X4\` (UTF-32), `\X\hh` (latin-1) and `\S\c` (the upper half) show raw in every name the app
+takes from a file: piece names, the Split list, the drawn-without note (the Cobot package's
+"HC5 Joint 5 / 14\X2\00d600e1...\X0\"). A decoder at the parser is small, but it changes piece
+names and so the app digests of every file whose names use it: its own differential, not done.
+
+### Gap rule tier 2 (not written yet)
+
+Agreed with KERNEL-STRESS and the coordinator: one gap rule, held on `import/faces`. Tier 1 is
+done (a face whose edges lie farther than both 1 mm and 1% of the part from its surface refuses
+the solid; wording UX-LEAD-approved, test asserts it). Tier 2 keeps the solid but warns, for a gap
+over k x the file's stated uncertainty (and over LINEAR): ds-40y #249171's edge #57090 lies 0.96 mm
+off face #5840 where the file claims 1e-5 (evidence: tools/kernel-stress/edge_fit.py on
+import-sheets). Plan: Proto `edge_ids` like `face_ids`; measure_gaps reports the worst
+(edge, face, gap); choose k from the corpus's distribution of worst gap / uncertainty, so that
+accepted solids don't fill with warnings; join it with measures_agree's own `unverified`
+words (the gap first). Wording, UX-LEAD verbatim (distances through `far()`): "edge #E lies 0.96 mm
+off face #F, though the file claims 0.00001 mm accuracy: that face may look wrong and isn't checked
+there (exporting the file again may help)" -- drop "and isn't checked there" if the solid's checks
+still run on that face.
