@@ -47,6 +47,7 @@ pub mod robot;
 pub mod schematic;
 pub mod shapes;
 pub mod sheet;
+pub mod simplify;
 pub mod sketch;
 /// Every host that runs forge-lang frees what its runs kept, between runs (`sketch::release_sketches`).
 pub use sketch::{ReleaseOnDrop, release_sketches};
