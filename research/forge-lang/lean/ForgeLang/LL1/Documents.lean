@@ -107,4 +107,14 @@ a = part(\"a.fg\")
 theorem header_glued_refused : accepts "machining f = part(\"a.fg\")
 " = false := by decide +kernel
 
+theorem schematic_doc_accepted : accepts "schematic
+main = sheet()
+local_bypass = role(kind: \"bypass\")
+" = true := by decide +kernel
+
+theorem symbol_library_doc_accepted : accepts "symbol_library
+local_bypass = role(kind: \"bypass\")
+Cap = symbol(pins: {plus: pin(number: \"1\", kind: \"passive\", at: (0, 0), gives: [local_bypass])})
+" = true := by decide +kernel
+
 end ForgeLang.LL1.Documents

@@ -153,6 +153,11 @@ fn families() -> Vec<(&'static str, Vec<String>, Model)> {
     // the robot reader (forge-urdf); its word lists are forge_lang::robot's
     const ROBOT: &str = "interface/forge-urdf/src/robot.rs";
     vec![
+        (
+            "schematic",
+            schematic::ARGS.iter().map(|(k, _)| (*k).to_string()).collect(),
+            Model::Closed,
+        ),
         ("core", owned(builtins::BUILTINS), Model::Shadow),
         ("shapes", owned(shapes::NAMES), Model::Shadow),
         (
@@ -222,6 +227,7 @@ const FAMILY_CONSTS: &[&str] = &[
     "interface/forge-lang/src/harness.rs::BUILTINS",
     "interface/forge-lang/src/drawing/doc.rs::FUNCTIONS",
     "interface/forge-lang/src/syntax.rs::KEYWORDS",
+    "interface/forge-lang/src/schematic/mod.rs::HEADERS",
     "interface/forge-bend-lang/src/lib.rs::NAMES",
     "interface/forge-lang/src/robot.rs::RESERVED",
     // the robot families' words, the reader's arms (`lean_family_lists_are_the_rusts`)
@@ -327,6 +333,12 @@ fn headers() -> BTreeSet<(String, String)> {
             }
         }
     }
+    let file = "interface/forge-lang/src/schematic/mod.rs";
+    out.extend(
+        const_list(file, "HEADERS")
+            .into_iter()
+            .map(|word| (word, file.to_owned())),
+    );
     out
 }
 
@@ -334,6 +346,7 @@ fn headers() -> BTreeSet<(String, String)> {
 /// above (or that only reads the header). A new kind of document (a new file here) must register
 /// its families and its header's row.
 const HEADER_FILES: &[(&str, &str)] = &[
+    ("interface/forge-lang/src/schematic/mod.rs", "family schematic"),
     ("interface/forge-cam-lang/src/lib.rs", "families cam, cam-expr"),
     ("interface/forge-turn-lang/src/lib.rs", "families turn, turn-expr"),
     ("interface/forge-bend-lang/src/lib.rs", "family bend"),
@@ -600,6 +613,11 @@ fn arg_lists(rel: &str) -> Option<Vec<(String, Vec<String>)>> {
 /// Each document kind whose built-ins take named arguments: its families and where its argument
 /// lists would be.
 const ARG_KINDS: &[(&str, &str, &[&str])] = &[
+    (
+        "schematic",
+        "interface/forge-lang/src/schematic/mod.rs",
+        &["schematic"],
+    ),
     ("cam", "interface/forge-cam-lang/src/lib.rs", &["cam", "cam-expr"]),
     (
         "turn",
@@ -737,6 +755,7 @@ fn lean_family_lists_are_the_rusts() {
             .cloned()
             .collect()
     };
+    assert_eq!(lean(&src, "schematicFns"), rust("schematic"), "Families.schematicFns");
     assert_eq!(lean(&src, "camStmt"), rust("cam"), "Families.camStmt");
     assert_eq!(lean(&src, "camExpr"), rust("cam-expr"), "Families.camExpr");
     assert_eq!(lean(&src, "turnStmt"), rust("turn"), "Families.turnStmt");
@@ -851,7 +870,10 @@ fn shadow_families_bound_nowhere() {
             },
             _ => None,
         };
-        if matches!(header.as_deref(), Some("machining" | "drawing")) {
+        if matches!(
+            header.as_deref(),
+            Some("machining" | "drawing" | "schematic" | "symbol_library")
+        ) {
             continue;
         }
         files += 1;

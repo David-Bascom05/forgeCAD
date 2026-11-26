@@ -722,3 +722,108 @@ fn mcp_import_brings_a_parasolid_model_in_as_a_part_under_the_root() {
     assert!(!dir.join(".GIT").exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn schematic_pin_workflow_uses_one_checked_undoable_transaction() {
+    let dir = scratch("schematic-pin");
+    let src = include_str!("../../../examples/electronics/controller.fg");
+    let path = dir.join("controller.fg");
+    std::fs::write(&path, src).unwrap();
+    std::fs::write(
+        dir.join("power-symbols.fg"),
+        include_str!("../../../examples/electronics/power-symbols.fg"),
+    )
+    .unwrap();
+    let file = || Json::from(path.to_str().unwrap());
+    let mut server = Server::start("mcp", &dir);
+    for kind in ["schematic", "symbol_library"] {
+        let args = vec![("file", format!("{kind}.fg").into()), ("kind", kind.into())];
+        let (err, created, _) = server.tool("new_schematic", args.clone());
+        assert!(!err, "{created}");
+        let original = std::fs::read(dir.join(format!("{kind}.fg"))).unwrap();
+        let (err, refused, _) = server.tool("new_schematic", args);
+        assert!(err, "{refused}");
+        assert_eq!(original, std::fs::read(dir.join(format!("{kind}.fg"))).unwrap());
+    }
+    let (err, plan, _) = server.tool(
+        "plan_bypass",
+        vec![
+            ("file", file()),
+            ("want", "main/reg.out".into()),
+            ("return_pin", "main/reg.gnd".into()),
+            ("symbol", "parts.Cap".into()),
+            ("give", "plus".into()),
+            ("return_key", "minus".into()),
+            ("role", "parts.local_bypass".into()),
+            ("id", "c2".into()),
+            ("x_mm", 6.0.into()),
+            ("y_mm", 2.5.into()),
+        ],
+    );
+    assert!(!err, "{plan}");
+    let ops = arr(plan.get("result").unwrap(), "ops");
+    assert_eq!(ops.len(), 4);
+    let (err, edited, _) = server.tool(
+        "edit",
+        vec![
+            ("file", file()),
+            ("base", plan.get("version").unwrap().clone()),
+            ("ops", Json::Arr(ops)),
+        ],
+    );
+    assert!(!err, "{edited}");
+    let (_, pin, _) = server.tool(
+        "schematic",
+        vec![("file", file()), ("sel", "pin main/reg.out".into())],
+    );
+    assert!(pin.to_string().contains("main/c2_intent"), "{pin}");
+    let after = std::fs::read_to_string(&path).unwrap();
+    let op = Op::AddFeature {
+        before: None,
+        text: "broken = wire(sheet: main, from: reg.out, to: typo.a)".into(),
+    };
+    let (err, bad, _) = server.tool("edit", vec![("file", file()), ("op", op.json())]);
+    assert!(err && bad.to_string().contains("UnknownEndpoint"), "{bad}");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), after);
+    let (err, r, _) = server.tool(
+        "edit",
+        vec![("file", file()), ("op", Json::obj(vec![("op", "Undo".into())]))],
+    );
+    assert!(!err, "{r}");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), src);
+    let (err, plan, _) = server.tool(
+        "plan_fulfillment",
+        vec![
+            ("file", file()),
+            ("want", "main/reg.out".into()),
+            ("give", "main/c.plus".into()),
+            ("role", "@examples.bypass100n".into()),
+            ("id", "reg_bypass".into()),
+            ("return_from", "main/c.minus".into()),
+            ("return_to", "main/reg.gnd".into()),
+        ],
+    );
+    assert!(!err, "{plan}");
+    let ops = arr(plan.get("result").unwrap(), "ops");
+    assert_eq!(ops.len(), 1);
+    let (err, result, _) = server.tool(
+        "edit",
+        vec![
+            ("file", file()),
+            ("base", plan.get("version").unwrap().clone()),
+            ("ops", Json::Arr(ops)),
+        ],
+    );
+    assert!(!err, "{result}");
+    let (_, inspected, _) = server.tool(
+        "schematic",
+        vec![("file", file()), ("sel", "pin main/reg.out".into())],
+    );
+    assert!(inspected.to_string().contains("main/reg_bypass"), "{inspected}");
+    // Replacing a library in the same session must invalidate the compiled model.
+    std::fs::write(dir.join("power-symbols.fg"), "symbol_library\n").unwrap();
+    let (err, r, _) = server.tool("build", vec![("file", file())]);
+    assert!(err && r.to_string().contains("UnknownSymbol"), "{r}");
+    drop(server);
+    std::fs::remove_dir_all(dir).unwrap();
+}

@@ -40,6 +40,7 @@ no family extension changes where a document goes.
 
 | Kind | Item | Names | Rust site | Lean |
 |---|---|---|---|---|
+| builtins | `schematic` | `role`, `symbol`, `pin`, `line`, `rect`, `arc`, `polyline`, `circle`, `text`, `library`, `sheet`, `place`, `gate`, `subsheet`, `junction`, `port`, `wire`, `label`, `no_connect`, `note`, `flow`, `bus`, `fulfill` | closed call signatures in schematic::ARGS | `LL1.Documents.schematic_doc_accepted`, `Families.families_not_keywords`, `Schematic.binding_sound_complete`, `Schematic.resolved_binding_typed`; GAP full elaboration and ERC refinement |
 | builtins | `core` | `use`, `sqrt`, `div`, `mod`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `abs`, `min`, `max`, `count`, `ratio`, `len`, `polar`, `pt`, `near`, `line`, `arc`, `circle`, `ellipse`, `earc`, `rect`, `slot`, `hull`, `disc`, `poly`, `spline`, `tarc`, `close`, `tangent`, `coincident`, `horizontal`, `vertical`, `parallel`, `perpendicular`, `equal`, `midpoint`, `distance`, `radius`, `angle`, `fix`, `concentric`, `collinear`, `symmetric`, `hdistance`, `vdistance`, `extrude`, `cut`, `revolve`, `fillet`, `chamfer`, `shell`, `loft`, `offset`, `rotate`, `edges`, `faces`, `shift`, `hline`, `vline`, `meet`, `mid`, `plane`, `properties` | `interface/forge-lang/src/builtins.rs` `BUILTINS`; part namespace (`builtins::NAMES`, ShadowsBuiltin) | `Builtins.extend_conservative` (with `N` the family; its hypothesis, no refusal-subject binding of the names, checked by lang_coverage::shadow_families_bound_nowhere), `Builtins.resolve_append_off`, `Builtins.shadows_new`; the base list `B` |
 | builtins | `shapes` | `sweep`, `coil`, `draft`, `offset_faces`, `delete_faces`, `replace_face`, `move_faces`, `thicken`, `rib`, `facefillet`, `fullround`, `ball`, `sphere`, `dome` | `shapes.rs` `NAMES`; part namespace (`builtins::NAMES`, ShadowsBuiltin) | `Builtins.extend_conservative` (with `N` the family; its hypothesis, no refusal-subject binding of the names, checked by lang_coverage::shadow_families_bound_nowhere), `Builtins.resolve_append_off`, `Builtins.shadows_new` |
 | builtins | `constants` | `pi`, `X`, `Y`, `Z`, `xy`, `xz`, `yz`, `thru`, `thru_all`, `next`, `axis`, `sym`, `two`, `upto`, `intersect` | `builtins.rs` `CONSTANTS`, `MORE`; part namespace (`builtins::NAMES`, ShadowsBuiltin) | `Builtins.extend_conservative` (with `N` the family; its hypothesis, no refusal-subject binding of the names, checked by lang_coverage::shadow_families_bound_nowhere), `Builtins.resolve_append_off`, `Builtins.shadows_new` |
@@ -73,6 +74,8 @@ documents in `examples/machined/` included. Headers that are names add no syntax
 
 | Kind | Item | Names | Rust site | Lean |
 |---|---|---|---|---|
+| header | `schematic` | | schematic document | `LL1.Documents.schematic_doc_accepted` |
+| header | `symbol_library` | | reusable symbols and roles | `LL1.Documents.symbol_library_doc_accepted` |
 | header | `machining` | | forge-cam-lang `is_machining`, forge-turn-lang `is_turning` (first statement the bare name; turning when a statement calls `lathe_setup`) | `LL1.Documents.milling_doc_accepted`, `LL1.Documents.turning_doc_accepted`, `LL1.Documents.header_glued_refused`, `Families.families_not_keywords`; semantics `Families.run_ext_accepted` |
 | header | `drawing` | | forge-lang `drawing::doc::declared` (and the `drawing` keyword's statement) | `LL1.Unified.accept_drawing_header`, `LL1.Unified.accept_drawing_empty` (on the unified prototype grammar; on `Impl` by `LL1.Impl.grammar_ll1` and parse_diff); semantics `Families.drawing_conservative` |
 | header | `assembly` | | forge-render `is_assembly` (optional first line; an assembly is a file with components or joints) | `LL1.Documents.assembly_header_accepted`, `Families.families_not_keywords`. Semantics: GAP (assembly namespace, see `assembly`) |
@@ -106,6 +109,29 @@ extension so far:
 
 | Kind | Item | Names | Rust site | Lean |
 |---|---|---|---|---|
+| args | `schematic::role` | `kind`, `key`, `capacitance_nf`, `voltage_mv`, `prefer` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::symbol` | `pins`, `graphics` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::pin` | `number`, `kind`, `at`, `angle`, `wants`, `gives`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::line` | `from`, `to`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::rect` | `from`, `to`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::arc` | `from`, `mid`, `to`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::polyline` | `points`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::circle` | `at`, `radius`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::text` | `at`, `value`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::library` | `file` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::sheet` | `title` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::place` | `sheet`, `symbol`, `unit`, `value`, `footprint`, `at`, `angle`, `mirror` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::gate` | `sheet`, `of`, `unit`, `at`, `angle`, `mirror` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::subsheet` | `sheet`, `of`, `at`, `ports` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::junction` | `sheet`, `at` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::port` | `sheet`, `at` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::wire` | `sheet`, `from`, `to`, `via` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::label` | `sheet`, `on`, `value`, `global`, `at` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::no_connect` | `sheet`, `on` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::note` | `sheet`, `at`, `value` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::flow` | `sheet`, `from`, `to` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::bus` | `sheet`, `members` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::fulfill` | `sheet`, `want`, `give`, `role`, `return_from`, `return_to`, `prefer` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `cam::part` | `#0`, `group`, `material` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
 | args | `cam::machine` | `#0` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
 | args | `cam::tool` | `#0`, `t`, `stickout`, `holder`, `vc`, `rpm`, `chip`, `fz`, `feed`, `ap`, `ae`, `max_angle`, `tilt`, `plunge_feed`, `ramp_feed`, `lead_in_feed`, `max_power`, `max_torque`, `max_deflection`, `min_feed`, `max_feed` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
