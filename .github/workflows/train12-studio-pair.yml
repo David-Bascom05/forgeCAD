@@ -1,0 +1,61 @@
+name: Train 12 paired Studio frame timing
+on:
+  push:
+    branches: [diagnostics/train12-studio-pair]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  paired:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: b86b2d07f3b915c0e1661fc38dac614a07dc6043
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-1.63.0-chromium-${{ runner.os }}
+      - name: Install the same browser as web CI
+        run: |
+          mkdir -p "$HOME/pw" && cd "$HOME/pw"
+          npm init -y >/dev/null && npm install --no-save playwright@1.63.0
+          npx playwright install --with-deps chromium
+          echo "NODE_PATH=$HOME/pw/node_modules" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 45756628553
+          name: web
+          path: paired/base
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 45762286596
+          name: web
+          path: paired/candidate
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 45762286596
+          name: forgecad
+          path: paired/bin
+      - name: Interleave unchanged Studio tests on the same runner
+        env:
+          FORGECAD: ${{ github.workspace }}/paired/bin/forgecad
+        shell: bash
+        run: |
+          chmod +x "$FORGECAD" paired/bin/forge-server
+          lscpu | sed -n '/Model name/p'
+          rc=0
+          for side in base candidate candidate base; do
+            echo "::group::$side"
+            node interface/forge-render/web/tests/studio_live.cjs "$GITHUB_WORKSPACE/paired/$side" || rc=1
+            echo "::endgroup::"
+          done
+          exit "$rc"
