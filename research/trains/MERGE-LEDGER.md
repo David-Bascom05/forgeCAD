@@ -154,3 +154,9 @@ For #71, the main and candidate Callgrind files and the two geometry-bit files m
 | #72 | `3759324dddfe905b7215cf01b97473b20101e595` | `d1ff9bd297e765553b5ad53ddd747d51dbfc3cb5` | Retargeted after landing #71. Exact review and main-specific checks requested. |
 
 [Per-function Callgrind comparison](https://github.com/David-Bascom05/forgeCAD/actions/runs/45762401095) covers main and the three feature trees. The performance holds require attribution and a passing exact gate.
+
+The freeform-surface pre-merge check now has a current-main [draft PR #75](https://github.com/David-Bascom05/forgeCAD/pull/75), head `c141281b4efbf50f5ddfab92b72a0220c6e240d4`, candidate `d4ae6985e53f6b38c59306624dae94fefa570ded`. It contains the six-file delta from the earlier Train 11 integration, including the Clippy correction. Independent review and CI were requested.
+
+IMPORT-SPEED's live branches had advanced beyond the handoff ledger. The independent face review [#76](https://github.com/David-Bascom05/forgeCAD/pull/76) compares `d744659b5922f602b6d5a36fb97d700067885fc0` to speed-ks `934102fa6d797045e1adbf8374bdc080d937e2dd`. The mesh review [#77](https://github.com/David-Bascom05/forgeCAD/pull/77) compares `b256b1be5d6fd9b0e7585337a0f7524cc2b7c1cb` to that face head. Both are draft review targets. The integration hold still requires the rigor package and validation on the final main candidate.
+
+New editor draft [#74](https://github.com/David-Bascom05/forgeCAD/pull/74) depends on #72. Head `8458c1910c31d224b9a3762009f8ef3fc7f32178` changes the native and browser editor UI. The PR includes desktop/browser captures. Current-main integration, independent review and coordinator UI sign-off are required before landing.
