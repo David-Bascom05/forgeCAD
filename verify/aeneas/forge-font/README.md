@@ -14,7 +14,7 @@ then `lake build` in `lean/`.
 
 | Level | |
 |---|---|
-| L4 | translated: 66 definitions. Four are opaque std items, each defined in `lean/ForgeFont/FunsExternal.lean` as std documents it: `Vec::default`, `Vec::clear`, `Vec::pop`, `mem::take`. Proven (`lean/ForgeFont/{Walk,Contour,ReadSimple,Cff}.lean`, standard axioms only: `lake env lean Axioms.lean`, no `sorry`). See below |
+| L4 | translated: 66 definitions. Four are opaque std items. The shared bridge supplies `Vec::clear`. `lean/ForgeFont/FunsExternal.lean` defines `Vec::default`, `Vec::pop` and `mem::take`. Proven (`lean/ForgeFont/{Walk,Contour,ReadSimple,Cff}.lean`, standard axioms only: `lake env lean Axioms.lean`, no `sorry`). See below |
 
 ## What is proven
 

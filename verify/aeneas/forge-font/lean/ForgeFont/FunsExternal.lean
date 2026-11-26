@@ -5,19 +5,15 @@ open Aeneas Aeneas.Std Result ControlFlow Error
 /-!
 # The std items the charstring machine (cff_core.rs) uses that Aeneas leaves opaque
 
-Each is defined as std documents it: `Vec::default` is the empty vector, `Vec::clear` empties
-it, `Vec::pop` takes the last element off (none from an empty one), `mem::take` returns the value
-and leaves the type's default in its place.
+The shared float bridge supplies `Vec::clear`. Here `Vec::default` is the empty vector,
+`Vec::pop` takes the last element off (none from an empty one), and `mem::take` returns the
+value and leaves the type's default in its place.
 -/
 
 open forge_font
 
 @[rust_fun "alloc::vec::{core::default::Default<alloc::vec::Vec<@T>>}::default"]
 def alloc.vec.Vec.Insts.CoreDefaultDefault.default (T : Type _) : Result (alloc.vec.Vec T) :=
-  ok (alloc.vec.Vec.new T)
-
-@[rust_fun "alloc::vec::{alloc::vec::Vec<@T>}::clear"]
-def alloc.vec.Vec.clear {T : Type _} (_A : Type _) (_v : alloc.vec.Vec T) : Result (alloc.vec.Vec T) :=
   ok (alloc.vec.Vec.new T)
 
 @[rust_fun "alloc::vec::{alloc::vec::Vec<@T>}::pop"]
