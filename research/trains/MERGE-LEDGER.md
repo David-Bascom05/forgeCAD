@@ -4,8 +4,8 @@ Kept by TRAIN-CONDUCTOR. One row per branch. The status values are: queued, pre-
 Rules: each item needs a GREEN pre-verify on the train's main, made with tools/preverify ≥13d78f06 or proven clean by a record check or my own test build. UI changes need UX-LEAD's OK. Branches with the flagged history land squashed.
 This branch (coord/trains) is never merged into main.
 
-Main: dfe0c096fcc8bc2b9e7de804aade9c7037d6d014 (platform CI, #73), following 292e2ec01fd6128a94d97ea78af24b5bf3c77659 (Train 13, #69), on 5a3f4875b4d57f23f8e1f653b4f43c84b5c01031 (train CI, #66). Train 11 landed at 568d5f497c3c343b8fafeebe6f1b50e13d9c56e3 (#65). Before it: 247a26942e5cc29a2ddc6b80ae43d6fe1751f45a (train 10, #64), d6820393 (train 9, #62), 5767cdb4 (gate-memfns alone, #63), 10d87778 (train 8, #61).
-Train 12 ([#67](https://github.com/David-Bascom05/forgeCAD/pull/67)) passed CI on the pre-Train-13 base and has three open client correctness findings. Standalone Train 13 ([#69](https://github.com/David-Bascom05/forgeCAD/pull/69)) merged after all 82 PR checks, independent review and the full Haas differential passed. [#68](https://github.com/David-Bascom05/forgeCAD/pull/68) was closed as superseded.
+Main: 3d718a28016a1dd9f67b3f1d8b825686210999fd (electronics design, #71), following dfe0c096fcc8bc2b9e7de804aade9c7037d6d014 (platform CI, #73), following 292e2ec01fd6128a94d97ea78af24b5bf3c77659 (Train 13, #69), on 5a3f4875b4d57f23f8e1f653b4f43c84b5c01031 (train CI, #66). Train 11 landed at 568d5f497c3c343b8fafeebe6f1b50e13d9c56e3 (#65). Before it: 247a26942e5cc29a2ddc6b80ae43d6fe1751f45a (train 10, #64), d6820393 (train 9, #62), 5767cdb4 (gate-memfns alone, #63), 10d87778 (train 8, #61).
+Train 12 ([#67](https://github.com/David-Bascom05/forgeCAD/pull/67)) has fixes for the client review findings and is being revalidated against current main. Standalone Train 13 ([#69](https://github.com/David-Bascom05/forgeCAD/pull/69)) merged after all 82 PR checks, independent review and the full Haas differential passed. [#68](https://github.com/David-Bascom05/forgeCAD/pull/68) was closed as superseded.
 UI OKs now come from the coordinator (UX-LEAD wound down), judged against docs/ux/STANDARD.md.
 
 | branch | owner | sha | status | notes |
@@ -143,3 +143,14 @@ The stacked [#68](https://github.com/David-Bascom05/forgeCAD/pull/68) was closed
 The next independent review of #70 found that an exported snapshot could exceed the document loader's 64 MiB limit. Head `24c028d8925f269d4adf9e97fd8c3a3bb98e37ef` validates each export with that loader limit before publishing the document. [Re-review](https://github.com/David-Bascom05/forgeCAD/pull/70#issuecomment-7183094074) and CI are running on base `dfe0c096fcc8bc2b9e7de804aade9c7037d6d014`, candidate `6f0383881a5845def32e27c974581a1e82f87a45`.
 
 For #71, the main and candidate Callgrind files and the two geometry-bit files match byte for byte in the [gate artifact](https://github.com/David-Bascom05/forgeCAD/actions/runs/45756628546/artifacts/15088930528). Other checks are running. Exact-head independent review completed without findings on #19 and #72. All nine schematic regression tests passed on #72 head `7e249d06f6ef903898a0c9fd85a7b7eb3aedc980`.
+
+[#71](https://github.com/David-Bascom05/forgeCAD/pull/71) merged at `3d718a28016a1dd9f67b3f1d8b825686210999fd`. The tree matches the tested candidate (`d5a52bb66142a94376cfb6cf0ab7055ed607058a`). All 32 PR checks passed. Six main-push workflows started. #72 now targets main and runs its full train gates. The current base for all four PRs is the #71 merge.
+
+| PR | Head | Candidate | Decision |
+|---|---|---|---|
+| #67 | `b86b2d07f3b915c0e1661fc38dac614a07dc6043` | `8b887e06b8e358202733ea6462fb2e1e98b280e4` | A concurrent edit could associate an old build hash with a newer revision. Build text and revision now come from one locked snapshot. Review and CI restarted. |
+| #19 | `b23ecc5fbe38abae27a883933a1b51975d17a673` | `d045fcf4c809ac97c88e5aaedaf4b89bd2baeabb` | Corrected the stale generated source location against the CI translator output. Prior exact performance exceeded the band, worst hub/app +0.2226%. |
+| #70 | `ec1b7a4fefb0d8b66cdb50566bd7f5e1f38f5391` | `f6034a8172850a2de8ec34bc96ce90600ef9fd7c` | Seven Simplify CLI tests passed. Prior exact performance exceeded the band, worst insert/edit +0.1554%. |
+| #72 | `3759324dddfe905b7215cf01b97473b20101e595` | `d1ff9bd297e765553b5ad53ddd747d51dbfc3cb5` | Retargeted after landing #71. Exact review and main-specific checks requested. |
+
+[Per-function Callgrind comparison](https://github.com/David-Bascom05/forgeCAD/actions/runs/45762401095) covers main and the three feature trees. The performance holds require attribution and a passing exact gate.
