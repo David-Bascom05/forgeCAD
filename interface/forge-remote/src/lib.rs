@@ -11,8 +11,10 @@
 use forge_lang::error::Op;
 use forge_sync::wire::{Down, MAX_MESSAGE, Up};
 use forge_sync::{Client, Event};
+use std::net::{Shutdown, TcpStream, ToSocketAddrs};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{SyncSender, sync_channel};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -205,10 +207,21 @@ pub fn client_id() -> String {
     format!("n{:016x}", h.finish())
 }
 
+enum Outgoing {
+    Messages(Vec<Up>),
+    Pong(Vec<u8>),
+}
+
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
+const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
+const OUTBOX_CAPACITY: usize = 64;
+
 struct Shared {
     client: Client,
     events: Vec<Event>,
-    writer: Option<forge_ws::Writer>,
+    writer: Option<SyncSender<Outgoing>>,
+    /// A shutdown handle, installed before reading the HTTP upgrade.
+    socket: Option<TcpStream>,
     connected: bool,
     /// When this client last sent anything (it pings when quiet: the server closes connections
     /// it has heard nothing from).
@@ -225,22 +238,35 @@ struct Shared {
 }
 
 impl Shared {
-    fn flush(&mut self) {
-        let msgs: Vec<Up> = std::mem::take(&mut self.client.outbox);
-        if let Some(w) = &mut self.writer {
-            if !msgs.is_empty() {
-                self.last_sent = Instant::now();
-            }
-            for m in msgs {
-                if w.send(&m.text()).is_err() {
-                    self.writer = None;
-                    self.connected = false;
-                    break;
-                }
-            }
+    fn disconnect(&mut self) {
+        if let Some(socket) = self.socket.take() {
+            let _ = socket.shutdown(Shutdown::Both);
         }
-        // not connected: dropped; the reconnect re-sends Hello and every pending op
+        self.writer = None;
+        self.connected = false;
     }
+
+    fn queue(&mut self, message: Outgoing) -> bool {
+        let Some(writer) = &self.writer else { return false };
+        if writer.try_send(message).is_err() {
+            // A stalled writer cannot accumulate messages indefinitely. The next
+            // connection re-sends any unacknowledged edits under their original IDs.
+            self.disconnect();
+            return false;
+        }
+        self.last_sent = Instant::now();
+        true
+    }
+
+    fn flush(&mut self) {
+        let messages = std::mem::take(&mut self.client.outbox);
+        if !messages.is_empty() {
+            // A reconnect can replay more edits than there are queue slots.
+            // Keep that ordered replay together in the one connection's queue.
+            self.queue(Outgoing::Messages(messages));
+        }
+    }
+
 }
 
 /// One document's live connection.
@@ -320,6 +346,7 @@ impl Session {
             client: client.unwrap_or_else(|| Client::new(doc, &client_id(), &remote.token)),
             events: vec![],
             writer: None,
+            socket: None,
             connected: false,
             last_sent: Instant::now(),
             last_heard: Instant::now(),
@@ -342,20 +369,21 @@ impl Session {
                     let ping = s3.lock().unwrap_or_else(|e| e.into_inner()).ping;
                     std::thread::sleep((ping / 4).min(Duration::from_millis(500)));
                     let mut s = s3.lock().unwrap_or_else(|e| e.into_inner());
-                    if s.connected && s.last_heard.elapsed() >= ping * 3 {
-                        // a half-open link (no reply to three pings): drop it; it reconnects
-                        if let Some(w) = &s.writer {
-                            let _ = w.stream().shutdown(std::net::Shutdown::Both);
-                        }
-                        s.writer = None;
-                        s.connected = false;
+                    if s.connected && s.last_heard.elapsed() >= ping * 3
+                        || !s.connected && s.socket.is_some() && s.last_heard.elapsed() >= HANDSHAKE_TIMEOUT
+                    {
+                        s.disconnect();
                     } else if s.connected && s.last_sent.elapsed() >= ping {
                         s.client.outbox.push(Up::Ping { t: 0.0 });
                         s.flush();
                     }
                 }
             })
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| {
+                stop.store(true, Ordering::SeqCst);
+                shared.lock().unwrap_or_else(|e| e.into_inner()).disconnect();
+                e.to_string()
+            })?;
         Ok(Session {
             shared,
             stop,
@@ -449,12 +477,7 @@ impl Session {
     }
     /// Drops the connection (the thread reconnects): for tests of reconnects.
     pub fn drop_connection(&self) {
-        let mut s = self.lock();
-        if let Some(w) = &s.writer {
-            let _ = w.stream().shutdown(std::net::Shutdown::Both);
-        }
-        s.writer = None;
-        s.connected = false;
+        self.lock().disconnect();
     }
 }
 
@@ -474,31 +497,90 @@ fn run(addr: &str, path: &str, shared: &Mutex<Shared>, stop: &AtomicBool, waker:
     };
     let mut backoff = Duration::from_millis(50);
     while !stop.load(Ordering::SeqCst) {
-        let Ok((mut r, w)) = forge_ws::connect(addr, path, &[], MAX_MESSAGE) else {
-            // (connect's own wait is the OS's; then backoff)
+        let connect = || -> std::io::Result<_> {
+            let started = Instant::now();
+            let mut last = std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, "no address");
+            for address in addr.to_socket_addrs()? {
+                if stop.load(Ordering::SeqCst) {
+                    return Err(std::io::ErrorKind::Interrupted.into());
+                }
+                let left = HANDSHAKE_TIMEOUT.saturating_sub(started.elapsed());
+                if left.is_zero() {
+                    return Err(std::io::ErrorKind::TimedOut.into());
+                }
+                let socket = match TcpStream::connect_timeout(&address, left) {
+                    Ok(socket) => socket,
+                    Err(error) => {
+                        last = error;
+                        continue;
+                    }
+                };
+                socket.set_read_timeout(Some(HANDSHAKE_TIMEOUT))?;
+                socket.set_write_timeout(Some(HANDSHAKE_TIMEOUT))?;
+                let cancel = socket.try_clone()?;
+                {
+                    let mut s = lock();
+                    if stop.load(Ordering::SeqCst) {
+                        return Err(std::io::ErrorKind::Interrupted.into());
+                    }
+                    s.socket = Some(cancel);
+                    s.last_heard = Instant::now();
+                }
+                let (reader, writer) = forge_ws::upgrade_client(socket, addr, path, &[], MAX_MESSAGE)?;
+                // A read timeout in the middle of a WebSocket frame would leave the
+                // framing out of step. Only the HTTP upgrade has a read timeout.
+                writer.stream().set_read_timeout(None)?;
+                writer.stream().set_write_timeout(Some(WRITE_TIMEOUT))?;
+                return Ok((reader, writer));
+            }
+            Err(last)
+        };
+        let Ok((mut r, mut w)) = connect() else {
+            lock().disconnect();
+            if !stop.load(Ordering::SeqCst) {
+                std::thread::sleep(backoff);
+                backoff = (backoff * 2).min(Duration::from_secs(5));
+            }
+            continue;
+        };
+        let (send, receive) = sync_channel(OUTBOX_CAPACITY);
+        let Ok(writer) = std::thread::Builder::new()
+            .name("forge-remote write".into())
+            .spawn(move || {
+                while let Ok(message) = receive.recv() {
+                    let result = match message {
+                        Outgoing::Messages(messages) => messages.iter().try_for_each(|message| w.send(&message.text())),
+                        Outgoing::Pong(data) => w.pong(&data),
+                    };
+                    if result.is_err() {
+                        let _ = w.stream().shutdown(Shutdown::Both);
+                        break;
+                    }
+                }
+            })
+        else {
+            lock().disconnect();
             std::thread::sleep(backoff);
             backoff = (backoff * 2).min(Duration::from_secs(5));
             continue;
         };
-        // (the backoff resets only once a Welcome came: a server that closes at once, or refuses,
-        // is not retried 40 times a second)
-        // no read timeout: a timeout in the middle of a frame would leave the framing out of
-        // step (the security review's finding); quiet links are kept alive by the pinger thread,
-        // and a dead one ends in a reset or in the server's idle close
-        // writes are made under the session's lock: never one that can block for long
-        let _ = w.stream().set_write_timeout(Some(Duration::from_secs(10)));
         {
             let mut s = lock();
-            s.last_heard = Instant::now();
-            s.writer = Some(w);
-            s.connected = true;
-            // Hello (from the last seq applied) and every pending op again
-            s.client.reconnect();
-            s.flush();
+            // The document may have closed or the handshake deadline expired just
+            // as the peer replied.
+            if s.socket.is_some() && !stop.load(Ordering::SeqCst) {
+                s.last_heard = Instant::now();
+                s.writer = Some(send);
+                s.connected = true;
+                s.client.reconnect();
+                s.flush();
+            } else {
+                drop(send);
+            }
         }
         loop {
-            if stop.load(Ordering::SeqCst) {
-                return;
+            if stop.load(Ordering::SeqCst) || !lock().connected {
+                break;
             }
             match r.read() {
                 Ok(forge_ws::Msg::Text(t)) => {
@@ -549,17 +631,13 @@ fn run(addr: &str, path: &str, shared: &Mutex<Shared>, stop: &AtomicBool, waker:
                     }
                 }
                 Ok(forge_ws::Msg::Ping(p)) => {
-                    if let Some(w) = &mut lock().writer {
-                        let _ = w.pong(&p);
-                    }
+                    lock().queue(Outgoing::Pong(p));
                 }
                 Ok(forge_ws::Msg::Close) | Err(_) => break,
             }
         }
-        let mut s = lock();
-        s.writer = None;
-        s.connected = false;
-        drop(s);
+        lock().disconnect();
+        let _ = writer.join();
         if !stop.load(Ordering::SeqCst) {
             std::thread::sleep(backoff);
             backoff = (backoff * 2).min(Duration::from_secs(5));
@@ -613,6 +691,50 @@ mod tests {
         std::fs::create_dir_all(&d).unwrap();
         assert!(remote(&d).is_none(), "no file: LOCAL");
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn closing_cancels_an_unanswered_upgrade() {
+        use std::io::Read;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let remote = Remote {
+            name: "stalled".into(),
+            url: format!("ws://{}/sync", listener.local_addr().unwrap()),
+            token: "test".into(),
+        };
+        let session = Session::start(&remote, "p.fg", None).unwrap();
+        let (mut socket, _) = listener.accept().unwrap();
+        socket.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        let mut request = [0; 4];
+        socket.read_exact(&mut request).unwrap();
+        assert_eq!(&request, b"GET ");
+        assert!(!session.connected());
+        drop(session);
+        let mut rest = Vec::new();
+        match socket.read_to_end(&mut rest) {
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::ConnectionReset => {}
+            Err(e) => panic!("upgrade socket was not shut down: {e}"),
+        }
+    }
+
+    #[test]
+    fn a_full_writer_queue_disconnects_without_waiting() {
+        let remote = Remote {
+            name: "offline".into(),
+            url: "ws://127.0.0.1:1/sync".into(),
+            token: "test".into(),
+        };
+        let session = Session::start(&remote, "p.fg", None).unwrap();
+        // Install a queue whose receiver deliberately makes no progress. A
+        // second call must disconnect instead of waiting for the receiver.
+        let (sender, _stalled) = sync_channel(1);
+        let mut shared = session.lock();
+        shared.writer = Some(sender);
+        shared.connected = true;
+        assert!(shared.queue(Outgoing::Pong(vec![1])));
+        assert!(!shared.queue(Outgoing::Pong(vec![2])));
+        assert!(!shared.connected && shared.writer.is_none());
     }
 
     /// The review's 11: a frame cut in two by a pause (longer than the ping interval) is read

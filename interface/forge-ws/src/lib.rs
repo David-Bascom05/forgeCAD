@@ -140,7 +140,18 @@ pub fn connect(
     headers: &[(&str, &str)],
     max: usize,
 ) -> io::Result<(Reader, Writer)> {
-    let s = TcpStream::connect(addr)?;
+    upgrade_client(TcpStream::connect(addr)?, addr, path_and_query, headers, max)
+}
+
+/// Upgrade a connected socket. Callers can install deadlines and a shutdown handle
+/// before waiting for the peer's response.
+pub fn upgrade_client(
+    s: TcpStream,
+    addr: &str,
+    path_and_query: &str,
+    headers: &[(&str, &str)],
+    max: usize,
+) -> io::Result<(Reader, Writer)> {
     s.set_nodelay(true)?;
     let mut w = s.try_clone()?;
     let mut mask = Mask::new();
