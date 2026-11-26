@@ -40,7 +40,7 @@ no family extension changes where a document goes.
 
 | Kind | Item | Names | Rust site | Lean |
 |---|---|---|---|---|
-| builtins | `schematic` | `role`, `symbol`, `pin`, `line`, `rect`, `arc`, `polyline`, `circle`, `text`, `library`, `sheet`, `place`, `gate`, `subsheet`, `junction`, `port`, `wire`, `label`, `no_connect`, `note`, `flow`, `bus`, `fulfill` | closed call signatures in schematic::ARGS | `LL1.Documents.schematic_doc_accepted`, `Families.families_not_keywords`, `Schematic.binding_sound_complete`, `Schematic.resolved_binding_typed`; GAP full elaboration and ERC refinement |
+| builtins | `schematic` | `role`, `symbol`, `pin`, `line`, `rect`, `arc`, `polyline`, `circle`, `text`, `library`, `sheet`, `place`, `gate`, `subsheet`, `junction`, `port`, `wire`, `label`, `no_connect`, `note`, `flow`, `bus`, `fulfill`, `waiver`, `erc_rule`, `variant`, `function`, `annotation` | closed call signatures in schematic::ARGS | `LL1.Documents.schematic_doc_accepted`, `Families.families_not_keywords`, `Schematic.binding_sound_complete`, `Schematic.resolved_binding_typed`; GAP full elaboration and ERC refinement |
 | builtins | `core` | `use`, `sqrt`, `div`, `mod`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `abs`, `min`, `max`, `count`, `ratio`, `len`, `polar`, `pt`, `near`, `line`, `arc`, `circle`, `ellipse`, `earc`, `rect`, `slot`, `hull`, `disc`, `poly`, `spline`, `tarc`, `close`, `tangent`, `coincident`, `horizontal`, `vertical`, `parallel`, `perpendicular`, `equal`, `midpoint`, `distance`, `radius`, `angle`, `fix`, `concentric`, `collinear`, `symmetric`, `hdistance`, `vdistance`, `extrude`, `cut`, `revolve`, `fillet`, `chamfer`, `shell`, `loft`, `offset`, `rotate`, `edges`, `faces`, `shift`, `hline`, `vline`, `meet`, `mid`, `plane`, `properties` | `interface/forge-lang/src/builtins.rs` `BUILTINS`; part namespace (`builtins::NAMES`, ShadowsBuiltin) | `Builtins.extend_conservative` (with `N` the family; its hypothesis, no refusal-subject binding of the names, checked by lang_coverage::shadow_families_bound_nowhere), `Builtins.resolve_append_off`, `Builtins.shadows_new`; the base list `B` |
 | builtins | `shapes` | `sweep`, `coil`, `draft`, `offset_faces`, `delete_faces`, `replace_face`, `move_faces`, `thicken`, `rib`, `facefillet`, `fullround`, `ball`, `sphere`, `dome` | `shapes.rs` `NAMES`; part namespace (`builtins::NAMES`, ShadowsBuiltin) | `Builtins.extend_conservative` (with `N` the family; its hypothesis, no refusal-subject binding of the names, checked by lang_coverage::shadow_families_bound_nowhere), `Builtins.resolve_append_off`, `Builtins.shadows_new` |
 | builtins | `constants` | `pi`, `X`, `Y`, `Z`, `xy`, `xz`, `yz`, `thru`, `thru_all`, `next`, `axis`, `sym`, `two`, `upto`, `intersect` | `builtins.rs` `CONSTANTS`, `MORE`; part namespace (`builtins::NAMES`, ShadowsBuiltin) | `Builtins.extend_conservative` (with `N` the family; its hypothesis, no refusal-subject binding of the names, checked by lang_coverage::shadow_families_bound_nowhere), `Builtins.resolve_append_off`, `Builtins.shadows_new` |
@@ -109,18 +109,23 @@ extension so far:
 
 | Kind | Item | Names | Rust site | Lean |
 |---|---|---|---|---|
+| args | `schematic::function` | `kind`, `wants`, `gives` | schematic::ARGS and checked reader | `Schematic.selected_function_wants`, `Schematic.selected_function_gives`. GAP record decoding in Rust |
+| args | `schematic::annotation` | `occurrence`, `reference`, `locked` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::variant` | `omit`, `fit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::erc_rule` | `rule`, `severity` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::waiver` | `rule`, `objects`, `reason` | schematic::ARGS and checked reader | `Schematic.adding_waiver_preserves_other_finding`. GAP record decoding in Rust |
 | args | `schematic::role` | `kind`, `key`, `capacitance_nf`, `voltage_mv`, `voltage_range_v`, `prefer`, `connect_to`, `through`, `part_path`, `value`, `value_range` | schematic::ARGS and checked reader | `Schematic.acceptsVoltage_iff` for inclusive voltage ranges. `Schematic.direct_connection_iff` for direct wants. `Schematic.one_bridge_witness` and `Schematic.short_bypasses_bridge` cover one-hop matching on partitioned nets. GAP record decoding in Rust |
 | args | `schematic::symbol` | `pins`, `graphics`, `fields`, `datasheet`, `power_net`, `ref_prefix`, `peripherals`, `part_kind`, `paths` | schematic::ARGS and checked reader | GAP record decoding in Rust |
-| args | `schematic::pin` | `number`, `kind`, `at`, `angle`, `wants`, `gives`, `unit`, `description`, `aliases` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::pin` | `number`, `kind`, `at`, `angle`, `wants`, `gives`, `unit`, `description`, `aliases`, `functions`, `pads` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::line` | `from`, `to`, `unit`, `sheet`, `width` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::rect` | `from`, `to`, `unit`, `sheet`, `width` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::arc` | `from`, `mid`, `to`, `unit`, `sheet`, `width` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::polyline` | `points`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::circle` | `at`, `radius`, `unit`, `sheet`, `width` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::text` | `at`, `value`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
-| args | `schematic::library` | `file` | schematic::ARGS and checked reader | GAP record decoding in Rust |
-| args | `schematic::sheet` | `title` | schematic::ARGS and checked reader | GAP record decoding in Rust |
-| args | `schematic::place` | `sheet`, `symbol`, `unit`, `value`, `footprint`, `fields`, `datasheet`, `populated`, `in_bom`, `ref_offset`, `value_offset`, `wants`, `gives`, `at`, `angle`, `mirror` | schematic::ARGS and checked reader | `Schematic.effective_wants` and `Schematic.effective_gives` for role inheritance. GAP record decoding in Rust |
+| args | `schematic::library` | `file` | schematic::ARGS and checked reader | `Schematic.nested_qualification`, `Schematic.nested_shared_role`. GAP record decoding in Rust |
+| args | `schematic::sheet` | `title`, `template` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::place` | `sheet`, `symbol`, `unit`, `value`, `footprint`, `fields`, `datasheet`, `populated`, `in_bom`, `ref_offset`, `value_offset`, `wants`, `gives`, `at`, `angle`, `mirror`, `functions`, `reference`, `bindings` | schematic::ARGS and checked reader | `Schematic.effective_wants` and `Schematic.effective_gives` for role inheritance. GAP record decoding in Rust |
 | args | `schematic::gate` | `sheet`, `of`, `unit`, `at`, `angle`, `mirror` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::subsheet` | `sheet`, `of`, `at`, `ports` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::junction` | `sheet`, `at` | schematic::ARGS and checked reader | GAP record decoding in Rust |
@@ -249,6 +254,8 @@ scope).
 | not-names | `interface/forge-lang/src/explode.rs::SCREWS` | | standard screw file names | not a namespace |
 | not-names | `interface/forge-lang/src/fuzz.rs::UNREAD` | | error kinds (the fuzzer's) | not a namespace |
 | not-names | `interface/forge-lang/src/harness.rs::CSV_COLUMNS` | | wire-list CSV columns | not a namespace |
+| not-names | `interface/forge-lang/src/schematic/mod.rs::PART_KINDS` | | component type suggestions for string-valued fields | open classification vocabulary |
+| not-names | `interface/forge-lang/src/schematic/mod.rs::ERC_RULES` | | ERC diagnostic codes | rule selectors in quoted fields |
 | not-names | `interface/forge-lang/src/harness.rs::PLAIN` | | harness library CSV columns | not a namespace |
 | not-names | `interface/forge-lang/src/holes.rs::HOLE_ARGS` | | keyword arguments of `hole` | not a namespace |
 | not-names | `interface/forge-lang/src/holes.rs::HOLE_CLASSES` | | the ISO 286 hole classes `hole(.., fit:)` takes on a plain hole (string values, recorded for CAM's ream; no geometry) | not a namespace |

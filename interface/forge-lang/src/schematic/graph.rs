@@ -8,6 +8,7 @@ pub struct Terminal {
     pub power_net: Option<String>,
     pub populated: bool,
     pub number: String,
+    pub function: Option<String>,
     pub electrical: Electrical,
     pub wants: Set<RoleId>,
     pub gives: Set<RoleId>,
@@ -23,14 +24,36 @@ pub struct Link {
 }
 #[derive(Clone, Debug)]
 pub struct Issue {
+    pub unknown: bool,
     pub kind: &'static str,
     pub objects: Vec<String>,
     pub message: String,
 }
 impl Issue {
+    pub fn waiver<'a>(&self, d: &'a Document) -> Option<&'a str> {
+        if d.waivers.is_empty() {
+            return None;
+        }
+        let mut objects = self.objects.clone();
+        objects.sort();
+        objects.dedup();
+        d.waivers
+            .get(&(self.kind.to_owned(), objects))
+            .map(String::as_str)
+    }
+    pub fn priority<'a>(&self, d: &'a Document) -> &'a str {
+        d.severities
+            .get(self.kind)
+            .map_or(self.severity(), String::as_str)
+    }
+    pub fn status(&self) -> &'static str {
+        if self.unknown { "unknown" } else { "failed" }
+    }
     pub fn severity(&self) -> &'static str {
         match self.kind {
-            "DriverConflict"
+            "PeripheralConflict"
+            | "BusMemberShort"
+            | "DriverConflict"
             | "PinConnectionMismatch"
             | "VoltageOutOfRange"
             | "ConnectedNoConnect"
@@ -106,6 +129,9 @@ pub(super) fn transform(local: Point, at: Point, angle: f64, mirror: bool) -> Po
 }
 impl Circuit {
     pub fn build(doc: &Document) -> Result<Self> {
+        Self::build_fitted(doc, &Map::new())
+    }
+    pub fn build_fitted(doc: &Document, overrides: &Map<String, bool>) -> Result<Self> {
         let mut c = Self::default();
         if doc.library {
             c.issues = super::drawing::library_readability(doc);
@@ -133,10 +159,81 @@ impl Circuit {
         if let Some(k) = doc.sheets.keys().find(|k| !seen.contains(*k)) {
             return Err(Fault::new("SheetCycle", Span::default(), k));
         }
+        for (pin, t) in &mut c.terminals {
+            if let Some(fit) = pin.rsplit_once('.').and_then(|(owner, _)| overrides.get(owner)) {
+                t.populated = *fit;
+            }
+        }
         c.partition();
         c.check_voltages(doc);
         c.check_connections(doc, &by_sheet);
         c.check();
+        for (id, members) in &c.buses {
+            let mut seen = Map::new();
+            for (lane, pin) in members {
+                if let Some(other) = seen.insert(&c.net_of[pin], lane) {
+                    c.issues.push(Issue {
+                        unknown: false,
+                        kind: "BusMemberShort",
+                        objects: vec![id.clone(), members[other].clone(), pin.clone()],
+                        message: format!("{other} and {lane} share a net"),
+                    });
+                }
+            }
+        }
+        let mut placed_paths = Set::new();
+        for (scope, sheet) in &c.occurrences {
+            let mut refs = Set::new();
+            for row in by_sheet.get(sheet.as_str()).into_iter().flatten() {
+                if let Item::Place {
+                    symbol,
+                    functions,
+                    reference,
+                    ..
+                } = &row.item
+                {
+                    let path = format!("{scope}/{}", row.id);
+                    let display = doc.reference(&path, reference.as_ref().unwrap_or(&row.id));
+                    if doc.symbols[symbol].power_net.is_none() {
+                        placed_paths.insert(path);
+                    }
+                    if !refs.insert(display) {
+                        return Err(Fault::new(
+                            "DuplicateReference",
+                            row.span,
+                            format!("{scope}/{display}"),
+                        ));
+                    }
+                    for (group, signals) in &doc.symbols[symbol].peripherals {
+                        for (signal, pins) in signals {
+                            let active: Vec<_> = pins
+                                .iter()
+                                .filter(|p| functions.get(*p) == Some(signal))
+                                .map(|p| format!("{scope}/{}.{p}", row.id))
+                                .collect();
+                            if active.len() > 1 {
+                                c.issues.push(Issue {
+                                    unknown: false,
+                                    kind: "PeripheralConflict",
+                                    objects: active,
+                                    message: format!("More than one pin selects {group}.{signal}"),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for path in doc.annotations.keys() {
+            if !placed_paths.contains(path) {
+                return Err(Fault::new("UnknownAnnotationPart", Span::default(), path));
+            }
+        }
+        for path in doc.variants.values().flat_map(|changes| changes.keys()) {
+            if !placed_paths.contains(path) {
+                return Err(Fault::new("UnknownVariantPart", Span::default(), path));
+            }
+        }
         c.sort_findings();
         Ok(c)
     }
@@ -169,12 +266,13 @@ impl Circuit {
                 if let Item::Place {
                     symbol,
                     populated,
+                    functions,
                     wants,
                     gives,
                     ..
                 } = &r.item
                 {
-                    Some((r.id.as_str(), (symbol, *populated, wants, gives)))
+                    Some((r.id.as_str(), (symbol, *populated, wants, gives, functions)))
                 } else {
                     None
                 }
@@ -202,7 +300,7 @@ impl Circuit {
                 _ => None,
             };
             if let Some((owner, unit, at, angle, mirror)) = gate {
-                let &(symbol, populated, wants, gives) = placed
+                let &(symbol, populated, wants, gives, functions) = placed
                     .get(owner.as_str())
                     .ok_or_else(|| Fault::new("UnknownOccurrence", row.span, owner))?;
                 let def = &doc.symbols[symbol];
@@ -224,6 +322,7 @@ impl Circuit {
                         self.origins.entry(rail.clone()).or_insert(row.span);
                         self.edge(&key, &rail);
                     }
+                    let mode = functions.get(name).map(|f| &pin.functions[f]);
                     self.terminals.insert(
                         key,
                         Terminal {
@@ -233,15 +332,16 @@ impl Circuit {
                             pin: name.clone(),
                             power_net: def.power_net.clone(),
                             number: pin.number.clone(),
-                            electrical: pin.electrical,
-                            wants: pin
-                                .wants
+                            function: functions.get(name).cloned(),
+                            electrical: mode.map_or(pin.electrical, |f| f.electrical),
+                            wants: mode
+                                .map_or(&pin.wants, |f| &f.wants)
                                 .iter()
                                 .chain(wants.get(name).into_iter().flatten())
                                 .cloned()
                                 .collect(),
-                            gives: pin
-                                .gives
+                            gives: mode
+                                .map_or(&pin.gives, |f| &f.gives)
                                 .iter()
                                 .chain(gives.get(name).into_iter().flatten())
                                 .cloned()
@@ -291,6 +391,7 @@ impl Circuit {
                 .collect();
             for unit in missing {
                 self.issues.push(Issue {
+                    unknown: false,
                     kind: "UnplacedGate",
                     objects: vec![format!("{scope}/{owner}"), unit.clone()],
                     message: "sub part has no schematic placement".into(),
@@ -479,6 +580,7 @@ impl Circuit {
                     });
                     if !required.accepts(offered) {
                         self.issues.push(Issue {
+                            unknown: false,
                             kind: "VoltageOutOfRange",
                             objects: vec![pin.clone(), peer.clone()],
                             message: format!("{pin} wants {required}. {peer} provides {offered}."),
@@ -487,6 +589,7 @@ impl Circuit {
                 }
                 if check.providers.is_empty() {
                     self.issues.push(Issue {
+                        unknown: true,
                         kind: "UnknownSupplyVoltage",
                         objects: vec![pin.clone()],
                         message: format!(
@@ -503,11 +606,15 @@ impl Circuit {
     }
     fn check(&mut self) {
         let issue = |kind, objects, message: &str| Issue {
+            unknown: kind == "UnfulfilledWant",
             kind,
             objects,
             message: message.into(),
         };
         for (id, pin) in &self.terminals {
+            if !pin.populated {
+                continue;
+            }
             let connected = self.attached.contains(id);
             if connected && (self.nc.contains(id) || pin.electrical == Electrical::Unused) {
                 self.issues.push(issue(
@@ -524,9 +631,9 @@ impl Circuit {
             let outputs: Vec<_> = members
                 .iter()
                 .filter(|id| {
-                    self.terminals
-                        .get(*id)
-                        .is_some_and(|p| matches!(p.electrical, Electrical::Output | Electrical::Source))
+                    self.terminals.get(*id).is_some_and(|p| {
+                        p.populated && matches!(p.electrical, Electrical::Output | Electrical::Source)
+                    })
                 })
                 .cloned()
                 .collect();
@@ -555,7 +662,10 @@ impl Circuit {
             for pin in [&link.want, &link.give] {
                 self.relations.entry(pin.clone()).or_default().push(i);
             }
-            if self.net_of[&link.want] != self.net_of[&link.give] {
+            if !self.terminals[&link.want].populated {
+                continue;
+            }
+            if !self.terminals[&link.give].populated || self.net_of[&link.want] != self.net_of[&link.give] {
                 self.issues.push(issue(
                     "DisconnectedFulfillment",
                     vec![link.id.clone(), link.want.clone(), link.give.clone()],

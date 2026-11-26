@@ -40,6 +40,9 @@ impl BomLine {
     }
 }
 pub fn bom(doc: &Document, c: &Circuit) -> Vec<BomLine> {
+    bom_for(doc, c, &Map::new())
+}
+pub fn bom_for(doc: &Document, c: &Circuit, overrides: &Map<String, bool>) -> Vec<BomLine> {
     let mut lines: Map<PartSpec, Vec<String>> = Map::new();
     for (path, sheet) in &c.occurrences {
         for row in doc.rows.iter().filter(|r| r.sheet == *sheet) {
@@ -49,13 +52,16 @@ pub fn bom(doc: &Document, c: &Circuit) -> Vec<BomLine> {
                 footprint,
                 fields,
                 datasheet,
-                populated: true,
+                reference,
+                populated,
                 in_bom: true,
                 ..
             } = &row.item
             {
                 let lib = &doc.symbols[symbol];
-                if lib.power_net.is_some() {
+                if lib.power_net.is_some()
+                    || !overrides.get(&format!("{path}/{}", row.id)).unwrap_or(populated)
+                {
                     continue;
                 }
                 let mut merged = lib.fields.clone();
@@ -67,7 +73,13 @@ pub fn bom(doc: &Document, c: &Circuit) -> Vec<BomLine> {
                     fields: merged,
                     datasheet: datasheet.clone().or_else(|| lib.datasheet.clone()),
                 };
-                lines.entry(part).or_default().push(format!("{path}/{}", row.id));
+                lines.entry(part).or_default().push(format!(
+                    "{path}/{}",
+                    doc.reference(
+                        &format!("{path}/{}", row.id),
+                        reference.as_ref().unwrap_or(&row.id)
+                    )
+                ));
             }
         }
     }

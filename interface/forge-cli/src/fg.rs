@@ -145,6 +145,30 @@ impl Session {
     }
 
     fn schematic_reply(&mut self, path: &Path, src: &str, words: &[String]) -> Reply {
+        if words == ["pdf"] {
+            let result = forge_lang::schematic::compile(src, path.parent(), self.root.as_deref())
+                .and_then(|(d, c)| forge_lang::schematic::sheet_pdf(&d, &c));
+            return match result {
+                Ok(bytes) => Reply {
+                    ok: true,
+                    text: format!("{} bytes", bytes.len()),
+                    json: Json::obj(vec![
+                        ("ok", true.into()),
+                        ("media_type", "application/pdf".into()),
+                        ("mime", "application/pdf".into()),
+                        ("format", "pdf".into()),
+                        ("version", version(src).into()),
+                    ]),
+                    png: Some(bytes),
+                },
+                Err(e) => Reply {
+                    ok: false,
+                    text: e.message.clone(),
+                    json: e.json(),
+                    png: None,
+                },
+            };
+        }
         let result = self.schematic.query(path, self.root.as_deref(), src, words);
         let ok = result.is_ok();
         let mut json = result.unwrap_or_else(|err| err.json());
@@ -423,7 +447,11 @@ impl Session {
                     post: p.post.clone(),
                     text: p.text.clone(),
                     error: p.error.clone(),
-                    certified: if p.text.is_none() { "no".into() } else { cert.clone() },
+                    certified: if p.text.is_none() {
+                        "no".into()
+                    } else {
+                        cert.clone()
+                    },
                     setup: None,
                 })
                 .collect()
@@ -1153,6 +1181,25 @@ impl Session {
         let Some(other) = a.words.first() else {
             return Err("diff takes two parts: diff A B [volume]".into());
         };
+        let (path, src) = self.read(&a.file)?;
+        if forge_lang::schematic::is_document(&src) {
+            let (other_path, other_src) = self.read(other)?;
+            let read = |p: &Path, s: &str| {
+                forge_lang::schematic::compile(s, p.parent(), self.root.as_deref())
+                    .map_err(|e| format!("{} · {}", e.kind, e.message))
+            };
+            let (old, oc) = read(&path, &src)?;
+            let (new, nc) = read(&other_path, &other_src)?;
+            let changes =
+                forge_lang::schematic::electrical_diff((&old, &oc), (&new, &nc)).map_err(|e| e.message)?;
+            let json = Json::obj(vec![("ok", true.into()), ("changes", changes)]);
+            return Ok(Reply {
+                ok: true,
+                text: json.to_string(),
+                json,
+                png: None,
+            });
+        }
         let side = |file: &str| -> Result<forge_lang::compare::Side, String> {
             let (p, text) = self.read(file)?;
             let opts = Options {

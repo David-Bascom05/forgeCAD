@@ -3,24 +3,31 @@
 mod author;
 mod connection;
 pub use connection::{ConnectionCheck, ConnectionWant, PartType, PartValue};
+mod block;
 mod drawing;
+pub use block::{BlockPlan, block_plan};
+mod project;
+pub use project::{SearchHit, board, electrical_diff, project_annotation, reannotate, search};
 mod graph;
 mod move_cache;
 mod reader;
 mod report;
 use crate::syntax::Span;
 mod inspection;
-pub use drawing::{graphic_page, pin_inspection_page, sheet_page, sheet_selection_page, symbol_page};
+pub use drawing::{
+    graphic_page, pin_inspection_page, sheet_page, sheet_pdf, sheet_selection_page, symbol_page,
+};
 pub use graph::Circuit;
 pub use inspection::{Direction, Evidence, PinInspection, inspect_pin, wire_directions};
 mod bom;
 pub mod datasheet;
-pub use bom::{BomLine, bom, bom_csv};
+pub use bom::{BomLine, bom, bom_csv, bom_for};
 pub use reader::{parameter_dimension, read};
 pub use report::response;
 use std::collections::{BTreeMap as Map, BTreeSet as Set};
 use std::path::Path;
 
+pub const NEW_SCHEMATIC: &str = "schematic\nframes = library(file: \"forge:frames\")\nmain = sheet(title: \"Main sheet\", template: frames.A4)\n";
 pub const POWER_LIBRARY: &str = include_str!("power.fg");
 pub fn power_symbols() -> &'static std::collections::BTreeMap<String, String> {
     static NAMES: std::sync::OnceLock<std::collections::BTreeMap<String, String>> =
@@ -34,6 +41,41 @@ pub fn power_symbols() -> &'static std::collections::BTreeMap<String, String> {
             .collect()
     })
 }
+pub const PART_KINDS: &[&str] = &[
+    "resistor",
+    "capacitor",
+    "inductor",
+    "diode",
+    "fet",
+    "mosfet",
+    "jfet",
+    "bjt",
+    "relay",
+    "switch",
+    "fuse",
+    "connector",
+    "transformer",
+    "crystal",
+    "ic",
+];
+pub const ERC_RULES: &[&str] = &[
+    "DriverConflict",
+    "PinConnectionMismatch",
+    "VoltageOutOfRange",
+    "ConnectedNoConnect",
+    "ReturnMismatch",
+    "DisconnectedFulfillment",
+    "NetLabelConflict",
+    "UnknownSupplyVoltage",
+    "UnconnectedPin",
+    "UnfulfilledWant",
+    "UnplacedGate",
+    "TextGeometryOverlap",
+    "TextBoundsOverlap",
+    "PeripheralConflict",
+    "BusMemberShort",
+];
+
 pub const HEADERS: &[&str] = &["schematic", "symbol_library"];
 pub const ARGS: &[(&str, &[&str])] = &[
     (
@@ -78,6 +120,8 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "unit",
             "description",
             "aliases",
+            "functions",
+            "pads",
         ],
     ),
     ("line", &["from", "to", "unit", "sheet", "width"]),
@@ -87,7 +131,12 @@ pub const ARGS: &[(&str, &[&str])] = &[
     ("circle", &["at", "radius", "unit", "sheet", "width"]),
     ("text", &["at", "value", "unit"]),
     ("library", &["file"]),
-    ("sheet", &["title"]),
+    ("sheet", &["title", "template"]),
+    ("erc_rule", &["rule", "severity"]),
+    ("waiver", &["rule", "objects", "reason"]),
+    ("annotation", &["occurrence", "reference", "locked"]),
+    ("variant", &["omit", "fit"]),
+    ("function", &["kind", "wants", "gives"]),
     (
         "place",
         &[
@@ -102,6 +151,9 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "in_bom",
             "ref_offset",
             "value_offset",
+            "reference",
+            "bindings",
+            "functions",
             "wants",
             "gives",
             "at",
@@ -193,7 +245,15 @@ pub struct Role {
 }
 
 #[derive(Clone, Debug)]
+pub struct PinFunction {
+    pub electrical: Electrical,
+    pub wants: Set<RoleId>,
+    pub gives: Set<RoleId>,
+}
+#[derive(Clone, Debug)]
 pub struct Pin {
+    pub functions: Map<String, PinFunction>,
+    pub pads: Vec<String>,
     pub aliases: Set<String>,
     pub description: String,
     pub number: String,
@@ -233,6 +293,9 @@ pub struct Symbol {
 #[derive(Clone, Debug)]
 pub enum Item {
     Place {
+        reference: Option<String>,
+        bindings: Map<String, String>,
+        functions: Map<String, String>,
         symbol: String,
         wants: Map<String, Set<RoleId>>,
         gives: Map<String, Set<RoleId>>,
@@ -306,9 +369,22 @@ pub struct Row {
     pose_span: Option<Span>,
     pub span: Span,
 }
+#[derive(Debug)]
+pub struct Annotation {
+    pub id: String,
+    pub reference: String,
+    pub locked: bool,
+}
 #[derive(Default, Debug)]
 pub struct Document {
     pub(super) imports: Vec<(std::path::PathBuf, std::path::PathBuf)>,
+    /// Qualified import namespace and owning file. Bundled libraries have no disk path.
+    pub libraries: Map<String, Option<std::path::PathBuf>>,
+    pub annotations: Map<String, Annotation>,
+    pub templates: Map<String, String>,
+    pub severities: Map<String, String>,
+    pub waivers: Map<(String, Vec<String>), String>,
+    pub variants: Map<String, Map<String, bool>>,
     pub library: bool,
     pub roles: Map<RoleId, Role>,
     pub role_names: Map<String, RoleId>,
@@ -388,10 +464,56 @@ impl Cache {
             });
         }
         let last = self.last.as_ref().expect("compiled revision");
-        let reply = response(&last.doc, &last.circuit, words)?;
+        use forge_agent::json::Json;
+        let selection: Vec<_> = words.iter().map(String::as_str).collect();
+        let plan = match selection.as_slice() {
+            ["plan-block", mode @ ("copy" | "move"), scope, x, y, objects @ ..] => {
+                let amount = |v: &str| {
+                    v.parse::<f64>().map_err(|_| {
+                        Fault::new(
+                            "ExpectedLength",
+                            Span::default(),
+                            "enter the offset in millimetres",
+                        )
+                    })
+                };
+                Some(block_plan(
+                    src,
+                    &last.doc,
+                    &last.circuit,
+                    scope,
+                    &objects.iter().map(|s| s.to_string()).collect(),
+                    [amount(x)?, amount(y)?],
+                    *mode == "copy",
+                )?)
+            }
+            ["plan-reannotate"] => Some(BlockPlan {
+                ops: project_annotation(src, &last.doc, &last.circuit)?,
+                boundary: Set::new(),
+            }),
+            _ => None,
+        };
+        let reply = if let Some(plan) = plan {
+            Json::obj(vec![
+                ("schema", "forgecad.schematic/1".into()),
+                ("ok", true.into()),
+                (
+                    "result",
+                    Json::obj(vec![
+                        ("ops", Json::Arr(plan.ops.iter().map(|o| o.json()).collect())),
+                        (
+                            "boundary",
+                            Json::Arr(plan.boundary.into_iter().map(Into::into).collect()),
+                        ),
+                    ]),
+                ),
+            ])
+        } else {
+            response(&last.doc, &last.circuit, words)?
+        };
         if matches!(
             words.first().map(String::as_str),
-            Some("plan-bypass" | "plan-fulfillment")
+            Some("plan-bypass" | "plan-fulfillment" | "plan-reannotate" | "plan-block")
         ) {
             let forge_agent::json::Json::Arr(ops) = reply
                 .get("result")
@@ -413,6 +535,11 @@ impl Cache {
 }
 
 impl Document {
+    pub fn reference<'a>(&'a self, path: &str, default: &'a str) -> &'a str {
+        self.annotations
+            .get(path)
+            .map_or(default, |a| a.reference.as_str())
+    }
     pub fn library_paths(&self) -> impl Iterator<Item = &Path> {
         self.imports.iter().map(|(_, path)| path.as_path())
     }

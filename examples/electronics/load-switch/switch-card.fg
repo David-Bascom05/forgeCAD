@@ -1,0 +1,13 @@
+schematic
+components = library(file: "components/catalog.fg")
+frames = library(file: "forge:frames")
+switch_path = role(kind: "signal", connect_to: OUT, through: "fet", part_path: "channel")
+overview = sheet(title: "Dual load switch", template: frames.A4)
+channel = sheet(title: "Load switch channel", template: frames.A4)
+left = subsheet(sheet: overview, of: channel, at: (-30,0))
+right = subsheet(sheet: overview, of: channel, at: (30,0))
+J1 = place(sheet: channel, symbol: components.Connector, at: (-18,0), wants: {IN: [switch_path]})
+Q1 = place(sheet: channel, symbol: components.discrete.switches.PowerFET, at: (8,2), footprint: "DFN-3-EP", value: "N-channel")
+supply = wire(sheet: channel, from: J1.IN, to: Q1.drain)
+load = wire(sheet: channel, from: Q1.source, to: J1.OUT, via: [(19,2),(19,-12),(-10,-12),(-10,-2)])
+prototype = variant(omit: ["overview/right/Q1"])

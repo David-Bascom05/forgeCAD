@@ -71,6 +71,31 @@ theorem effective_gives (library placement : Port) (r : RoleId) :
     r ∈ (effectivePort library placement).gives ↔ r ∈ library.gives ∨ r ∈ placement.gives := by
   simp [effectivePort]
 
+/-- A selected alternate function supplies the port contract before placement roles are added. -/
+def selectedPort (defaultPort : Port) (mode : Option Port) (placed : Port) : Port :=
+  effectivePort (mode.getD defaultPort) placed
+
+theorem selected_function_wants (base mode placed : Port) (r : RoleId) :
+    r ∈ (selectedPort base (some mode) placed).wants ↔ r ∈ mode.wants ∨ r ∈ placed.wants := by
+  exact effective_wants mode placed r
+
+theorem selected_function_gives (base mode placed : Port) (r : RoleId) :
+    r ∈ (selectedPort base (some mode) placed).gives ↔ r ∈ mode.gives ∨ r ∈ placed.gives := by
+  exact effective_gives mode placed r
+
+/-- Object lists enter this model after the reader sorts and deduplicates the qualified IDs. -/
+structure FindingKey where
+  rule : String
+  objects : List String
+  deriving DecidableEq
+
+def waived (exceptions : List FindingKey) (finding : FindingKey) : Bool :=
+  decide (finding ∈ exceptions)
+
+theorem adding_waiver_preserves_other_finding (xs : List FindingKey) (a b : FindingKey) (h : a ≠ b) :
+    waived (a :: xs) b = waived xs b := by
+  simp [waived, Ne.symm h]
+
 structure Binding where
   consumer : Terminal
   provider : Terminal
@@ -178,10 +203,32 @@ structure PathWant where
   part : PartType
   path : Option String
 
+def kindAccepts (wanted actual : String) : Bool :=
+  wanted == actual || (wanted == "fet" && (actual == "mosfet" || actual == "jfet"))
+
+theorem custom_kind_reflexive (name : String) : kindAccepts name name = true := by simp [kindAccepts]
+example : kindAccepts "fet" "jfet" = true := by decide
+example : kindAccepts "mosfet" "jfet" = false := by decide
+
+/-- Imports prepend lexical path segments. Shared role keys have global identity. -/
+inductive LibraryRole where
+  | localRole (path : List String)
+  | sharedRole (key : String)
+  deriving DecidableEq
+
+def qualify (namespaceName : String) : LibraryRole → LibraryRole
+  | .localRole path => .localRole (namespaceName :: path)
+  | .sharedRole key => .sharedRole key
+
+theorem nested_qualification (parent child : String) (path : List String) :
+    qualify parent (qualify child (.localRole path)) = .localRole (parent :: child :: path) := rfl
+theorem nested_shared_role (parent child key : String) :
+    qualify parent (qualify child (.sharedRole key)) = .sharedRole key := rfl
+
 def bridgeMatches (a b : Nat) (want : PathWant) (range : Option NominalBounds) (part : Bridge) : Bool :=
   let matchesType := match want.part with
     | .exactSymbol s => part.symbol == s
-    | .classified k => part.partKind == some k
+    | .classified k => part.partKind.any (kindAccepts k)
   let matchesPath := match want.path with
     | none => part.defaultPath
     | some name => part.path == some name

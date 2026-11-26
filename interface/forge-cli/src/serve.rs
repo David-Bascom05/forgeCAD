@@ -64,7 +64,7 @@ const TOOLS: [Tool; 22] = [
             ("file", "path to .fg"),
             (
                 "sel",
-                "summary, symbols, symbol ID, sheet PATH, erc, nets, links, pin PATH, tree PATH, bom or bom-csv",
+                "summary, symbols, symbol ID, sheet PATH, erc, nets, links, pin PATH, tree PATH, search TERMS, variants, bom [VARIANT], bom-csv [VARIANT], board [VARIANT], erc [VARIANT], plan-reannotate [SHEET], plan-block copy|move SCOPE DX_MM DY_MM OBJECT... or pdf",
             ),
         ],
     ),
@@ -447,7 +447,7 @@ fn call(forge: &mut fg::Session, name: &str, p: &Json) -> Reply {
                 return Err("the session is read-only".into());
             }
             let src = match p.get("kind").and_then(Json::str) {
-                Some("schematic") => "schematic\nmain = sheet()\n",
+                Some("schematic") => forge_lang::schematic::NEW_SCHEMATIC,
                 Some("symbol_library") => "symbol_library\n",
                 _ => return Err("kind must be schematic or symbol_library".into()),
             };
@@ -738,7 +738,7 @@ fn answer(forge: &mut fg::Session, req: &Json, mcp: bool) -> Option<Json> {
             let r = call(forge, name, &arguments);
             let mut content = Vec::new();
             if let Some(png) = &r.png {
-                if name == "export" {
+                if name == "export" || r.json.get("mime").and_then(Json::str) == Some("application/pdf") {
                     // a file, not a picture: an embedded resource
                     let ext = r
                         .json
@@ -790,7 +790,15 @@ fn answer(forge: &mut fg::Session, req: &Json, mcp: bool) -> Option<Json> {
 fn served(r: Reply) -> Json {
     let Json::Obj(mut f) = r.json else { return r.json };
     if let Some(png) = r.png {
-        f.push(("png".into(), b64(&png).into()));
+        let key = if f
+            .iter()
+            .any(|(k, v)| k == "media_type" && v.str() == Some("application/pdf"))
+        {
+            "data"
+        } else {
+            "png"
+        };
+        f.push((key.into(), b64(&png).into()));
     }
     Json::Obj(f)
 }

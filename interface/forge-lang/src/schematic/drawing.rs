@@ -165,7 +165,7 @@ fn component_fields(page: &mut Page, lo: Point2, hi: Point2, row: &Row, referenc
     }
 }
 
-fn fit(mut p: Page) -> String {
+fn fit_page(mut p: Page) -> Page {
     let (mut x0, mut y0, mut x1, mut y1) =
         (f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
     let mut include = |a: Point2, b: Point2| {
@@ -206,7 +206,26 @@ fn fit(mut p: Page) -> String {
             *v = place.point(*v);
         }
     }
-    forge_draw::svg::svg(&p)
+    p
+}
+fn fit(p: Page) -> String {
+    forge_draw::svg::svg(&fit_page(p))
+}
+
+pub fn sheet_pdf(d: &Document, c: &Circuit) -> Result<Vec<u8>> {
+    if c.occurrences.is_empty() {
+        return Err(Fault::new(
+            "NoSheets",
+            Span::default(),
+            "the document has no sheets to print",
+        ));
+    }
+    let pages = c
+        .occurrences
+        .keys()
+        .map(|s| sheet_page(d, c, s).map(fit_page))
+        .collect::<Result<Vec<_>>>()?;
+    Ok(forge_draw::pdf::pdf(&pages))
 }
 pub fn symbol_page(d: &Document, id: &str, unit: &str) -> Result<Page> {
     let s = d
@@ -221,7 +240,28 @@ pub fn symbol_page(d: &Document, id: &str, unit: &str) -> Result<Page> {
     Ok(page)
 }
 pub fn sheet_page(d: &Document, c: &Circuit, scope: &str) -> Result<Page> {
-    sheet_selection_page(d, c, scope, |_, _| true)
+    let mut page = sheet_selection_page(d, c, scope, |_, _| true)?;
+    let sheet = &c.occurrences[scope];
+    if let Some(template) = d.templates.get(sheet) {
+        let mut frame = Page::default();
+        for g in &d.symbols[template].graphics {
+            graphic(&mut frame, &g.shape, pt);
+        }
+        let index = c.occurrences.keys().position(|s| s == scope).unwrap() + 1;
+        for text in &mut frame.texts {
+            text.text = text
+                .text
+                .replace("{page}", &index.to_string())
+                .replace("{pages}", &c.occurrences.len().to_string())
+                .replace("{sheet}", scope)
+                .replace("{title}", &d.sheets[sheet]);
+        }
+        frame.texts.append(&mut page.texts);
+        frame.strokes.append(&mut page.strokes);
+        frame.fills.append(&mut page.fills);
+        return Ok(frame);
+    }
+    Ok(page)
 }
 /// Project selected rows with the full sheet's gate and attachment context.
 pub fn sheet_selection_page(
@@ -324,8 +364,11 @@ fn visit_rows(
     let placed: Map<_, _> = rows
         .iter()
         .filter_map(|r| {
-            if let Item::Place { symbol, .. } = &r.item {
-                Some((&r.id, symbol))
+            if let Item::Place {
+                symbol, reference, ..
+            } = &r.item
+            {
+                Some((&r.id, (symbol, reference.as_ref().unwrap_or(&r.id))))
             } else {
                 None
             }
@@ -353,6 +396,7 @@ fn visit_rows(
                 angle,
                 mirror,
                 value,
+                reference,
                 ..
             } => {
                 let sym = &d.symbols[symbol];
@@ -370,7 +414,14 @@ fn visit_rows(
                     text(&mut page, Point2::new(x, y), VALUE_HEIGHT, net);
                     text_ids.push(key.clone());
                 } else {
-                    component_fields(&mut page, lo, hi, row, &row.id, value);
+                    component_fields(
+                        &mut page,
+                        lo,
+                        hi,
+                        row,
+                        d.reference(&key, reference.as_ref().unwrap_or(&row.id)),
+                        value,
+                    );
                     text_ids.push(format!("{key}:reference"));
                     if !value.is_empty() {
                         text_ids.push(format!("{key}:value"));
@@ -384,10 +435,17 @@ fn visit_rows(
                 angle,
                 mirror,
             } => {
-                let sym = &d.symbols[placed[of]];
+                let sym = &d.symbols[placed[of].0];
                 let (lo, hi) = glyph(&mut page, sym, unit, *at, *angle, *mirror, true);
                 glyph_ids(&mut text_ids, sym, unit, &format!("{scope}/{of}"), true);
-                component_fields(&mut page, lo, hi, row, &format!("{of}.{unit}"), "");
+                component_fields(
+                    &mut page,
+                    lo,
+                    hi,
+                    row,
+                    &format!("{}.{unit}", d.reference(&format!("{scope}/{of}"), placed[of].1)),
+                    "",
+                );
                 text_ids.push(format!("{key}:reference"));
             }
             Item::Wire { .. } => {
@@ -712,6 +770,7 @@ fn intersections(mut items: Vec<PrintedItem>) -> Vec<super::graph::Issue> {
     pairs
         .into_iter()
         .map(|(kind, a, b)| super::graph::Issue {
+            unknown: false,
             kind,
             message: if kind == "TextBoundsOverlap" {
                 format!("Printed text overlaps: {a} and {b}")

@@ -130,6 +130,25 @@ fn symbol(id: &str, s: &Symbol, d: &Document) -> Json {
                             ("id", id.clone().into()),
                             ("description", p.description.clone().into()),
                             ("aliases", strings(&p.aliases)),
+                            ("pads", strings(&p.pads)),
+                            (
+                                "functions",
+                                Json::Obj(
+                                    p.functions
+                                        .iter()
+                                        .map(|(k, f)| {
+                                            (
+                                                k.clone(),
+                                                Json::obj(vec![
+                                                    ("electrical", f.electrical.word().into()),
+                                                    ("wants", roles(&f.wants, d)),
+                                                    ("gives", roles(&f.gives, d)),
+                                                ]),
+                                            )
+                                        })
+                                        .collect(),
+                                ),
+                            ),
                             ("number", p.number.clone().into()),
                             ("unit", p.unit.clone().into()),
                             ("electrical", p.electrical.word().into()),
@@ -163,14 +182,16 @@ fn link(l: &Link, d: &Document) -> Json {
         ),
     ])
 }
-fn findings(c: &Circuit) -> Json {
+fn findings(d: &Document, c: &Circuit) -> Json {
     Json::Arr(
         c.issues
             .iter()
             .map(|i| {
                 Json::obj(vec![
                     ("kind", i.kind.into()),
-                    ("severity", i.severity().into()),
+                    ("severity", i.priority(d).into()),
+                    ("status", i.status().into()),
+                    ("waiver", i.waiver(d).map_or(Json::Null, Into::into)),
                     ("objects", strings(&i.objects)),
                     (
                         "locations",
@@ -208,7 +229,7 @@ fn placement_roles(roles: &Map<String, Set<RoleId>>) -> Json {
             .collect(),
     )
 }
-fn scene(row: &Row) -> Json {
+fn scene(d: &Document, scope: &str, row: &Row) -> Json {
     let (kind, mut fields) = match &row.item {
         Item::Place {
             symbol,
@@ -226,9 +247,22 @@ fn scene(row: &Row) -> Json {
             in_bom,
             ref_offset,
             value_offset,
+            reference,
+            functions,
+            bindings,
         } => (
             "place",
             vec![
+                (
+                    "reference",
+                    d.reference(
+                        &format!("{scope}/{}", row.id),
+                        reference.as_ref().unwrap_or(&row.id),
+                    )
+                    .into(),
+                ),
+                ("functions", super::bom::field_json(functions)),
+                ("bindings", super::bom::field_json(bindings)),
                 ("wants", placement_roles(wants)),
                 ("gives", placement_roles(gives)),
                 ("ref_offset", ref_offset.map_or(Json::Null, point)),
@@ -350,6 +384,7 @@ fn pin(id: &str, p: &Terminal, d: &Document, c: &Circuit) -> Json {
     Json::obj(vec![
         ("id", id.into()),
         ("pin", p.pin.clone().into()),
+        ("function", p.function.clone().map_or(Json::Null, Into::into)),
         (
             "description",
             d.symbols[&p.symbol].pins[&p.pin].description.clone().into(),
@@ -388,18 +423,19 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
                         .collect(),
                 ),
             ),
+            ("libraries", strings(d.libraries.keys())),
             ("symbols", strings(d.symbols.keys())),
             ("sheets", strings(c.occurrences.keys())),
             ("pin_count", c.terminals.len().into()),
             ("net_count", c.nets.len().into()),
-            ("findings", findings(c)),
+            ("findings", findings(d, c)),
         ])),
         ["plan-fulfillment", args @ ..] => super::author::fulfillment(d, c, args),
         ["plan-bypass", args @ ..] => super::author::bypass(d, c, args),
         ["svg", scope] => Ok(super::drawing::sheet_svg(d, c, scope)?.into()),
         ["symbol-svg", id] => Ok(super::drawing::symbol_svg(d, id, "A")?.into()),
         ["symbol-svg", id, unit] => Ok(super::drawing::symbol_svg(d, id, unit)?.into()),
-        ["erc"] => Ok(findings(c)),
+        ["erc"] => Ok(findings(d, c)),
         ["netlist"] => Ok(Json::Arr(
             c.nets
                 .iter()
@@ -419,6 +455,37 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
                 })
                 .collect(),
         )),
+        ["search", terms @ ..] => Ok(Json::Arr(
+            search(d, c, &terms.join(" "))
+                .into_iter()
+                .map(|h| {
+                    Json::obj(vec![
+                        ("id", h.id.into()),
+                        ("label", h.label.into()),
+                        ("zone", h.zone.map_or(Json::Null, Into::into)),
+                    ])
+                })
+                .collect(),
+        )),
+        ["board"] => board(d, c, None),
+        ["board", v] => board(d, c, Some(v)),
+        ["plan-reannotate", sheet] if d.sheets.contains_key(*sheet) => Ok(Json::obj(vec![(
+            "ops",
+            Json::Arr(reannotate(d, sheet).iter().map(|op| op.json()).collect()),
+        )])),
+        ["variants"] => Ok(strings(d.variants.keys())),
+        [cmd @ ("bom" | "bom-csv"), variant] => {
+            let changes = d
+                .variants
+                .get(*variant)
+                .ok_or_else(|| Fault::new("UnknownVariant", Span::default(), *variant))?;
+            let lines = bom_for(d, c, changes);
+            if *cmd == "bom-csv" {
+                Ok(bom_csv(&lines).into())
+            } else {
+                Ok(Json::Arr(lines.iter().map(|l| l.json()).collect()))
+            }
+        }
         ["bom-csv"] => Ok(super::bom_csv(&super::bom(d, c)).into()),
         ["bom"] => Ok(Json::Arr(
             super::bom(d, c).iter().map(|line| line.json()).collect(),
@@ -431,6 +498,7 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
                         symbol,
                         value,
                         footprint,
+                        reference,
                         ..
                     } = &row.item
                     {
@@ -439,6 +507,14 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
                         }
                         components.push(Json::obj(vec![
                             ("occurrence", format!("{scope}/{}", row.id).into()),
+                            (
+                                "reference",
+                                d.reference(
+                                    &format!("{scope}/{}", row.id),
+                                    reference.as_ref().unwrap_or(&row.id),
+                                )
+                                .into(),
+                            ),
                             ("symbol", symbol.clone().into()),
                             ("value", value.clone().into()),
                             ("footprint", footprint.clone().map_or(Json::Null, Into::into)),
@@ -489,7 +565,13 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
                 ("title", d.sheets[sheet].clone().into()),
                 (
                     "items",
-                    Json::Arr(d.rows.iter().filter(|r| r.sheet == *sheet).map(scene).collect()),
+                    Json::Arr(
+                        d.rows
+                            .iter()
+                            .filter(|r| r.sheet == *sheet)
+                            .map(|r| scene(d, id, r))
+                            .collect(),
+                    ),
                 ),
             ]))
         }
@@ -585,6 +667,17 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
                                     ("role", role.0.clone().into()),
                                     ("target", check.target.clone().into()),
                                     ("satisfied", check.satisfied.into()),
+                                    (
+                                        "status",
+                                        if check.satisfied {
+                                            "satisfied"
+                                        } else if check.unknown {
+                                            "unknown"
+                                        } else {
+                                            "failed"
+                                        }
+                                        .into(),
+                                    ),
                                     ("bridge_pins", strings(&check.bridge_pins)),
                                     ("detail", check.detail.clone().into()),
                                 ])
@@ -618,12 +711,24 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
     }
 }
 pub fn response(d: &Document, c: &Circuit, words: &[String]) -> Result<Json> {
+    if let [cmd, variant] = words
+        && cmd == "erc"
+    {
+        let changes = d
+            .variants
+            .get(variant)
+            .ok_or_else(|| Fault::new("UnknownVariant", Span::default(), variant))?;
+        return response(d, &Circuit::build_fitted(d, changes)?, &["erc".into()]);
+    }
     Ok(Json::obj(vec![
         ("schema", "forgecad.schematic/1".into()),
         ("ok", true.into()),
         (
             "erc_ok",
-            (!c.issues.iter().any(|i| i.severity() == "error")).into(),
+            (!c.issues
+                .iter()
+                .any(|i| i.priority(d) == "error" && i.waiver(d).is_none()))
+            .into(),
         ),
         ("result", query(d, c, words)?),
     ]))

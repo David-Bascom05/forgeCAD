@@ -1,0 +1,20 @@
+symbol_library
+A4 = symbol(pins: {}, graphics: [
+  rect(from: (-145.5,-102), to: (145.5,102)),
+  line(from: (65,-87), to: (145.5,-87)),
+  line(from: (65,-102), to: (65,-87)),
+  text(at: (68,-93), value: "{title}"),
+  text(at: (68,-99), value: "{sheet}    Sheet {page} of {pages}"),
+  text(at: (-127.31,98), value: "1"),
+  text(at: (-90.94,98), value: "2"),
+  text(at: (-54.56,98), value: "3"),
+  text(at: (-18.19,98), value: "4"),
+  text(at: (18.19,98), value: "5"),
+  text(at: (54.56,98), value: "6"),
+  text(at: (90.94,98), value: "7"),
+  text(at: (127.31,98), value: "8"),
+  text(at: (-143,76.5), value: "A"),
+  text(at: (-143,25.5), value: "B"),
+  text(at: (-143,-25.5), value: "C"),
+  text(at: (-143,-76.5), value: "D")
+])

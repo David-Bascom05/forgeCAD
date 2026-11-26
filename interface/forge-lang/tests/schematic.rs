@@ -907,3 +907,230 @@ fn source_edits_resolve_pin_targets_after_placements_and_quantities_in_order() {
     assert!(updated.contains("connect_to: late.P2"));
     assert!(edit::apply(src, &add("rail = role(kind: \"power\", voltage_mv: late)")).is_err());
 }
+
+const SWITCH_CARD: &str = include_str!("../../../examples/electronics/load-switch/switch-card.fg");
+fn switch_dir() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/electronics/load-switch")
+}
+
+#[test]
+fn child_library_edits_reach_board_handoff_templates_and_variants() {
+    let (d, c) = schematic::compile(SWITCH_CARD, Some(&switch_dir()), None).unwrap();
+    assert!(d.libraries.contains_key("components.discrete.switches"));
+    assert_eq!(d.library_paths().count(), 3);
+    assert!(c.connections["overview/left/J1.IN"].values().all(|v| v.satisfied));
+    let board = schematic::board(&d, &c, Some("prototype")).unwrap();
+    let forge_agent::json::Json::Arr(parts) = board.get("components").unwrap() else {
+        panic!()
+    };
+    let right = parts
+        .iter()
+        .find(|p| p.get("id").unwrap().str() == Some("overview/right/Q1"))
+        .unwrap();
+    assert_eq!(right.get("populated"), Some(&false.into()));
+    assert!(right.get("pads").unwrap().to_string().contains("\"EP\""));
+    assert!(
+        schematic::search(&d, &c, "load switch")
+            .iter()
+            .any(|h| h.id == "overview/right/Q1" && h.zone.is_some())
+    );
+    let page = schematic::sheet_page(&d, &c, "overview/right").unwrap();
+    assert!(page.texts.iter().any(|t| t.text.contains("Sheet 3 of 3")));
+    let data = schematic::sheet_pdf(&d, &c).unwrap();
+    let pdf = String::from_utf8_lossy(&data);
+    assert!(pdf.starts_with("%PDF-") && pdf.contains("/Count 3") && pdf.contains("Load switch channel"));
+}
+
+#[test]
+fn nested_cycle_and_leaf_reload_have_a_located_result() {
+    let dir = forge_dirs::temp_dir().join(format!("forge-nested-{}", forge_dirs::process_id()));
+    std::fs::create_dir_all(dir.join("children")).unwrap();
+    let parent = dir.join("parent.fg");
+    let child = dir.join("children/parts.fg");
+    let src = "schematic\nlib=library(file:\"parent.fg\")\ns=sheet()\nu=place(sheet:s,symbol:lib.child.Part,at:(0,0))";
+    std::fs::write(
+        &parent,
+        "symbol_library\nchild=library(file:\"children/parts.fg\")",
+    )
+    .unwrap();
+    let leaf = "symbol_library\nsig=role(kind:\"signal\")\nPart=symbol(pins:{p:pin(number:\"1\",kind:\"input\",at:(0,0),wants:[sig])})";
+    std::fs::write(&child, leaf).unwrap();
+    let mut cache = schematic::Cache::default();
+    let mut query = || {
+        cache.query(
+            &dir.join("design.fg"),
+            Some(&dir),
+            src,
+            &["pin".into(), "s/u.p".into()],
+        )
+    };
+    assert!(query().unwrap().to_string().contains("lib.child.sig"));
+    std::fs::write(&child, leaf.replace("input", "output")).unwrap();
+    assert!(query().unwrap().to_string().contains("output"));
+    std::fs::write(&child, "symbol_library\nlooplib=library(file:\"../parent.fg\")").unwrap();
+    let e = query().unwrap_err();
+    assert_eq!(e.kind, "LibraryCycle");
+    assert!(e.file.unwrap().ends_with("children/parts.fg"));
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn alternate_functions_drive_erc_and_waivers_match_only_one_occurrence() {
+    let src = r#"schematic
+clock = role(kind: "clock")
+IC = symbol(pins:{A:pin(kind:"input",number:"1",at:(-1,0),functions:{CLK:function(kind:"output",gives:[clock])}),B:pin(kind:"input",number:"2",at:(1,0),functions:{CLK:function(kind:"output")})},peripherals:{tim:{CLK:[A,B]}})
+top=sheet()
+cell=sheet()
+one=subsheet(sheet:top,of:cell,at:(0,0))
+two=subsheet(sheet:top,of:cell,at:(5,5))
+chip=place(sheet:cell,symbol:IC,at:(0,0),functions:{A:CLK,B:CLK})
+link=wire(sheet:cell,from:chip.A,to:chip.B)
+bus1=bus(sheet:cell,members:{left:chip.A,right:chip.B})
+relax=erc_rule(rule:"BusMemberShort",severity:"info")
+allow=waiver(rule:"DriverConflict",objects:["top/one/chip.A","top/one/chip.B"],reason:"prototype fixture")
+"#;
+    let (d, c) = run(src).unwrap();
+    assert_eq!(
+        c.terminals["top/two/chip.A"].electrical,
+        schematic::Electrical::Output
+    );
+    assert!(
+        c.terminals["top/two/chip.A"]
+            .gives
+            .contains(&schematic::RoleId("clock".into()))
+    );
+    let clashes: Vec<_> = c.issues.iter().filter(|i| i.kind == "DriverConflict").collect();
+    assert_eq!(clashes.len(), 2);
+    assert_eq!(clashes.iter().filter(|i| i.waiver(&d).is_some()).count(), 1);
+    assert_eq!(
+        c.issues.iter().filter(|i| i.kind == "PeripheralConflict").count(),
+        2
+    );
+    assert!(
+        c.issues
+            .iter()
+            .filter(|i| i.kind == "BusMemberShort")
+            .all(|i| i.priority(&d) == "info")
+    );
+    assert_eq!(
+        run(&src.replace("A:CLK,B:CLK", "A:oops")).unwrap_err().kind,
+        "UnknownPinFunction"
+    );
+}
+
+#[test]
+fn block_copy_retains_internal_typed_paths_and_source_identity() {
+    let dir = switch_dir();
+    let (d, c) = schematic::compile(SWITCH_CARD, Some(&dir), None).unwrap();
+    let selection = ["J1", "Q1"].map(str::to_string).into_iter().collect();
+    let plan =
+        schematic::block_plan(SWITCH_CARD, &d, &c, "overview/left", &selection, [0., 24.], true).unwrap();
+    let mut next = SWITCH_CARD.to_owned();
+    for op in plan.ops {
+        next = forge_lang::edit::apply(&next, &op).unwrap();
+    }
+    let (d2, c2) = schematic::compile(&next, Some(&dir), None).unwrap();
+    let want = c2.connections["overview/left/J2.IN"].values().next().unwrap();
+    assert!(want.satisfied);
+    assert!(want.bridge_pins[0].contains("/Q2."));
+    assert_ne!(c2.net_of["overview/left/J1.IN"], c2.net_of["overview/left/J2.IN"]);
+    next = forge_lang::edit::apply(
+        &next,
+        &forge_lang::error::Op::SetArg {
+            id: "J2".into(),
+            arg: "reference".into(),
+            text: "\"J17\"".into(),
+        },
+    )
+    .unwrap();
+    let (d3, c3) = schematic::compile(&next, Some(&dir), None).unwrap();
+    assert_eq!(c2.net_of, c3.net_of);
+    let diff = schematic::electrical_diff((&d2, &c2), (&d3, &c3))
+        .unwrap()
+        .to_string();
+    assert!(diff.contains("J17") && diff.contains("overview/right/J2"));
+}
+
+#[test]
+fn project_reannotation_reserves_locked_occurrences_and_preserves_net_identity() {
+    let original = format!(
+        "{SWITCH_CARD}\nlocked=annotation(occurrence:\"overview/right/Q1\",reference:\"Q1\",locked:true)"
+    );
+    let (d, c) = schematic::compile(&original, Some(&switch_dir()), None).unwrap();
+    let mut next = original.clone();
+    for op in schematic::project_annotation(&original, &d, &c).unwrap() {
+        next = forge_lang::edit::apply(&next, &op).unwrap();
+    }
+    let (d2, c2) = schematic::compile(&next, Some(&switch_dir()), None).unwrap();
+    assert_eq!(c.net_of, c2.net_of);
+    assert_eq!(d2.reference("overview/left/Q1", "Q1"), "Q2");
+    let reply = schematic::response(&d2, &c2, &["sheet".into(), "overview/left".into()]).unwrap();
+    let items = reply.get("result").unwrap().get("items").unwrap();
+    let forge_agent::json::Json::Arr(items) = items else {
+        panic!()
+    };
+    assert_eq!(
+        items
+            .iter()
+            .find(|i| i.get("id").and_then(|v| v.str()) == Some("Q1"))
+            .unwrap()
+            .get("reference")
+            .unwrap()
+            .str(),
+        Some("Q2")
+    );
+    assert_eq!(d2.reference("overview/right/Q1", "Q1"), "Q1");
+    assert!(schematic::project_annotation(&next, &d2, &c2).unwrap().is_empty());
+    let result = schematic::response(&d2, &c2, &["erc".into(), "prototype".into()])
+        .unwrap()
+        .to_string();
+    assert!(result.contains("overview/right/J1.IN") && result.contains("PinConnectionMismatch"));
+}
+
+#[test]
+fn copying_an_internal_want_rebinds_the_specific_target_component() {
+    const FILE: &str = include_str!("../../../examples/electronics/analog/pin-connections.fg");
+    let dir = switch_dir().parent().unwrap().join("analog");
+    let (d, c) = schematic::compile(FILE, Some(&dir), None).unwrap();
+    let selected = ["U1", "J1", "R1"].map(str::to_owned).into_iter().collect();
+    let plan = schematic::block_plan(FILE, &d, &c, "main", &selected, [20., 0.], true).unwrap();
+    let mut src = FILE.to_owned();
+    for op in plan.ops {
+        src = forge_lang::edit::apply(&src, &op).unwrap();
+    }
+    let (_, clone) = schematic::compile(&src, Some(&dir), None).unwrap();
+    let path = clone.connections["main/U2.INP"].values().next().unwrap();
+    assert_eq!(path.target, "main/J2.P1");
+    assert!(path.satisfied, "{}", path.detail);
+}
+
+#[cfg(unix)]
+#[test]
+fn linked_catalogs_resolve_pdf_assets_from_the_owning_file() {
+    use std::os::unix::fs::symlink;
+    let dir = std::env::temp_dir().join(format!("fg-library-assets-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("physical/devices")).unwrap();
+    std::fs::create_dir_all(dir.join("aliases")).unwrap();
+    std::fs::write(
+        dir.join("physical/catalog.fg"),
+        "symbol_library\nchild=library(file:\"devices/custom.fg\")",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("physical/devices/custom.fg"),
+        "symbol_library\nFET=symbol(pins:{},datasheet:\"datasheets/fet.pdf\")",
+    )
+    .unwrap();
+    symlink("../physical/catalog.fg", dir.join("aliases/chips.fg")).unwrap();
+    let (doc, _) = schematic::compile(
+        "schematic\nlib=library(file:\"aliases/chips.fg\")",
+        Some(&dir),
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        doc.symbols["lib.child.FET"].datasheet.as_deref(),
+        Some("physical/devices/datasheets/fet.pdf")
+    );
+    std::fs::remove_dir_all(dir).unwrap();
+}

@@ -784,7 +784,10 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
     let r = fg::Session::new(None, true).run(cmd, &a, &forge_agent::json::Json::Null);
     let mut text = if json { r.json.to_string() } else { r.text };
     if cmd == "schematic"
-        && matches!(a.words.first().map(String::as_str), Some("svg" | "symbol-svg" | "bom-csv"))
+        && matches!(
+            a.words.first().map(String::as_str),
+            Some("svg" | "symbol-svg" | "bom-csv")
+        )
         && let Some(content) = r.json.get("result").and_then(forge_agent::json::Json::str)
     {
         if let Some(path) = out.as_deref() {
@@ -801,6 +804,7 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
     }
     if let Some(png) = &r.png {
         let ext = match cmd {
+            "schematic" if a.words == ["pdf"] => "pdf",
             "export" if a.words.first().is_some_and(|w| w == "dxf") => "dxf",
             "export" if a.words.first().is_some_and(|w| w == "dwg") => "dwg",
             "export" if a.words.first().is_some_and(|w| w == "stl") => "stl",

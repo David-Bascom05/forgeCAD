@@ -172,6 +172,13 @@ fn rotation(e: Option<&Expr>, p: &Params) -> Result<f64> {
     }
     Ok(angle.rem_euclid(360.0))
 }
+fn reference_name(e: &Expr) -> Result<String> {
+    if let E::Name(name) = &e.kind {
+        Ok(name.clone())
+    } else {
+        Err(fault(e, "ExpectedReference", "choose a component on this sheet"))
+    }
+}
 fn class_name(e: &Expr) -> Result<String> {
     let s = string(e)?;
     if s.is_empty()
@@ -185,7 +192,10 @@ fn class_name(e: &Expr) -> Result<String> {
             "use a part type such as mosfet or relay",
         ));
     }
-    Ok(s)
+    Ok(PART_KINDS
+        .iter()
+        .find(|name| name.eq_ignore_ascii_case(&s))
+        .map_or(s.clone(), |name| name.to_string()))
 }
 fn nominal_unit(kind: &str) -> Option<&'static str> {
     match kind {
@@ -364,7 +374,52 @@ fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
                 aliases.insert(id.clone());
             }
         }
+        let functions = c
+            .take("functions")
+            .map(|e| {
+                map(e, |fun| {
+                    let mut alt = Call::new(fun)?;
+                    if alt.name != "function" {
+                        return Err(fault(fun, "ExpectedFunction", "expected function(kind: ...)"));
+                    }
+                    let kind = alt.req("kind")?;
+                    let electrical = Electrical::parse(&string(kind)?).ok_or_else(|| {
+                        fault(kind, "UnknownElectricalKind", "unknown function electrical kind")
+                    })?;
+                    let mode = PinFunction {
+                        electrical,
+                        wants: roles(alt.take("wants"), doc, false)?,
+                        gives: roles(alt.take("gives"), doc, true)?,
+                    };
+                    alt.end()?;
+                    Ok(mode)
+                })
+            })
+            .transpose()?
+            .unwrap_or_default();
+        let pads = if let Some(e) = c.take("pads") {
+            let mut pads = Vec::new();
+            for entry in list(e)? {
+                let pad = string(entry)?;
+                if pad.trim().is_empty() || pads.contains(&pad) {
+                    return Err(fault(
+                        entry,
+                        "InvalidPad",
+                        "pad numbers must be nonempty and unique",
+                    ));
+                }
+                pads.push(pad);
+            }
+            if pads.is_empty() {
+                return Err(fault(e, "InvalidPad", "a physical pin needs a pad"));
+            }
+            pads
+        } else {
+            vec![n.clone()]
+        };
         let pin = Pin {
+            functions,
+            pads,
             aliases,
             description: c.take("description").map(string).transpose()?.unwrap_or_default(),
             number: n,
@@ -386,6 +441,12 @@ fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
         };
         c.end()?;
         pins.insert(name.clone(), pin);
+    }
+    let mut mapped = Set::new();
+    for pad in pins.values().flat_map(|pin| &pin.pads) {
+        if !mapped.insert(pad) {
+            return Err(fault(e, "DuplicatePad", pad));
+        }
     }
     let mut graphics = Vec::new();
     if let Some(g) = call.take("graphics") {
@@ -564,7 +625,39 @@ fn item(c: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Item> {
                 .symbols
                 .get(&sym)
                 .ok_or_else(|| fault(e, "UnknownSymbol", &sym))?;
+            let mut functions = Map::new();
+            if let Some(e) = c.take("functions") {
+                for (name, function) in map(e, reference)? {
+                    let Some((pin, def)) = def
+                        .pins
+                        .get_key_value(&name)
+                        .or_else(|| def.pins.iter().find(|(_, p)| p.aliases.contains(&name)))
+                    else {
+                        return Err(fault(e, "UnknownPin", name));
+                    };
+                    if !def.functions.contains_key(&function) {
+                        return Err(fault(e, "UnknownPinFunction", format!("{pin}.{function}")));
+                    }
+                    if functions.insert(pin.clone(), function).is_some() {
+                        return Err(fault(e, "DuplicatePin", pin));
+                    }
+                }
+            }
+            let reference = c.take("reference").map(string).transpose()?;
+            if reference
+                .as_ref()
+                .is_some_and(|r| r.is_empty() || !r.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_'))
+            {
+                return Err(fault(e, "InvalidReference", "use a reference such as U2"));
+            }
             Item::Place {
+                bindings: c
+                    .take("bindings")
+                    .map(|e| map(e, reference_name))
+                    .transpose()?
+                    .unwrap_or_default(),
+                functions,
+                reference,
                 wants: placement_roles(c.take("wants"), def, doc, false)?,
                 gives: placement_roles(c.take("gives"), def, doc, true)?,
                 symbol: sym,
@@ -694,6 +787,31 @@ pub(super) fn header(src: &str) -> Option<&str> {
         .find(|l| !l.is_empty())
 }
 pub fn read(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Document> {
+    read_nested(src, dir, root, &mut ImportState::default())
+}
+
+#[derive(Default)]
+struct ImportState {
+    active: Vec<PathBuf>,
+    bytes: usize,
+    count: usize,
+}
+
+fn read_nested(
+    src: &str,
+    dir: Option<&Path>,
+    root: Option<&Path>,
+    state: &mut ImportState,
+) -> Result<Document> {
+    state.bytes += src.len();
+    state.count += 1;
+    if state.active.len() > 64 || state.bytes > 64 * 1024 * 1024 || state.count > 8192 {
+        return Err(Fault::new(
+            "LibraryLimit",
+            Span::default(),
+            "library expansion exceeds the project limit",
+        ));
+    }
     let prog =
         syntax::parse(src).map_err(|e| Fault::new(e.kind(), e.span().unwrap_or_default(), e.text()))?;
     let Some((head, body)) = prog.split_first() else {
@@ -838,14 +956,46 @@ pub fn read(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Docume
                 let s = symbol(&mut c, &params, &doc)?;
                 doc.symbols.insert(name.clone(), s);
             }
-            "library" if !library => {
+            "library" => {
                 let e = c.req("file")?;
                 let file = string(e)?;
-                let library = if file == "forge:power" {
-                    read(POWER_LIBRARY, None, None)?
-                } else {
-                    load_library(&file, dir, root, e, &mut doc.imports)?
+                let bundled = match file.as_str() {
+                    "forge:power" => Some(POWER_LIBRARY),
+                    "forge:frames" => Some(include_str!("frames.fg")),
+                    _ => None,
                 };
+                let library = if let Some(text) = bundled {
+                    read_nested(text, None, None, state)?
+                } else {
+                    load_library(&file, dir, root, e, &mut doc.imports, state)?
+                };
+                let owner = if bundled.is_some() {
+                    None
+                } else {
+                    doc.imports.last().map(|(_, p)| p.clone())
+                };
+                let asset_dir = owner.as_ref().and_then(|path| {
+                    let dir = forge_dirs::fs::canonicalize(dir.unwrap_or_else(|| Path::new("."))).ok()?;
+                    let parent = path.parent()?;
+                    for (up, ancestor) in dir.ancestors().enumerate() {
+                        if let Ok(rest) = parent.strip_prefix(ancestor) {
+                            let mut relative = PathBuf::new();
+                            for _ in 0..up {
+                                relative.push("..");
+                            }
+                            return Some(relative.join(rest));
+                        }
+                    }
+                    None
+                });
+                doc.libraries.insert(name.clone(), owner);
+                doc.libraries.extend(
+                    library
+                        .libraries
+                        .into_iter()
+                        .map(|(child, path)| (format!("{name}.{child}"), path)),
+                );
+                doc.imports.extend(library.imports);
                 let qualify = |id: RoleId| {
                     if id.0.starts_with('@') {
                         id
@@ -866,13 +1016,17 @@ pub fn read(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Docume
                     if let Some(link) = &mut sym.datasheet
                         && !link.contains("://")
                         && !Path::new(link).is_absolute()
-                        && let Some(parent) = Path::new(&file).parent()
+                        && let Some(parent) = &asset_dir
                     {
                         *link = parent.join(&*link).to_string_lossy().replace('\\', "/");
                     }
 
                     for pin in sym.pins.values_mut() {
-                        for roles in [&mut pin.wants, &mut pin.gives] {
+                        for roles in [&mut pin.wants, &mut pin.gives].into_iter().chain(
+                            pin.functions
+                                .values_mut()
+                                .flat_map(|f| [&mut f.wants, &mut f.gives]),
+                        ) {
                             *roles = std::mem::take(roles).into_iter().map(&qualify).collect();
                         }
                     }
@@ -885,13 +1039,95 @@ pub fn read(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Docume
                     .map(string)
                     .transpose()?
                     .unwrap_or_else(|| name.clone());
+                if let Some(e) = c.take("template") {
+                    let id = reference(e)?;
+                    if !doc.symbols.get(&id).is_some_and(|s| s.pins.is_empty()) {
+                        return Err(fault(
+                            e,
+                            "InvalidSheetTemplate",
+                            "choose a graphics-only library symbol",
+                        ));
+                    }
+                    doc.templates.insert(name.clone(), id);
+                }
                 doc.sheets.insert(name.clone(), title);
+            }
+            "erc_rule" | "waiver" if !library => {
+                let rule = string(c.req("rule")?)?;
+                if !ERC_RULES.contains(&rule.as_str()) {
+                    return Err(fault(e, "UnknownErcRule", rule));
+                }
+                if c.name == "waiver" {
+                    let mut objects = list(c.req("objects")?)?
+                        .iter()
+                        .map(string)
+                        .collect::<Result<Vec<_>>>()?;
+                    objects.sort();
+                    objects.dedup();
+                    let reason = string(c.req("reason")?)?;
+                    if reason.trim().is_empty() || objects.is_empty() {
+                        return Err(fault(
+                            e,
+                            "InvalidWaiver",
+                            "specify the affected objects and a reason",
+                        ));
+                    }
+                    if doc.waivers.insert((rule, objects), reason).is_some() {
+                        return Err(fault(e, "DuplicateWaiver", name));
+                    }
+                } else {
+                    let severity = string(c.req("severity")?)?;
+                    if !["error", "warning", "info"].contains(&severity.as_str()) {
+                        return Err(fault(e, "InvalidSeverity", severity));
+                    }
+                    if doc.severities.insert(rule, severity).is_some() {
+                        return Err(fault(e, "DuplicateErcRule", name));
+                    }
+                }
+            }
+            "annotation" if !library => {
+                let path = string(c.req("occurrence")?)?;
+                let reference = string(c.req("reference")?)?;
+                if reference.trim().is_empty()
+                    || !reference.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+                {
+                    return Err(fault(e, "InvalidReference", "use a reference such as U2"));
+                }
+                let locked = c.take("locked").map(boolean).transpose()?.unwrap_or(false);
+                if doc
+                    .annotations
+                    .insert(
+                        path.clone(),
+                        Annotation {
+                            id: name.clone(),
+                            reference,
+                            locked,
+                        },
+                    )
+                    .is_some()
+                {
+                    return Err(fault(e, "DuplicateAnnotation", path));
+                }
+            }
+            "variant" if !library => {
+                let mut overrides = Map::new();
+                for (arg, fitted) in [("omit", false), ("fit", true)] {
+                    if let Some(entries) = c.take(arg) {
+                        for entry in list(entries)? {
+                            let path = string(entry)?;
+                            if overrides.insert(path.clone(), fitted).is_some() {
+                                return Err(fault(entry, "DuplicateVariantPart", path));
+                            }
+                        }
+                    }
+                }
+                doc.variants.insert(name.clone(), overrides);
             }
             _ if library => {
                 return Err(fault(
                     e,
                     "InvalidLibraryItem",
-                    "a symbol library declares roles, shared dimensions and symbols",
+                    "a symbol library declares libraries, roles, shared dimensions and symbols",
                 ));
             }
             _ => {
@@ -1026,6 +1262,7 @@ fn load_library(
     root: Option<&Path>,
     e: &Expr,
     imports: &mut Vec<(PathBuf, PathBuf)>,
+    state: &mut ImportState,
 ) -> Result<Document> {
     let bad = || {
         fault(
@@ -1040,6 +1277,13 @@ fn load_library(
     if !candidate.starts_with(&fence) || candidate.extension().and_then(|x| x.to_str()) != Some("fg") {
         return Err(bad());
     }
+    if state.active.contains(&candidate) {
+        return Err(fault(
+            e,
+            "LibraryCycle",
+            format!("cyclic library import of {file}"),
+        ));
+    }
     let bytes = crate::deps::read_plain(&candidate, 8 * 1024 * 1024).map_err(|_| bad())?;
     crate::deps::read(&candidate, Some(&bytes));
     imports.push((base.join(file), candidate.clone()));
@@ -1047,8 +1291,17 @@ fn load_library(
     if header(src) != Some("symbol_library") {
         return Err(fault(e, "ExpectedSymbolLibrary", file));
     }
-    read(src, candidate.parent(), Some(&fence)).map_err(|mut f| {
-        f.file = Some(file.into());
+    state.active.push(candidate.clone());
+    let result = read_nested(src, candidate.parent(), Some(&fence), state);
+    state.active.pop();
+    result.map_err(|mut f| {
+        f.file.get_or_insert_with(|| {
+            candidate
+                .strip_prefix(&fence)
+                .unwrap_or(&candidate)
+                .to_string_lossy()
+                .into_owned()
+        });
         f
     })
 }
