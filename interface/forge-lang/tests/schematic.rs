@@ -257,6 +257,7 @@ left = subsheet(sheet: root, of: cell, at: (0,0))
 right = subsheet(sheet: root, of: cell, at: (10,0))
 U1 = place(sheet: cell, symbol: parts.Amplifier, at: (0,0), fields: {Manufacturer: "Local, Inc.", Package: "DBV"})
 U2 = place(sheet: cell, symbol: S, at: (10,0))
+U3 = place(sheet: cell, symbol: S, at: (50,0), footprint: "")
 gateB = gate(sheet: cell, of: U2, unit: "B", at: (20,0))
 spare = place(sheet: cell, symbol: S, at: (30,0), populated: false)
 fixture = place(sheet: cell, symbol: S, at: (40,0), in_bom: false)
@@ -264,7 +265,8 @@ fixture = place(sheet: cell, symbol: S, at: (40,0), in_bom: false)
     let (d, c) = run(source).unwrap();
     let lines = schematic::bom(&d, &c);
     assert_eq!(lines.len(), 2);
-    assert!(lines.iter().all(|l| l.references.len() == 2));
+    let local = lines.iter().find(|l| l.part.symbol == "S").unwrap();
+    assert_eq!(local.references.len(), 4);
     let amp = lines.iter().find(|l| l.part.symbol == "parts.Amplifier").unwrap();
     assert_eq!(amp.references, ["root/left/U1", "root/right/U1"]);
     assert_eq!(amp.part.fields["Manufacturer"], "Local, Inc.");

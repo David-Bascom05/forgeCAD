@@ -310,7 +310,7 @@ fn item(c: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Item> {
                     .transpose()?
                     .unwrap_or_else(|| "A".into()),
                 value: c.take("value").map(string).transpose()?.unwrap_or_default(),
-                footprint: c.take("footprint").map(string).transpose()?,
+                footprint: c.take("footprint").map(string).transpose()?.filter(|s| !s.is_empty()),
                 fields: fields(c)?,
                 datasheet: c
                     .take("datasheet")

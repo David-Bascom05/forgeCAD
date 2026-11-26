@@ -406,7 +406,13 @@ impl Editor {
             return Err("Enter a valid, unique identifier.".into());
         }
         let before = if self.tool == Tool::Role {
-            self.doc.symbols.keys().find(|k| !k.contains('.')).cloned()
+            syntax::parse(&self.src)
+                .map_err(|e| e.text())?
+                .into_iter()
+                .find_map(|stmt| match stmt.kind {
+                    StmtKind::Assign { name, .. } if self.doc.symbols.contains_key(&name) => Some(name),
+                    _ => None,
+                })
         } else {
             None
         };
@@ -604,6 +610,20 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn new_roles_precede_every_local_symbol() {
+        let mut e = Editor::open(
+            None,
+            "symbol_library\nZ = symbol(pins: {})\nA = symbol(pins: {})\n".into(),
+        )
+        .unwrap();
+        e.start(Tool::Role);
+        e.form.name = "rail".into();
+        e.form.role_kind = "power".into();
+        e.create_record().unwrap();
+        assert!(e.src.find("rail =").unwrap() < e.src.find("Z =").unwrap());
+    }
+
     #[test]
     fn branching_on_a_wire_connects_in_one_undoable_edit() {
         let src = "schematic
