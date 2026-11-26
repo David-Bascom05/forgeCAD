@@ -384,7 +384,11 @@ fn save(
 
 fn save_asset(path: &Path, body: &forge_topo::Body) -> Result<String, String> {
     let step = forge_step::export(body, &forge_step::Options::default()).map_err(|e| e.to_string())?;
-    let read = forge_step::import(step.text.as_bytes(), &forge_step::Limits::default())
+    let limits = forge_step::Limits {
+        max_bytes: forge_lang::media::MAX_ASSET_BYTES as usize,
+        ..Default::default()
+    };
+    let read = forge_step::import(step.text.as_bytes(), &limits)
         .map_err(|e| e.to_string())?;
     if !read.refusals.is_empty()
         || read.solids.len() != step.solids
