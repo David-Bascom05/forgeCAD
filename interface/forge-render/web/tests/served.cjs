@@ -66,7 +66,38 @@ async function same(a, b, what, min = 0) {
     web = served.proc;
     b = await t.browser();
     const q = `?open=plate.fg&offscreen=640x400&sync=${encodeURIComponent(ws)}&sync_token=${TOKEN}`;
-    const [pa, pb] = [await t.page(b, url + q), await t.page(b, url + q)];
+    let held = null;
+    const prepare = (page) => page.routeWebSocket(ws, (client) => {
+      const upstream = client.connectToServer();
+      client.onMessage((message) => {
+        const op = typeof message === "string" ? JSON.parse(message) : null;
+        if (held && op?.t === "op") {
+          held.push({ page, base: op.base, send: () => upstream.send(message) });
+        } else {
+          upstream.send(message);
+        }
+      });
+    });
+    const [pa, pb] = [await t.page(b, url + q, prepare), await t.page(b, url + q, prepare)];
+    // Hold operations until both browsers have actually submitted against the
+    // same revision. Two JS calls alone do not guarantee a concurrent edit:
+    // a peer's commit can reach the other page before it consumes its inbox.
+    const concurrent = async (a, b, base) => {
+      held = [];
+      await Promise.all([apply(pa, a), apply(pb, b)]);
+      const t0 = Date.now();
+      while (held.length < 2 && Date.now() - t0 < 10000) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      const edits = held;
+      held = null;
+      if (edits.length !== 2 || edits.some((edit) => edit.base !== base)
+          || edits[0].page === edits[1].page) {
+        const status = await Promise.all([pa, pb].map((p) => p.evaluate(() => window.forgecad.state().status)));
+        throw new Error(`both tabs must submit at seq ${base}; got bases ${edits.map((edit) => edit.base)}, status ${JSON.stringify(status)}`);
+      }
+      for (const edit of edits) edit.send();
+    };
     for (const p of [pa, pb]) {
       await t.until(p, (s) => s.built?.checked, "the first build");
       await t.loaded(p);
@@ -91,16 +122,17 @@ async function same(a, b, what, min = 0) {
     assert.deepEqual(directWrites, []);
 
     // both edit at once
-    await Promise.all([apply(pa, setParam("L", 70)), apply(pb, setParam("W", 40))]);
+    await concurrent(setParam("L", 70), setParam("W", 40), s1.seq);
     const s2 = await same(pa, pb, "two edits at once", s1.seq + 2);
     assert.equal(s2.seq, s1.seq + 2);
     console.log(`ok - concurrent edits merged (seq ${s2.seq})`);
 
     // a Rename race: one wins, both end on the same text, the loser is told
-    await Promise.all([
-      apply(pa, { op: "Rename", from: "boss", to: "hub" }),
-      apply(pb, { op: "Rename", from: "boss", to: "pin" }),
-    ]);
+    await concurrent(
+      { op: "Rename", from: "boss", to: "hub" },
+      { op: "Rename", from: "boss", to: "pin" },
+      s2.seq,
+    );
     const s3 = await same(pa, pb, "the rename race", s2.seq + 1);
     // the losing rename's refusal arrives with it: give the tabs a moment to show it
     await new Promise((r) => setTimeout(r, 500));
