@@ -481,8 +481,12 @@ fn strip(body: &Body, fa: FaceId, band: &[FaceId], fb: FaceId, radius: Option<f6
                 }
             })
             .collect();
-        out.remove_loop(*f, l);
-        out.add_loop(*f, &uses);
+        // A splice replaces this boundary in place. Appending the outer boundary would
+        // leave an existing hole first. Two cuts of the same original loop need a joint splice.
+        if !out.face(*f).loops.contains(&l) {
+            return Err(overflow);
+        }
+        out.replace_loop(*f, l, &uses);
         let face = &mut out.faces[f.index()];
         face.bbox.clear();
         face.query.clear();
@@ -670,8 +674,10 @@ fn closed_strip(
                 }
             })
             .collect();
-        out.remove_loop(f, l);
-        out.add_loop(f, &uses);
+        if !out.face(f).loops.contains(&l) {
+            return Err(err);
+        }
+        out.replace_loop(f, l, &uses);
         let face = &mut out.faces[f.index()];
         face.bbox.clear();
         face.query.clear();

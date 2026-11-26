@@ -2430,3 +2430,28 @@ tool = {op}(s3, {depth})
         assert!((v - want).abs() < 1e-9, "{tool}: {v} vs {want}");
     }
 }
+
+/// The round trims the outer boundary of a side face that already has a hole.
+#[test]
+fn full_round_keeps_the_outer_loop_before_a_hole() {
+    let src = r#"sketch S0(on: xy) {
+  o = rect(corner: (0, 0), size: (117.88, 47.1))
+}
+L0 = extrude(S0, 14.83)
+sketch H2(on: offset(xy, -2.58)) {
+  p0 = pt(60.31, 41.94)
+}
+sketch S2(on: plane(at: H2.p0, normal: -Y, x: X)) {
+  o = poly([(-2.67, 14.63), (2.67, 14.63), (2.67, 19.97), (-2.67, 19.97)])
+  ax = line((0, 0), (1, 0))
+}
+L2 = revolve(S2.o, axis: S2.ax)
+L7 = fullround(side: faces(of: L0, normal: Y, extreme: X), middle: faces(of: L0, shape: "plane", normal: X, extreme: X), other: faces(of: L0, shape: "plane", normal: -Y, extreme: X))
+"#;
+    let part = forge_lang::fuzz::build(src);
+    assert!(part.run.errors.is_empty(), "{}", forge_lang::report::text(&part.run, src));
+    let body = part.body_after(part.built()).unwrap();
+    assert!(body.face_ids().any(|f| body.face(f).loops.len() > 1));
+    let problems = forge_topo::check(&body);
+    assert!(problems.is_empty(), "{problems:?}");
+}
