@@ -931,6 +931,11 @@ fn walk(
             // a procedural surface may stop at its face's rim: the branch ends there (any part
             // of it back on the face is seeded and traced from there)
             if ends(a, p, d, h) || ends(b, p, d, h) {
+                // (a spline patch's rim short of the march: the branch carried onto it, so the
+                // edge there is met, not missed by the hair the march stopped short)
+                if let Some(q) = rim_point(a, b, p, step).or_else(|| rim_point(b, a, p, step)) {
+                    pts.push(q);
+                }
                 return Some((pts, false));
             }
             // last, any forward step at all: near a branch point (a cone's apex on the other
@@ -1039,11 +1044,82 @@ pub(crate) fn all_but_touch(na: Vec3, nb: Vec3) -> bool {
 }
 
 /// Whether a procedural surface stops at p going along d: a short step on lies off it by about
-/// the step's length (a curve on it would stay within the step's square).
+/// the step's length (a curve on it would stay within the step's square); or, the rim nearer
+/// than the step (the march stopped a hair short of it, the shortest step reaching past it), the
+/// step's foot is on the edge of the surface's parameters and the step off the surface: a spline
+/// patch whose edge is its face's (ST-28L #645206, a plane across a ruled spline, 7 um short).
 fn ends(s: &Surface, p: Point3, d: Vec3, h: f64) -> bool {
     let Surface::Procedural(pr) = s else { return false };
     let x = p + d * h;
-    pr.point(pr.project(x)).distance(x) > 0.5 * h
+    let uv = pr.project(x);
+    let off = pr.point(uv).distance(x);
+    if off > 0.5 * h {
+        return true;
+    }
+    let rim = |d: crate::curve::Domain1, t: f64| {
+        let w = 1e-9 * (d.hi - d.lo).abs().max(1.0);
+        d.period.is_none() && (t <= d.lo + w || t >= d.hi - w)
+    };
+    let dom = crate::surface::SurfaceGeom::domain(s);
+    off > tol::LINEAR && (rim(dom.u, uv.x) || rim(dom.v, uv.y))
+}
+
+/// Where the curve of `s` and `other` near `p` meets the rim of `s`'s parameters (a spline
+/// patch's edge, its face's): on the domain edge nearest `p` (not a wrapping one), along it, the
+/// point where `other`'s implicit vanishes, by Newton steps from `p`'s place. None if `s` is not
+/// procedural, the rim is no nearer than `step`, or the steps do not settle on both surfaces.
+#[cold]
+#[inline(never)]
+fn rim_point(s: &Surface, other: &Surface, p: Point3, step: f64) -> Option<Point3> {
+    use crate::surface::SurfaceGeom;
+    let Surface::Procedural(pr) = s else { return None };
+    let dom = SurfaceGeom::domain(s);
+    let uv = pr.project(p);
+    // the rim nearest p: a fixed coordinate (u or v) at an end, the other free
+    let mut best: Option<(f64, bool, f64)> = None;
+    for (fix_u, d1) in [(true, dom.u), (false, dom.v)] {
+        if d1.period.is_some() {
+            continue;
+        }
+        for at in [d1.lo, d1.hi] {
+            let q = if fix_u {
+                Point2::new(at, uv.y)
+            } else {
+                Point2::new(uv.x, at)
+            };
+            let dist = pr.point(q).distance(p);
+            if best.is_none_or(|b| dist < b.0) {
+                best = Some((dist, fix_u, at));
+            }
+        }
+    }
+    let (dist, fix_u, at) = best?;
+    if dist > step {
+        return None;
+    }
+    let free = if fix_u { dom.v } else { dom.u };
+    let on = |t: f64| {
+        pr.point(if fix_u {
+            Point2::new(at, t)
+        } else {
+            Point2::new(t, at)
+        })
+    };
+    let mut t = if fix_u { uv.y } else { uv.x };
+    let dt = 1e-7 * (free.hi - free.lo).abs().max(1e-12);
+    for _ in 0..30 {
+        let g = other.implicit(on(t));
+        if g.abs() <= 1e-3 * tol::LINEAR {
+            break;
+        }
+        let slope = (other.implicit(on(t + dt)) - other.implicit(on(t - dt))) / (2.0 * dt);
+        if slope.abs().partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
+            return None;
+        }
+        t = (t - g / slope).clamp(free.lo, free.hi);
+    }
+    let q = on(t);
+    (other.implicit(q).abs() <= tol::LINEAR && q.distance(p) <= step).then_some(q)
 }
 
 pub(crate) fn finish(a: &Surface, b: &Surface, pts: Vec<Point3>, closed: bool, step: f64) -> IntCurve {
