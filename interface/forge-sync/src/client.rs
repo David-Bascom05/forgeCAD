@@ -217,7 +217,10 @@ impl Client {
 
     /// The user's op, already applied and checked by the host on `text()` (the host's edit
     /// path: `apply_checked` succeeded and gave `after`). Queued and sent; returns its id.
-    pub fn local(&mut self, op: impl Into<Edit>, after: String) -> u64 {
+    pub fn local(&mut self, op: impl Into<Edit>, after: String) -> Result<u64, forge_lang::error::Error> {
+        if self.missing_pending_history() {
+            return Err(forge_lang::error::Error::StaleEdit);
+        }
         let op = op.into();
         let id = self.next_id;
         self.next_id += 1;
@@ -228,7 +231,7 @@ impl Client {
             op,
         });
         self.view = after;
-        id
+        Ok(id)
     }
 
     /// Queue only if the editor still sees the exact revision and optimistic text it checked.
@@ -242,14 +245,14 @@ impl Client {
         if self.joining || base != self.seq || before != self.view {
             return Err(forge_lang::error::Error::StaleEdit);
         }
-        Ok(self.local(op, after))
+        self.local(op, after)
     }
 
     /// Applies and checks `op` on `text()` itself, then [`local`](Self::local). Refused: the
     /// typed error, nothing sent.
     pub fn edit(&mut self, op: Op) -> Result<u64, forge_lang::error::Error> {
         let (after, _) = forge_lang::edit::apply_checked(&self.view, &op)?;
-        Ok(self.local(op, after))
+        self.local(op, after)
     }
 
     /// Undo this client's last committed op that has an inverse: the inverse, made on the text
@@ -274,10 +277,10 @@ impl Client {
             kind: e.kind().into(),
             text: e.text(),
         });
-        Some(checked.map(|after| {
-            let id = self.local(op, after);
+        Some(checked.and_then(|after| {
+            let id = self.local(op, after).map_err(|e| Refusal::Lang { kind: e.kind().into(), text: e.text() })?;
             self.pending_undo = Some(id);
-            id
+            Ok(id)
         }))
     }
 
@@ -462,9 +465,20 @@ impl Client {
         true
     }
 
+    /// A fresh snapshot may omit renames between a restored op's base and the
+    /// confirmed text. Keep the confirmed view until the server settles those ops.
+    fn missing_pending_history(&self) -> bool {
+        let floor = self.recent.first().map_or(self.seq, |entry| entry.seq - 1);
+        self.pending.iter().any(|pending| pending.base < floor)
+    }
+
     /// The view: the confirmed text with every pending op rebased as the server will and applied;
     /// one that no longer applies is skipped (the server will refuse it).
     fn replay(&mut self) {
+        if self.missing_pending_history() {
+            self.view.clone_from(&self.confirmed);
+            return;
+        }
         let mut t = self.confirmed.clone();
         for p in &self.pending {
             let since = self.recent.iter().filter(|e| e.seq > p.base);

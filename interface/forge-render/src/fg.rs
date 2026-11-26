@@ -2656,7 +2656,7 @@ fn closing_before_the_next_poll_keeps_the_offline_edit() {
         token: "test-token".into(),
     };
     let link = forge_remote::Session::start(&remote, "part.fg", None).unwrap();
-    link.local(Op::Rename { from: "w".into(), to: "width".into() }, "shared width = 40\n".into());
+    link.local(Op::Rename { from: "w".into(), to: "width".into() }, "shared width = 40\n".into()).unwrap();
     let pending = link.saved();
     let mut editor = Session::new(Some(path.to_string_lossy().into_owned()), src.into(), None, Arc::new(|| {}));
     editor.sync_file = Some(file);

@@ -643,7 +643,11 @@ fn a_saved_client_restores_its_pending_ops_and_ids() {
         back.outbox
     );
     back.outbox.clear();
-    assert_eq!(back.edit(set_w(43.0)).unwrap(), 3, "op ids continue");
+    assert!(matches!(back.edit(set_w(43.0)), Err(forge_lang::error::Error::StaleEdit)));
+    for id in [1, 2] {
+        back.receive(Down::Refused { id, refusal: forge_sync::Refusal::AlreadyCommitted { seq: 5 } });
+    }
+    assert_eq!(back.edit(set_w(43.0)).unwrap(), 3, "op ids continue after the pending operations settle");
     assert!(Client::restore("part.fg", "t", "not json").is_none());
 }
 

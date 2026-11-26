@@ -86,6 +86,13 @@ fn rename_then_readd(send_real_base: bool) -> String {
     for (_, d) in out {
         ada.receive(d);
     }
+    assert!(ada.text().contains("shared w = 5"));
+    assert!(!ada.text().contains("shared w = 41"));
+    assert!(matches!(ada.edit(set("w", 42.)), Err(forge_lang::error::Error::StaleEdit)));
+    assert!(matches!(
+        ada.local_on(ada.seq(), &ada.text().to_owned(), set("w", 42.).into(), "invalid optimistic text".into()),
+        Err(forge_lang::error::Error::StaleEdit)
+    ));
     let ups: Vec<Up> = std::mem::take(&mut ada.outbox);
     for u in ups {
         let u = match (u, send_real_base) {
@@ -93,8 +100,12 @@ fn rename_then_readd(send_real_base: bool) -> String {
             (u, _) => u,
         };
         let (out, _) = room.receive(&mut st, 0, u);
-        eprintln!("answer: {:?}", out.iter().map(|x| &x.1).collect::<Vec<_>>());
+        for (_, d) in out {
+            ada.receive(d);
+        }
     }
+    assert!(ada.pending().is_empty());
+    assert!(ada.edit(set("w", 42.)).is_ok());
     room.seq.head().to_string()
 }
 
