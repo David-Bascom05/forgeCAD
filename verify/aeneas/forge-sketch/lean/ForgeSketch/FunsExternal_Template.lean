@@ -34,7 +34,7 @@ axiom core.f64.F64.max : F64 → F64 → Result F64
 axiom core.f64.F64.min : F64 → F64 → Result F64
 
 /-- [forge_math::predicates::orient2d]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 405:0-405:55
+    Source: 'kernel/forge-math/src/predicates.rs', lines 415:0-415:55
     Name pattern: [forge_math::predicates::orient2d]
     Visibility: public -/
 @[rust_fun "forge_math::predicates::orient2d"]
