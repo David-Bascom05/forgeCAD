@@ -84,11 +84,13 @@ def core.f64.F64.floor (x : F64) : Result F64 := ok (F64.Ops.floor x)
 
 Rust's documentation: a NaN argument gives the other argument; otherwise the lesser (greater)
 value. Which zero `min(+0, -0)` returns is left open (LLVM's `minnum` may give either): that one
-choice is `F64.zeroTie`, an `opaque` function. A proof sees no definition of it, so a theorem holds
-whichever zero it gives; both are equal in value. -/
+choice is opaque. The selected operand is one of the two zeros, which are equal in value. -/
 
-/-- The zero `min`/`max` give for `+0` and `-0` (Rust leaves it open). -/
-opaque F64.zeroTie : F64 → F64 → F64 := fun x _ => x
+/-- Which signed-zero operand to return is unspecified by Rust. -/
+opaque F64.chooseLeftZero : F64 → F64 → Bool := fun _ _ => true
+
+/-- The result of a zero tie is one of its operands, whichever sign is selected. -/
+def F64.zeroTie (x y : F64) : F64 := if F64.chooseLeftZero x y then x else y
 
 /-- `x.min(y)` -/
 def core.f64.F64.min (x y : F64) : Result F64 :=

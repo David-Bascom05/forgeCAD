@@ -955,6 +955,7 @@ fn plan(a: &Body, b: &dyn Src, op: Op) -> R<Plan> {
         }
         a_walls.push(w);
     }
+    c.walls.reserve_exact(t.walls.len() + a_walls.len());
     for &f in &t.walls {
         let w = c.wall(1, f).ok_or("a tool wall not along the axis")?;
         c.walls.push(w);

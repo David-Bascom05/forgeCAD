@@ -152,9 +152,12 @@ type H = [f64; 4];
 
 /// A rational Bézier piece in homogeneous points, split at its midpoint until decided; its
 /// leaves pushed in order. False if some piece is not decided within the splits allowed.
-fn bezier(h: &[H], a: End, b: End, p: Point2, depth: usize, out: &mut Count) -> bool {
+/// `big0` is the largest coordinate of the piece the splits started from (0 at the start).
+fn bezier(h: &[H], a: End, b: End, p: Point2, depth: usize, big0: f64, out: &mut Count) -> bool {
     // the hull, and how far its points may be off: each midpoint level adds at most one
-    // rounding of the largest coordinate, and projecting divides by the least weight
+    // rounding of the largest coordinate of the levels above (the root's, not this piece's: a
+    // small piece of a large curve carries its ancestors' rounding, research/sketch-text/
+    // hull-margin.md), and projecting divides by the least weight
     let (mut lo, mut hi) = (
         Point2::new(f64::INFINITY, f64::INFINITY),
         Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
@@ -170,7 +173,8 @@ fn bezier(h: &[H], a: End, b: End, p: Point2, depth: usize, out: &mut Count) -> 
     if wmin.is_nan() || wmin <= 0.0 || !big.is_finite() {
         return false;
     }
-    let m = 4.0 * (depth as f64 + 2.0) * EPS * big / wmin;
+    let big0 = big0.max(big);
+    let m = 4.0 * (depth as f64 + 2.0) * EPS * big0 / wmin;
     if let Some(leaf) = decide(lo, hi, m, p) {
         out.push(leaf, a, b);
         return true;
@@ -201,7 +205,7 @@ fn bezier(h: &[H], a: End, b: End, p: Point2, depth: usize, out: &mut Count) -> 
         at: Point2::new(mid[0] / mid[3], mid[1] / mid[3]),
         err: m,
     };
-    bezier(&left, a, e, p, depth + 1, out) && bezier(&right, e, b, p, depth + 1, out)
+    bezier(&left, a, e, p, depth + 1, big0, out) && bezier(&right, e, b, p, depth + 1, big0, out)
 }
 
 /// An arc piece from angle t0 to t1 (t0 < t1, at most a quarter turn), split at its middle
@@ -327,7 +331,7 @@ fn segment(s: &Segment, p: Point2) -> Option<i32> {
                         err: 2.0 * EPS * (last[0].abs().max(last[1].abs()) / last[3]).max(1.0),
                     }
                 };
-                if !bezier(h, a, b, p, 0, &mut leaves) {
+                if !bezier(h, a, b, p, 0, 0.0, &mut leaves) {
                     return None;
                 }
                 a = b;

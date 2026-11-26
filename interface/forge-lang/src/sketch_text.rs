@@ -30,7 +30,9 @@ pub fn text(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let a = Args::bind(
         ev,
         "text",
-        &["text", "at", "size", "font", "bold", "italic", "align", "angle"],
+        &[
+            "text", "at", "size", "font", "bold", "italic", "align", "angle", "spacing",
+        ],
         args,
         span,
     )?;
@@ -79,6 +81,8 @@ pub fn text(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         }
     };
     let angle = a.num("angle", ANG)?.map_or(0.0, |n| n.v);
+    // a length added after each character (but a line's last), beyond the font's advance
+    let spacing = a.num("spacing", LEN)?.map_or(0.0, |n| n.v);
     let family = match a.opt("font") {
         None => crate::fonts::DEFAULT.to_string(),
         Some(_) => crate::media::string(&a, "font")?,
@@ -98,15 +102,16 @@ pub fn text(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         a.span("font"),
     )?;
     let fail = |problem| -> Error { FeatError::Text { span, problem }.into() };
-    let placed = lay_out(&font, &string, align).map_err(|e| match e {
-        LayoutError::Font(f) => fail(TextProblem::Font(format!("{f:?}"))),
-        LayoutError::NoGlyph { index, ch } => FeatError::Text {
-            span: a.span("text"),
-            problem: TextProblem::NoGlyph { index, ch },
-        }
-        .into(),
-        LayoutError::NoLineSpacing => fail(TextProblem::NoLineSpacing),
-    })?;
+    let placed =
+        lay_out(&font, &string, align, spacing / size.v * font.units_per_em).map_err(|e| match e {
+            LayoutError::Font(f) => fail(TextProblem::Font(format!("{f:?}"))),
+            LayoutError::NoGlyph { index, ch } => FeatError::Text {
+                span: a.span("text"),
+                problem: TextProblem::NoGlyph { index, ch },
+            }
+            .into(),
+            LayoutError::NoLineSpacing => fail(TextProblem::NoLineSpacing),
+        })?;
     if placed.is_empty() {
         return Err(fail(TextProblem::Empty));
     }
@@ -130,7 +135,7 @@ pub fn text(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let mut sk_ref = sk.borrow_mut();
     for g in &placed {
         let mut segs: Vec<EntityId> = Vec::new();
-        for (ci, contour) in g.contours.iter().enumerate() {
+        for (ci, (contour, &part)) in g.contours.iter().zip(&g.parts).enumerate() {
             let Some(first) = contour.first() else { continue };
             let start = sk_ref.point(to(first.start()), true, None, span)?;
             let mut at_pt = start;
@@ -156,6 +161,7 @@ pub fn text(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                     }
                 };
                 segs.push(e);
+                sk_ref.text_segs.push((e, g.index, part));
                 at_pt = end;
             }
         }

@@ -29,6 +29,12 @@ pub enum ExtractError {
         inner: EntityId,
         outer: EntityId,
     },
+    /// Two groups that must stay apart (`profiles_in_groups`: two glyphs) meet: these two
+    /// entities cross or touch.
+    Meet {
+        a: EntityId,
+        b: EntityId,
+    },
 }
 
 /// The regions the sketch's non-construction lines, arcs and circles enclose:
@@ -118,6 +124,13 @@ pub fn profiles_among(
     }
     check_crossings(&loops)?;
 
+    // A single boundary has depth zero and no children. Move it into the same
+    // normalization used below, after checking it for self-crossings.
+    if loops.len() == 1 {
+        let profile = Profile { plane: sketch.plane, loops };
+        return Ok(vec![profile.normalized_touching().map_err(ExtractError::Profile)?]);
+    }
+
     // which loop lies inside which, decided exactly (winding.rs); each pair asked as needed
     let n = loops.len();
     let inside = |i: usize, j: usize| -> Result<bool, ExtractError> {
@@ -156,6 +169,61 @@ pub fn profiles_among(
             loops: ls,
         };
         out.push(p.normalized_touching().map_err(ExtractError::Profile)?);
+    }
+    Ok(out)
+}
+
+/// The regions of groups of entities taken one group at a time (each a part of a glyph, say),
+/// each group's by `profiles_among`; groups of one `whole` (one glyph) may overlap, the union
+/// of their regions being what a feature over them makes, while loops of different wholes must
+/// neither cross nor touch (`Meet`). Each region comes with its group's index.
+pub fn profiles_in_groups(
+    sketch: &Sketch,
+    groups: &[(usize, Vec<EntityId>)],
+) -> Result<Vec<(usize, Profile)>, ExtractError> {
+    let mut out: Vec<(usize, Profile)> = Vec::new();
+    for (g, (_, ids)) in groups.iter().enumerate() {
+        let mut keep = ids.clone();
+        keep.sort_unstable();
+        for p in profiles_among(sketch, &|e| keep.binary_search(&e).is_ok())? {
+            out.push((g, p));
+        }
+    }
+    // every loop of every region, with its whole and its box
+    let loops: Vec<(usize, &ProfileLoop, (Point2, Point2))> = out
+        .iter()
+        .flat_map(|(g, p)| {
+            p.loops
+                .iter()
+                .map(move |l| (groups[*g].0, l, crate::winding::bbox(l)))
+        })
+        .collect();
+    let pad = tol::LINEAR;
+    let apart = |a: (Point2, Point2), b: (Point2, Point2)| {
+        a.1.x + pad < b.0.x || b.1.x + pad < a.0.x || a.1.y + pad < b.0.y || b.1.y + pad < a.0.y
+    };
+    for i in 0..loops.len() {
+        for j in i + 1..loops.len() {
+            let ((wi, li, bi), (wj, lj, bj)) = (&loops[i], &loops[j]);
+            if wi == wj || apart(*bi, *bj) {
+                continue;
+            }
+            for (si, ei) in &li.segments {
+                let shi = shape(si);
+                for (sj, ej) in &lj.segments {
+                    let met = match hits(&shi, &shape(sj)) {
+                        Hit::Overlap => true,
+                        Hit::Points(ps) => !ps.is_empty(),
+                    };
+                    if met {
+                        return Err(ExtractError::Meet {
+                            a: EntityId(*ei),
+                            b: EntityId(*ej),
+                        });
+                    }
+                }
+            }
+        }
     }
     Ok(out)
 }
@@ -517,6 +585,10 @@ fn check_crossings(loops: &[ProfileLoop]) -> Result<(), ExtractError> {
         Pairs::Listed(crossing_candidates(&all).into_iter())
     };
     for (i, j) in pairs {
+        let hit = hits(&shapes[i], &shapes[j]);
+        if matches!(&hit, Hit::Points(points) if points.is_empty()) {
+            continue;
+        }
         let (si, sj) = (&all[i].0, &all[j].0);
         let ends = [si.start(), si.end(), sj.start(), sj.end()];
         // the ends of the first the second shares (at most two: no list made for them)
@@ -532,7 +604,6 @@ fn check_crossings(loops: &[ProfileLoop]) -> Result<(), ExtractError> {
         // a tangent joint solved to ~1e-9 mm still splits into two roots up to sqrt(2 r delta) apart
         let near = 1e-6 + (2.0 * radius(&shapes[i]).max(radius(&shapes[j])) * 1e-8).sqrt();
         let same = all[i].2 == all[j].2;
-        let hit = hits(&shapes[i], &shapes[j]);
         let bad = match &hit {
             Hit::Overlap => true,
             Hit::Points(ps) => ps.iter().any(|p| {

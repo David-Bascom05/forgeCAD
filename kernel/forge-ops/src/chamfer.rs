@@ -145,10 +145,11 @@ pub fn chamfer_with(
     }
 
     let mut out = Body::new();
-    // All source entities are copied below. Each bevel also adds one face and two contact edges.
+    // Each bevel adds one face and two contact edges. Allow one joining edge per
+    // affected corner before the contact edges are appended.
     out.vertices.reserve(src.vertices.len());
     out.faces.reserve(src.faces.len() + bevels.len());
-    out.edges.reserve(src.edges.len() + 2 * bevels.len());
+    out.edges.reserve(src.edges.len() + 2 * bevels.len() + affected.len());
     out.joins = src.joins.clone();
     for v in &src.vertices {
         out.add_vertex(v.point, v.name);

@@ -139,8 +139,24 @@ fn refusals_are_typed() {
     assert!(kind(part("A", ", italic: true", "extrude")).contains("NoStyle"));
     assert!(kind(part("A\u{4e2d}", "", "extrude")).contains("NoGlyph"));
     assert!(kind(part("  ", "", "extrude")).contains("Empty"));
-    // Open Sans's C cedilla: its cedilla crosses the C, refused rather than joined
-    assert!(kind(part("\u{c7}", "", "extrude")).contains("SketchProfile"));
+    // bold V and W touch: two glyphs meeting are refused, naming them; spacing sets them apart
+    assert!(kind(part("VW", ", bold: true", "extrude")).contains("GlyphsMeet { a: 0, b: 1 }"));
+    assert!(run(&part("VW", ", bold: true, spacing: 0.5", "extrude")).ok());
+}
+
+/// A composite glyph is the union of its components' regions: Open Sans's A ring, C cedilla
+/// and c cedilla overlap their letters, and build as one glyph each.
+#[test]
+fn composite_glyphs_are_unions() {
+    let plate = 80.0 * 30.0 * 4.0;
+    for c in ["\u{c5}", "\u{c7}", "\u{e7}"] {
+        for bold in ["", ", bold: true"] {
+            let r = run(&part(c, bold, "extrude"));
+            assert!(r.ok(), "{c}{bold}: {:?}", r.errors);
+            assert!(forge_topo::check(r.body.as_ref().unwrap()).is_empty());
+            assert!(volume(&r) > plate);
+        }
+    }
 }
 
 /// Text as a part's first, new body, and as a new body beside another: its glyphs one body.
@@ -221,4 +237,15 @@ fn text_bits_are_the_same_everywhere() {
     ];
     println!("{got:?}");
     assert_eq!(got, ["62b0602ea86db6e0", "9b4b3744493af53b"]);
+}
+
+#[test]
+fn ordinary_loop_lists_keep_holes() {
+    // Include an unselected glyph in the second sketch to exercise both selection paths.
+    for label in ["", "  label = text(\"A\", at: (30, 0), size: 4)\n"] {
+        let src = format!("sketch plan(on: xy) {{\n  outer = rect(corner: (0, 0), size: (20, 20))\n  inner = rect(corner: (5, 5), size: (10, 10))\n{label}}}\nsolid = extrude([plan.outer, plan.inner], 2)\n");
+        let r = run(&src);
+        assert!(r.ok(), "{:?}", r.errors);
+        assert!((volume(&r) - 600.0).abs() < 1e-6);
+    }
 }

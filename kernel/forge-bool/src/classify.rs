@@ -437,7 +437,8 @@ pub fn face_box(body: &Body, f: FaceId) -> Box3 {
 fn info(body: &Body, f: FaceId) -> &FaceInfo {
     let face = body.face(f);
     let q = face.query.get_or_init(|| {
-        let mut edges = Vec::new();
+        let coedges = face.loops.iter().map(|&l| body.lp(l).coedges().len()).sum();
+        let mut edges = Vec::with_capacity(coedges);
         // (the body's bound of its vertices' tolerances, at least this face's loops')
         let mut reach = tol::LINEAR.max(body.vertex_tol());
         for &l in &face.loops {

@@ -1,0 +1,36 @@
+# Sketch text's Lean claims (verify/forge-text/lean): the placed outline is the font's, the
+# winding rule, a text's region as the union of its glyphs' parts. `lake build` on the pinned
+# toolchain (core Lean only, no Mathlib), then the axiom check: a `sorry`, `native_decide` or any
+# axiom past propext, Classical.choice and Quot.sound fails the job.
+name: lean-forge-text
+
+on:
+  push:
+    branches: [main]
+    paths: ["verify/forge-text/**", "verify/winding2d/**", "kernel/forge-font/src/**", "kernel/forge-sketch/src/winding.rs",
+            ".github/workflows/lean-forge-text.yml"]
+  pull_request:
+    paths: ["verify/forge-text/**", "verify/winding2d/**", "kernel/forge-font/src/**", "kernel/forge-sketch/src/winding.rs",
+            ".github/workflows/lean-forge-text.yml"]
+  workflow_dispatch:
+
+jobs:
+  proofs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: verify/forge-text/lean
+    steps:
+      - uses: actions/checkout@v4
+      - name: elan and the pinned toolchain
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+          sh elan-init.sh -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install "$(cat lean-toolchain)"
+      - name: build and axioms
+        run: |
+          lake build
+          lake env lean Axioms.lean | tee axioms.txt
+          ! grep -E "sorryAx|ofReduceBool" axioms.txt

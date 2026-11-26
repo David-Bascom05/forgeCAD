@@ -1,0 +1,16 @@
+name = "forgefont"
+version = "0.1.0"
+defaultTargets = ["ForgeFont"]
+
+# The float bridge: Aeneas's library, verify/ieee754, and f64 as binary64.
+[[require]]
+name = "aeneasf64"
+path = "../../bridge"
+
+# The specs the translation is proven against: verify/forge-text (and verify/winding2d).
+[[require]]
+name = "forgetext"
+path = "../../../forge-text/lean"
+
+[[lean_lib]]
+name = "ForgeFont"
