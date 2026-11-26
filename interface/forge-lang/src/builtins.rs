@@ -760,7 +760,7 @@ pub(crate) fn mk_ent(sk: &Rc<RefCell<Sk>>, id: EntityId) -> Value {
         sk: sk.clone(),
         id,
         kind,
-        loop_segs: Rc::new(vec![]),
+        loop_segs: Ent::no_segments(),
     })
 }
 
@@ -1752,7 +1752,6 @@ type Regions = (Rc<RefCell<Sk>>, Vec<forge_ops::Profile>, Vec<EntityId>);
 pub(crate) fn profiles_of(xs: &[Value], span: Span) -> R<Regions> {
     let mut sk: Option<Rc<RefCell<Sk>>> = None;
     let mut ids = Vec::new();
-    let mut elements: Vec<&[EntityId]> = Vec::new();
     for x in xs.iter() {
         match x {
             Value::Ent(e) if !e.loop_segs.is_empty() => {
@@ -1767,7 +1766,6 @@ pub(crate) fn profiles_of(xs: &[Value], span: Span) -> R<Regions> {
                 }
                 sk = Some(e.sk.clone());
                 ids.extend(e.loop_segs.iter().copied());
-                elements.push(&e.loop_segs);
             }
             o => {
                 return Err(Error::WrongType {
@@ -1789,7 +1787,11 @@ pub(crate) fn profiles_of(xs: &[Value], span: Span) -> R<Regions> {
     let ps = if sketch.text_segs.is_empty() {
         sketch.profiles_among(&ids, span)?
     } else {
-        sketch.profiles_grouped(&elements, span)?
+        let elements = xs.iter().filter_map(|x| match x {
+            Value::Ent(e) => Some(e.loop_segs.as_slice()),
+            _ => None,
+        });
+        sketch.profiles_grouped(elements, span)?
     };
     drop(sketch);
     Ok((sk, ps, ids))
@@ -3059,7 +3061,7 @@ pub fn member(ev: &mut Eval, v: Value, name: &str, span: Span) -> R<Value> {
                     sk: e.sk.clone(),
                     id,
                     kind: EntKind::Point,
-                    loop_segs: Rc::new(vec![]),
+                    loop_segs: Ent::no_segments(),
                 })
             };
             use forge_sketch::Entity as E;

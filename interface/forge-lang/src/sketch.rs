@@ -715,7 +715,7 @@ impl Sk {
     /// text's; anything else one part), each element's parts overlapping as they will and the
     /// elements kept apart (`forge_sketch::profiles_in_groups`), named as `profile` names them.
     /// Two characters meeting is `Text GlyphsMeet`, naming them.
-    pub fn profiles_grouped(&self, elements: &[&[EntityId]], span: Span) -> R<Vec<Profile>> {
+    pub fn profiles_grouped<'a>(&self, elements: impl Iterator<Item = &'a [EntityId]>, span: Span) -> R<Vec<Profile>> {
         let part = |e: EntityId| {
             self.text_segs
                 .binary_search_by_key(&e, |t| t.0)
@@ -723,7 +723,7 @@ impl Sk {
         };
         let mut groups: Vec<(usize, Vec<EntityId>)> = Vec::new();
         let mut ordinary = Vec::new();
-        for (k, el) in elements.iter().enumerate() {
+        for (k, el) in elements.enumerate() {
             let first = groups.len();
             for &e in el.iter() {
                 let (character, p) = part(e);
@@ -742,7 +742,7 @@ impl Sk {
         }
         if !ordinary.is_empty() {
             // All ordinary contours form one region set so an inner contour remains a hole.
-            groups.push((elements.len(), ordinary));
+            groups.push((usize::MAX, ordinary));
         }
         let solved = match &self.done.0 {
             Some(d) if d.out.same_bits(&self.s) => &d.out,

@@ -104,6 +104,14 @@ pub struct Ent {
     pub loop_segs: Rc<Vec<EntityId>>,
 }
 
+impl Ent {
+    /// Points and individual curves all have the same empty segment list.
+    pub(crate) fn no_segments() -> Rc<Vec<EntityId>> {
+        thread_local! { static EMPTY: Rc<Vec<EntityId>> = Rc::new(Vec::new()); }
+        EMPTY.with(Rc::clone)
+    }
+}
+
 impl std::fmt::Debug for Ent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Ent({:?} {:?})", self.kind, self.id)
@@ -1879,7 +1887,7 @@ impl<'s> Eval<'s> {
                             sk: en.sk.clone(),
                             id,
                             kind,
-                            loop_segs: Rc::new(vec![]),
+                            loop_segs: Ent::no_segments(),
                         }));
                     }
                     o => {
