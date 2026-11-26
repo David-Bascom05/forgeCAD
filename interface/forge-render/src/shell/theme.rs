@@ -193,7 +193,12 @@ pub fn mono(size: f32) -> FontId {
 /// Public Sans and IBM Plex Mono, bundled.
 pub fn fonts() -> FontDefinitions {
     let mut f = FontDefinitions::empty();
-    let faces: [(&str, &'static [u8]); 4] = [
+    let faces: [(&str, &'static [u8]); 5] = [
+        // The primary UI faces omit Greek letters used in schematic units such as Ω.
+        (
+            "symbols",
+            include_bytes!("../../../forge-lang/fonts/OpenSans-Regular.ttf"),
+        ),
         ("sans", include_bytes!("../../fonts/PublicSans-Regular.ttf")),
         ("medium", include_bytes!("../../fonts/PublicSans-Medium.ttf")),
         ("semi", include_bytes!("../../fonts/PublicSans-SemiBold.ttf")),
@@ -203,16 +208,19 @@ pub fn fonts() -> FontDefinitions {
         f.font_data
             .insert(name.into(), FontData::from_static(bytes).into());
     }
-    f.families.insert(FontFamily::Proportional, vec!["sans".into()]);
     f.families
-        .insert(FontFamily::Monospace, vec!["mono".into(), "sans".into()]);
+        .insert(FontFamily::Proportional, vec!["sans".into(), "symbols".into()]);
+    f.families.insert(
+        FontFamily::Monospace,
+        vec!["mono".into(), "sans".into(), "symbols".into()],
+    );
     f.families.insert(
         FontFamily::Name("medium".into()),
-        vec!["medium".into(), "sans".into()],
+        vec!["medium".into(), "sans".into(), "symbols".into()],
     );
     f.families.insert(
         FontFamily::Name("semi".into()),
-        vec!["semi".into(), "sans".into()],
+        vec!["semi".into(), "sans".into(), "symbols".into()],
     );
     f
 }

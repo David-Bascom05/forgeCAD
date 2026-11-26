@@ -1,0 +1,17 @@
+schematic
+USBDevice = symbol(ref_prefix:"U",pins:{
+    DP:pin(kind:"bidirectional",number:"1",at:(9,4)),
+    DM:pin(kind:"bidirectional",number:"2",at:(9,-4))
+},graphics:[rect(from:(-6,-7),to:(6,7)),line(from:(6,4),to:(9,4)),line(from:(6,-4),to:(9,-4))])
+USBConnector = symbol(ref_prefix:"J",part_kind:"connector",pins:{
+    DP:pin(kind:"passive",number:"3",at:(-9,4)),
+    DM:pin(kind:"passive",number:"2",at:(-9,-4))
+},graphics:[rect(from:(-6,-7),to:(6,7)),line(from:(-9,4),to:(-6,4)),line(from:(-9,-4),to:(-6,-4))])
+main = sheet(title:"USB data interface")
+U1 = place(sheet:main,symbol:USBDevice,value:"USB PHY",at:(-27,0))
+J1 = place(sheet:main,symbol:USBConnector,value:"USB connector",at:(27,0))
+positive_wire = wire(sheet:main,from:U1.DP,to:J1.DP)
+negative_wire = wire(sheet:main,from:U1.DM,to:J1.DM)
+data_plus = label(sheet:main,on:U1.DP,value:"USB_D+",at:(-3,4))
+data_minus = label(sheet:main,on:U1.DM,value:"USB_D-",at:(-3,-4))
+usb = diff_pair(sheet:main,positive:U1.DP,negative:U1.DM)

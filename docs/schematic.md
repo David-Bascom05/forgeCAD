@@ -219,7 +219,7 @@ Choose **Differential Pair** (F8). Pick the positive and negative pins, wires or
 usb = diff_pair(sheet: main, positive: J1.DP, negative: J1.DM)
 ```
 
-The `diff-pairs` query and `board` handoff report both terminal IDs and their resolved nets per occurrence. ERC flags shorted legs and incompatible mate or polarity assignments. The schematic declaration supplies pairing intent for layout. Board geometry determines impedance and length matching.
+The `diff-pairs` query and `board` handoff report both terminal IDs and their resolved nets per occurrence. ERC flags shorted legs and incompatible mate or polarity assignments. The schematic declaration supplies pairing intent for layout. Board geometry determines impedance and length matching. [USB schematic example](../examples/electronics/usb-diff-pair.fg)
 
 ### Selecting and cleaning up wiring
 

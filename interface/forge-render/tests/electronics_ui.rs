@@ -557,7 +557,9 @@ fn confirm_differential_net_labels_and_reopen() {
     let dir = std::env::temp_dir().join(format!("fg-diff-pair-ui-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("usb.fg");
-    std::fs::write(&file,"schematic\nmain = sheet()\na = port(sheet:main,at:(0,0))\nb = port(sheet:main,at:(0,6))\npa = label(sheet:main,on:a,value:\"USB_D+\",at:(0,0))\nnb = label(sheet:main,on:b,value:\"USB_D-\",at:(0,6))\n").unwrap();
+    let sample = include_str!("../../../examples/electronics/usb-diff-pair.fg");
+    let (unpaired, _) = sample.rsplit_once("usb = diff_pair").unwrap();
+    std::fs::write(&file, unpaired).unwrap();
     h.gui.open(file.to_str().unwrap());
     h.step();
     h.key(egui::Key::F8);
@@ -566,6 +568,9 @@ fn confirm_differential_net_labels_and_reopen() {
     h.step();
     if let Some(out) = std::env::var_os("FORGE_UI_SHOTS") {
         std::fs::create_dir_all(&out).unwrap();
+        for _ in 0..3 {
+            h.step();
+        }
         std::fs::write(Path::new(&out).join("differential-pair.png"), h.png().unwrap()).unwrap();
     }
     assert!(h.click("electronics:create-record"));
@@ -573,6 +578,6 @@ fn confirm_differential_net_labels_and_reopen() {
     h.gui.fg_save();
     let src = std::fs::read_to_string(file).unwrap();
     let (_, c) = forge_lang::schematic::compile(&src, Some(&dir), None).unwrap();
-    assert_eq!(c.diff_pairs["main/pair1"], ["main/a", "main/b"]);
+    assert_eq!(c.diff_pairs["main/pair1"], ["main/U1.DP", "main/U1.DM"]);
     std::fs::remove_dir_all(dir).unwrap();
 }
