@@ -18,7 +18,7 @@ type Tool = (
     &'static [(&'static str, &'static str)],
 );
 
-const TOOLS: [Tool; 22] = [
+const TOOLS: [Tool; 23] = [
     (
         "plan_fulfillment",
         "Confirm a typed candidate on an existing hand-drawn circuit. Returns one checked edit and the source version.",
@@ -54,6 +54,15 @@ const TOOLS: [Tool; 22] = [
             ("id", "new .fg occurrence name"),
             ("x_mm", "sheet X in mm"),
             ("y_mm", "sheet Y in mm"),
+        ],
+    ),
+    (
+        "pcb",
+        "Inspect a rigid PCB document, its stack and authored copper, or run its supported design rules.",
+        1,
+        &[
+            ("file", "path to a PCB .fg"),
+            ("sel", "summary, stackup, routing, handoff [VARIANT] or drc"),
         ],
     ),
     (

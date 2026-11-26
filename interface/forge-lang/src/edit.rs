@@ -485,8 +485,8 @@ fn splice(src: &str, lo: u32, hi: u32, text: &str) -> String {
 
 /// The dimension a param's definition gives, from a check of the document.
 pub(crate) fn param_dim(src: &str, key: &ParamKey, at: &At) -> Option<Dim> {
-    if crate::schematic::is_document(src) {
-        return crate::schematic::parameter_dimension(src, key);
+    if crate::schematic::is_document(src) || crate::pcb::is_document(src) {
+        return crate::electronics::parameter_dimension(src, key);
     }
     let (run, _) = crate::run(src, at.options(), Default::default());
     dim_in(&run, key)
@@ -1394,6 +1394,12 @@ pub fn apply_checked_in(src: &str, op: &Op, dir: Option<std::path::PathBuf>) -> 
 /// `apply_checked` for a document in `at`: every evaluation it makes (a param's dimension, the
 /// source's errors, the edited text's) has the document's directory and the session's root.
 pub fn apply_checked_at(src: &str, op: &Op, at: &At) -> R<(String, Option<Reach>)> {
+    if crate::pcb::is_document(src) {
+        let next = apply_at(src, op, at)?;
+        crate::pcb::compile(&next, at.dir.as_deref(), at.root.as_deref())
+            .map_err(|e| Error::Schematic(Box::new(e)))?;
+        return Ok((next, None));
+    }
     if crate::schematic::is_document(src) {
         let next = apply_at(src, op, at)?;
         crate::schematic::compile(&next, at.dir.as_deref(), at.root.as_deref())
@@ -1493,6 +1499,11 @@ pub fn apply_all_checked_at(src: &str, ops: &[Op], at: &At) -> R<String> {
     let mut text = src.to_string();
     for op in ops {
         text = apply_at(&text, op, at)?;
+    }
+    if crate::pcb::is_document(src) {
+        crate::pcb::compile(&text, at.dir.as_deref(), at.root.as_deref())
+            .map_err(|e| Error::Schematic(Box::new(e)))?;
+        return Ok(text);
     }
     let (before, _) = crate::run(src, at.options(), Default::default());
     checked_against(&before, &text, at.options())?;

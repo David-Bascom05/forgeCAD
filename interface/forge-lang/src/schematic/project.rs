@@ -224,6 +224,15 @@ pub fn board(d: &Document, c: &Circuit, variant: Option<&str>) -> Result<Json> {
         .iter()
         .map(|l| {
             Json::obj(vec![
+                ("id", l.id.clone().into()),
+                (
+                    "return_from",
+                    l.returns.as_ref().map_or(Json::Null, |r| r.0.clone().into()),
+                ),
+                (
+                    "return_to",
+                    l.returns.as_ref().map_or(Json::Null, |r| r.1.clone().into()),
+                ),
                 ("consumer", l.want.clone().into()),
                 ("provider", l.give.clone().into()),
                 ("role", l.role.0.clone().into()),

@@ -827,3 +827,63 @@ fn schematic_pin_workflow_uses_one_checked_undoable_transaction() {
     drop(server);
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn a_pcb_edit_is_atomic_and_drc_uses_the_updated_geometry() {
+    let dir = scratch("pcb");
+    let path = dir.join("board.fg");
+    let src = include_str!("../../../examples/electronics/controller-board.fg");
+    for (name, text) in [
+        ("board.fg", src),
+        (
+            "controller.fg",
+            include_str!("../../../examples/electronics/controller.fg"),
+        ),
+        (
+            "power-symbols.fg",
+            include_str!("../../../examples/electronics/power-symbols.fg"),
+        ),
+    ] {
+        std::fs::write(dir.join(name), text).unwrap();
+    }
+    let file = path.to_str().unwrap();
+    let mut server = Server::start("mcp", &dir);
+    let (err, original, _) = server.tool("pcb", vec![("file", file.into()), ("sel", "drc".into())]);
+    assert!(!err, "{original}");
+    assert_eq!(s(&original, "schema"), "forgecad.pcb/1");
+    let change = |text: &str| {
+        Json::obj(vec![
+            ("op", "SetArg".into()),
+            ("id", "feed".into()),
+            ("arg", "width".into()),
+            ("text", text.into()),
+        ])
+    };
+    let (err, bad, _) = server.tool("edit", vec![("file", file.into()), ("op", change("2deg"))]);
+    assert!(err, "{bad}");
+    assert_eq!(s(bad.get("error").unwrap(), "kind"), "WrongDim");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), src);
+    let (err, edit, _) = server.tool(
+        "edit",
+        vec![
+            ("file", file.into()),
+            ("base", s(&original, "version").into()),
+            ("op", change("0.15mm")),
+        ],
+    );
+    assert!(!err, "{edit}");
+    let (err, check, _) = server.tool("check", vec![("file", file.into())]);
+    assert!(err, "{check}");
+    let findings = arr(check.get("result").unwrap(), "findings");
+    assert_eq!(findings.len(), 1);
+    assert_eq!(s(&findings[0], "object"), "feed");
+    let (err, r, _) = server.tool(
+        "edit",
+        vec![
+            ("file", file.into()),
+            ("op", Json::obj(vec![("op", "Undo".into())])),
+        ],
+    );
+    assert!(!err, "{r}");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), src);
+}

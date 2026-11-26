@@ -25,8 +25,9 @@ pub use graph::Circuit;
 pub use inspection::{Direction, Evidence, PinInspection, inspect_pin, wire_directions};
 mod bom;
 pub mod datasheet;
+pub use crate::electronics::{Fault, Result, parameter_dimension};
 pub use bom::{BomLine, bom, bom_csv, bom_for};
-pub use reader::{parameter_dimension, read};
+pub use reader::read;
 pub use report::response;
 use std::collections::{BTreeMap as Map, BTreeSet as Set};
 use std::path::Path;
@@ -412,26 +413,8 @@ pub struct Document {
     pub sheets: Map<String, String>,
     pub rows: Vec<Row>,
 }
-#[derive(Debug, Clone, PartialEq)]
-pub struct Fault {
-    pub kind: &'static str,
-    pub message: String,
-    pub span: Span,
-    pub file: Option<String>,
-}
-impl Fault {
-    pub(super) fn new(kind: &'static str, span: Span, msg: impl Into<String>) -> Self {
-        Self {
-            kind,
-            message: msg.into(),
-            span,
-            file: None,
-        }
-    }
-}
-pub type Result<T> = std::result::Result<T, Fault>;
 pub fn is_document(src: &str) -> bool {
-    reader::header(src).is_some_and(|word| HEADERS.contains(&word))
+    crate::electronics::header(src).is_some_and(|word| HEADERS.contains(&word))
 }
 pub fn compile(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<(Document, Circuit)> {
     let doc = read(src, dir, root)?;

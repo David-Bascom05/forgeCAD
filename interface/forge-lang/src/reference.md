@@ -1594,3 +1594,11 @@ ordinary named .fg calls. `forgecad build FILE.fg --json` reports the model, rol
 returns the instantiated terminal, numbered pin, typed needs and offerings, compatible
 candidates and confirmed bindings. `tree main/u.vdd` traverses functional stages, bindings
 and wires and marks revisits. See docs/schematic.md and examples/electronics/controller.fg.
+
+## PCB
+
+Start a rigid board with the single word `pcb`. Declare one `edge(points: [...])` for the outer polygon. The closing segment is implicit. Declare named `copper(weight_oz_ft2: 1, thickness: 0.035mm)` and `dielectric(material: "FR-4 core", thickness: 1.53mm)` layers and order them top to bottom with `stackup(layers: [top, core, bottom])`. Foil weight is nominal ounces per square foot. The specified finished copper thickness contributes to the stack height. Dimensions accept shared length parameters, mm and inches on a 1 nm grid. Coordinates and individual dimensions are bounded to ±500 mm.
+
+Use `net(name: "GND")` for a board-local net. To bind a net to the current electrical partition, declare `source = schematic(file: "controller.fg")` then `rail = net(terminal: "main/u.vdd")`. A track references the board net and a copper layer. It has a positive width and a polyline of round-ended segments. A circular `through_via(net: rail, at: (12, 11), diameter: 0.6mm, drill: 0.3mm)` spans the stack, with uniform lands on every copper layer.
+
+`forgecad pcb FILE.fg summary|stackup|routing|drc --json` inspects the compiled board. The additional query `handoff [VARIANT]` reads fitted components, pin-to-pad mappings, differential pairs and confirmed supply/return relationships from its linked schematic. `build`, `check`, `query` and checked `edit` accept board files. DRC checks whether the full width of each segment and each via land fits inside the perimeter. An optional `process(min_width: ..., min_spacing: ..., min_drill: ..., min_annular_ring: ...)` adds uniform minimum dimensions and different-net copper spacing on each layer. Equality at a limit passes. The result lists its checked rules. Net membership expresses routing intent. Full connectivity, component pads, cutouts and plane fills require further backend work.

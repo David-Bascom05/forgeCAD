@@ -769,18 +769,6 @@ pub fn response(d: &Document, c: &Circuit, words: &[String]) -> Result<Json> {
 }
 impl Fault {
     pub fn json(&self) -> Json {
-        Json::obj(vec![
-            ("schema", "forgecad.schematic/1".into()),
-            ("ok", false.into()),
-            (
-                "error",
-                Json::obj(vec![
-                    ("kind", self.kind.into()),
-                    ("message", self.message.clone().into()),
-                    ("span", crate::error::span_json(self.span)),
-                    ("file", self.file.clone().map_or(Json::Null, Into::into)),
-                ]),
-            ),
-        ])
+        self.json_for("forgecad.schematic/1")
     }
 }

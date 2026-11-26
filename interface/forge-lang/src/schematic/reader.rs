@@ -1,165 +1,13 @@
 use super::*;
-use crate::syntax::{self, Arg, BinOp, Expr, ExprKind as E, StmtKind as S, Unit};
-use crate::values::{self, Dim, Num};
+use crate::electronics::*;
+use crate::syntax::{self, Expr, ExprKind as E, StmtKind as S};
+use crate::values::Dim;
 use std::path::PathBuf;
 
-struct Call<'a> {
-    name: &'a str,
-    args: Map<&'a str, &'a Expr>,
-    span: Span,
-}
 impl<'a> Call<'a> {
     fn new(expr: &'a Expr) -> Result<Self> {
-        if let E::Call(head, args) = &expr.kind
-            && let E::Name(name) = &head.kind
-        {
-            let signature = ARGS
-                .iter()
-                .find(|(word, _)| *word == name)
-                .ok_or_else(|| fault(head, "UnknownBuiltin", name))?
-                .1;
-            let mut fields = Map::new();
-            for Arg { name: key, value } in args {
-                let Some((key, span)) = key else {
-                    return Err(fault(value, "ExpectedNamedArgument", "use a named argument"));
-                };
-                if !signature.contains(&key.as_str()) {
-                    return Err(Fault::new(
-                        "UnknownArgument",
-                        *span,
-                        format!("{name} has no argument {key}"),
-                    ));
-                }
-                if fields.insert(key.as_str(), value).is_some() {
-                    return Err(Fault::new("DuplicateArgument", *span, key));
-                }
-            }
-            Ok(Self {
-                name,
-                args: fields,
-                span: expr.span,
-            })
-        } else {
-            Err(fault(expr, "ExpectedCall", "expected a schematic declaration"))
-        }
+        Self::with_signature(expr, ARGS)
     }
-    fn take(&mut self, key: &str) -> Option<&'a Expr> {
-        self.args.remove(key)
-    }
-    fn req(&mut self, key: &str) -> Result<&'a Expr> {
-        self.take(key).ok_or_else(|| {
-            Fault::new(
-                "MissingArgument",
-                self.span,
-                format!("{} requires {key}", self.name),
-            )
-        })
-    }
-    fn end(self) -> Result<()> {
-        if let Some((k, e)) = self.args.first_key_value() {
-            Err(fault(
-                e,
-                "UnknownArgument",
-                format!("{} has no argument {k}", self.name),
-            ))
-        } else {
-            Ok(())
-        }
-    }
-}
-fn fault(e: &Expr, k: &'static str, msg: impl Into<String>) -> Fault {
-    Fault::new(k, e.span, msg)
-}
-fn string(e: &Expr) -> Result<String> {
-    match &e.kind {
-        E::Str(s) => Ok(s.clone()),
-        _ => Err(fault(e, "ExpectedString", "expected quoted text")),
-    }
-}
-fn boolean(e: &Expr) -> Result<bool> {
-    match e.kind {
-        E::Bool(x) => Ok(x),
-        _ => Err(fault(e, "ExpectedBool", "expected true or false")),
-    }
-}
-fn reference(e: &Expr) -> Result<String> {
-    match &e.kind {
-        E::Name(s) => Ok(s.clone()),
-        E::Attr(base, k) => Ok(format!("{}.{k}", reference(base)?)),
-        _ => Err(fault(
-            e,
-            "ExpectedReference",
-            "expected a declared name or pin reference",
-        )),
-    }
-}
-fn list(e: &Expr) -> Result<&[Expr]> {
-    if let E::List(xs) = &e.kind {
-        Ok(xs)
-    } else {
-        Err(fault(e, "ExpectedList", "expected a list"))
-    }
-}
-type Params = Map<String, Num>;
-fn number(e: &Expr, params: &Params) -> Result<Num> {
-    let n = match &e.kind {
-        E::Num(x, u) => match u {
-            Unit::In => Num::konst(x * 25.4, Dim::Length),
-            Unit::Mm => Num::konst(*x, Dim::Length),
-            Unit::Deg => Num::konst(*x, Dim::Angle),
-            Unit::None => Num::konst(*x, Dim::Any),
-        },
-        E::Neg(v) => values::neg(&number(v, params)?),
-        E::Name(k) => params
-            .get(k)
-            .cloned()
-            .ok_or_else(|| fault(e, "UnknownParameter", k))?,
-        E::Bin(op, l, r) => {
-            let (l, r) = (number(l, params)?, number(r, params)?);
-            match op {
-                BinOp::Add | BinOp::Sub => values::add(&l, &r, *op == BinOp::Sub, e.span),
-                BinOp::Mul => values::mul(&l, &r, e.span),
-                BinOp::Div => values::div(&l, &r, e.span),
-                _ => return Err(fault(e, "ExpectedQuantity", "expected arithmetic")),
-            }
-            .map_err(|err| fault(e, err.kind(), err.text()))?
-        }
-        _ => return Err(fault(e, "ExpectedQuantity", "expected a numeric expression")),
-    };
-    if !n.v.is_finite() || n.v.abs() > 1e12 {
-        return Err(fault(
-            e,
-            "QuantityOutOfRange",
-            "quantity exceeds schematic bounds",
-        ));
-    }
-    Ok(n)
-}
-fn measure(e: &Expr, p: &Params, d: Dim) -> Result<f64> {
-    let n = number(e, p)?;
-    if n.dim != Dim::Any && n.dim != d {
-        return Err(fault(
-            e,
-            "WrongDim",
-            format!("expected {}, got {}", d.name(), n.dim.name()),
-        ));
-    }
-    Ok(n.v)
-}
-fn positive(e: &Expr, p: &Params) -> Result<f64> {
-    let v = measure(e, p, Dim::Length)?;
-    if v <= 0.0 {
-        return Err(fault(e, "ExpectedPositiveLength", "expected a positive length"));
-    }
-    Ok(v)
-}
-fn point(e: &Expr, p: &Params) -> Result<Point> {
-    if let E::Tuple(xs) = &e.kind
-        && let [x, y] = xs.as_slice()
-    {
-        return Ok([measure(x, p, Dim::Length)?, measure(y, p, Dim::Length)?]);
-    }
-    Err(fault(e, "ExpectedPoint", "expected (x, y) in sheet units"))
 }
 fn rotation(e: Option<&Expr>, p: &Params) -> Result<f64> {
     let angle = e.map(|v| measure(v, p, Dim::Angle)).transpose()?.unwrap_or(0.0);
@@ -789,11 +637,6 @@ fn item(c: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Item> {
     })
 }
 
-pub(super) fn header(src: &str) -> Option<&str> {
-    src.lines()
-        .map(|l| l.split('#').next().unwrap_or("").trim())
-        .find(|l| !l.is_empty())
-}
 pub fn read(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Document> {
     read_nested(src, dir, root, &mut ImportState::default())
 }
@@ -1340,23 +1183,6 @@ fn load_library(
         });
         f
     })
-}
-
-pub fn parameter_dimension(src: &str, key: &crate::error::ParamKey) -> Option<Dim> {
-    let mut params = Map::new();
-    for stmt in syntax::parse(src).ok()? {
-        if let S::Shared { name, value } = stmt.kind {
-            let mut n = number(&value, &params).ok()?;
-            if n.dim == Dim::Any {
-                n.dim = Dim::Length;
-            }
-            if crate::error::ParamKey::shared(&name) == *key {
-                return Some(n.dim);
-            }
-            params.insert(name, n);
-        }
-    }
-    None
 }
 
 /// Read one complete, self-contained coordinate tuple with the normal grammar and unit checks.

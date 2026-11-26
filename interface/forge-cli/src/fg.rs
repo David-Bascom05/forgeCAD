@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// The tools a part file takes, on the command line and over `serve`/`mcp`.
-pub const COMMANDS: [&str; 11] = [
+pub const COMMANDS: [&str; 12] = [
     "build",
     "check",
     "query",
@@ -26,6 +26,7 @@ pub const COMMANDS: [&str; 11] = [
     "cam",
     "bend",
     "schematic",
+    "pcb",
 ];
 
 /// A tool's arguments: the file, and its words (a selector, the refs to measure, the view, the
@@ -144,6 +145,20 @@ impl Session {
         }
     }
 
+    fn pcb_reply(&self, path: &Path, src: &str, words: &[String]) -> Reply {
+        use forge_lang::pcb;
+        let mut json = pcb::compile(src, path.parent(), self.root.as_deref())
+            .and_then(|board| pcb::response(&board, words))
+            .unwrap_or_else(|err| err.json_for(pcb::SCHEMA));
+        obj_push(&mut json, "version", version(src).into());
+        Reply {
+            ok: json.get("ok") == Some(&Json::Bool(true)),
+            text: json.to_string(),
+            json,
+            png: None,
+        }
+    }
+
     fn schematic_reply(&mut self, path: &Path, src: &str, words: &[String]) -> Reply {
         if words == ["pdf"] {
             let result = forge_lang::schematic::compile(src, path.parent(), self.root.as_deref())
@@ -181,7 +196,9 @@ impl Session {
         }
     }
     fn edited_report(&mut self, path: &Path, text: &str) -> Reply {
-        if forge_lang::schematic::is_document(text) {
+        if forge_lang::pcb::is_document(text) {
+            self.pcb_reply(path, text, &[])
+        } else if forge_lang::schematic::is_document(text) {
             self.schematic_reply(path, text, &[])
         } else {
             let run = self.run_src(path, text, true);
@@ -263,6 +280,13 @@ impl Session {
         }
         let r = match cmd {
             "build" | "check" => self.read(&a.file).and_then(|(path, src)| {
+                if forge_lang::pcb::is_document(&src) {
+                    return Ok(if cmd == "check" {
+                        self.pcb_reply(&path, &src, &["drc".into()])
+                    } else {
+                        self.pcb_reply(&path, &src, &a.words)
+                    });
+                }
                 if forge_lang::schematic::is_document(&src) {
                     let mut r = self.schematic_reply(&path, &src, &a.words);
                     if cmd == "check" && r.json.get("erc_ok") == Some(&Json::Bool(false)) {
@@ -290,6 +314,7 @@ impl Session {
             "diff" => self.diff(a),
             "cam" => self.cam(a),
             "bend" => self.bend(a),
+            "pcb" => self.read(&a.file).map(|(p, s)| self.pcb_reply(&p, &s, &a.words)),
             "schematic" => self
                 .read(&a.file)
                 .map(|(path, src)| self.schematic_reply(&path, &src, &a.words)),
@@ -658,6 +683,12 @@ impl Session {
         }
         if what != "file" {
             let (path, src) = self.read(&a.file)?;
+            if forge_lang::pcb::is_document(&src) {
+                if a.at.is_some() {
+                    return Err("--at is unsupported for PCB queries".into());
+                }
+                return Ok(self.pcb_reply(&path, &src, &a.words));
+            }
             if forge_lang::schematic::is_document(&src) {
                 if a.at.is_some() {
                     return Err("--at is unsupported for schematic queries".into());
@@ -1295,7 +1326,7 @@ impl Session {
                 dir: p.parent().map(Path::to_path_buf),
                 root: self.root.clone(),
             };
-            let result = if forge_lang::schematic::is_document(&src) {
+            let result = if forge_lang::schematic::is_document(&src) || forge_lang::pcb::is_document(&src) {
                 edit::apply_at(&text, op, &at).map(|s| (s, None))
             } else {
                 edit::apply_checked_at(&text, op, &at)
@@ -1325,8 +1356,12 @@ impl Session {
                 }
             }
         }
-        if forge_lang::schematic::is_document(&src) {
-            let validated = self.schematic_reply(&p, &text, &[]);
+        if forge_lang::schematic::is_document(&src) || forge_lang::pcb::is_document(&src) {
+            let validated = if forge_lang::pcb::is_document(&src) {
+                self.pcb_reply(&p, &text, &[])
+            } else {
+                self.schematic_reply(&p, &text, &[])
+            };
             if !validated.ok {
                 let mut json = validated.json;
                 if let Json::Obj(fields) = &mut json {

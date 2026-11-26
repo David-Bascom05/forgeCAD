@@ -6,6 +6,15 @@ A designer draws a circuit, places it on a board, installs the board in an assem
 
 The [PCB layout backend and manufacturer-rule study](pcb-layout-rules.md) records verified schematic handoff gaps, fabrication-service comparisons, real-board measurements and the first physical-layout acceptance fixture.
 
+## Physical layout opportunities
+
+- **Review the electrical effect of an edit.** Keep each bypass capacitor associated with the intended supply and return pins through placement, routing and reannotation. Compare the old and new pad distance, copper connection and reference-plane coverage. A designer can inspect the affected pins and geometry even when several capacitors share a rail.
+- **Explain a BGA escape bottleneck.** Count legal tracks through a selected passage under a specific stack and fab process. Preview the change from rotating the package, changing the via construction or selecting a permitted pin swap. Surface any resulting firmware or FPGA remap.
+- **Check the installed connector and test access.** Sweep the mating plug through its insertion stroke and test the cable bend against the enclosure. Distinguish production-probe access on the assembled PCB from service-probe access after installation.
+- **Leave room for high-speed analysis.** Preserve package and layer delay, differential path identity, return-reference transitions and the mounted power loop. Timing budgets, impedance versus frequency and current-return simulation each require their own model and evidence. [Competitive references and proposed experiments](pcb-layout-rules.md#opportunities-worth-testing-with-designers)
+
+The first native rigid-board document defines a polygonal perimeter, ordered copper and dielectric layers, nominal foil weight and finished thickness. Named tracks and plated through vias can bind to a net by schematic occurrence and pin. The source example includes a four-layer stack, editable process minima and a routed layer transition. [Board example](../../examples/electronics/controller-board.fg) · [Language reference](../../interface/forge-lang/src/reference.md#pcb)
+
 ## First milestone
 
 Determine how ForgeCAD can infer **which components serve which pins or functional groups**, and what that implies for placement, from an ordinary hand-drawn schematic. Start with bypass capacitors. Evaluate the inferred assignments against documented reference designs before looking at their layouts. The cross-view contract supports carrying those findings into the PCB. [Worked RP2040 example, inference design and benchmark](design-intent.md#inferring-which-pins-a-capacitor-serves)
