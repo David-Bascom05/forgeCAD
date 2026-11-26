@@ -540,6 +540,8 @@ pub enum Role {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Error {
+    /// The document changed after the editor checked an edit.
+    StaleEdit,
     Syntax(SyntaxError),
     /// A static rule broken.
     LooseLiteral {
@@ -987,6 +989,7 @@ impl Error {
             | NotAStatement { .. }
             | NameTaken { .. }
             | EditDim { .. }
+            | StaleEdit
             | NotFinite { .. } => None,
             Sheet(e) => e.span(),
             Thermo(e) => e.span(),
@@ -1053,6 +1056,7 @@ impl Error {
             StillRead { .. } => "StillRead",
             EntityStillRead { .. } => "EntityStillRead",
             ShadowsTopLevel { .. } => "ShadowsTopLevel",
+            StaleEdit => "StaleEdit",
             EditDim { .. } => "EditDim",
             NotFinite { .. } => "NotFinite",
             TooLarge { .. } => "TooLarge",
@@ -1336,6 +1340,7 @@ impl Error {
                 )
             }
             ShadowsTopLevel { name, .. } => format!("{name} is a top-level name; a local may not hide it"),
+            StaleEdit => "The document changed. Apply the edit again on the current version.".into(),
             EditDim { param, want, found } => format!("{param} is a {want:?}; the value is a {found:?}"),
             NotFinite { param, value } => {
                 format!("{param} cannot be set to {value}: only a finite number is written")

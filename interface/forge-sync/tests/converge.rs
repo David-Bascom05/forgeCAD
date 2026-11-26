@@ -730,3 +730,41 @@ fn hosted_dialog_is_one_durable_edit() {
     seq.submit_edit(&mut store, "Ada", "a", 1, 3, &inverse).unwrap();
     assert_eq!((seq.seq(), seq.head()), (2, DOC));
 }
+
+#[test]
+fn an_old_undo_follows_a_collaborators_rename_after_pending_edits_land() {
+    let mut sim = Sim::new(2);
+    let mut rng = Rng(213);
+    sim.flush(0);
+    sim.flush(1);
+    sim.drain(&mut rng);
+    sim.clients[0].edit(set_w(41.0)).unwrap();
+    sim.flush(0);
+    sim.drain(&mut rng);
+    let base = sim.clients[0].seq();
+    let before = sim.clients[0].text().to_owned();
+    sim.clients[1].edit(Op::Rename { from: "w".into(), to: "width".into() }).unwrap();
+    sim.clients[1].edit(Op::AddFeature { before: None, text: "shared w = 5".into() }).unwrap();
+    sim.flush(1);
+    sim.drain(&mut rng);
+    let c = &mut sim.clients[0];
+    let stale = forge_sync::Edit::Batch(vec![set_w(50.0), set_w(55.0)]);
+    let after = stale.apply(&before, &Default::default()).unwrap();
+    assert!(matches!(c.local_on(base, &before, stale, after), Err(forge_lang::error::Error::StaleEdit)));
+    assert!(c.outbox.is_empty());
+    for value in [13., 14.] {
+        let Op::SetParam { value, .. } = set_w(value) else { unreachable!() };
+        c.edit(Op::SetParam { param: forge_lang::error::ParamKey::parse("h").unwrap(), value }).unwrap();
+    }
+    sim.flush(0);
+    sim.drain(&mut rng);
+    for _ in 0..3 {
+        sim.clients[0].undo().unwrap().unwrap();
+        sim.flush(0);
+        sim.drain(&mut rng);
+    }
+    let text = sim.clients[0].text();
+    assert!(text.contains("shared width = 40"));
+    assert!(text.contains("shared w = 5"));
+    assert!(text.contains("shared h = 12"));
+}

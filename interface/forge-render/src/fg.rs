@@ -1960,6 +1960,8 @@ pub struct Session {
     pub sync_changed: bool,
     /// The link's first snapshot has been taken in.
     sync_seen: bool,
+    /// Revision paired with the text most recently received by the editor.
+    sync_base: u64,
     /// The link's last note, kept (the GUI takes `sync_note` for its status line; a test or the
     /// page's state reads this).
     pub sync_said: Option<String>,
@@ -2073,6 +2075,7 @@ impl Session {
             sync_note: None,
             sync_changed: false,
             sync_seen: false,
+            sync_base: 0,
             sync_said: None,
             #[cfg(not(target_arch = "wasm32"))]
             sync_file: None,
@@ -2256,7 +2259,8 @@ impl Session {
             }
         }
         let Some(l) = &self.sync else { return };
-        let text = l.text();
+        let (base, text) = l.snapshot();
+        self.sync_base = base;
         if l.ready() && text == self.src && !self.sync_seen {
             // the server's first word, the same text as the file's: build it as the server's (its
             // hash is then reported; the build before the link was ready had no seq)
@@ -2426,7 +2430,7 @@ impl Session {
             .and_then(|f| f.parent().map(|d| d.to_path_buf()));
         let (text, reach) = edit::apply_checked_in(&self.src, &op, dir)?;
         if let Some(l) = &self.sync {
-            l.local(op.clone().into(), text.clone());
+            l.local_on(self.sync_base, &self.src, op.clone().into(), text.clone())?;
         }
         self.take_text(text);
         self.ops.push(op);
@@ -2439,8 +2443,13 @@ impl Session {
         if let Some(l) = &self.sync {
             match ops.as_slice() {
                 [] => return Ok(()),
-                [op] => l.local(op.clone().into(), text.clone()),
-                _ => l.local(forge_sync::Edit::Batch(ops.clone()), text.clone()),
+                [op] => l.local_on(self.sync_base, &self.src, op.clone().into(), text.clone())?,
+                _ => l.local_on(
+                    self.sync_base,
+                    &self.src,
+                    forge_sync::Edit::Batch(ops.clone()),
+                    text.clone(),
+                )?,
             }
         }
         self.take_text(text);
@@ -2521,7 +2530,7 @@ impl Session {
             return match l.undo() {
                 None => false,
                 Some(Ok(())) => {
-                    self.src = l.text();
+                    (self.sync_base, self.src) = l.snapshot();
                     self.rebuild();
                     true
                 }

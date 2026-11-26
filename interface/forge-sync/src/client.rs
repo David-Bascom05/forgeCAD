@@ -231,6 +231,20 @@ impl Client {
         id
     }
 
+    /// Queue only if the editor still sees the exact revision and optimistic text it checked.
+    pub fn local_on(
+        &mut self,
+        base: u64,
+        before: &str,
+        op: Edit,
+        after: String,
+    ) -> Result<u64, forge_lang::error::Error> {
+        if self.joining || base != self.seq || before != self.view {
+            return Err(forge_lang::error::Error::StaleEdit);
+        }
+        Ok(self.local(op, after))
+    }
+
     /// Applies and checks `op` on `text()` itself, then [`local`](Self::local). Refused: the
     /// typed error, nothing sent.
     pub fn edit(&mut self, op: Op) -> Result<u64, forge_lang::error::Error> {
@@ -283,9 +297,13 @@ impl Client {
                 if snap {
                     // a snapshot: the head as it is (pending ops, if any, replay on it)
                     self.joining = false;
+                    if seq != self.seq || text != self.confirmed {
+                        // The snapshot omits the intervening renames needed by old inverses.
+                        self.recent.clear();
+                        self.undo.clear();
+                    }
                     self.confirmed = text;
                     self.seq = seq;
-                    self.recent.clear();
                     // (each pending op keeps its own base: the server rebases it from there,
                     // reading older ops from its history; sent as if made on this text, a Rename
                     // in between would be skipped and the edit land on another name)
@@ -428,17 +446,19 @@ impl Client {
         self.confirmed = t;
         self.seq = e.seq;
         self.recent.push(e);
-        // keep only what a pending op's rebase can still read
-        match self.pending.iter().map(|p| p.base).min() {
-            Some(b) => self.recent.retain(|x| x.seq > b),
-            // undo rebases through entries after its op's seq: keep a bounded tail
-            None => {
-                let keep = 1024;
-                if self.recent.len() > keep {
-                    self.recent.drain(..self.recent.len() - keep);
-                }
-            }
-        }
+        // Keep the undo window as well as any older history needed by a pending edit.
+        // A discarded rename can make an old inverse target a newly reused name.
+        let floor = self
+            .pending
+            .iter()
+            .map(|p| p.base)
+            .min()
+            .unwrap_or(self.seq)
+            .min(self.seq.saturating_sub(1024));
+        let expired = self.recent.partition_point(|entry| entry.seq <= floor);
+        self.recent.drain(..expired);
+        let expired = self.undo.partition_point(|(seq, _)| *seq < floor);
+        self.undo.drain(..expired);
         true
     }
 

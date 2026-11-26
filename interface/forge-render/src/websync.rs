@@ -207,10 +207,21 @@ impl Link for WebLink {
     fn pending(&self) -> usize {
         self.0.borrow().client.pending().len()
     }
-    fn local(&self, op: Edit, after: String) {
+    fn snapshot(&self) -> (u64, String) {
+        let s = self.0.borrow();
+        (s.client.seq(), s.client.text().into())
+    }
+    fn local_on(
+        &self,
+        base: u64,
+        before: &str,
+        op: Edit,
+        after: String,
+    ) -> Result<(), forge_lang::error::Error> {
         let mut s = self.0.borrow_mut();
-        s.client.local(op, after);
+        s.client.local_on(base, before, op, after)?;
         s.flush();
+        Ok(())
     }
     fn undo(&self) -> Option<Result<(), String>> {
         let mut s = self.0.borrow_mut();

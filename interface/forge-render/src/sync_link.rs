@@ -16,12 +16,19 @@ pub trait Link {
     fn ready(&self) -> bool;
     /// The text to show: the server's with this client's pending ops on it.
     fn text(&self) -> String;
+    fn snapshot(&self) -> (u64, String);
     /// The last seq applied from the server.
     fn seq(&self) -> u64;
     /// Ops sent, not yet acked or refused.
     fn pending(&self) -> usize;
     /// The app applied and checked `op` and got `after`: share it.
-    fn local(&self, op: Edit, after: String);
+    fn local_on(
+        &self,
+        base: u64,
+        before: &str,
+        op: Edit,
+        after: String,
+    ) -> Result<(), forge_lang::error::Error>;
     /// Hosted undo: the inverse of this client's last op, rebased (others' edits stay). None:
     /// nothing to undo; Err: it no longer applies.
     fn undo(&self) -> Option<Result<(), String>>;
@@ -50,8 +57,17 @@ impl Link for forge_remote::Session {
     fn pending(&self) -> usize {
         forge_remote::Session::pending(self)
     }
-    fn local(&self, op: Edit, after: String) {
-        forge_remote::Session::local(self, op, after);
+    fn snapshot(&self) -> (u64, String) {
+        forge_remote::Session::snapshot(self)
+    }
+    fn local_on(
+        &self,
+        base: u64,
+        before: &str,
+        op: Edit,
+        after: String,
+    ) -> Result<(), forge_lang::error::Error> {
+        forge_remote::Session::local_on(self, base, before, op, after)
     }
     fn undo(&self) -> Option<Result<(), String>> {
         forge_remote::Session::undo(self)

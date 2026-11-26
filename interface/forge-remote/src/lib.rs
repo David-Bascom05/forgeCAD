@@ -379,6 +379,11 @@ impl Session {
     pub fn text(&self) -> String {
         self.lock().client.text().to_string()
     }
+    pub fn snapshot(&self) -> (u64, String) {
+        let s = self.lock();
+        (s.client.seq(), s.client.text().into())
+    }
+
     /// The last seq applied from the server.
     pub fn seq(&self) -> u64 {
         self.lock().client.seq()
@@ -395,6 +400,20 @@ impl Session {
         s.flush();
         id
     }
+    pub fn local_on(
+        &self,
+        base: u64,
+        before: &str,
+        op: forge_sync::Edit,
+        after: String,
+    ) -> Result<(), forge_lang::error::Error> {
+        let mut s = self.lock();
+        let id = s.client.local_on(base, before, op, after)?;
+        s.sent.insert(id, Instant::now());
+        s.flush();
+        Ok(())
+    }
+
     /// `apply_checked` on `text()`, then [`local`](Self::local).
     pub fn edit(&self, op: Op) -> Result<u64, forge_lang::error::Error> {
         let mut s = self.lock();

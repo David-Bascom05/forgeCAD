@@ -5,7 +5,7 @@
 //! writer rounds to a few decimals (fine for replies to people, wrong for a param's value, which
 //! must reach every client bit for bit).
 
-use crate::{Entry, Refusal};
+use crate::{Edit, Entry, Refusal};
 pub use forge_agent::json::Json;
 #[cfg(test)]
 use forge_lang::error::Op;
