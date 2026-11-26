@@ -124,6 +124,13 @@ pub fn profiles_among(
     }
     check_crossings(&loops)?;
 
+    // A single boundary has depth zero and no children. Move it into the same
+    // normalization used below, after checking it for self-crossings.
+    if loops.len() == 1 {
+        let profile = Profile { plane: sketch.plane, loops };
+        return Ok(vec![profile.normalized_touching().map_err(ExtractError::Profile)?]);
+    }
+
     // which loop lies inside which, decided exactly (winding.rs); each pair asked as needed
     let n = loops.len();
     let inside = |i: usize, j: usize| -> Result<bool, ExtractError> {
