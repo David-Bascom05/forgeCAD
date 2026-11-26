@@ -138,6 +138,9 @@ pub enum Lost {
     MergedRegion { face: FaceRef },
     /// A retry after losing the way made a body `check` faults.
     RetryInvalid,
+    /// An edge of the target that lost a use to the boolean is left used by one face only: the
+    /// result would be an open shell.
+    OpenShell { at: Point3 },
     /// An open curve inside both faces that crosses no edge of either.
     Uncut { a: FaceRef, b: FaceRef, at: Point3 },
 }
@@ -159,6 +162,11 @@ impl std::fmt::Display for Lost {
             Lost::DegenerateEdge { face } => write!(f, "degenerate edge on {face}"),
             Lost::MergedRegion { face } => write!(f, "merged region of no old one on {face}"),
             Lost::RetryInvalid => write!(f, "a retry after losing the way left an invalid body"),
+            Lost::OpenShell { at } => write!(
+                f,
+                "an edge at ({:.3}, {:.3}, {:.3}) would bound one face only",
+                at.x, at.y, at.z
+            ),
             Lost::Uncut { a, b, at } => write!(
                 f,
                 "a curve between {a} and {b} through ({:.6}, {:.6}, {:.6}) meets no edge of either",
@@ -686,6 +694,11 @@ fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
     let (loops, verts) = (target.loops.len(), target.vertices.len());
     let touched = touched_old(&plan);
     apply(target, b, &plan);
+    // an edge of the target that lost a use (round a face the boolean took off, or a loop it took
+    // off a face) and is left used once: an open shell, the boolean's own (drift.md §8)
+    if let Some(at) = opened(target, &plan) {
+        open_shell(b, at)?;
+    }
     let pinch = pinched_new(target, loops, verts).or_else(|| pinched_old(target, &touched));
     target.joins.extend(&b.joins);
     target.joins.pieces.extend_from_slice(&plan.wholes);
@@ -742,6 +755,64 @@ pub(crate) fn undecided_touch(body: &Body, undecided: Option<Point3>) -> R<()> {
         }
         _ => Ok(()),
     }
+}
+
+/// Where an edge of a face `apply` took off (its loops stay readable), or of a loop it took off a
+/// face, is left alive and used by one face: the result's shell is open there. (An edge used
+/// once before, an open sheet's, dies with its one use and is not asked.)
+fn opened(t: &Body, plan: &Plan) -> Option<Point3> {
+    // (plain loops over each loop's run of coedges: this is asked on every boolean)
+    let free = |l: forge_topo::LoopId| -> Option<EdgeId> {
+        let (first, len) = t.loops[l.index()].span();
+        t.coedges[first as usize..(first + len) as usize]
+            .iter()
+            .map(|c| c.edge)
+            .find(|&e| {
+                let x = &t.edges[e.index()];
+                x.coedges.len() == 1 && x.alive
+            })
+    };
+    let mut found = None;
+    for &f in &plan.involved {
+        let face = &t.faces[f.index()];
+        if !face.alive {
+            found = face.loops.iter().find_map(|&l| free(l));
+            if found.is_some() {
+                break;
+            }
+        }
+    }
+    if found.is_none() {
+        for &(si, flip) in &plan.kept {
+            let s = &plan.specs[si];
+            if s.extend && !flip {
+                found = s.remove.iter().find_map(|&l| free(l));
+                if found.is_some() {
+                    break;
+                }
+            }
+        }
+    }
+    found.map(|e| {
+        let x = t.edge(e);
+        x.curve.eval(x.range.mid())
+    })
+}
+
+/// An open shell the boolean made, refused: a wrong Ok `check` finds (EdgeUses), the classifier
+/// having dropped a region it should have kept beside one it kept (research/booleans/drift.md §6,
+/// §8). Not where the tool itself has an edge used once (an open sheet): its free edges come
+/// through so.
+#[cold]
+#[inline(never)]
+fn open_shell(b: &Body, at: Point3) -> R<()> {
+    // (an open sheet's free edges come through as they were: the target's die with their one use
+    // and are not asked, the tool's are asked of the tool)
+    if b.edge_ids().any(|e| b.edge(e).coedges.len() == 1) {
+        return Ok(());
+    }
+    decided!(crate::decisions::site("open shell refused", 1));
+    Err(BoolError::lost(Lost::OpenShell { at }))
 }
 
 /// The target's vertices where something of this boolean meets them: a new curve's end, or a
@@ -2160,24 +2231,13 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
             a.vertices[id.index()].name = n;
         }
     }
-    let mut as_is = vec![false; specs.len()];
+    let mut staying = untouched_kept.clone();
     for &(si, flip) in kept {
-        if specs[si].side == 0 && specs[si].whole && !flip {
-            as_is[si] = true;
+        let s = &specs[si];
+        if !flip && (s.extend || s.side == 0 && s.whole) {
+            staying.push(s.from);
         }
     }
-    let mut staying: Vec<FaceId> = specs
-        .iter()
-        .zip(&as_is)
-        .filter(|(_, k)| **k)
-        .map(|(s, _)| s.from)
-        .collect();
-    staying.extend(
-        kept.iter()
-            .filter(|&&(si, flip)| specs[si].extend && !flip)
-            .map(|&(si, _)| specs[si].from),
-    );
-    staying.extend(untouched_kept.iter().copied());
     staying.sort_unstable();
     staying.dedup();
     for &f in involved {
@@ -2208,11 +2268,12 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
     let shell = if a.shells.is_empty() { a.add_shell() } else { forge_topo::ShellId(0) };
     let other_shell =
         a.shells.len() > 1 && specs.iter().any(|s| s.side == 0 && a.face(s.from).shell != shell);
+    let mut uses = Vec::new();
     for &(si, flip) in kept {
-        if as_is[si] {
+        let s = &specs[si];
+        if s.side == 0 && s.whole && !flip {
             continue;
         }
-        let s = &specs[si];
         // (read by reference: a clone of the face would share its point-in-face index, which
         // the next boolean then finds shared and rebuilds)
         let (sense, bx) = if s.side == 0 {
@@ -2238,7 +2299,8 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
             a.faces[face.index()].bbox.set(bx);
         }
         for lp in &s.loops {
-            let mut uses: Vec<(EdgeId, bool)> = Vec::with_capacity(lp.len());
+            uses.clear();
+            uses.reserve(lp.len());
             for &(p, fwd) in lp {
                 let e = match emap[p] {
                     Some(e) => e,
@@ -2259,10 +2321,10 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
                         e
                     }
                 };
-                uses.push((e, fwd));
+                uses.push((e, fwd != flip));
             }
             if flip {
-                uses = reversed(uses);
+                uses.reverse();
             }
             let lp = a.add_loop(face, &uses);
             if s.extend && !flip {
@@ -2296,6 +2358,47 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
     {
         a.rebuild_shells();
     }
+}
+
+/// Whether two cuts of `curve` (a circle) past 0.3 mm apart are a shallow pass the midpoint would
+/// join: a circle within `t` of a line or circle it touches stays so for sqrt(8 R_rel t), R_rel =
+/// 1/|1/R - 1/R'| (a line 1/R' = 0; two circles touching inside, their centres |R - R'| apart),
+/// which can pass 0.3 mm; and the stretch's midpoint is on one cut's edge, while the curve is not
+/// that edge's own circle. Counted only (the decision log): research/decide-once/flat-g11.md, U.
+#[cfg(feature = "decisions")]
+#[allow(clippy::too_many_arguments)]
+fn long_pass(bodies: &[&Body], sides: &[Side], a: &Cut, b: &Cut, curve: &Curve, t0: f64, t1: f64) -> bool {
+    let Curve::Circle(c) = curve else { return false };
+    let reach = 1.2 * a.tol.max(b.tol);
+    let gap = a.point.distance(b.point);
+    let edge = |x: &Cut| match x.on {
+        CutOn::Edge(sd, e) => Some((bodies[(sides[0] != sd) as usize], e)),
+        CutOn::Free => None,
+    };
+    let long = |x: &Cut| {
+        let Some((body, e)) = edge(x) else { return false };
+        match &body.edge(e).curve {
+            Curve::Line(_) => 8.0 * reach * c.radius >= gap * gap,
+            Curve::Circle(k) => {
+                let dr = (c.radius - k.radius).abs();
+                let same = dr <= tol::LINEAR
+                    && c.frame.origin.distance(k.frame.origin) <= tol::LINEAR
+                    && c.frame.z().cross(k.frame.z()).length() <= tol::ANGULAR;
+                !same
+                    && dr > tol::LINEAR
+                    && 8.0 * reach * c.radius * k.radius >= gap * gap * dr
+                    && (c.frame.origin.distance(k.frame.origin) - dr).abs() <= reach
+            }
+            _ => false,
+        }
+    };
+    if !long(a) && !long(b) {
+        return false;
+    }
+    let mid = curve.eval(0.5 * (t0 + t1));
+    [a, b]
+        .iter()
+        .any(|x| edge(x).is_some_and(|(body, e)| on_edge(body, e, mid).is_some()))
 }
 
 /// The vertices `apply` adds to A, as it first needs each: B's, and the new ones.
@@ -2348,13 +2451,6 @@ impl Made {
 /// The name vertex `v` takes: from the flush list (sorted by vertex), else `n`.
 fn renamed(flush: &[(VKey, Name)], v: VKey, n: Name) -> Name {
     flush.binary_search_by_key(&v, |f| f.0).map_or(n, |k| flush[k].1)
-}
-
-/// A loop's uses run the other way: reversed, each use flipped (in place: the collect reuses
-/// the allocation).
-#[inline(always)]
-fn reversed(uses: Vec<(EdgeId, bool)>) -> Vec<(EdgeId, bool)> {
-    uses.into_iter().rev().map(|(e, f)| (e, !f)).collect()
 }
 
 /// An edge imprinted on a face of the other body lies on that face's surface only within
@@ -3695,8 +3791,25 @@ fn trim_in(
             continue;
         }
         let gap = cuts[i].point.distance(cuts[j].point);
-        // (a curve radius R stays within t of a tangent for sqrt(8 R t): under a third of a mm unless
-        // R is over a metre)
+        // Two cuts past 0.3 mm apart are never one shallow pass: an assumption, not a theorem
+        // (research/decide-once/flat-g11.md, U). A curve of radius R stays within t of a tangent
+        // line for sqrt(8 R t), so for a circle against a line that holds for R under about 0.94 m,
+        // and for two circles touching inside unless 1/|1/R - 1/R'| is that large; a curve on an
+        // edge's own circle runs along it, its cuts the run's two ends, kept. A pass the bound
+        // skips but the midpoint would join is counted under `decisions` (`long_pass`), so the
+        // sweeps can show whether one is ever met.
+        decided!(if gap > 0.3
+            && long_pass(
+                &bodies,
+                &sides,
+                &cuts[i],
+                &cuts[j],
+                &curve,
+                ts[w].0,
+                ts[next].0 + if next == 0 { period } else { 0.0 }
+            ) {
+            crate::decisions::site("trim: a long shallow pass the 0.3 mm bound skips (G11 U)", 1);
+        });
         decided!(if gap <= 1.2 * cuts[i].tol.max(cuts[j].tol) {
             let of = |sd: Side| bodies[(sides[0] != sd) as usize];
             let (x, y) = (&cuts[i], &cuts[j]);

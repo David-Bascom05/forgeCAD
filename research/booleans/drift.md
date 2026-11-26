@@ -298,9 +298,22 @@ answer is to record the distance (§4), or to refuse.
   Wall 25 lies flush, 5.5e-6 off, against the plate's y = 0 wall, from below the plate's bottom
   to above its middle. Wall 43 lies almost wholly inside wall 25, its own face flush too. The
   second union drops the plate's bottom and the flush face below it: eight edges used once.
-  Not yet traced.
-- **An n-ary wrong Ok, open** (§9): FaceWrongSide after three notches; a refusal is written and
-  awaits a judgment on its cost.
+
+  Traced: wall 43's front crosses wall 25's front (below the plate) at 6e-7 rad. One edge of the
+  crossing is made, a vertical piece at x = 51.625 from the plate's bottom down to wall 43's own
+  bottom; the pieces that would close it (wall 43's bottom and side against wall 25's front, over
+  the 0.28 mm where wall 43 stands 2e-7 proud) lie within tolerance and are not. The piece dangles,
+  and the classifier drops the face it splits and the plate's bottom with it. Two tests deciding
+  at one threshold again (§10 of proof/slit-faces).
+
+  Refused now (proof/open-shell-refuse): after `apply`, an edge of a face `apply` took off (its
+  loops stay readable) or of a loop it took off a face, left alive and used by one face, is an
+  open shell, refused (`Lost::OpenShell`). A sheet's own free edges die with their one use and
+  are not asked, and a tool with a free edge is let through. forge-model's regen already refused
+  such a result after the feature (`NotClosed`); the boolean now does at the source, so its own
+  callers (drift_adv, forge-stress, assembly interference) never get one. The scan costs +0.0091%
+  in total, +0.194% on coplanar seq: a correctness exception (research/booleans/speed-ledger.md).
+  Test: `a_union_left_open_is_refused`.
 - The n-ary boolean's refusals of §9 are refusals, not fixes: the sequential boolean builds
   each of those inputs validly.
 - A Lean statement of the composed bound per merge (δ_out = δ_in + edge tol, per entity), from
@@ -350,7 +363,7 @@ tolerance from a plane the edge bounds. It is cold: only for such short edges. T
 `nary_edges_shorter_than_their_tolerances_are_refused` (both pairs; fails without it). Fresh
 n-ary searches of top, edge and angle, both objectives, then find no wrong Ok.
 
-The diag family (§6) found a third kind through `nary`, still open: FaceWrongSide, shrunk to three
+The diag family (§6) found a third kind through `nary`: FaceWrongSide, shrunk to three
 notches of `drift_adv edge` (the same in the world frame), by original index:
 - q0 = [-0.8372800888218773, -0.11373138087108248, -0.2204833551204205, 0.17906482084578879, -0.3544689322679776, 0.15642457524751008];
 - q6 = [-0.6052129218507916, 0.22383341292989567, -0.08696144819919327, -0.5762008893474448, -0.04268567467012552, -0.8144618293755979];
@@ -369,16 +382,21 @@ notches of `drift_adv edge` (the same in the world frame), by original index:
   twice.
 - The third boolean finds that face on the wrong side of its loop.
 
-The fix is to judge a face flush with all of a plane's faces or with none, a change to how the
-n-ary pass pairs faces. A refusal is written (proof/drift-tols-m, `SplitDeadEnd`): `split_face`'s
-walk notes where its one way on is back along the piece it came by, and `nary` refuses a kept
-region of a plane, on a face whose split noted one, that turns at such a tip. It refuses the case
-and every saved sequence replays with no n-ary wrong Ok, but it costs 0.17 to 0.38% more than
-without it on the gate's coplanar lines (the test sits in the walk's hottest branch), and it also refuses one Ok that
-`check` passed (a saved angle sequence's op 8, whose region walks a slit too; whether that slit
-was harmful is UNKNOWN). Cheaper forms were tried: a counter shared across threads (up to
-0.08%) is a hidden input, since a concurrent boolean could move it, and refusing in the walk
-itself refused valid sequential Oks. So it is held for a judgment, and the wrong Ok stands.
+The fix is to judge a face flush with all of a plane's faces or with none, and that is what the
+n-ary pass now does (proof/flush-per-plane). Two planes all but parallel (normals within 1e-6 of
+each other) are judged flush or crossing over where the whole of each plane's faces meet: each
+face's box grown to every face of its tool on its very plane (one plane to the bit, since pieces of
+a split face keep its surface). Every face pair of the two planes then gets one verdict. The boxes
+are built once per tool in each n-ary call, and only when two such planes not parallel to the bit
+are met (planes parallel to the bit are judged without a region, ssi.rs). The gate: bits identical,
+total -0.0003%, a few nary1 lines up to +0.14% (mostly realloc copying moved by the heap's
+layout), granted as a correctness exception.
+
+The three notches now come out valid with no refusal: the second notch is judged crossing over
+the whole wall, on the short face as on the long one. Test:
+`nary_a_plane_is_flush_with_all_of_a_planes_faces_or_none` (fails without it). Every saved
+sequence of every family replays through `nary` with no wrong Ok. The refusal written before
+(`SplitDeadEnd`, 0.17 to 0.38%) is not needed.
 
 ## 10. A real part at the boundary: slit faces
 

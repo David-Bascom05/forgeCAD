@@ -105,6 +105,15 @@ pub fn draw_loop(body: &Body, face: FaceId, samples: &[Point3]) -> (Vec<Point2>,
 /// meshing: the same points to within rounding, where the surface can start from there.
 pub fn draw_loop_near(body: &Body, face: FaceId, samples: &[Point3]) -> (Vec<Point2>, Vec<usize>) {
     let surface = &body.face(face).surface;
+    // A plane has neither singular points nor periodic parameters. Every projection keeps its
+    // sample index.
+    #[cfg(not(feature = "reference_sampling"))]
+    if let forge_geom::Surface::Plane(plane) = surface {
+        return (
+            samples.iter().map(|&p| plane.project(p)).collect(),
+            (0..samples.len()).collect(),
+        );
+    }
     // an analytic surface's projection is closed form already
     if !matches!(surface, forge_geom::Surface::Procedural(_)) {
         return draw(body, face, samples.iter().map(|&p| surface.project(p)).collect());
@@ -577,6 +586,30 @@ fn first_cross(loops: &[UvLoop], counts: &dyn Fn((Point2, Point2), (Point2, Poin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn planar_samples_match_the_general_chart_bit_for_bit() {
+        use forge_geom::{Plane, Surface};
+        use forge_math::{Frame, Vec3};
+
+        let mut body = Body::new();
+        let shell = body.add_shell();
+        let frame = Frame::from_z(
+            Point3::new(3.5, -11.0, 0.125),
+            Vec3::new(1.0, -2.0, 3.0).normalize().unwrap(),
+        );
+        let f = body.add_face(shell, Surface::Plane(Plane::new(frame)), false, crate::Name::NONE);
+        let samples = [frame.origin, Point3::new(-0.0, 0.5, 2.0), frame.origin];
+        for end in 0..=samples.len() {
+            let samples = &samples[..end];
+            let actual = draw_loop_near(&body, f, samples);
+            let raw = samples.iter().map(|&p| body.face(f).surface.project(p)).collect();
+            let reference = draw(&body, f, raw);
+            let bits = |uv: Point2| [uv.x.to_bits(), uv.y.to_bits()];
+            assert!(actual.0.into_iter().map(bits).eq(reference.0.into_iter().map(bits)));
+            assert_eq!(actual.1, reference.1);
+        }
+    }
 
     /// A corner on another loop's line to rounding, or past it by less than the band, is no crossing;
     /// past it by more is.

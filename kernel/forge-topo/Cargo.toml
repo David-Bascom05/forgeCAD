@@ -11,6 +11,8 @@ forge-math = { path = "../forge-math" }
 forge-geom = { path = "../forge-geom" }
 
 [features]
+# Compare Train 13 sampling against the general projection and buffered edge-length paths.
+reference_sampling = []
 # the boolean's decision log (forge-bool's `decisions`): check's edge-on-face answers recorded
 # where a collector asks (`check::face_log`)
 decisions = ["forge-geom/decisions"]
