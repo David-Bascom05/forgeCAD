@@ -259,6 +259,28 @@ b = part("source.fg", ground: true, at: pose(at: (separation, 0, 0)))
         derived.get("part").unwrap().get("bodies").and_then(Json::num),
         Some(1.0)
     );
+    // Drop only the first use's placement; another use of the same part still resolves.
+    let assembly = fs::read_to_string(d.join("assembly.fg")).unwrap();
+    let options = forge_lang::Options {
+        dir: Some(d.clone()),
+        step: Some("uses".into()),
+        ..Default::default()
+    };
+    let assembly_run = forge_lang::run(&assembly, options, Default::default()).0;
+    let files = forge_lang::export::step(&assembly_run, "uses").unwrap();
+    fs::write(d.join("uses.step"), &files[0].text).unwrap();
+    ok(&d, &["simplify", "create", "uses.step", "-o", "linked.fg"]);
+    let saved = fs::read(d.join("linked.fg")).unwrap();
+    let text = fs::read_to_string(d.join("uses.step")).unwrap();
+    assert_eq!(text.matches("CONTEXT_DEPENDENT_SHAPE_REPRESENTATION(").count(), 2);
+    let partial = text.replacen("CONTEXT_DEPENDENT_SHAPE_REPRESENTATION(", "MISSING_PLACEMENT(", 1);
+    let read = forge_step::import(partial.as_bytes(), &forge_step::Limits::default()).unwrap();
+    assert_eq!(read.occurrences.len(), 1);
+    assert!(read.stats.incomplete_placements);
+    fs::write(d.join("uses.step"), partial).unwrap();
+    let (success, reply) = run(&d, &["simplify", "refresh", "linked.fg"]);
+    assert!(!success && reply.to_string().contains("unresolved placements"), "{reply}");
+    assert_eq!(fs::read(d.join("linked.fg")).unwrap(), saved);
     fs::remove_dir_all(d).unwrap();
 }
 

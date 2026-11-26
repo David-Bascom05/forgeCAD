@@ -151,6 +151,9 @@ pub fn load(path: &Path, root: Option<&Path>) -> Result<Source, String> {
             refusal.entity, refusal.why
         ));
     }
+    if imported.stats.incomplete_placements {
+        return Err("Source assembly contains unresolved placements".into());
+    }
     let parts = if imported.occurrences.is_empty() {
         if imported.stats.assembly > 0 {
             return Err("Source assembly placements could not be resolved".into());

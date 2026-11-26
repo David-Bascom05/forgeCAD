@@ -53,6 +53,8 @@ pub struct Stats {
     /// What an assembly asks that is not done (`Body::unplaced`): parts moved from where they stand,
     /// and parts used more than once.
     pub assembly: usize,
+    /// The occurrence walk skipped a declared use or reached its traversal bound.
+    pub incomplete_placements: bool,
 }
 
 pub struct Imported {
@@ -1889,7 +1891,7 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
     if let Some(u) = any_ctx.and_then(|c| units_of(&f, c)) {
         stats.assembly = assembly_asks(&f, &Reader { f: &f, u, depth: 0 });
         if !only_measure {
-            uses = occurrences(&f, &Reader { f: &f, u, depth: 0 });
+            (uses, stats.incomplete_placements) = occurrences(&f, &Reader { f: &f, u, depth: 0 });
         }
     }
     for (id, r) in roots {
@@ -2033,7 +2035,8 @@ pub struct Occurrence {
 /// its next_assembly_usage_occurrences, each placed by its context dependent shape
 /// representation's item defined transformation, to the solids each product's shape holds. Empty
 /// where the file has no product structure; a use whose placement cannot be read is left out.
-fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> Vec<Occurrence> {
+fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> (Vec<Occurrence>, bool) {
+    let mut incomplete = false;
     let refs = |r: &Record| -> Vec<u32> {
         f.args(r)
             .iter()
@@ -2074,6 +2077,8 @@ fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> Vec<Occurrence> {
                 "NEXT_ASSEMBLY_USAGE_OCCURRENCE" => {
                     if let (Some(Value::Ref(p)), Some(Value::Ref(c))) = (a.get(3), a.get(4)) {
                         nauo.push((id, *p, *c, text(a.get(1))));
+                    } else {
+                        incomplete = true;
                     }
                 }
                 "CONTEXT_DEPENDENT_SHAPE_REPRESENTATION" => {
@@ -2122,7 +2127,7 @@ fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> Vec<Occurrence> {
         }
     }
     if nauo.is_empty() && sdr.is_empty() {
-        return Vec::new();
+        return (Vec::new(), incomplete);
     }
     // each definition's representations; a representation's solids through untransformed links
     let mut reps_of: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
@@ -2195,7 +2200,9 @@ fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> Vec<Occurrence> {
         })
     };
     let mut children: BTreeMap<u32, Vec<_>> = BTreeMap::new();
+    let mut unvisited = std::collections::BTreeSet::new();
     for (id, p, c, label) in &nauo {
+        unvisited.insert(*id);
         children.entry(*p).or_default().push((*id, *c, label.as_str()));
     }
     let used: std::collections::BTreeSet<u32> = nauo.iter().map(|x| x.2).collect();
@@ -2218,6 +2225,7 @@ fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> Vec<Occurrence> {
         .collect();
     while let Some((d, path, instance_path, frame)) = todo.pop() {
         if out.len() > 1_000_000 || path.len() > 64 {
+            incomplete = true;
             break;
         }
         for &r in reps_of.get(&d).into_iter().flatten() {
@@ -2231,7 +2239,11 @@ fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> Vec<Occurrence> {
             }
         }
         for &(id, c, label) in children.get(&d).into_iter().flatten() {
-            let Some(p) = placement(id, c) else { continue };
+            unvisited.remove(&id);
+            let Some(p) = placement(id, c) else {
+                incomplete = true;
+                continue;
+            };
             let name = name_of(c);
             let mut products = path.clone();
             products.push(name.clone());
@@ -2245,7 +2257,7 @@ fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> Vec<Occurrence> {
             todo.push((c, products, instances, frame.compose(&p)));
         }
     }
-    out
+    (out, incomplete || !unvisited.is_empty())
 }
 
 #[cfg(test)]
