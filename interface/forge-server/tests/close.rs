@@ -78,7 +78,7 @@ fn op(base: u64, id: u64, v: f64) -> String {
     Up::Op {
         base,
         id,
-        op: set_w(v),
+        op: set_w(v).into(),
     }
     .text()
 }

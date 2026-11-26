@@ -7,6 +7,7 @@
 
 use crate::{Entry, Refusal};
 pub use forge_agent::json::Json;
+#[cfg(test)]
 use forge_lang::error::Op;
 
 /// The largest message either side accepts, in bytes. An op is ~150–250 B; a Welcome carries a
@@ -32,7 +33,7 @@ pub enum Up {
         kernel: String,
     },
     /// An op the client applied locally on top of the server's text at `base`.
-    Op { base: u64, id: u64, op: Op },
+    Op { base: u64, id: u64, op: Edit },
     /// The exact hash of the body the client built at `seq` (divergence detection).
     BuildHash { seq: u64, hash: u64 },
     /// Write the head as a named version (a forge-history commit and tag).
@@ -61,8 +62,8 @@ pub enum Down {
     Ack {
         id: u64,
         seq: u64,
-        op: Op,
-        inv: Option<Op>,
+        op: Edit,
+        inv: Option<Edit>,
         th: u64,
     },
     /// The client's own op `id` refused; nothing was written.
@@ -74,7 +75,7 @@ pub enum Down {
     Applied {
         seq: u64,
         author: String,
-        op: Op,
+        op: Edit,
         th: u64,
     },
     /// A build hash at `seq` differs from the first one reported for it.
@@ -115,7 +116,7 @@ pub fn entry_json(e: &Entry) -> Json {
         ("id", num(e.id)),
         ("base", num(e.base)),
         ("op", e.op.json()),
-        ("inv", e.inv.as_ref().map_or(Json::Null, Op::json)),
+        ("inv", e.inv.as_ref().map_or(Json::Null, Edit::json)),
         ("th", hex(e.th)),
     ])
 }
@@ -127,10 +128,10 @@ pub fn entry_from(j: &Json) -> Option<Entry> {
         client: s(j, "client")?,
         id: u(j, "id")?,
         base: u(j, "base")?,
-        op: Op::from_json(j.get("op")?)?,
+        op: Edit::from_json(j.get("op")?)?,
         inv: match j.get("inv")? {
             Json::Null => None,
-            x => Some(Op::from_json(x)?),
+            x => Some(Edit::from_json(x)?),
         },
         th: unhex(j.get("th")?)?,
     })
@@ -187,7 +188,7 @@ impl Up {
             "op" => Up::Op {
                 base: u(j, "base")?,
                 id: u(j, "id")?,
-                op: Op::from_json(j.get("op")?)?,
+                op: Edit::from_json(j.get("op")?)?,
             },
             "hash" => Up::BuildHash {
                 seq: u(j, "seq")?,
@@ -224,7 +225,7 @@ impl Down {
                 ("id", num(*id)),
                 ("seq", num(*seq)),
                 ("op", op.json()),
-                ("inv", inv.as_ref().map_or(Json::Null, Op::json)),
+                ("inv", inv.as_ref().map_or(Json::Null, Edit::json)),
                 ("th", hex(*th)),
             ]),
             Down::Refused { id, refusal } => Json::obj(vec![
@@ -278,10 +279,10 @@ impl Down {
             "ack" => Down::Ack {
                 id: u(j, "id")?,
                 seq: u(j, "seq")?,
-                op: Op::from_json(j.get("op")?)?,
+                op: Edit::from_json(j.get("op")?)?,
                 inv: match j.get("inv")? {
                     Json::Null => None,
-                    x => Some(Op::from_json(x)?),
+                    x => Some(Edit::from_json(x)?),
                 },
                 th: unhex(j.get("th")?)?,
             },
@@ -292,7 +293,7 @@ impl Down {
             "applied" => Down::Applied {
                 seq: u(j, "seq")?,
                 author: s(j, "author")?,
-                op: Op::from_json(j.get("op")?)?,
+                op: Edit::from_json(j.get("op")?)?,
                 th: unhex(j.get("th")?)?,
             },
             "diverged" => Down::Diverged {
@@ -446,16 +447,20 @@ mod tests {
                     dim: Dim::Length,
                 },
             };
-            let m = Up::Op { base: 7, id: 3, op };
+            let m = Up::Op {
+                base: 7,
+                id: 3,
+                op: op.into(),
+            };
             let back = Up::parse(&m.text()).unwrap();
             match (&m, &back) {
                 (
                     Up::Op {
-                        op: Op::SetParam { value: a, .. },
+                        op: Edit::One(Op::SetParam { value: a, .. }),
                         ..
                     },
                     Up::Op {
-                        op: Op::SetParam { value: b, .. },
+                        op: Edit::One(Op::SetParam { value: b, .. }),
                         ..
                     },
                 ) => {
@@ -503,7 +508,7 @@ mod tests {
             Up::Op {
                 base: 1,
                 id: 2,
-                op: op.clone(),
+                op: op.clone().into(),
             },
             Up::BuildHash {
                 seq: 4,
@@ -525,14 +530,14 @@ mod tests {
             Down::Ack {
                 id: 2,
                 seq: 5,
-                op: op.clone(),
-                inv: Some(op.clone()),
+                op: op.clone().into(),
+                inv: Some(op.clone().into()),
                 th: 1,
             },
             Down::Ack {
                 id: 2,
                 seq: 5,
-                op: op.clone(),
+                op: op.clone().into(),
                 inv: None,
                 th: 1,
             },
@@ -543,7 +548,7 @@ mod tests {
             Down::Applied {
                 seq: 6,
                 author: "x".into(),
-                op: op.clone(),
+                op: op.clone().into(),
                 th: 0xdead_beef,
             },
             Down::Diverged {

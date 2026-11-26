@@ -36,6 +36,7 @@ pub mod fsx;
 pub mod git;
 pub mod store;
 
+#[cfg(feature = "test-hooks")]
 use forge_lang::error::Op;
 use forge_sync::room::{Action, Conn, Room};
 use forge_sync::wire::{Down, Up};
@@ -464,7 +465,7 @@ impl Check for Timed {
         &mut self,
         head: &str,
         counts: Option<&Counts>,
-        op: &Op,
+        op: &forge_sync::Edit,
         dir: Option<PathBuf>,
         root: Option<PathBuf>,
     ) -> Result<(String, Counts), Refusal> {
@@ -492,7 +493,7 @@ impl Check for Timed {
         );
         let job: Box<dyn FnOnce() + Send> = Box::new(move || {
             let r = catch_unwind(AssertUnwindSafe(|| {
-                forge_sync::validate(&head, counts.as_ref(), &op, dir, root)
+                forge_sync::validate_edit(&head, counts.as_ref(), &op, dir, root)
             }))
             .unwrap_or_else(|_| {
                 Err(Refusal::Invalid {
@@ -1516,7 +1517,7 @@ impl Actor {
             DocEv::Up { conn, up } => {
                 #[cfg(feature = "test-hooks")]
                 if let Up::Op {
-                    op: Op::SetProperty { key, .. },
+                    op: forge_sync::Edit::One(Op::SetProperty { key, .. }),
                     ..
                 } = &up
                     && key == "test_hook_panic"

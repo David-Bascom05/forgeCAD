@@ -10,7 +10,7 @@
 //! session polls each frame through [`Link`].
 
 use crate::sync_link::Link;
-use forge_lang::error::Op;
+use forge_sync::Edit;
 use forge_sync::wire::{Down, Up};
 use forge_sync::{Client, Event};
 use std::cell::RefCell;
@@ -61,6 +61,8 @@ struct Inner {
     /// The server refused for good (a bad token, another kernel, a quarantined document): no
     /// reconnect (it would be refused the same way, for ever).
     stopped: bool,
+    retry_timer: Option<i32>,
+    retry_callback: Option<Closure<dyn FnMut()>>,
     waker: Arc<dyn Fn() + Send + Sync>,
     /// The socket's callbacks, kept alive while it is.
     #[allow(clippy::type_complexity)]
@@ -96,6 +98,8 @@ pub fn open(path: &str, waker: Arc<dyn Fn() + Send + Sync>) -> Option<Result<Box
         url,
         connected: false,
         stopped: false,
+        retry_timer: None,
+        retry_callback: None,
         waker,
         held: vec![],
     }));
@@ -109,6 +113,9 @@ fn client_id() -> String {
 }
 
 fn connect(inner: &Rc<RefCell<Inner>>) {
+    if inner.borrow().stopped {
+        return;
+    }
     let url = inner.borrow().url.clone();
     let Ok(ws) = WebSocket::new(&url) else {
         return retry(inner);
@@ -167,10 +174,23 @@ fn connect(inner: &Rc<RefCell<Inner>>) {
 
 /// Connects again a second later.
 fn retry(inner: &Rc<RefCell<Inner>>) {
-    let i = inner.clone();
-    let again = Closure::once_into_js(move || connect(&i));
-    if let Some(w) = web_sys::window() {
-        let _ = w.set_timeout_with_callback_and_timeout_and_arguments_0(again.unchecked_ref(), 1000);
+    let Some(w) = web_sys::window() else { return };
+    let mut state = inner.borrow_mut();
+    if state.stopped || state.retry_timer.is_some() {
+        return;
+    }
+    let weak = Rc::downgrade(inner);
+    let again = Closure::<dyn FnMut()>::new(move || {
+        if let Some(i) = weak.upgrade() {
+            i.borrow_mut().retry_timer = None;
+            connect(&i);
+        }
+    });
+    if let Ok(timer) =
+        w.set_timeout_with_callback_and_timeout_and_arguments_0(again.as_ref().unchecked_ref(), 1000)
+    {
+        state.retry_callback = Some(again);
+        state.retry_timer = Some(timer);
     }
 }
 
@@ -187,7 +207,7 @@ impl Link for WebLink {
     fn pending(&self) -> usize {
         self.0.borrow().client.pending().len()
     }
-    fn local(&self, op: Op, after: String) {
+    fn local(&self, op: Edit, after: String) {
         let mut s = self.0.borrow_mut();
         s.client.local(op, after);
         s.flush();
@@ -220,7 +240,13 @@ impl Link for WebLink {
 impl Drop for WebLink {
     fn drop(&mut self) {
         let mut s = self.0.borrow_mut();
+        s.stopped = true;
+        if let (Some(w), Some(timer)) = (web_sys::window(), s.retry_timer.take()) {
+            w.clear_timeout_with_handle(timer);
+        }
         if let Some(ws) = s.ws.take() {
+            ws.set_onopen(None);
+            ws.set_onmessage(None);
             ws.set_onclose(None);
             let _ = ws.close();
         }

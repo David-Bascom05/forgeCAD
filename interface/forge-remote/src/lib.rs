@@ -388,7 +388,7 @@ impl Session {
     }
     /// The app applied and checked `op` on `text()` and got `after` (its edit path, unchanged):
     /// queue and send it. Returns the op's id.
-    pub fn local(&self, op: Op, after: String) -> u64 {
+    pub fn local(&self, op: impl Into<forge_sync::Edit>, after: String) -> u64 {
         let mut s = self.lock();
         let id = s.client.local(op, after);
         s.sent.insert(id, Instant::now());

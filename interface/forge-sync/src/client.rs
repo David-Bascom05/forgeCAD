@@ -6,10 +6,11 @@
 //! edit shows at once (budget B1: no network on the edit path) and every client converges on the
 //! server's text once its ops are acked or refused.
 
-use crate::rebase::rebase;
+use crate::Edit;
+use crate::rebase::rebase_edit as rebase;
 use crate::wire::{Down, Up};
 use crate::{Entry, Refusal, text_hash};
-use forge_lang::edit::apply;
+use forge_lang::edit::At;
 use forge_lang::error::Op;
 
 /// What the host should do after a message (besides sending the client's `outbox`).
@@ -55,7 +56,7 @@ pub enum Event {
 pub struct Pending {
     pub id: u64,
     pub base: u64,
-    pub op: Op,
+    pub op: Edit,
 }
 
 pub struct Client {
@@ -73,7 +74,9 @@ pub struct Client {
     view: String,
     next_id: u64,
     /// Own committed ops with an inverse, newest last: (seq, inverse).
-    undo: Vec<(u64, Op)>,
+    undo: Vec<(u64, Edit)>,
+    /// The inverse in flight. Its Ack consumes the undo entry; a refusal keeps it.
+    pending_undo: Option<u64>,
     /// Messages for the server, in order; the host drains and sends them.
     pub outbox: Vec<Up>,
     /// True until the first Welcome.
@@ -98,6 +101,7 @@ impl Client {
             view: String::new(),
             next_id: 1,
             undo: vec![],
+            pending_undo: None,
             outbox: vec![],
             joining: true,
             welcomed: false,
@@ -131,6 +135,10 @@ impl Client {
             ("client", self.id.as_str().into()),
             ("next", (self.next_id as f64).into()),
             ("ops", Json::Arr(ops)),
+            (
+                "pending_undo",
+                self.pending_undo.map_or(Json::Null, |id| (id as f64).into()),
+            ),
         ]))
     }
 
@@ -151,6 +159,12 @@ impl Client {
                 }
             }
         }
+        c.pending_undo = j.get("pending_undo").and_then(Json::num).map(|n| n as u64);
+        if c.pending_undo
+            .is_some_and(|id| !c.pending.iter().any(|p| p.id == id))
+        {
+            return None;
+        }
         c.next_id = next.max(1);
         Some(c)
     }
@@ -165,7 +179,7 @@ impl Client {
     }
 
     /// Sends an op now if this connection was welcomed (else Welcome sends every pending op).
-    fn send_op(&mut self, base: u64, id: u64, op: &Op) {
+    fn send_op(&mut self, base: u64, id: u64, op: &Edit) {
         if self.welcomed {
             self.outbox.push(Up::Op {
                 base,
@@ -203,7 +217,8 @@ impl Client {
 
     /// The user's op, already applied and checked by the host on `text()` (the host's edit
     /// path: `apply_checked` succeeded and gave `after`). Queued and sent; returns its id.
-    pub fn local(&mut self, op: Op, after: String) -> u64 {
+    pub fn local(&mut self, op: impl Into<Edit>, after: String) -> u64 {
+        let op = op.into();
         let id = self.next_id;
         self.next_id += 1;
         self.send_op(self.seq, id, &op);
@@ -235,26 +250,19 @@ impl Client {
                 why: "an edit is still on its way to the server: undo once it has landed".into(),
             }));
         }
-        let (seq, inv) = self.undo.pop()?;
+        let (seq, inv) = self.undo.last()?.clone();
         // the inverse as it reads now: through others' renames since that seq
         let op = match rebase(&inv, &self.id, self.recent.iter().filter(|e| e.seq > seq)) {
             Ok(op) => op,
             Err(r) => return Some(Err(r)),
         };
-        let checked = forge_lang::edit::apply_checked(&self.view, &op).map_err(|e| Refusal::Lang {
+        let checked = op.checked(&self.view).map_err(|e| Refusal::Lang {
             kind: e.kind().into(),
             text: e.text(),
         });
-        Some(checked.map(|(after, _)| {
-            let id = self.next_id;
-            self.next_id += 1;
-            self.send_op(seq.max(self.seq), id, &op);
-            self.pending.push(Pending {
-                id,
-                base: seq.max(self.seq),
-                op,
-            });
-            self.view = after;
+        Some(checked.map(|after| {
+            let id = self.local(op, after);
+            self.pending_undo = Some(id);
             id
         }))
     }
@@ -305,6 +313,11 @@ impl Client {
                 let Some(k) = self.pending.iter().position(|p| p.id == id) else {
                     return ev;
                 };
+                let was_undo = self.pending_undo == Some(id);
+                if was_undo {
+                    self.pending_undo = None;
+                    self.undo.pop();
+                }
                 if seq <= self.seq {
                     // already in the snapshot this client started over from
                     self.pending.remove(k);
@@ -332,7 +345,7 @@ impl Client {
                 if !self.commit(e) {
                     return self.diverged(seq);
                 }
-                if let Some(inv) = inv {
+                if let Some(inv) = inv.filter(|_| !was_undo) {
                     self.undo.push((seq, inv));
                 }
                 // only the client's own op landed: the view is unchanged unless the server's
@@ -344,6 +357,12 @@ impl Client {
                 }
             }
             Down::Refused { id, refusal } => {
+                if self.pending_undo == Some(id) {
+                    self.pending_undo = None;
+                    if matches!(refusal, Refusal::AlreadyCommitted { .. }) {
+                        self.undo.pop();
+                    }
+                }
                 if let Some(k) = self.pending.iter().position(|p| p.id == id) {
                     self.pending.remove(k);
                     self.replay();
@@ -400,7 +419,7 @@ impl Client {
     /// Applies a committed entry to the confirmed text; false if it does not apply or the text's
     /// hash differs from the server's.
     fn commit(&mut self, e: Entry) -> bool {
-        let Ok(t) = apply(&self.confirmed, &e.op) else {
+        let Ok(t) = e.op.apply(&self.confirmed, &At::default()) else {
             return false;
         };
         if text_hash(&t) != e.th {
@@ -430,7 +449,7 @@ impl Client {
         for p in &self.pending {
             let since = self.recent.iter().filter(|e| e.seq > p.base);
             if let Ok(op) = rebase(&p.op, &self.id, since)
-                && let Ok(x) = apply(&t, &op)
+                && let Ok(x) = op.apply(&t, &At::default())
             {
                 t = x;
             }

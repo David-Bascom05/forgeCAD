@@ -2426,7 +2426,7 @@ impl Session {
             .and_then(|f| f.parent().map(|d| d.to_path_buf()));
         let (text, reach) = edit::apply_checked_in(&self.src, &op, dir)?;
         if let Some(l) = &self.sync {
-            l.local(op.clone(), text.clone());
+            l.local(op.clone().into(), text.clone());
         }
         self.take_text(text);
         self.ops.push(op);
@@ -2437,8 +2437,10 @@ impl Session {
     pub fn apply_all(&mut self, ops: Vec<Op>) -> Result<(), Error> {
         let text = edit::apply_all_checked(&self.src, &ops)?;
         if let Some(l) = &self.sync {
-            for op in &ops {
-                l.local(op.clone(), text.clone());
+            match ops.as_slice() {
+                [] => return Ok(()),
+                [op] => l.local(op.clone().into(), text.clone()),
+                _ => l.local(forge_sync::Edit::Batch(ops.clone()), text.clone()),
             }
         }
         self.take_text(text);

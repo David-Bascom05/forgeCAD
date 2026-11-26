@@ -14,6 +14,8 @@
 //! browser build. Nothing in the speed gate's binaries links it, and LOCAL projects never run it.
 
 pub mod client;
+mod edit;
+pub use edit::Edit;
 pub mod inverse;
 pub mod rebase;
 pub mod room;
@@ -43,9 +45,9 @@ pub struct Entry {
     /// The seq the client made it on.
     pub base: u64,
     /// The op as applied (rebased).
-    pub op: Op,
+    pub op: Edit,
     /// Its exact inverse on the text it was applied to (undo), if it has one.
-    pub inv: Option<Op>,
+    pub inv: Option<Edit>,
     /// The hash of the text after it.
     pub th: u64,
 }
@@ -387,11 +389,29 @@ pub fn validate(
     dir: Option<std::path::PathBuf>,
     root: Option<std::path::PathBuf>,
 ) -> Result<(String, Counts), Refusal> {
+    validate_edit(head, head_counts, &Edit::One(op.clone()), dir, root)
+}
+
+pub fn validate_edit(
+    head: &str,
+    head_counts: Option<&Counts>,
+    op: &Edit,
+    dir: Option<std::path::PathBuf>,
+    root: Option<std::path::PathBuf>,
+) -> Result<(String, Counts), Refusal> {
     let lang = |e: forge_lang::error::Error| Refusal::Lang {
         kind: e.kind().into(),
         text: e.text(),
     };
-    let text = forge_lang::edit::apply(head, op).map_err(lang)?;
+    let text = op
+        .apply(
+            head,
+            &forge_lang::edit::At {
+                dir: dir.clone(),
+                root: root.clone(),
+            },
+        )
+        .map_err(lang)?;
     let opts = forge_lang::Options {
         build: false,
         dir,
@@ -415,7 +435,7 @@ pub fn validate(
 }
 
 /// The wire protocol's version: a client of another version is refused at Hello.
-pub const PROTOCOL: u32 = 2;
+pub const PROTOCOL: u32 = 3;
 
 /// This build's kernel: the pinned toolchain and the hash of the kernel's and the language's
 /// sources (build.rs). Geometry is bit-identical only between equal kernels, so a room holds one.

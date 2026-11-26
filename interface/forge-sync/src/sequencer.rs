@@ -7,8 +7,9 @@
 //! are a short ring; the head's error counts are kept, so an op's check evaluates only the new
 //! text, not the head again.
 
-use crate::rebase::{rebase, span_op};
-use crate::{Counts, Entry, Refusal, Store, check_limits, inverse::inverse, text_hash};
+use crate::Edit;
+use crate::rebase::span_op;
+use crate::{Counts, Entry, Refusal, Store, text_hash};
 use forge_lang::error::Op;
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
@@ -23,7 +24,7 @@ pub trait Check {
         &mut self,
         head: &str,
         counts: Option<&Counts>,
-        op: &Op,
+        op: &Edit,
         dir: Option<PathBuf>,
         root: Option<PathBuf>,
     ) -> Result<(String, Counts), Refusal>;
@@ -37,11 +38,11 @@ impl Check for Direct {
         &mut self,
         head: &str,
         counts: Option<&Counts>,
-        op: &Op,
+        op: &Edit,
         dir: Option<PathBuf>,
         root: Option<PathBuf>,
     ) -> Result<(String, Counts), Refusal> {
-        crate::validate(head, counts, op, dir, root)
+        crate::validate_edit(head, counts, op, dir, root)
     }
 }
 
@@ -198,9 +199,11 @@ impl Sequencer {
                     s.seq()
                 )));
             }
-            let head = forge_lang::edit::apply(&s.head, &e.op).map_err(|err| {
-                std::io::Error::other(format!("{doc}: seq {} does not apply: {}", e.seq, err.kind()))
-            })?;
+            let head =
+                e.op.apply(&s.head, &forge_lang::edit::At::default())
+                    .map_err(|err| {
+                        std::io::Error::other(format!("{doc}: seq {} does not apply: {}", e.seq, err.kind()))
+                    })?;
             if text_hash(&head) != e.th {
                 return Err(std::io::Error::other(format!(
                     "{doc}: seq {} text hash differs",
@@ -318,6 +321,18 @@ impl Sequencer {
         id: u64,
         op: &Op,
     ) -> Result<Commit, Refusal> {
+        self.submit_edit(store, author, client, base, id, &Edit::One(op.clone()))
+    }
+
+    pub fn submit_edit(
+        &mut self,
+        store: &mut dyn Store,
+        author: &str,
+        client: &str,
+        base: u64,
+        id: u64,
+        op: &Edit,
+    ) -> Result<Commit, Refusal> {
         if let Some(&seq) = self.in_log.get(&(client.to_string(), id))
             && let Some(e) = self.log.get((seq - self.floor - 1) as usize)
         {
@@ -347,9 +362,9 @@ impl Sequencer {
         client: &str,
         base: u64,
         id: u64,
-        op: &Op,
+        op: &Edit,
     ) -> Result<Commit, Refusal> {
-        check_limits(op)?;
+        op.check_limits()?;
         let head = self.seq();
         if base > head {
             return Err(Refusal::BadBase { base, head });
@@ -377,10 +392,10 @@ impl Sequencer {
                     .collect()
             }
         };
-        let op = rebase(op, client, since.iter())?;
+        let op = crate::rebase::rebase_edit(op, client, since.iter())?;
         // a span op is valid only on its base: rebase refused it if another author's op landed;
         // the author's own ops since base moved its bytes too unless there are none
-        if span_op(&op) && !since.is_empty() {
+        if op.ops().iter().any(span_op) && !since.is_empty() {
             return Err(Refusal::StaleSpan);
         }
         let checked = self.checker.check(
@@ -403,7 +418,7 @@ impl Sequencer {
                 ),
             });
         }
-        let inv = inverse(&self.head, &op, &text);
+        let inv = op.inverse(&self.head, &text);
         let entry = Entry {
             seq: head + 1,
             author: author.into(),
@@ -469,7 +484,7 @@ impl Sequencer {
 
 /// A NameTaken refusal of an op whose name another author's concurrent op took: the refusal
 /// says which op (seq and author), so the person knows what happened.
-fn name_the_taker(r: Refusal, op: &Op, client: &str, since: &[Entry]) -> Refusal {
+fn name_the_taker(r: Refusal, op: &Edit, client: &str, since: &[Entry]) -> Refusal {
     let Refusal::Lang { kind, text } = &r else {
         return r;
     };
@@ -481,20 +496,22 @@ fn name_the_taker(r: Refusal, op: &Op, client: &str, since: &[Entry]) -> Refusal
             .map(|p| forge_lang::edit::bound(&p).into_iter().collect())
             .unwrap_or_default()
     };
-    let mine: Vec<String> = match op {
-        Op::Rename { to, .. } => vec![to.clone()],
-        Op::AddFeature { text, .. } => binds(text),
-        _ => vec![],
-    };
-    let taker = since
+    let mine: Vec<String> = op
+        .ops()
         .iter()
-        .rev()
-        .filter(|e| e.client != client)
-        .find(|e| match &e.op {
+        .flat_map(|op| match op {
+            Op::Rename { to, .. } => vec![to.clone()],
+            Op::AddFeature { text, .. } => binds(text),
+            _ => vec![],
+        })
+        .collect();
+    let taker = since.iter().rev().filter(|e| e.client != client).find(|e| {
+        e.op.ops().iter().any(|op| match op {
             Op::Rename { to, .. } => mine.contains(to),
             Op::AddFeature { text, .. } => binds(text).iter().any(|n| mine.contains(n)),
             _ => false,
-        });
+        })
+    });
     match taker {
         Some(e) => Refusal::Lang {
             kind: kind.clone(),

@@ -502,7 +502,8 @@ fn refusals_at_the_door() {
         op: Op::Rename {
             from: "boss".into(),
             to: "x\ny".into(),
-        },
+        }
+        .into(),
     };
     w.send(&bad.text()).unwrap();
     match r.read() {

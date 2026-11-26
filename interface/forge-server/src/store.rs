@@ -374,7 +374,8 @@ mod tests {
             op: Op::Rename {
                 from: format!("a{seq}"),
                 to: format!("a{}", seq + 1),
-            },
+            }
+            .into(),
             inv: None,
             th: seq * 7,
         }

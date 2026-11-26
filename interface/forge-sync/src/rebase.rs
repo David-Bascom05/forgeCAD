@@ -22,18 +22,33 @@ use forge_lang::syntax::Seg;
 /// locally before it made `op`, so `op` already reads their names.
 pub fn rebase<'a>(op: &Op, client: &str, since: impl IntoIterator<Item = &'a Entry>) -> Result<Op, Refusal> {
     let mut op = op.clone();
-    for e in since {
-        if e.client == client {
-            continue;
-        }
+    for e in since.into_iter().filter(|e| e.client != client) {
         if span_op(&op) {
             return Err(Refusal::StaleSpan);
         }
-        if let Op::Rename { from, to } = &e.op {
-            op = rename_in(&op, from, to)?;
+        for committed in e.op.ops() {
+            if let Op::Rename { from, to } = committed {
+                op = rename_in(&op, from, to)?;
+            }
         }
     }
     Ok(op)
+}
+
+/// A dialog may introduce names used later in the same edit. Reapply it on its original
+/// view, or refuse the entire edit if a collaborator changed that view in the meantime.
+pub fn rebase_edit<'a>(
+    edit: &crate::Edit,
+    client: &str,
+    since: impl IntoIterator<Item = &'a Entry>,
+) -> Result<crate::Edit, Refusal> {
+    match edit {
+        crate::Edit::One(op) => rebase(op, client, since).map(crate::Edit::One),
+        crate::Edit::Batch(_) if since.into_iter().any(|e| e.client != client) => Err(Refusal::Invalid {
+            why: "another author edited the document; apply the dialog again on its current contents".into(),
+        }),
+        _ => Ok(edit.clone()),
+    }
 }
 
 /// An op that addresses bytes, not names: valid only on its base text.
@@ -150,7 +165,7 @@ mod tests {
             client: client.into(),
             id: 1,
             base: 0,
-            op,
+            op: op.into(),
             inv: None,
             th: 0,
         }

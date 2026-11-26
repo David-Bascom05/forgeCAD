@@ -584,7 +584,7 @@ fn a_gapped_ack_settles_its_op_and_the_resync_resends_nothing() {
     c.receive(Down::Ack {
         id: 1,
         seq: 5,
-        op: set_w(41.0),
+        op: set_w(41.0).into(),
         inv: None,
         th: 0,
     });
@@ -680,4 +680,53 @@ fn undo_waits_for_the_latest_edit_to_land() {
         "the latest edit was undone: {}",
         c.text()
     );
+    assert!(matches!(c.undo(), Some(Ok(_))));
+    pump(&mut c, &mut room, &mut st);
+    assert!(c.text().contains("shared w = 40"));
+    assert!(c.undo().is_none());
+}
+
+#[test]
+fn hosted_dialog_is_one_durable_edit() {
+    use forge_sync::{Edit, Refusal};
+
+    let mut store = MemStore::default();
+    let mut seq = Sequencer::open(&mut store, "part.fg", DOC, None).unwrap();
+    let bad = Edit::Batch(vec![set_w(41.0), Op::DeleteFeature { id: "absent".into() }]);
+    assert!(seq.submit_edit(&mut store, "Ada", "a", 0, 1, &bad).is_err());
+    assert_eq!((seq.seq(), seq.head()), (0, DOC));
+
+    let ops = vec![
+        set_w(41.0),
+        Op::Rename {
+            from: "w".into(),
+            to: "width".into(),
+        },
+    ];
+    let after = forge_lang::edit::apply_all_checked(DOC, &ops).unwrap();
+    let edit = Edit::Batch(ops);
+    let up = Up::Op {
+        base: 0,
+        id: 2,
+        op: edit.clone(),
+    };
+    assert_eq!(Up::parse(&up.text()).unwrap(), up);
+    let commit = seq.submit_edit(&mut store, "Ada", "a", 0, 2, &edit).unwrap();
+    assert_eq!(seq.head(), after);
+    assert_eq!(seq.seq(), 1);
+    assert!(
+        seq.submit_edit(&mut store, "Ada", "a", 0, 2, &edit)
+            .unwrap()
+            .duplicate
+    );
+    let inverse = commit.entry.inv.unwrap();
+    let mut seq = Sequencer::open(&mut store, "part.fg", DOC, None).unwrap();
+    assert_eq!((seq.seq(), seq.head()), (1, after.as_str()));
+    assert!(matches!(
+        seq.submit_edit(&mut store, "Bob", "b", 0, 1, &edit),
+        Err(Refusal::Invalid { .. })
+    ));
+    assert_eq!((seq.seq(), seq.head()), (1, after.as_str()));
+    seq.submit_edit(&mut store, "Ada", "a", 1, 3, &inverse).unwrap();
+    assert_eq!((seq.seq(), seq.head()), (2, DOC));
 }

@@ -7,7 +7,7 @@
 //! The [`Link`] trait is what the part's session needs, the same on both hosts: natively a
 //! forge-remote session (its own thread and socket), in the browser the page's WebSocket.
 
-use forge_lang::error::Op;
+use forge_sync::Edit;
 use forge_sync::Event;
 use std::sync::Arc;
 
@@ -21,7 +21,7 @@ pub trait Link {
     /// Ops sent, not yet acked or refused.
     fn pending(&self) -> usize;
     /// The app applied and checked `op` and got `after`: share it.
-    fn local(&self, op: Op, after: String);
+    fn local(&self, op: Edit, after: String);
     /// Hosted undo: the inverse of this client's last op, rebased (others' edits stay). None:
     /// nothing to undo; Err: it no longer applies.
     fn undo(&self) -> Option<Result<(), String>>;
@@ -50,7 +50,7 @@ impl Link for forge_remote::Session {
     fn pending(&self) -> usize {
         forge_remote::Session::pending(self)
     }
-    fn local(&self, op: Op, after: String) {
+    fn local(&self, op: Edit, after: String) {
         forge_remote::Session::local(self, op, after);
     }
     fn undo(&self) -> Option<Result<(), String>> {

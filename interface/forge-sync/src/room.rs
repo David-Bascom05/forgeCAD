@@ -131,7 +131,7 @@ impl Room {
                 )],
                 vec![],
             ),
-            Up::Op { base, id, op } => match self.seq.submit(store, &author, &client, base, id, &op) {
+            Up::Op { base, id, op } => match self.seq.submit_edit(store, &author, &client, base, id, &op) {
                 Ok(c) => {
                     let e = &c.entry;
                     let mut out = vec![(conn, down_for(e, &client))];

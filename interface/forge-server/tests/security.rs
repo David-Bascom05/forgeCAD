@@ -210,7 +210,7 @@ fn client_ids_are_per_account() {
         &Up::Op {
             base: 0,
             id: 1,
-            op: set_w(41.0),
+            op: set_w(41.0).into(),
         }
         .text(),
     )
@@ -222,7 +222,7 @@ fn client_ids_are_per_account() {
         &Up::Op {
             base: 1,
             id: 1,
-            op: set_w(77.0),
+            op: set_w(77.0).into(),
         }
         .text(),
     )
@@ -230,7 +230,7 @@ fn client_ids_are_per_account() {
     match next(&mut ra) {
         Down::Ack { seq, op, .. } => {
             assert_eq!(seq, 2);
-            assert_eq!(op, set_w(77.0));
+            assert_eq!(op, set_w(77.0).into());
         }
         d => panic!("{d:?}"),
     }
@@ -250,7 +250,7 @@ fn a_fake_hash_only_marks_its_reporter() {
         &Up::Op {
             base: 0,
             id: 1,
-            op: set_w(50.0),
+            op: set_w(50.0).into(),
         }
         .text(),
     )
@@ -332,7 +332,7 @@ fn outside_changes_and_one_server_per_folder() {
             &Up::Op {
                 base: 0,
                 id: 1,
-                op: set_w(60.0),
+                op: set_w(60.0).into(),
             }
             .text(),
         )
@@ -447,7 +447,7 @@ fn a_heavy_document_slows_only_itself() {
         &Up::Op {
             base: 0,
             id: 1,
-            op: heavy,
+            op: heavy.into(),
         }
         .text(),
     )
@@ -458,7 +458,7 @@ fn a_heavy_document_slows_only_itself() {
         &Up::Op {
             base: 0,
             id: 1,
-            op: set_w(55.0),
+            op: set_w(55.0).into(),
         }
         .text(),
     )
@@ -480,7 +480,7 @@ fn a_heavy_document_slows_only_itself() {
         &Up::Op {
             base: 1,
             id: 2,
-            op: set_w(41.0),
+            op: set_w(41.0).into(),
         }
         .text(),
     )
@@ -506,7 +506,7 @@ fn a_hash_report_on_a_long_log_is_answered_at_once() {
             &Up::Op {
                 base: k,
                 id: k + 1,
-                op: set_w(10.0 + (k % 90) as f64),
+                op: set_w(10.0 + (k % 90) as f64).into(),
             }
             .text(),
         )
@@ -573,7 +573,7 @@ fn an_edit_on_disk_while_open_is_never_overwritten() {
         &Up::Op {
             base: 0,
             id: 1,
-            op: set_w(60.0),
+            op: set_w(60.0).into(),
         }
         .text(),
     )
@@ -633,7 +633,7 @@ fn a_panic_quarantines_one_document() {
         &Up::Op {
             base: 0,
             id: 1,
-            op: boom,
+            op: boom.into(),
         }
         .text(),
     )
@@ -646,7 +646,7 @@ fn a_panic_quarantines_one_document() {
         &Up::Op {
             base: 0,
             id: 1,
-            op: set_w(50.0),
+            op: set_w(50.0).into(),
         }
         .text(),
     )
