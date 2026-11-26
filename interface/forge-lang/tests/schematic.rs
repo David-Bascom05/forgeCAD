@@ -1254,6 +1254,22 @@ fn visually_ambiguous_wires_remain_electrically_separate() {
     assert!(c.issues.iter().any(|i| i.kind == "WireNearPin"));
     assert!(c.issues.iter().any(|i| i.kind == "WireOverlap"));
     assert_ne!(c.net_of["main/a"], c.net_of["main/c"]);
+    // The fixed overlapping wires must survive removal of a near-pin warning.
+    // Moving a wire endpoint must create and clear collinear overlap independently.
+    let mut cache = schematic::Cache::default();
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let file = dir.join("wire-moves.fg");
+    for source in [src.to_owned(), src.replace("from:a,to:b", "from:a,to:U1.P")] {
+        for y in [0., 1., 0., 0.25, 20., 0.] {
+            let text = source.replace("10.25,0", &format!("10.25,{y}"));
+            let (doc, actual) = run(&text).unwrap();
+            let query = ["erc".into()];
+            assert_eq!(
+                cache.query(&file, Some(dir), &text, &query).unwrap(),
+                schematic::response(&doc, &actual, &query).unwrap()
+            );
+        }
+    }
     let (_, clear) = run(&src
         .replace("10.25,0", "12,0")
         .replace("4,0", "5,-4")

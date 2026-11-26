@@ -198,7 +198,8 @@ impl Circuit {
             }
         }
         for scope in c.occurrences.keys() {
-            c.issues.extend(super::wire_readability::findings(&c, scope));
+            c.issues
+                .extend(super::wire_readability::findings(&c, scope, None));
         }
         c.check_voltages(doc);
         c.check_connections(doc, &by_sheet);

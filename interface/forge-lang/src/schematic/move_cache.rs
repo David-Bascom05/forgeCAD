@@ -55,13 +55,12 @@ pub(super) fn update(last: &mut Compiled, src: &str) -> bool {
         .filter(|(_, sheet)| **sheet == row.sheet)
         .map(|(k, _)| k.clone())
         .collect();
+    let mut changed = Set::new();
     c.issues.retain(|i| {
-        !matches!(
-            i.kind,
-            "TextBoundsOverlap" | "TextGeometryOverlap" | "WireNearPin" | "WireOverlap"
-        ) || !i.objects[0]
-            .rsplit_once('/')
-            .is_some_and(|(path, _)| scopes.contains(path))
+        !matches!(i.kind, "TextBoundsOverlap" | "TextGeometryOverlap")
+            || !i.objects[0]
+                .rsplit_once('/')
+                .is_some_and(|(path, _)| scopes.contains(path))
     });
     for scope in &scopes {
         for (name, pin) in def.pins.iter().filter(|(_, p)| p.unit == *unit) {
@@ -69,8 +68,19 @@ pub(super) fn update(last: &mut Compiled, src: &str) -> bool {
             let location = graph::transform(pin.at, pos, *angle, *mirror);
             c.terminals.get_mut(&key).expect("placed pin").at = location;
             c.locations.insert(key.clone(), location);
+            changed.insert(key);
         }
     }
+    let moved_wires: Vec<_> = c
+        .wires
+        .iter()
+        .filter(|(_, (a, b, _))| changed.contains(a) || changed.contains(b))
+        .map(|(id, _)| id.clone())
+        .collect();
+    changed.extend(moved_wires);
+    c.issues.retain(|i| {
+        !matches!(i.kind, "WireNearPin" | "WireOverlap") || !i.objects.iter().any(|id| changed.contains(id))
+    });
     let sheet = row.sheet.clone();
     let rows = last
         .doc
@@ -81,7 +91,8 @@ pub(super) fn update(last: &mut Compiled, src: &str) -> bool {
     for scope in &scopes {
         let findings = drawing::readability(&last.doc, c, scope, &rows);
         c.issues.extend(findings);
-        c.issues.extend(super::wire_readability::findings(c, scope));
+        c.issues
+            .extend(super::wire_readability::findings(c, scope, Some(&changed)));
     }
     c.sort_findings();
     if delta != 0 {
