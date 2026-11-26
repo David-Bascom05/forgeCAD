@@ -722,15 +722,27 @@ impl Sk {
                 .map_or((usize::MAX, 0), |k| (self.text_segs[k].1, self.text_segs[k].2))
         };
         let mut groups: Vec<(usize, Vec<EntityId>)> = Vec::new();
+        let mut ordinary = Vec::new();
         for (k, el) in elements.iter().enumerate() {
             let first = groups.len();
             for &e in el.iter() {
-                let p = part(e).1;
+                let (character, p) = part(e);
+                if character == usize::MAX {
+                    ordinary.push(e);
+                    continue;
+                }
                 match groups[first..].iter_mut().find(|g| part(g.1[0]).1 == p) {
                     Some(g) => g.1.push(e),
                     None => groups.push((k, vec![e])),
                 }
             }
+        }
+        if groups.is_empty() {
+            return self.profiles_among(&ordinary, span);
+        }
+        if !ordinary.is_empty() {
+            // All ordinary contours form one region set so an inner contour remains a hole.
+            groups.push((elements.len(), ordinary));
         }
         let solved = match &self.done.0 {
             Some(d) if d.out.same_bits(&self.s) => &d.out,
@@ -740,6 +752,9 @@ impl Sk {
             forge_sketch::ExtractError::Meet { a, b } => {
                 const PIECE: u64 = 0xffff << 48;
                 let (ca, cb) = (part(EntityId(a.0 & !PIECE)).0, part(EntityId(b.0 & !PIECE)).0);
+                if ca == usize::MAX || cb == usize::MAX {
+                    return Error::SketchProfile { span, sketch: self.id.clone(), error };
+                }
                 crate::feat_error::FeatError::Text {
                     span,
                     problem: crate::feat_error::TextProblem::GlyphsMeet {

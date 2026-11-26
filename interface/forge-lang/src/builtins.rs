@@ -1747,9 +1747,8 @@ pub(crate) fn profile_of(
 /// A profile argument's sketch, its regions, and the entities they were taken from.
 type Regions = (Rc<RefCell<Sk>>, Vec<forge_ops::Profile>, Vec<EntityId>);
 
-/// The regions a list of loops of one sketch (a sketch text, a loop per character) bound, only
-/// they: each element's regions, the union of its parts' (a composite glyph's components may
-/// overlap); different elements never meet.
+/// Ordinary loops nest together. A text glyph groups its own components so overlapping
+/// components within a glyph are filled while adjacent glyphs remain distinct.
 pub(crate) fn profiles_of(xs: &[Value], span: Span) -> R<Regions> {
     let mut sk: Option<Rc<RefCell<Sk>>> = None;
     let mut ids = Vec::new();
@@ -1786,7 +1785,13 @@ pub(crate) fn profiles_of(xs: &[Value], span: Span) -> R<Regions> {
         want: Ty::Sketch,
         found: Ty::List,
     })?;
-    let ps = sk.borrow().profiles_grouped(&elements, span)?;
+    let sketch = sk.borrow();
+    let ps = if sketch.text_segs.is_empty() {
+        sketch.profiles_among(&ids, span)?
+    } else {
+        sketch.profiles_grouped(&elements, span)?
+    };
+    drop(sketch);
     Ok((sk, ps, ids))
 }
 

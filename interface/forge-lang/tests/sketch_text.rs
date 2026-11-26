@@ -238,3 +238,14 @@ fn text_bits_are_the_same_everywhere() {
     println!("{got:?}");
     assert_eq!(got, ["62b0602ea86db6e0", "9b4b3744493af53b"]);
 }
+
+#[test]
+fn ordinary_loop_lists_keep_holes() {
+    // Include an unselected glyph in the second sketch to exercise both selection paths.
+    for label in ["", "  label = text(\"A\", at: (30, 0), size: 4)\n"] {
+        let src = format!("sketch plan(on: xy) {{\n  outer = rect(corner: (0, 0), size: (20, 20))\n  inner = rect(corner: (5, 5), size: (10, 10))\n{label}}}\nsolid = extrude([plan.outer, plan.inner], 2)\n");
+        let r = run(&src);
+        assert!(r.ok(), "{:?}", r.errors);
+        assert!((volume(&r) - 600.0).abs() < 1e-6);
+    }
+}
