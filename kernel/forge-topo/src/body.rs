@@ -1264,13 +1264,15 @@ impl Body {
 
     /// Points along an edge, `n + 1` of them, evenly spaced in parameter.
     pub fn edge_points(&self, e: EdgeId, n: usize) -> Vec<Point3> {
+        self.edge_samples(e, n).collect()
+    }
+
+    pub(crate) fn edge_samples(&self, e: EdgeId, n: usize) -> impl Iterator<Item = Point3> {
         let edge = self.edge(e);
-        (0..=n)
-            .map(|i| {
-                let t = edge.range.lo + edge.range.width() * (i as f64 / n as f64);
-                edge.curve.eval(t.min(edge.range.hi))
-            })
-            .collect()
+        (0..=n).map(move |i| {
+            let t = edge.range.lo + edge.range.width() * (i as f64 / n as f64);
+            edge.curve.eval(t.min(edge.range.hi))
+        })
     }
 
     /// A box holding face `f`, from its edges alone. A face on a plane,
