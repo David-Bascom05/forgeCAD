@@ -471,7 +471,7 @@ impl Shell {
         let right = if narrow && !editor.inspector_open {
             0.
         } else {
-            (s.width() * 0.25).clamp(240., 344.).min(s.width() * 0.8)
+            (s.width() * 0.25).clamp(320., 380.).min(s.width() * 0.8)
         };
         let view = Rect::from_min_max(pos2(left, top), pos2(s.width() - right, (bottom - 29.).max(top)));
         self.view_rect = view;
@@ -497,6 +497,9 @@ impl Shell {
             let r = Rect::from_min_max(pos2(view.right(), top), pos2(s.width(), bottom));
             let mut b = pane(ui, "electronics-inspector", r);
             ui.painter().vline(r.left(), r.y_range(), Stroke::new(1., t.line));
+            if !editor.library() {
+                editor.dock_tabs(&mut b, &t, &mut self.places);
+            }
             // A long parts list or component form must not leave a newly opened checklist scrolled away.
             let scroll_id = ("properties", editor.focus_pin.as_ref().map(|f| &f.id));
             ScrollArea::vertical().id_salt(scroll_id).show(&mut b, |ui| {

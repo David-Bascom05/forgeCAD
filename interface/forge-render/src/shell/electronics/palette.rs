@@ -18,6 +18,7 @@ impl Editor {
         self.select(component, pin);
         let page = sch::pin_inspection_page(&self.doc, &self.circuit, scope, &inspection).unwrap_or_default();
         self.focus_pin = Some(PinFocus {
+            manage: None,
             id: id.into(),
             inspection,
             page,
@@ -25,18 +26,23 @@ impl Editor {
         self.inspector_open = true;
         self.fit = true;
     }
-    pub(super) fn dock_ui(&mut self, ui: &mut Ui, t: &Theme, places: &mut Vec<(String, Rect)>) {
-        if self.library() {
-            self.inspector(ui, t);
-            return;
-        }
+    pub(super) fn dock_tabs(&mut self, ui: &mut Ui, t: &Theme, places: &mut Vec<(String, Rect)>) {
+        let width = (ui.available_width() - ui.spacing().item_spacing.x * 2.) / 3.;
         ui.horizontal(|ui| {
             for (tab, label) in [
                 (Dock::Parts, "Parts"),
                 (Dock::Power, "Power"),
                 (Dock::Properties, "Properties"),
             ] {
-                let r = ui.selectable_label(self.dock == tab, label);
+                let active = self.dock == tab;
+                let r = ui.add_sized(
+                    [width, crate::shell::theme::TITLE_ROW_H],
+                    egui::Button::selectable(active, label).frame_when_inactive(false),
+                );
+                if active {
+                    ui.painter()
+                        .hline(r.rect.x_range(), r.rect.bottom(), egui::Stroke::new(2., t.accent));
+                }
                 places.push((format!("electronics:dock:{label}"), r.rect));
                 if r.clicked() && self.dock != tab {
                     self.start(Tool::Select);
@@ -45,6 +51,15 @@ impl Editor {
             }
         });
         ui.separator();
+    }
+    pub(super) fn dock_ui(&mut self, ui: &mut Ui, t: &Theme, places: &mut Vec<(String, Rect)>) {
+        if self.library() || self.dock == Dock::Properties {
+            ui.spacing_mut().item_spacing = vec2(crate::shell::theme::S2, crate::shell::theme::S1);
+        }
+        if self.library() {
+            self.inspector(ui, t, places);
+            return;
+        }
         match self.dock {
             Dock::Parts => self.parts_ui(ui, t, places),
             Dock::Power => {
@@ -110,7 +125,7 @@ impl Editor {
                 if self.focus_pin.is_some() {
                     self.checklist(ui, t, places)
                 } else {
-                    self.inspector(ui, t)
+                    self.inspector(ui, t, places)
                 }
             }
         }
@@ -219,140 +234,6 @@ impl Editor {
             {
                 self.open_file = Some(path.to_string_lossy().into());
             }
-        }
-    }
-    fn checklist(&mut self, ui: &mut Ui, t: &Theme, places: &mut Vec<(String, Rect)>) {
-        let f = self.focus_pin.as_ref().unwrap();
-        let p = &self.circuit.terminals[&f.id];
-        let label = f.id.rsplit('/').next().unwrap_or(&f.id);
-        let heading = ui.heading("Pin checklist");
-        ui.add_space(4.);
-        ui.strong(label);
-        places.push((format!("electronics:inspection:{}", f.id), heading.rect));
-        ui.weak(format!(
-            "Pin {} · {}",
-            p.number,
-            p.electrical.word().replace('_', " ")
-        ));
-        let description = &self.doc.symbols[&p.symbol].pins[&p.pin].description;
-        if !description.is_empty() {
-            let brief = description
-                .split_once('\n')
-                .map_or(description.as_str(), |(first, _)| first);
-            let end = brief
-                .char_indices()
-                .nth(160)
-                .map(|(n, _)| n)
-                .unwrap_or(brief.len());
-            if end < description.len() {
-                ui.label(format!("{}…", brief[..end].trim_end()))
-                    .on_hover_text(description);
-            } else {
-                ui.label(description);
-            }
-        }
-        let mut next = None;
-        for (need, title) in [(true, "Needs"), (false, "Provides")] {
-            ui.separator();
-            let count = f.inspection.checks.iter().filter(|r| r.need == need).count();
-            let verified = f
-                .inspection
-                .checks
-                .iter()
-                .filter(|r| r.need == need && r.peers.iter().any(|(_, e)| *e == sch::Evidence::Verified))
-                .count();
-            if count > 0 {
-                ui.strong(format!("{title}   {verified} / {count} verified"));
-            } else {
-                ui.strong(title);
-            }
-            for check in f.inspection.checks.iter().filter(|r| r.need == need) {
-                let role = self
-                    .doc
-                    .role_names
-                    .iter()
-                    .find(|(_, id)| **id == check.role)
-                    .map(|(name, _)| name.as_str())
-                    .unwrap_or(&check.role.0);
-                let verified = check.peers.iter().any(|(_, s)| *s == sch::Evidence::Verified);
-                let spec = &self.doc.roles[&check.role];
-                let mut title = role.rsplit('.').next().unwrap_or(role).replace('_', " ");
-                if let Some(r) = &spec.rating {
-                    match r {
-                        sch::Rating::VoltageMv(mv) => title.push_str(&format!(" · {} V", mv / 1000.)),
-                        sch::Rating::CapacitanceNf(nf) => title.push_str(&format!(" · {nf} nF")),
-                    }
-                }
-                ui.add_space(8.);
-                ui.horizontal(|ui| {
-                    let (rect, _) = ui.allocate_exact_size(vec2(13., 13.), egui::Sense::hover());
-                    let ink = if verified { t.success } else { t.ink2 };
-                    ui.painter().rect_stroke(
-                        rect.shrink(1.),
-                        2.,
-                        egui::Stroke::new(1., ink),
-                        egui::StrokeKind::Inside,
-                    );
-                    if verified {
-                        let point = |x, y| rect.min + vec2(x, y);
-                        ui.painter().add(egui::Shape::line(
-                            vec![point(3., 6.), point(5.5, 9.), point(10., 3.5)],
-                            egui::Stroke::new(1.5, ink),
-                        ));
-                    }
-                    ui.add_space(4.);
-                    let row = ui.strong(title).on_hover_text(&check.role.0);
-                    places.push((format!("electronics:check:{}:{}", f.id, check.role.0), row.rect));
-                });
-                if need && matches!(spec.kind, sch::RoleKind::Power | sch::RoleKind::Return) {
-                    for (rail, pin) in &f.inspection.rails {
-                        let row = ui.label(format!("{rail} connected"));
-                        places.push((format!("electronics:rail:{pin}"), row.rect));
-                    }
-                }
-                if check.peers.is_empty() {
-                    let missing = if need && spec.kind == sch::RoleKind::Power {
-                        "No power source assigned"
-                    } else if need {
-                        "No provider"
-                    } else {
-                        "No consumer"
-                    };
-                    ui.colored_label(t.warn, missing);
-                }
-                for (peer, status) in &check.peers {
-                    let (sheet, name) = peer.rsplit_once('/').unwrap_or(("", peer));
-                    let caption = if sheet == self.subject { name } else { peer };
-                    ui.horizontal_wrapped(|ui| {
-                        if ui.link(caption).clicked() {
-                            next = Some(peer.clone());
-                        }
-                        ui.add_space(6.);
-                        match status {
-                            sch::Evidence::Verified => ui.colored_label(t.success, "Verified"),
-                            sch::Evidence::Invalid => ui.colored_label(t.error, "Check wiring"),
-                            sch::Evidence::Candidate => ui.weak("Candidate"),
-                        };
-                    });
-                }
-            }
-            if count == 0 {
-                ui.weak("None declared");
-            }
-        }
-        if let Some(id) = next
-            && let Some((scope, _)) = id.rsplit_once('/')
-        {
-            if self.subject != scope {
-                self.focus_pin = None;
-                self.subject = scope.into();
-                self.refresh();
-            }
-            self.focus_on(&id);
-        }
-        ui.separator();
-        if ui.button("Close pin inspection").clicked() {
-            self.start(Tool::Select);
         }
     }
 }

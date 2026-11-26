@@ -11,6 +11,7 @@ impl Editor {
             Wire => "Click the first pin, port or junction",
             Move if self.selected.is_empty() && self.pin.is_empty() => "Select an object to move",
             Move => "Click the new position",
+            Intent if self.form.checklist_pin.is_some() => "Choose a matching pin on this net",
             Intent => "Click the consumer pin, then the provider pin",
             Flow => "Click the source, then the destination",
             Label => "Click a pin, port or junction",
@@ -962,6 +963,15 @@ impl Editor {
                     ),
                     Flow => ("flow", format!("flow(sheet: {sheet}, from: {a}, to: {b})")),
                     _ => {
+                        let (a, b) = if let Some((id, need)) = &self.form.checklist_pin {
+                            let peer = format!("{}/{b}", self.subject);
+                            if self.circuit.net_of.get(&peer) != self.circuit.net_of.get(id) {
+                                return Err("Choose a pin connected to this net.".into());
+                            }
+                            if *need { (a, b) } else { (b, a) }
+                        } else {
+                            (a, b)
+                        };
                         let mut extra = String::new();
                         match (self.form.return_from.as_str(), self.form.return_to.as_str()) {
                             ("", "") => {}
@@ -1037,6 +1047,9 @@ impl Editor {
         self.add(&id, body)?;
         self.first = None;
         self.points.clear();
+        if let Some((pin, _)) = self.form.checklist_pin.take() {
+            self.focus_on(&pin);
+        }
         self.message = format!("Added {id}");
         Ok(())
     }

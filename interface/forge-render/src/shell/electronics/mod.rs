@@ -1,6 +1,7 @@
 //! Native electronic documents. The canvas, browser and inspector edit a single .fg source.
 mod annotation;
 mod canvas;
+mod checklist;
 mod inspector;
 mod palette;
 mod workspace;
@@ -72,6 +73,8 @@ pub fn tab_name(library: bool, tab: usize) -> &'static str {
 
 #[derive(Default)]
 struct Inputs {
+    /// Pin and role direction when assigning from the checklist.
+    checklist_pin: Option<(String, bool)>,
     description: String,
     power_symbol: Option<String>,
     line_width: f64,
@@ -124,6 +127,7 @@ impl SignalMarkers {
 }
 
 struct PinFocus {
+    manage: Option<(sch::RoleId, bool)>,
     id: String,
     inspection: sch::PinInspection,
     page: forge_draw::Page,

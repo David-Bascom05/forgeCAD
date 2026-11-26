@@ -1,10 +1,28 @@
 use super::*;
-use crate::shell::ux;
+use crate::shell::{theme, ux};
 use egui::{ComboBox, RichText};
 fn field(ui: &mut Ui, label: &str, value: &mut String) {
-    ui.label(label);
-    ui.add(egui::TextEdit::singleline(value).desired_width(f32::INFINITY));
+    ui.horizontal(|ui| {
+        let width = (ui.available_width() * 0.35).min(116.);
+        let label_id = ui
+            .allocate_ui_with_layout(
+                vec2(width, theme::CONTROL_H),
+                egui::Layout::left_to_right(egui::Align::Center),
+                |ui| {
+                    ui.set_width(width);
+                    ui.label(RichText::new(label).font(theme::small())).id
+                },
+            )
+            .inner;
+        ui.add_sized(
+            [ui.available_width(), theme::CONTROL_H],
+            egui::TextEdit::singleline(value),
+        )
+        .labelled_by(label_id)
+        .on_hover_text(value.as_str());
+    });
 }
+
 fn choice(ui: &mut Ui, label: &str, value: &mut String, items: Vec<String>) {
     ui.label(label);
     ComboBox::from_id_salt(label)
@@ -202,17 +220,14 @@ impl Editor {
         };
         self.change_member("graphics", None, Some(i), Some(expr))
     }
-    fn pin_form(&mut self, ui: &mut Ui) {
+    fn pin_form(&mut self, ui: &mut Ui, t: &Theme) {
         let f = &mut self.form;
         if self.tool == Tool::Pin {
             field(ui, "Pin name", &mut f.name);
         } else {
             ui.strong(&f.name);
         }
-        ui.horizontal(|ui| {
-            ui.label("Pin number");
-            ui.text_edit_singleline(&mut f.number);
-        });
+        field(ui, "Pin number", &mut f.number);
         choice(
             ui,
             "Electrical type",
@@ -230,36 +245,67 @@ impl Editor {
             .map(str::to_string)
             .to_vec(),
         );
-        field(ui, "Description", &mut f.description);
+        let description = ui.label("Description");
+        ui.add(
+            egui::TextEdit::multiline(&mut f.description)
+                .desired_rows(2)
+                .desired_width(f32::INFINITY),
+        )
+        .labelled_by(description.id);
         field(ui, "Unit", &mut f.unit);
-        ComboBox::from_label("Direction")
+        ui.label("Direction");
+        ComboBox::from_id_salt("pin-direction")
+            .width(ui.available_width())
             .selected_text(format!("{}°", f.angle))
             .show_ui(ui, |ui| {
                 for a in [0, 90, 180, 270] {
                     ui.selectable_value(&mut f.angle, a, format!("{a}°"));
                 }
             });
-        for (label, set) in [("Wants", &mut f.wants), ("Gives", &mut f.gives)] {
-            ui.label(label);
-            if self.doc.role_names.is_empty() {
-                ui.weak("No role declarations");
-            }
-            for (name, id) in &self.doc.role_names {
-                let mut enabled = set.contains(name);
-                if ui
-                    .checkbox(
-                        &mut enabled,
-                        format!("{name} · {}", self.doc.roles[id].kind.word()),
-                    )
-                    .changed()
-                {
-                    if enabled {
-                        set.push(name.clone());
-                    } else {
-                        set.retain(|s| s != name);
+        let sheet = ux::Sheet::new(t, ux::System::Metric, "");
+        sheet.section(ui, "Pin roles");
+        if self.doc.role_names.is_empty() {
+            ui.weak("No roles declared");
+        } else {
+            egui::Grid::new("symbol-pin-roles")
+                .num_columns(3)
+                .spacing(vec2(theme::S3, theme::S1))
+                .min_col_width((ui.available_width() - 2. * theme::S3) / 3.)
+                .striped(true)
+                .min_row_height(theme::CONTROL_H)
+                .show(ui, |ui| {
+                    ui.strong("Role");
+                    ui.strong("Wants");
+                    ui.strong("Provides");
+                    ui.end_row();
+                    let mut seen = std::collections::BTreeSet::new();
+                    for (name, id) in &self.doc.role_names {
+                        if !seen.insert(id) {
+                            continue;
+                        }
+                        ui.label(name).on_hover_text(self.doc.roles[id].kind.word());
+                        for (direction, set) in [("Wants", &mut f.wants), ("Provides", &mut f.gives)] {
+                            let mut on = set.contains(name);
+                            let r = ui.add(egui::Checkbox::without_text(&mut on));
+                            r.widget_info(|| {
+                                egui::WidgetInfo::selected(
+                                    egui::Role::CheckBox,
+                                    true,
+                                    on,
+                                    format!("{direction} {name}"),
+                                )
+                            });
+                            if r.on_hover_text(format!("{direction} {name}")).changed() {
+                                if on {
+                                    set.push(name.clone());
+                                } else {
+                                    set.retain(|n| n != name);
+                                }
+                            }
+                        }
+                        ui.end_row();
                     }
-                }
-            }
+                });
         }
     }
     pub(super) fn save_properties(&mut self) -> Result<()> {
@@ -434,17 +480,32 @@ impl Editor {
             }
         }
     }
-    pub(super) fn inspector(&mut self, ui: &mut Ui, t: &Theme) {
+    pub(super) fn inspector(&mut self, ui: &mut Ui, t: &Theme, places: &mut Vec<(String, Rect)>) {
         let path = self.path.clone().unwrap_or_default();
         let sheet = ux::Sheet::new(t, ux::System::of_doc("mm"), path.trim());
-        sheet.section(
-            ui,
-            if matches!(self.tool, Tool::Select | Tool::Properties) {
-                "Properties"
+        if matches!(self.tool, Tool::Select | Tool::Properties) {
+            let title = if self.library() {
+                &self.subject
             } else {
-                self.tool.button().0
-            },
-        );
+                &self.selected
+            };
+            if !title.is_empty() {
+                ui.add_space(theme::S2);
+                ui.label(RichText::new(title).font(theme::heading()).color(t.ink));
+            }
+            sheet.section(
+                ui,
+                if self.library() && !self.pin.is_empty() {
+                    "Pin properties"
+                } else if !self.selected.is_empty() {
+                    "Object properties"
+                } else {
+                    "Properties"
+                },
+            );
+        } else {
+            sheet.section(ui, self.tool.button().0);
+        }
         let mut result = Ok(());
         use Tool::*;
         let collisions = self
@@ -501,7 +562,7 @@ impl Editor {
             }
             Select | Properties => {
                 if self.library() && !self.pin.is_empty() {
-                    self.pin_form(ui);
+                    self.pin_form(ui, t);
                     if ui.button("Apply pin changes").clicked() {
                         result = self.save_properties();
                     }
@@ -564,24 +625,6 @@ impl Editor {
                     } else if self.library() || matches!(part, Some(Item::Place { .. })) {
                         if let Some(Item::Place { symbol, .. }) = part {
                             ui.label(format!("Symbol · {symbol}"));
-                            let base = &self.doc.symbols[symbol];
-                            if !base.fields.is_empty() || base.datasheet.is_some() {
-                                egui::CollapsingHeader::new("Library defaults")
-                                    .default_open(true)
-                                    .show(ui, |ui| {
-                                        if let Some(link) = &base.datasheet
-                                            && ui
-                                                .link("Copy datasheet reference")
-                                                .on_hover_text(link)
-                                                .clicked()
-                                        {
-                                            ui.ctx().copy_text(link.clone());
-                                        }
-                                        for (k, v) in &base.fields {
-                                            ui.label(format!("{k} · {v}"));
-                                        }
-                                    });
-                            }
                             field(ui, "Value", &mut self.form.value);
                             ui.collapsing("Field positions", |ui| {
                                 for (label, offset) in [
@@ -609,11 +652,33 @@ impl Editor {
                                     }
                                 }
                             });
+                            sheet.section(ui, "Assembly");
                             field(ui, "Footprint", &mut self.form.footprint);
                             ui.checkbox(&mut self.form.populated, "Populated");
                             ui.checkbox(&mut self.form.in_bom, "Include in BOM");
                         }
-                        field(ui, "Datasheet URL or file", &mut self.form.datasheet);
+                        if let Some(Item::Place { symbol, .. }) = part {
+                            let base = &self.doc.symbols[symbol];
+                            if !base.fields.is_empty() || base.datasheet.is_some() {
+                                egui::CollapsingHeader::new("Library defaults")
+                                    .default_open(false)
+                                    .show(ui, |ui| {
+                                        if let Some(link) = &base.datasheet
+                                            && ui
+                                                .link("Copy datasheet reference")
+                                                .on_hover_text(link)
+                                                .clicked()
+                                        {
+                                            ui.ctx().copy_text(link.clone());
+                                        }
+                                        for (k, v) in &base.fields {
+                                            ui.label(format!("{k} · {v}"));
+                                        }
+                                    });
+                            }
+                        }
+                        sheet.section(ui, "Documentation");
+                        field(ui, "Datasheet", &mut self.form.datasheet);
                         if ui
                             .add_enabled(self.path.is_some(), egui::Button::new("Attach PDF…"))
                             .on_hover_text("Copy a PDF beside the saved document")
@@ -659,7 +724,7 @@ impl Editor {
                     }
                 }
             }
-            Pin => self.pin_form(ui),
+            Pin => self.pin_form(ui, t),
             Power => choice(
                 ui,
                 "Power net",
@@ -707,12 +772,21 @@ impl Editor {
             }
             Port => field(ui, "Port name", &mut self.form.name),
             Intent => {
-                choice(
-                    ui,
-                    "Role",
-                    &mut self.form.role,
-                    self.doc.role_names.keys().cloned().collect(),
-                );
+                if let Some((pin, need)) = &self.form.checklist_pin {
+                    ui.label(RichText::new(pin.rsplit('/').next().unwrap_or(pin)).font(theme::heading()));
+                    ui.label(format!(
+                        "{} · {}",
+                        if *need { "Wants" } else { "Provides" },
+                        self.form.role
+                    ));
+                } else {
+                    choice(
+                        ui,
+                        "Role",
+                        &mut self.form.role,
+                        self.doc.role_names.keys().cloned().collect(),
+                    );
+                }
                 let prefix = format!("{}/", self.subject);
                 let pins = std::iter::once(String::new())
                     .chain(
@@ -736,6 +810,43 @@ impl Editor {
                     "Preferred separation (e.g. 3mm)",
                     &mut self.form.preferred_distance,
                 );
+                if let Some((pin, need)) = &self.form.checklist_pin {
+                    let mut chosen = None;
+                    let role = &self.doc.role_names[&self.form.role];
+                    sheet.section(
+                        ui,
+                        if *need {
+                            "Connected providers"
+                        } else {
+                            "Connected consumers"
+                        },
+                    );
+                    let mut any = false;
+                    for key in &self.circuit.nets[&self.circuit.net_of[pin]] {
+                        let Some((scope, short)) = key.rsplit_once('/') else {
+                            continue;
+                        };
+                        if scope == self.subject
+                            && key != pin
+                            && self.circuit.terminals.get(key).is_some_and(|peer| {
+                                (if *need { &peer.gives } else { &peer.wants }).contains(role)
+                            })
+                        {
+                            any = true;
+                            let r = ui.button(format!("Assign {short}"));
+                            places.push((format!("electronics:assign:{key}"), r.rect));
+                            if r.clicked() {
+                                chosen = Some(short.to_owned());
+                            }
+                        }
+                    }
+                    if !any {
+                        ui.weak("Connect a pin with the matching role on this sheet.");
+                    }
+                    if let Some(short) = chosen {
+                        result = self.click([0., 0.], Some(&short), None);
+                    }
+                }
             }
             Sheet | Library | Role | NewSymbol | Bus => {
                 field(ui, "Name", &mut self.form.name);

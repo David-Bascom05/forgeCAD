@@ -56,6 +56,15 @@ async function capture(browser, base, width, height, file, row, name) {
       await shown("electronics:inspection:main/U1.VDD");
       await shown("electronics:check:main/U1.VDD:@analog.local_bypass");
       await shown("electronics:rail:main/supply.net");
+      const bypass = "electronics:check:main/U1.VDD:@analog.local_bypass";
+      await click(bypass);
+      await shown("electronics:unassign:main/local_cap");
+      await click("electronics:unassign:main/local_cap");
+      await t.until(page, s => !s.places.some(p => p.name === "electronics:unassign:main/local_cap"), "removed assignment");
+      await click(bypass);
+      await shown("electronics:assign:main/C2.P");
+      await click("electronics:assign:main/C2.P");
+      await shown("electronics:inspection:main/U1.VDD");
       await click("electronics:dock:Parts");
       await shown("electronics:part:analog.Amplifier");
       await click("electronics:grid");

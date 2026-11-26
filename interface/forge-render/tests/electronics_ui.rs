@@ -147,6 +147,74 @@ fn inspect_pin_and_compare_signal_displays() {
 }
 
 #[test]
+fn checklist_edits_the_assignment_from_either_pin() {
+    let Ok(mut h) = Headless::new((1280., 800.), 1.) else {
+        return;
+    };
+    let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/electronics/analog");
+    let dir = forge_dirs::temp_dir().join(format!("forge-pin-checklist-{}", forge_dirs::process_id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::copy(base.join("analog-symbols.fg"), dir.join("analog-symbols.fg")).unwrap();
+    let original = std::fs::read_to_string(base.join("sensor-interface.fg")).unwrap();
+    for (pin, peer) in [("U1.VDD", "C2.P"), ("C2.P", "U1.VDD")] {
+        let path = dir.join(format!("sensor-{pin}.fg"));
+        std::fs::write(&path, &original).unwrap();
+        h.gui.open(path.to_str().unwrap());
+        h.step();
+        assert!(h.click(&format!("electronics:anchor:{pin}")));
+        h.step();
+        let check = format!("electronics:check:main/{pin}:@analog.local_bypass");
+        assert!(h.click(&check));
+        h.step();
+        assert!(h.click("electronics:unassign:main/local_cap"));
+        h.step();
+        h.gui.fg_save();
+        let src = std::fs::read_to_string(&path).unwrap();
+        assert!(!src.contains("= fulfill("));
+        assert!(h.click(&check));
+        h.step();
+        h.step(); // The dock enters Assign Role after the canvas has drawn.
+        assert!(
+            h.placed(&format!("electronics:assign:main/{peer}")).is_some(),
+            "{}",
+            h.gui.shell.status
+        );
+        if pin == "U1.VDD" {
+            assert!(h.click(&format!("electronics:assign:main/{peer}")));
+        } else {
+            assert!(h.click(&format!("electronics:anchor:{peer}")));
+        }
+        h.step();
+        assert!(
+            h.placed(&format!("electronics:inspection:main/{pin}")).is_some(),
+            "{}",
+            h.gui.shell.status
+        );
+        h.gui.fg_save();
+        let src = std::fs::read_to_string(&path).unwrap();
+        let (_, c) = forge_lang::schematic::compile(&src, Some(&dir), None).unwrap();
+        assert_eq!(c.links.len(), 1);
+        assert_eq!(c.links[0].want, "main/U1.VDD");
+        assert_eq!(c.links[0].give, "main/C2.P");
+        assert!(
+            forge_lang::schematic::inspect_pin(&c, &format!("main/{pin}"))
+                .unwrap()
+                .checks
+                .iter()
+                .any(|r| r
+                    .peers
+                    .contains(&(format!("main/{peer}"), forge_lang::schematic::Evidence::Verified)))
+        );
+        for _ in 0..2 {
+            h.gui.shell.electronics.as_mut().unwrap().step(false);
+        }
+        h.gui.fg_save();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+    }
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
 fn select_repeated_sheet_draw_and_change_grid() {
     let Ok(mut h) = Headless::new((1400., 860.), 1.) else {
         return;
