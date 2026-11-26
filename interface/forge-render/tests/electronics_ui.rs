@@ -539,7 +539,13 @@ fn inspect_i2c_pull_witness_in_the_native_window() {
     );
     if let Some(out) = std::env::var_os("FORGE_UI_SHOTS") {
         std::fs::create_dir_all(&out).unwrap();
-        std::fs::write(Path::new(&out).join("i2c-pull.png"), h.png().unwrap()).unwrap();
+        std::fs::write(Path::new(&out).join("i2c-pull.png"), {
+            for _ in 0..3 {
+                h.step();
+            }
+            h.png().unwrap()
+        })
+        .unwrap();
     }
 }
 
@@ -558,6 +564,10 @@ fn confirm_differential_net_labels_and_reopen() {
     h.step();
     assert!(h.click("electronics:pair:USB_D+:USB_D-"));
     h.step();
+    if let Some(out) = std::env::var_os("FORGE_UI_SHOTS") {
+        std::fs::create_dir_all(&out).unwrap();
+        std::fs::write(Path::new(&out).join("differential-pair.png"), h.png().unwrap()).unwrap();
+    }
     assert!(h.click("electronics:create-record"));
     h.step();
     h.gui.fg_save();
