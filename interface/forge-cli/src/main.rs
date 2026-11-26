@@ -48,6 +48,7 @@ fn usage() -> ExitCode {
          forgecad simplify refresh|pause|resume|detach DERIVED.fg\n       \
          forgecad edit FILE.fg 'OP'.. [--base VERSION]   (typed ops, as a part's fixes give them; export F.fg stl|3mf|obj|urdf|dxf [SHEET])\n       \
          forgecad cam FILE.fg [sheet] [--json] [-o OUT]   (a machining document: certified toolpaths, the program or setup sheet)\n       \
+         forgecad schematic FILE.fg [pin PATH|tree PATH|sheet PATH|nets|links|symbols|erc] [--json]\n       \
          forgecad bend FILE.fg [sheet|program] [--json] [-o OUT]   (a bending document: simulated; its setup sheet, or its press-brake program where the format is openly specified)\n       \
          forgecad diff A.fg B.fg [volume]   (what B changed from A: features, params, faces, volume)\n       \
          forgecad help [forge | WORD]   (the .fg language, or its sections on WORD)\n       \
@@ -786,6 +787,22 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
     }
     let r = fg::Session::new(None, true).run(cmd, &a, &forge_agent::json::Json::Null);
     let mut text = if json { r.json.to_string() } else { r.text };
+    if cmd == "schematic"
+        && matches!(a.words.first().map(String::as_str), Some("svg" | "symbol-svg"))
+        && let Some(svg) = r.json.get("result").and_then(forge_agent::json::Json::str)
+    {
+        if let Some(path) = out.as_deref() {
+            if let Err(e) = std::fs::write(path, svg) {
+                eprintln!("writing {path}: {e}");
+                return ExitCode::FAILURE;
+            }
+            if !json {
+                text = format!("wrote {path}");
+            }
+        } else if !json {
+            text = svg.to_owned();
+        }
+    }
     if let Some(png) = &r.png {
         let ext = match cmd {
             "export" if a.words.first().is_some_and(|w| w == "dxf") => "dxf",

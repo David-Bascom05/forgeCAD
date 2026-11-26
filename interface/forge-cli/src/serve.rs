@@ -18,7 +18,56 @@ type Tool = (
     &'static [(&'static str, &'static str)],
 );
 
-const TOOLS: [Tool; 19] = [
+const TOOLS: [Tool; 23] = [
+    (
+        "plan_fulfillment",
+        "Confirm a typed candidate on an existing hand-drawn circuit. Returns one checked edit and the source version.",
+        5,
+        &[
+            ("file", "schematic .fg"),
+            ("want", "qualified consumer pin"),
+            ("give", "qualified provider pin"),
+            ("role", "declared role ID"),
+            ("id", "new relationship identifier"),
+            ("return_from", "optional provider return pin"),
+            ("return_to", "optional consumer return pin"),
+        ],
+    ),
+    (
+        "new_schematic",
+        "Create a new empty native schematic or symbol library under the writable root.",
+        2,
+        &[("file", "new .fg path"), ("kind", "schematic or symbol_library")],
+    ),
+    (
+        "plan_bypass",
+        "From a selected consumer pin, propose a checked symbol placement, supply wire, return wire and typed fulfillment. Send the returned ops and version to edit to commit once.",
+        10,
+        &[
+            ("file", "schematic .fg"),
+            ("want", "qualified consumer pin"),
+            ("return_pin", "qualified return terminal"),
+            ("symbol", "library-qualified capacitor symbol"),
+            ("give", "provider pin key on that symbol"),
+            ("return_key", "return pin key on that symbol"),
+            ("role", "declared bypass role ID"),
+            ("id", "new .fg occurrence name"),
+            ("x_mm", "sheet X in mm"),
+            ("y_mm", "sheet Y in mm"),
+        ],
+    ),
+    (
+        "schematic",
+        "Inspect a native schematic or symbol library. Typed roles, pin candidates, confirmed links, net partitions, sheet geometry, ERC and rooted wiring. Use edit for checked source changes.",
+        1,
+        &[
+            ("file", "path to .fg"),
+            (
+                "sel",
+                "summary, symbols, symbol ID, sheet PATH, erc, nets, links, pin PATH or tree PATH",
+            ),
+        ],
+    ),
     (
         "import",
         "A model file (STEP, IGES, .brep, Parasolid .x_t/.x_b) under the root as a part: the file kept in `out` beside a new `<stem>.fg` that imports it (writable sessions). Replies with its solids and what was refused",
@@ -404,7 +453,75 @@ fn call(forge: &mut fg::Session, name: &str, p: &Json) -> Reply {
     if VERSION_TOOLS.contains(&name) {
         return version_tool(name, p);
     }
-    let a = args(p);
+    let mut a = args(p);
+    if name == "new_schematic" {
+        let result = (|| -> Result<Reply, String> {
+            let (root, writable) = FENCE.get().ok_or("no session root")?;
+            if !writable {
+                return Err("the session is read-only".into());
+            }
+            let src = match p.get("kind").and_then(Json::str) {
+                Some("schematic") => "schematic\nmain = sheet()\n",
+                Some("symbol_library") => "symbol_library\n",
+                _ => return Err("kind must be schematic or symbol_library".into()),
+            };
+            let path = out_place(root, &a.file)?;
+            if path.extension().and_then(|x| x.to_str()) != Some("fg") {
+                return Err("new document needs a .fg extension".into());
+            }
+            let mut file = std::fs::OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(&path)
+                .map_err(|e| e.to_string())?;
+            if let Err(e) = file.write_all(src.as_bytes()) {
+                drop(file);
+                let _ = std::fs::remove_file(&path);
+                return Err(e.to_string());
+            }
+            a.file = path.to_str().ok_or("expected UTF-8 path")?.into();
+            Ok(forge.run("schematic", &a, p))
+        })();
+        return result.unwrap_or_else(|msg| Reply {
+            text: msg.clone(),
+            json: Json::obj(vec![("ok", false.into()), ("error", msg.into())]),
+            ok: false,
+            png: None,
+        });
+    }
+    if name == "plan_fulfillment" {
+        a.words = vec!["plan-fulfillment".into()];
+        for key in ["want", "give", "role", "id", "return_from", "return_to"] {
+            if let Some(value) = p.get(key).and_then(Json::str) {
+                a.words.push(value.into());
+            } else if !key.starts_with("return_") {
+                return fg::fail(format!("missing {key}"));
+            }
+        }
+        return forge.run("schematic", &a, p);
+    }
+    if name == "plan_bypass" {
+        a.words = vec!["plan-bypass".into()];
+        for key in [
+            "want",
+            "return_pin",
+            "symbol",
+            "give",
+            "return_key",
+            "role",
+            "id",
+            "x_mm",
+            "y_mm",
+        ] {
+            let value = match p.get(key) {
+                Some(Json::Str(s)) => s.clone(),
+                Some(Json::Num(n)) if matches!(key, "x_mm" | "y_mm") => n.to_string(),
+                _ => String::new(),
+            };
+            a.words.push(value);
+        }
+        return forge.run("schematic", &a, p);
+    }
     if name == "vendors" {
         let mut v = vec![];
         match p.get("id").and_then(Json::str) {
@@ -720,7 +837,7 @@ fn tool(t: &Tool) -> Json {
             // an op is an object (or its JSON as text), ops a list of them
             let mut f = vec![("description", (*d).into())];
             match *p {
-                "px" => f.insert(0, ("type", "number".into())),
+                "px" | "x_mm" | "y_mm" => f.insert(0, ("type", "number".into())),
                 "op" | "ops" => {}
                 "rules" if name == "simplify" => {
                     f.push(("type", "array".into()));

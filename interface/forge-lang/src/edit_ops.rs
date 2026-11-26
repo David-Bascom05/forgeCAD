@@ -167,7 +167,7 @@ fn ident(s: &str) -> bool {
 /// `drill = drill(..)` binds a name a call also spells. A call's head there is not a use of the
 /// name.
 pub fn calls_closed(prog: &[Stmt]) -> bool {
-    matches!(prog.first().map(|s| &s.kind), Some(StmtKind::Expr(Expr { kind: ExprKind::Name(n), .. })) if n == "machining" || n == "robot" || n == "bending")
+    matches!(prog.first().map(|s| &s.kind), Some(StmtKind::Expr(Expr { kind: ExprKind::Name(n), .. })) if n == "machining" || n == "robot" || n == "bending" || n == "schematic" || n == "symbol_library")
 }
 
 pub fn precheck_rename(prog: &[Stmt], from: &str, to: &str) -> R<()> {

@@ -64,3 +64,5 @@ import ForgeLang.RenamePart
 import ForgeLang.LiftLiteral
 import ForgeLang.FamiliesArgs
 import ForgeLang.RenameDefs
+
+import ForgeLang.Schematic
