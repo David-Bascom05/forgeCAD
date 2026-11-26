@@ -1,0 +1,48 @@
+name: Sketch proof integration
+on:
+  push:
+    branches: [diagnostics/sketch-proof-integration]
+permissions:
+  contents: read
+jobs:
+  lean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: [verify/aeneas/forge-sketch/lean]
+    steps:
+      - uses: actions/checkout@v4
+      - name: elan and the pinned toolchain
+        run: |
+          if [ ! -x "$HOME/.elan/bin/elan" ]; then
+            curl -sSfL https://raw.githubusercontent.com/leanprover/elan/v4.1.2/elan-init.sh -o elan-init.sh
+            sh elan-init.sh -y --default-toolchain none
+          fi
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install "$(cat verify/aeneas/bridge/lean-toolchain)"
+          "$HOME/.elan/bin/elan" toolchain install "$(cat ${{ matrix.dir }}/lean-toolchain)"
+      - name: Lake cache key
+        id: lake
+        run: |
+          name=aeneas-$(basename "$(dirname "${{ matrix.dir }}")")
+          python3 tools/ci/lake-cache.py "$name" "${{ matrix.dir }}"
+      - name: Lake build (restored; Lake rebuilds what changed)
+        id: restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}
+          restore-keys: |
+            ${{ steps.lake.outputs.prefix }}
+            ${{ steps.lake.outputs.any }}
+      - name: the bridge, the translation and its proofs
+        working-directory: ${{ matrix.dir }}
+        run: |
+          echo "== ${{ matrix.dir }}"
+          for i in 1 2 3; do lake exe cache get && break; [ "$i" = 3 ] && exit 1; sleep 15; done  # Mathlib's server drops downloads now and then
+          lake build
+
+          lake env lean Axioms.lean | tee "$RUNNER_TEMP/sketch-axioms"
+          ! grep -E 'sorryAx|ofReduceBool' "$RUNNER_TEMP/sketch-axioms"
