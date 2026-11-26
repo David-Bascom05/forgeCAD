@@ -2578,6 +2578,18 @@ impl Session {
     }
 
     pub fn save(&mut self) -> Result<(), String> {
+        // The browser storage backend can PUT directly into the hosted project directory.
+        // Only the sync server may persist the acknowledged document there.
+        #[cfg(target_arch = "wasm32")]
+        if self.served() {
+            if !self.sync.as_ref().is_some_and(|link| {
+                link.ready() && link.pending() == 0 && link.snapshot().1 == self.src
+            }) {
+                return Err("Waiting for the server to confirm these edits.".into());
+            }
+            self.saved = self.src.clone();
+            return Ok(());
+        }
         let path = self.path.as_ref().ok_or("no file to save to")?;
         forge_dirs::fs::write(path, &self.src).map_err(|e| format!("{path}: {e}"))?;
         self.saved = self.src.clone();

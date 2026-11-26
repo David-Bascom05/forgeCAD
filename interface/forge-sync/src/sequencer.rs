@@ -491,26 +491,9 @@ fn name_the_taker(r: Refusal, op: &Edit, client: &str, since: &[Entry]) -> Refus
     if kind != "NameTaken" {
         return r;
     }
-    let binds = |t: &str| -> Vec<String> {
-        forge_lang::syntax::parse(t)
-            .map(|p| forge_lang::edit::bound(&p).into_iter().collect())
-            .unwrap_or_default()
-    };
-    let mine: Vec<String> = op
-        .ops()
-        .iter()
-        .flat_map(|op| match op {
-            Op::Rename { to, .. } => vec![to.clone()],
-            Op::AddFeature { text, .. } => binds(text),
-            _ => vec![],
-        })
-        .collect();
+    let mine: Vec<_> = op.ops().iter().flat_map(crate::rebase::introduced_names).collect();
     let taker = since.iter().rev().filter(|e| e.client != client).find(|e| {
-        e.op.ops().iter().any(|op| match op {
-            Op::Rename { to, .. } => mine.contains(to),
-            Op::AddFeature { text, .. } => binds(text).iter().any(|n| mine.contains(n)),
-            _ => false,
-        })
+        e.op.ops().iter().flat_map(crate::rebase::introduced_names).any(|n| mine.contains(&n))
     });
     match taker {
         Some(e) => Refusal::Lang {

@@ -272,3 +272,34 @@ fn soak_with_kills_and_resumes() {
         .unwrap_or(60.0);
     run("soak", 8, 3, secs, 3.0, 0.7);
 }
+
+#[test]
+fn recovered_ack_reaches_disk_on_close_without_another_edit() {
+    let root = std::env::temp_dir().join(format!("forge-recovered-close-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let path = root.join("part.fg");
+    std::fs::write(&path, doc_text(1)).unwrap();
+    let mut server = Server { root: root.clone(), port: free_port(), child: None };
+    server.start();
+    let connection = remote(server.port, 0);
+    let session = Session::start(&connection, "part.fg", None).unwrap();
+    wait("initial snapshot", 10, || session.ready());
+    session.edit(set(0, 42.0)).unwrap();
+    wait("acknowledged edit", 10, || session.pending() == 0 && session.seq() == 1);
+    let expected = session.text();
+    server.kill();
+    drop(session);
+    assert_ne!(std::fs::read_to_string(&path).unwrap(), expected);
+    server.start();
+    let reopened = Session::start(&connection, "part.fg", None).unwrap();
+    wait("replayed head", 10, || reopened.ready() && reopened.text() == expected);
+    drop(reopened);
+    wait("checkpoint of recovered edit", 10, || std::fs::read_to_string(&path).unwrap() == expected);
+    wait("git checkpoint of recovered edit", 10, || {
+        let Some(history) = forge_history::History::open(&path) else { return false };
+        let Ok(Some(head)) = history.head() else { return false };
+        history.content("part.fg", Some(&head)).ok().flatten().as_deref() == Some(expected.as_bytes())
+    });
+    drop(server);
+    std::fs::remove_dir_all(root).unwrap();
+}

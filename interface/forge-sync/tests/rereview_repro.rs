@@ -251,3 +251,17 @@ fn an_op_from_before_a_compaction_is_rebased_from_the_stores_history() {
     let r = s.submit(&mut st, "ada", "ada/c", 0, 2, &set("h", 3.0));
     assert!(matches!(r, Err(Refusal::RebaseGone { base: 0 })), "{r:?}");
 }
+
+#[test]
+fn queued_set_after_a_lost_name_race_cannot_edit_the_winners_parameter() {
+    let mut store = MemStore::default();
+    let mut seq = Sequencer::open(&mut store, "part.fg", DOC, None).unwrap();
+    let add = |value| Op::AddFeature { before: None, text: format!("shared x = {value}") };
+    seq.submit(&mut store, "bob", "bob/b", 0, 1, &add(20)).unwrap();
+    assert!(seq.submit(&mut store, "ada", "ada/a", 0, 1, &add(10)).is_err());
+    assert!(seq.submit(&mut store, "ada", "ada/a", 0, 2, &set("x", 11.)).is_err());
+    assert!(seq.head().contains("shared x = 20"));
+    // An unrelated optimistic edit and a subsequent edit of the confirmed binding still land.
+    seq.submit(&mut store, "ada", "ada/a", 0, 3, &set("w", 41.)).unwrap();
+    seq.submit(&mut store, "ada", "ada/a", seq.seq(), 4, &set("x", 12.)).unwrap();
+}

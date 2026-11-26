@@ -1307,7 +1307,8 @@ fn open_actor(
                 }
                 Err(_) => return ended(End::Quarantined),
             };
-            let saved = room.seq.seq();
+            // The durable log can be ahead of both the file and git after a crash.
+            // Reconcile recovered edits on idle/close. Git deduplicates an unchanged save.
             let store = shared2.store().ok();
             let mut a = Actor {
                 s: shared2,
@@ -1319,7 +1320,7 @@ fn open_actor(
                 closing: closing2,
                 resyncs: HashMap::new(),
                 last_op: Instant::now(),
-                saved,
+                saved: 0,
                 built: Default::default(),
                 waiting: vec![],
                 building: None,
@@ -1741,8 +1742,10 @@ impl Actor {
             return Err(why);
         }
         let head = self.room.seq.head().to_string();
-        fsx::put(&path, head.as_bytes()).map_err(|e| e.to_string())?;
-        self.s.marks.set(&self.doc, &head).map_err(|e| e.to_string())?;
+        if head != now {
+            fsx::put(&path, head.as_bytes()).map_err(|e| e.to_string())?;
+            self.s.marks.set(&self.doc, &head).map_err(|e| e.to_string())?;
+        }
         Ok(path)
     }
 
@@ -1762,13 +1765,18 @@ impl Actor {
         if seq <= self.saved {
             return;
         }
-        self.saved = seq;
         match self
             .write_file()
             .and_then(|p| git::checkpoint(&self.s.c.root, &p, seq))
         {
-            Ok(()) => self.s.stats().checkpoints += 1,
-            Err(e) => eprintln!("forge-server: {}: checkpoint not written: {e}", self.doc),
+            Ok(()) => {
+                self.saved = seq;
+                self.s.stats().checkpoints += 1;
+            }
+            Err(e) => {
+                self.last_op = Instant::now();
+                eprintln!("forge-server: {}: checkpoint not written: {e}", self.doc);
+            }
         }
     }
 

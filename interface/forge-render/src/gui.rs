@@ -3824,7 +3824,7 @@ impl Gui {
             Ok(()) => format!("Saved {path}"),
             Err(why) => why.clone(),
         };
-        if saved.is_ok() {
+        if saved.is_ok() && !(cfg!(target_arch = "wasm32") && s.served()) {
             self.versions_saved(&path, None);
         }
         self.fg_text();

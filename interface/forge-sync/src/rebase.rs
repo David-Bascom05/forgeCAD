@@ -27,12 +27,37 @@ pub fn rebase<'a>(op: &Op, client: &str, since: impl IntoIterator<Item = &'a Ent
             return Err(Refusal::StaleSpan);
         }
         for committed in e.op.ops() {
+            // A name supplied by another client after our base cannot identify the
+            // object we edited locally. This also covers a queued edit following a
+            // refused optimistic introduction, even when the refused op was never logged.
+            for name in introduced_names(committed) {
+                // Empty is never an identifier. The same substitution that follows
+                // renames sees structured paths and reads embedded in expression text.
+                if rename_in(&op, &name, "").as_ref() != Ok(&op) {
+                    return Err(Refusal::Lang {
+                        kind: "NameTaken".into(),
+                        text: format!("{name} was introduced by {}'s edit at seq {}", e.author, e.seq),
+                    });
+                }
+            }
             if let Op::Rename { from, to } = committed {
                 op = rename_in(&op, from, to)?;
             }
         }
     }
     Ok(op)
+}
+
+pub(crate) fn introduced_names(op: &Op) -> Vec<String> {
+    match op {
+        Op::Rename { to, .. } => vec![to.clone()],
+        Op::MakeShared { param } => vec![param.name.clone()],
+        Op::AddFeature { text, .. } => forge_lang::syntax::parse(text)
+            .map(|p| forge_lang::edit::bound(&p).into_iter().collect())
+            .unwrap_or_default(),
+        Op::LiftLiteral { name, scope: Scope::Shared, .. } => vec![name.clone()],
+        _ => vec![],
+    }
 }
 
 /// A dialog may introduce names used later in the same edit. Reapply it on its original

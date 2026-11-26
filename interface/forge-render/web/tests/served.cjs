@@ -80,6 +80,16 @@ async function same(a, b, what, min = 0) {
     assert.ok(s1.seq >= 1);
     console.log(`ok - a's edit reached b (seq ${s1.seq})`);
 
+    // Explicit Save on an acknowledged hosted edit must not issue a second writer's PUT.
+    const directWrites = [];
+    pa.on("request", (r) => {
+      if (r.method() === "PUT" && new URL(r.url()).pathname.endsWith("/plate.fg")) directWrites.push(r.url());
+    });
+    await pa.evaluate(() => window.forgecad.fc.app_save());
+    await t.until(pa, (s) => !s.dirty && /Saved/.test(s.status), "the hosted save");
+    await pa.evaluate(() => window.forgecad.settled());
+    assert.deepEqual(directWrites, []);
+
     // both edit at once
     await Promise.all([apply(pa, setParam("L", 70)), apply(pb, setParam("W", 40))]);
     const s2 = await same(pa, pb, "two edits at once", s1.seq + 2);
