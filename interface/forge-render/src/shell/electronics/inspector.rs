@@ -457,7 +457,7 @@ impl Editor {
             && collisions > 0
             && ui
                 .link(format!(
-                    "⚠ {collisions} readability warning{}",
+                    "{collisions} readability warning{}",
                     if collisions == 1 { "" } else { "s" }
                 ))
                 .clicked()
