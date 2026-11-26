@@ -1392,3 +1392,110 @@ fn a_wall_unioned_flush_on_a_diagonal_notched_face_stays_closed() {
         }
     }
 }
+
+/// Three notches whose tops lie within tolerance of a plate's y = 0 wall, each by the n-ary pass.
+/// The first imprints its top on the wall (a face of the wall's plane inside the wall's). The
+/// second's top, a hair off the plane (1.7e-6 to 1.15e-5 along it), was judged flush with that short
+/// face over its own overlap and not with the long wall round it over theirs: its edges were
+/// imprinted on the short face only, the crossings split only that face's edges, and the short face
+/// took them whole, walked out and back, as a hole (`check` passes it); the third found it on the
+/// wrong side of its loop (FaceWrongSide). Two planes all but parallel are now judged over the whole
+/// of each plane's faces, one verdict for every pair of them. Three ops of a hill-climbed fifty
+/// (`drift_adv diag`; the same in the world frame), by their original indices
+/// (research/booleans/drift.md §9).
+#[test]
+fn nary_a_plane_is_flush_with_all_of_a_planes_faces_or_none() {
+    let mut body = wall_plate(Frame::WORLD);
+    let ops: [(usize, [f64; 6]); 3] = [
+        (
+            0,
+            [
+                -0.8372800888218773,
+                -0.11373138087108248,
+                -0.2204833551204205,
+                0.17906482084578879,
+                -0.3544689322679776,
+                0.15642457524751008,
+            ],
+        ),
+        (
+            6,
+            [
+                -0.6052129218507916,
+                0.22383341292989567,
+                -0.08696144819919327,
+                -0.5762008893474448,
+                -0.04268567467012552,
+                -0.8144618293755979,
+            ],
+        ),
+        (
+            20,
+            [
+                0.3442284394203804,
+                1.0,
+                -0.6891012720410121,
+                -0.6789593456834419,
+                0.6571770356516388,
+                0.41846620468641493,
+            ],
+        ),
+    ];
+    for (i, q) in ops {
+        let (tool, op) = edge_wall(i, q);
+        // a refusal is an honest answer; an Ok must be a valid solid
+        match forge_bool::nary(&[&body, &tool], &[op], 1) {
+            Ok(r) => {
+                let p = check(&r);
+                assert!(p.is_empty(), "op {i} ({op:?}): {p:?}");
+                body = r;
+            }
+            Err(e) => eprintln!("op {i} refused: {e}"),
+        }
+    }
+}
+
+/// Two walls flush (5.5e-6 off) against a plate's y = 0 wall, the second almost wholly inside the
+/// first, its front a hair off the first's: unioned, the second crossed the first's front at 6e-7
+/// rad, one edge of that crossing was made and the pieces closing it, within tolerance, were not;
+/// the classifier dropped the plate's bottom and the first wall's front below it, and the union
+/// came out an open shell (eight edges used once), a wrong Ok. An open shell the boolean makes is
+/// refused (OpenShell). Two ops of `drift_adv edge`, by their original indices
+/// (research/booleans/drift.md §8).
+#[test]
+fn a_union_left_open_is_refused() {
+    let ops: [(usize, [f64; 6]); 2] = [
+        (
+            25,
+            [
+                -0.4870355810546001,
+                0.1901779229804108,
+                -0.27625441155899466,
+                -0.295604682866215,
+                -0.9833093286502677,
+                1.0,
+            ],
+        ),
+        (
+            43,
+            [
+                0.029814267349035806,
+                -0.5315581713293835,
+                -0.2762644949939368,
+                -1.0,
+                -0.8423443716357213,
+                0.4469800308709223,
+            ],
+        ),
+    ];
+    let mut body = wall_plate(Frame::WORLD);
+    for (i, q) in ops {
+        let (tool, op) = edge_wall_in(Frame::WORLD, i, q);
+        // a refusal is an honest answer; an Ok must be a valid solid
+        if let Ok(r) = boolean(&body, &tool, op, 100 + i as u64) {
+            let p = check(&r);
+            assert!(p.is_empty(), "op {i} ({op:?}): {p:?}");
+            body = r;
+        }
+    }
+}
