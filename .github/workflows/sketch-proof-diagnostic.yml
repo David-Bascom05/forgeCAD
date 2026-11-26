@@ -1,4 +1,4 @@
-name: Sketch proof integration
+name: Sketch font proof integration
 on:
   push:
     branches: [diagnostics/sketch-proof-integration]
@@ -11,9 +11,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        dir: [verify/aeneas/forge-sketch/lean]
+        dir: [verify/aeneas/forge-font/lean]
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: f6aaf23bf58eb9d899598a7c6ebc4d116251578f
       - name: elan and the pinned toolchain
         run: |
           if [ ! -x "$HOME/.elan/bin/elan" ]; then
