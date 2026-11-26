@@ -48,7 +48,14 @@ async function capture(browser, base, width, height, file, row, name) {
     const frame = await t.pixels(page);
     if (frame.width !== width || frame.height !== height || frame.colours < 12) throw Error("Incomplete editor frame");
     console.log(t.shot("web-" + name + ".png", frame));
-    if (name === "symbol") await verifyAttachedPdf(page);
+    if (name === "symbol") {
+      for (const id of ["electronics:pin-name", "electronics:pin-direction"]) {
+        await t.until(page, s => s.places.some(p => p.name === id), id);
+      }
+      await verifyAttachedPdf(page);
+      await page.evaluate(() => window.forgecad.fc.app_click("electronics:schchip:Resistor", 0, false));
+      await t.until(page, s => s.places.some(p => p.name === "electronics:ref-prefix"), "symbol reference prefix");
+    }
     if (name === "schematic") {
       const click = (id, button = 0) => page.evaluate(([id, button]) => window.forgecad.fc.app_click(id, button, false), [id, button]);
       const shown = id => t.until(page, s => s.places.some(p => p.name === id), id, 20000);

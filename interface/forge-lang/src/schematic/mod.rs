@@ -37,7 +37,14 @@ pub const ARGS: &[(&str, &[&str])] = &[
     ("role", &["kind", "key", "capacitance_nf", "voltage_mv", "prefer"]),
     (
         "symbol",
-        &["pins", "graphics", "datasheet", "fields", "power_net"],
+        &[
+            "pins",
+            "graphics",
+            "datasheet",
+            "fields",
+            "power_net",
+            "ref_prefix",
+        ],
     ),
     (
         "pin",
@@ -50,6 +57,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "gives",
             "unit",
             "description",
+            "aliases",
         ],
     ),
     ("line", &["from", "to", "unit", "sheet", "width"]),
@@ -142,6 +150,7 @@ pub struct Role {
 
 #[derive(Clone, Debug)]
 pub struct Pin {
+    pub aliases: Set<String>,
     pub description: String,
     pub number: String,
     pub unit: String,
@@ -167,6 +176,7 @@ pub enum Shape {
 }
 #[derive(Clone, Debug)]
 pub struct Symbol {
+    pub ref_prefix: String,
     pub power_net: Option<String>,
     pub fields: Map<String, String>,
     pub datasheet: Option<String>,

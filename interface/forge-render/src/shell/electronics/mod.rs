@@ -73,6 +73,7 @@ pub fn tab_name(library: bool, tab: usize) -> &'static str {
 
 #[derive(Default)]
 struct Inputs {
+    ref_prefix: String,
     /// Pin and role direction when assigning from the checklist.
     checklist_pin: Option<(String, bool)>,
     description: String,
@@ -94,7 +95,7 @@ struct Inputs {
     populated: bool,
     in_bom: bool,
     global: bool,
-    angle: i32,
+    angle: String,
     geometry: Vec<Point>,
     radius: f64,
     wants: Vec<String>,
@@ -219,6 +220,17 @@ fn power_aliases(src: &str) -> Vec<String> {
             is_power.then(|| name.clone())
         })
         .collect()
+}
+fn pin_degrees(input: &str) -> Option<f64> {
+    let input = input.trim();
+    input
+        .strip_suffix("deg")
+        .or_else(|| input.strip_suffix('°'))
+        .unwrap_or(input)
+        .trim()
+        .parse::<f64>()
+        .ok()
+        .filter(|v| v.is_finite() && v.abs() <= 1e12)
 }
 fn coord(p: Point) -> String {
     format!("({}mm, {}mm)", p[0], p[1])
@@ -594,6 +606,8 @@ impl Editor {
             }
             _ => {
                 self.form = Inputs {
+                    ref_prefix: "U".into(),
+                    angle: "0".into(),
                     text_size: 1.55,
                     line_width: 0.25,
                     electrical: "passive".into(),
@@ -605,7 +619,11 @@ impl Editor {
                     ..Default::default()
                 };
                 self.form.name = self.fresh(match t {
-                    Tool::Place => "U",
+                    Tool::Place => self
+                        .doc
+                        .symbols
+                        .get(&self.symbol)
+                        .map_or("U", |s| s.ref_prefix.as_str()),
                     Tool::Pin => "pin",
                     Tool::Library => "parts",
                     Tool::Role => "role",
@@ -665,7 +683,7 @@ impl Editor {
             if t == Tool::Delete {
                 if !self.pin.is_empty() {
                     let k = self.pin.clone();
-                    self.change_member("pins", Some(&k), None, None)?;
+                    self.change_member("pins", Some((&k, &k)), None, None)?;
                     self.pin.clear();
                     return Ok(());
                 }
@@ -693,7 +711,7 @@ impl Editor {
             (Tool::Mirror, Item::Place { mirror, .. } | Item::Gate { mirror, .. }) => {
                 arg(&id, "mirror", (!mirror).to_string())
             }
-            _ => return Err("Select a placed symbol or gate.".into()),
+            _ => return Err("Select a placed symbol or sub part.".into()),
         };
         self.apply(vec![op])
     }
@@ -701,7 +719,7 @@ impl Editor {
     fn change_member(
         &mut self,
         field: &str,
-        key: Option<&str>,
+        keys: Option<(&str, &str)>,
         index: Option<usize>,
         new: Option<String>,
     ) -> Result<()> {
@@ -713,10 +731,10 @@ impl Editor {
         match old.map(|e| &e.kind) {
             Some(ExprKind::Map(m)) => {
                 for (k, e) in m {
-                    if key == Some(k) {
+                    if let Some((_, new_key)) = keys.filter(|(old_key, _)| old_key == k) {
                         found = true;
                         if let Some(v) = &new {
-                            vals.push(format!("{k}: {v}"));
+                            vals.push(format!("{new_key}: {v}"));
                         }
                     } else {
                         vals.push(format!("{k}: {}", part(e)));
@@ -738,7 +756,7 @@ impl Editor {
             _ => {}
         }
         if !found && let Some(v) = new {
-            vals.push(if let Some(k) = key {
+            vals.push(if let Some((_, k)) = keys {
                 if !identifier(k) {
                     return Err("Enter a pin identifier.".into());
                 }
@@ -897,6 +915,31 @@ trace = wire(sheet: main, from: a, to: b, via: [(10,0)])
         assert_eq!(e.circuit.wires.len(), 3);
         assert_eq!(e.circuit.net_of["main/c"], e.circuit.net_of["main/b"]);
         assert_eq!(e.circuit.locations["main/j1"], [4., 0.]);
+        e.step(false);
+        assert_eq!(e.src, src);
+    }
+
+    #[test]
+    fn pin_rename_is_atomic_and_preserves_parameter_expressions() {
+        let src = "symbol_library\nshared pitch = 3mm\nshared turn = 27.5deg\nAmp = symbol(pins:{ a:pin(number:\"1\",kind:\"input\", at:(pitch,0),angle:turn), b:pin(number:\"2\",kind:\"output\",at:(0,2)) })\n";
+        let mut e = Editor::open(None, src.into()).unwrap();
+        e.pin = "a".into();
+        e.inspect();
+        e.form.name = "b".into();
+        assert!(e.save_properties().is_err());
+        e.form.name = "sense".into();
+        e.form.angle = "nan".into();
+        assert!(e.save_properties().is_err());
+        assert_eq!(e.src, src);
+        e.form.angle = "27.5°".into();
+        e.save_properties().unwrap();
+        assert_eq!(e.pin, "sense");
+        assert!(e.src.contains("angle: turn") && e.src.contains("at: (pitch,0)"));
+        assert!(e.doc.symbols["Amp"].pins["sense"].aliases.contains("a"));
+        e.form.name = "a".into();
+        e.save_properties().unwrap();
+        assert!(e.doc.symbols["Amp"].pins["a"].aliases.contains("sense"));
+        e.step(false);
         e.step(false);
         assert_eq!(e.src, src);
     }

@@ -46,6 +46,51 @@ fn electronic_document_windows() {
 }
 
 #[test]
+fn rename_a_library_pin_and_type_its_angle() {
+    let Ok(mut h) = Headless::new((1400., 860.), 1.) else {
+        return;
+    };
+    let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/electronics/analog");
+    let dir = forge_dirs::temp_dir().join(format!("forge-pin-name-{}", forge_dirs::process_id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("analog-symbols.fg");
+    std::fs::copy(base.join("analog-symbols.fg"), &path).unwrap();
+    h.gui.open(path.to_str().unwrap());
+    h.step();
+    assert!(h.click("electronics:schpin:VDD"));
+    h.step();
+    for (key, value) in [
+        ("electronics:pin-name", "AVDD"),
+        ("electronics:pin-direction", "37.5"),
+    ] {
+        assert!(h.click(key));
+        h.step();
+        h.key_with(egui::Key::A, egui::Modifiers::COMMAND);
+        h.text(value);
+        h.step();
+    }
+    assert!(h.click("electronics:apply-pin"));
+    h.step();
+    assert!(
+        h.placed("electronics:schpin:AVDD").is_some(),
+        "{}",
+        h.gui.shell.status
+    );
+    h.gui.fg_save();
+    let source = std::fs::read_to_string(base.join("sensor-interface.fg")).unwrap();
+    let (doc, circuit) = forge_lang::schematic::compile(&source, Some(&dir), None).unwrap();
+    let sym = &doc.symbols["analog.Amplifier"];
+    assert_eq!(sym.pins["AVDD"].angle, 37.5);
+    assert_eq!(sym.pins["AVDD"].number, "5");
+    assert!(!sym.pins.contains_key("VDD"));
+    assert_eq!(circuit.links[0].want, "main/U1.AVDD");
+    if let Some(out) = std::env::var_os("FORGE_UI_SHOTS") {
+        std::fs::create_dir_all(&out).unwrap();
+        std::fs::write(Path::new(&out).join("native-pin-edit.png"), h.png().unwrap()).unwrap();
+    }
+    std::fs::remove_dir_all(dir).unwrap();
+}
+#[test]
 fn inspect_a_note_crossing_the_output_wire() {
     let Ok(mut h) = Headless::new((1600., 1000.), 1.) else {
         eprintln!("No headless GPU adapter, skipping readability capture");
@@ -250,4 +295,74 @@ fn select_repeated_sheet_draw_and_change_grid() {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(Path::new(&dir).join("native-drawing-grid.png"), h.png().unwrap()).unwrap();
     }
+}
+
+#[test]
+fn symbol_prefix_drives_placement_and_allows_a_manual_reference() {
+    let Ok(mut h) = Headless::new((1400., 860.), 1.) else {
+        return;
+    };
+    let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/electronics/analog");
+    let dir = forge_dirs::temp_dir().join(format!("forge-reference-prefix-{}", forge_dirs::process_id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let library = dir.join("analog-symbols.fg");
+    std::fs::copy(base.join("analog-symbols.fg"), &library).unwrap();
+    let sheet = dir.join("sensor-interface.fg");
+    let source = std::fs::read_to_string(base.join("sensor-interface.fg")).unwrap()
+        + "\nTP1 = junction(sheet: main, at: (-40,-20))\n";
+    std::fs::write(&sheet, source).unwrap();
+    h.gui.open(library.to_str().unwrap());
+    h.step();
+    assert!(h.click("electronics:schchip:Resistor"));
+    h.step();
+    if let Some(out) = std::env::var_os("FORGE_UI_SHOTS") {
+        std::fs::create_dir_all(&out).unwrap();
+        std::fs::write(
+            Path::new(&out).join("native-reference-prefix.png"),
+            h.png().unwrap(),
+        )
+        .unwrap();
+    }
+    assert!(h.click("electronics:ref-prefix"));
+    h.step();
+    h.key_with(egui::Key::A, egui::Modifiers::COMMAND);
+    h.text("TP");
+    h.step();
+    assert!(h.click("electronics:apply-properties"));
+    h.step();
+    h.gui.fg_save();
+    let saved = std::fs::read_to_string(&library).unwrap();
+    let (doc, _) = forge_lang::schematic::compile(&saved, Some(&dir), None).unwrap();
+    assert_eq!(doc.symbols["Resistor"].ref_prefix, "TP");
+    h.gui.open(sheet.to_str().unwrap());
+    h.step();
+    assert!(h.click("electronics:dock:Parts"));
+    h.step();
+    for (x, manual) in [(550., false), (640., true)] {
+        assert!(h.click("electronics:part:analog.Resistor"));
+        h.step();
+        if manual {
+            assert!(h.click("electronics:place-reference"));
+            h.step();
+            h.key_with(egui::Key::A, egui::Modifiers::COMMAND);
+            h.text("TP99");
+            h.step();
+        }
+        h.click_at(x, 620.);
+        h.step();
+        assert!(h.click("electronics:dock:Parts"));
+        h.step();
+    }
+    h.gui.fg_save();
+    let saved = std::fs::read_to_string(&sheet).unwrap();
+    let (doc, _) = forge_lang::schematic::compile(&saved, Some(&dir), None).unwrap();
+    for name in ["R1", "TP2", "TP99"] {
+        assert!(
+            doc.rows.iter().any(|row| row.id == name
+                && matches!(&row.item,
+            forge_lang::schematic::Item::Place {symbol,..} if symbol == "analog.Resistor")),
+            "{name}"
+        );
+    }
+    std::fs::remove_dir_all(dir).unwrap();
 }

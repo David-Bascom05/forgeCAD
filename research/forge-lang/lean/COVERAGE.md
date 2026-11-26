@@ -110,8 +110,8 @@ extension so far:
 | Kind | Item | Names | Rust site | Lean |
 |---|---|---|---|---|
 | args | `schematic::role` | `kind`, `key`, `capacitance_nf`, `voltage_mv`, `prefer` | schematic::ARGS and checked reader | GAP record decoding in Rust |
-| args | `schematic::symbol` | `pins`, `graphics`, `fields`, `datasheet`, `power_net` | schematic::ARGS and checked reader | GAP record decoding in Rust |
-| args | `schematic::pin` | `number`, `kind`, `at`, `angle`, `wants`, `gives`, `unit`, `description` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::symbol` | `pins`, `graphics`, `fields`, `datasheet`, `power_net`, `ref_prefix` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::pin` | `number`, `kind`, `at`, `angle`, `wants`, `gives`, `unit`, `description`, `aliases` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::line` | `from`, `to`, `unit`, `sheet`, `width` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::rect` | `from`, `to`, `unit`, `sheet`, `width` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::arc` | `from`, `mid`, `to`, `unit`, `sheet`, `width` | schematic::ARGS and checked reader | GAP record decoding in Rust |

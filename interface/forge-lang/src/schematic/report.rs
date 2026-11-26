@@ -54,6 +54,7 @@ fn graphic(g: &Graphic) -> Json {
 }
 fn symbol(id: &str, s: &Symbol, d: &Document) -> Json {
     Json::obj(vec![
+        ("ref_prefix", s.ref_prefix.clone().into()),
         ("id", id.into()),
         (
             "pins",
@@ -64,6 +65,7 @@ fn symbol(id: &str, s: &Symbol, d: &Document) -> Json {
                         Json::obj(vec![
                             ("id", id.clone().into()),
                             ("description", p.description.clone().into()),
+                            ("aliases", strings(&p.aliases)),
                             ("number", p.number.clone().into()),
                             ("unit", p.unit.clone().into()),
                             ("electrical", p.electrical.word().into()),

@@ -12,6 +12,7 @@ MCU = symbol(
              line(from: (0, -4), to: (0, -3)), text(at: (0, 0), value: "MCU")]
 )
 Cap = symbol(
+  ref_prefix: "C",
   pins: {
     plus: pin(number: "1", kind: "passive", at: (0, 2), gives: [local_bypass]),
     minus: pin(number: "2", kind: "passive", at: (0, -2))

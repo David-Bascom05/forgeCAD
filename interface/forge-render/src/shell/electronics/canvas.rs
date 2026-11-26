@@ -461,6 +461,18 @@ impl Editor {
             {
                 continue;
             }
+            if selected
+                && self.library()
+                && let Some(pin) = self.doc.symbols[&self.subject].pins.get(k)
+            {
+                let angle = pin_degrees(&self.form.angle).unwrap_or(pin.angle);
+                let (s, c) = forge_math::dmath::sin_cos(angle.to_radians());
+                painter.arrow(
+                    self.screen(*q),
+                    vec2(c as f32, -s as f32) * 17.,
+                    Stroke::new(1.5, t.focus),
+                );
+            }
             painter.circle_stroke(
                 self.screen(*q),
                 if selected || near.as_ref() == Some(k) {
@@ -722,7 +734,7 @@ impl Editor {
             });
             (format!("{alias}.{symbol}"), "net".into(), "A".into(), [0., 0.])
         };
-        let name = self.fresh("PWR");
+        let name = self.fresh(self.doc.symbols.get(&symbol).map_or("PWR", |s| &s.ref_prefix));
         let sheet = self.sheet();
         let anchor = near
             .map(|key| self.circuit.locations[&format!("{}/{}", self.subject, key)])

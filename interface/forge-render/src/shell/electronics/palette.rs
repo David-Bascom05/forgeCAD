@@ -173,8 +173,8 @@ impl Editor {
             ui.weak("No matching symbols");
         }
         if let Some(name) = selected {
-            self.start(Tool::Place);
             self.symbol = name;
+            self.start(Tool::Place);
             self.form.unit = self.doc.symbols[&self.symbol]
                 .pins
                 .values()
@@ -210,17 +210,21 @@ impl Editor {
             }
             ui.horizontal(|ui| {
                 ui.label("Reference");
-                ui.text_edit_singleline(&mut self.form.name);
+                let reference = ui.text_edit_singleline(&mut self.form.name);
+                places.push(("electronics:place-reference".into(), reference.rect));
             });
             let units: std::collections::BTreeSet<_> = s.pins.values().map(|p| p.unit.as_str()).collect();
             if units.len() > 1 {
-                egui::ComboBox::from_label("Unit")
-                    .selected_text(&self.form.unit)
-                    .show_ui(ui, |ui| {
-                        for unit in units {
-                            ui.selectable_value(&mut self.form.unit, unit.into(), unit);
-                        }
-                    });
+                ui.horizontal(|ui| {
+                    ui.label("Sub part");
+                    egui::ComboBox::from_id_salt("place-sub-part")
+                        .selected_text(&self.form.unit)
+                        .show_ui(ui, |ui| {
+                            for unit in units {
+                                ui.selectable_value(&mut self.form.unit, unit.into(), unit);
+                            }
+                        });
+                });
             }
             ui.label("Click the sheet to place");
         }

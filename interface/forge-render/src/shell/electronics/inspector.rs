@@ -1,10 +1,10 @@
 use super::*;
 use crate::shell::{theme, ux};
 use egui::{ComboBox, RichText};
-fn field(ui: &mut Ui, label: &str, value: &mut String) {
+fn property_row<R>(ui: &mut Ui, label: &str, control: impl FnOnce(&mut Ui, egui::Id) -> R) -> R {
     ui.horizontal(|ui| {
         let width = (ui.available_width() * 0.35).min(116.);
-        let label_id = ui
+        let id = ui
             .allocate_ui_with_layout(
                 vec2(width, theme::CONTROL_H),
                 egui::Layout::left_to_right(egui::Align::Center),
@@ -14,29 +14,41 @@ fn field(ui: &mut Ui, label: &str, value: &mut String) {
                 },
             )
             .inner;
+        control(ui, id)
+    })
+    .inner
+}
+fn field(ui: &mut Ui, label: &str, value: &mut String) {
+    text_control(ui, label, value);
+}
+fn text_control(ui: &mut Ui, label: &str, value: &mut String) -> egui::Response {
+    property_row(ui, label, |ui, id| {
         ui.add_sized(
             [ui.available_width(), theme::CONTROL_H],
             egui::TextEdit::singleline(value),
         )
-        .labelled_by(label_id)
-        .on_hover_text(value.as_str());
-    });
+        .labelled_by(id)
+        .on_hover_text(value.as_str())
+    })
 }
 
 fn choice(ui: &mut Ui, label: &str, value: &mut String, items: Vec<String>) {
-    ui.label(label);
-    ComboBox::from_id_salt(label)
-        .selected_text(if value.is_empty() {
-            "Choose…"
-        } else {
-            value.as_str()
-        })
-        .width(ui.available_width())
-        .show_ui(ui, |ui| {
-            for s in items {
-                ui.selectable_value(value, s.clone(), s);
-            }
-        });
+    property_row(ui, label, |ui, id| {
+        ComboBox::from_id_salt(label)
+            .selected_text(if value.is_empty() {
+                "Choose…"
+            } else {
+                value.as_str()
+            })
+            .width(ui.available_width())
+            .show_ui(ui, |ui| {
+                for s in items {
+                    ui.selectable_value(value, s.clone(), s);
+                }
+            })
+            .response
+            .labelled_by(id);
+    });
 }
 fn custom(ui: &mut Ui, rows: &mut Vec<(String, String)>) {
     let mut remove = None;
@@ -79,6 +91,7 @@ impl Editor {
         if self.library() {
             if let Some(sym) = self.doc.symbols.get(&self.subject) {
                 self.form.name = self.subject.clone();
+                self.form.ref_prefix = sym.ref_prefix.clone();
                 self.form.fields = sym.fields.clone().into_iter().collect();
                 self.form.datasheet = sym.datasheet.clone().unwrap_or_default();
                 if let Some(g) = self.graphic.and_then(|i| sym.graphics.get(i)) {
@@ -104,7 +117,7 @@ impl Editor {
                     self.form.description = p.description.clone();
                     self.form.electrical = p.electrical.word().into();
                     self.form.unit = p.unit.clone();
-                    self.form.angle = p.angle as i32;
+                    self.form.angle = p.angle.to_string();
                     let names = |ids: &std::collections::BTreeSet<sch::RoleId>| {
                         ids.iter()
                             .filter_map(|id| {
@@ -169,28 +182,75 @@ impl Editor {
         if !identifier(&f.name) {
             return Err("Enter a valid pin name.".into());
         }
-        if self.tool == Tool::Pin
-            && self
-                .doc
-                .symbols
-                .get(&self.subject)
-                .is_some_and(|s| s.pins.contains_key(&f.name))
+        let old_name = (self.tool != Tool::Pin).then_some(self.pin.as_str());
+        let pins = &self.doc.symbols[&self.subject].pins;
+        if pins
+            .iter()
+            .any(|(id, p)| Some(id.as_str()) != old_name && (id == &f.name || p.aliases.contains(&f.name)))
         {
-            return Err("This pin name already exists.".into());
+            return Err("This pin name already belongs to another pin.".into());
         }
+        let deg = pin_degrees(&f.angle).ok_or("Enter a finite direction in degrees (for example, -22.5).")?;
+        let old = old_name.and_then(|k| pins.get(k));
+        let mut aliases = old.map(|p| p.aliases.clone()).unwrap_or_default();
+        if let Some(previous) = old_name
+            && previous != f.name
+        {
+            aliases.remove(&f.name);
+            aliases.insert(previous.into());
+        }
+        let alias_arg = if aliases.is_empty() {
+            String::new()
+        } else {
+            format!(
+                ", aliases: [{}]",
+                aliases.into_iter().collect::<Vec<_>>().join(", ")
+            )
+        };
+        let tree = syntax::parse(&self.src).map_err(|e| e.text())?;
+        let raw_args = source_arg(&tree, &self.subject, "pins").and_then(|map| {
+            let ExprKind::Map(m) = &map.kind else { return None };
+            let (_, expr) = m.iter().find(|(k, _)| Some(k.as_str()) == old_name)?;
+            let ExprKind::Call(_, args) = &expr.kind else {
+                return None;
+            };
+            Some(args)
+        });
+        // Keeping the original coordinate and angle expressions preserves shared parameters on rename.
+        let original = |key: &str| {
+            raw_args?
+                .iter()
+                .find(|a| a.name.as_ref().is_some_and(|(k, _)| k == key))
+                .map(|a| self.src[a.value.span.lo as usize..a.value.span.hi as usize].to_string())
+        };
+        let position = old
+            .filter(|p| p.at == at)
+            .and_then(|_| original("at"))
+            .unwrap_or_else(|| coord(at));
+        let direction = old
+            .filter(|p| p.angle == deg.rem_euclid(360.))
+            .and_then(|_| original("angle"))
+            .unwrap_or_else(|| format!("{deg}deg"));
         let body = format!(
-            "pin(number: {}, kind: {}, at: {}, unit: {}, angle: {}deg, wants: [{}], gives: [{}], description: {})",
+            "pin(number: {}, kind: {}, at: {position}, unit: {}, angle: {direction}, wants: [{}], gives: [{}], description: {}{alias_arg})",
             quote(&f.number),
             quote(&f.electrical),
-            coord(at),
             quote(&f.unit),
-            f.angle,
             f.wants.join(", "),
             f.gives.join(", "),
             quote(&f.description)
         );
-        let k = f.name.clone();
-        self.change_member("pins", Some(&k), None, Some(body))
+        let name = f.name.clone();
+        let gate = f.unit.clone();
+        let key = old_name.unwrap_or(&name).to_string();
+        self.change_member("pins", Some((&key, &name)), None, Some(body))?;
+        self.pin = name;
+        if self.unit != gate {
+            self.unit = gate;
+            self.refresh();
+        }
+        self.inspect();
+        Ok(())
     }
     pub(super) fn save_graphic(&mut self, i: usize) -> Result<()> {
         let f = &self.form;
@@ -220,13 +280,10 @@ impl Editor {
         };
         self.change_member("graphics", None, Some(i), Some(expr))
     }
-    fn pin_form(&mut self, ui: &mut Ui, t: &Theme) {
+    fn pin_form(&mut self, ui: &mut Ui, t: &Theme, places: &mut Vec<(String, Rect)>) {
         let f = &mut self.form;
-        if self.tool == Tool::Pin {
-            field(ui, "Pin name", &mut f.name);
-        } else {
-            ui.strong(&f.name);
-        }
+        let name = text_control(ui, "Pin name", &mut f.name);
+        places.push(("electronics:pin-name".into(), name.rect));
         field(ui, "Pin number", &mut f.number);
         choice(
             ui,
@@ -245,6 +302,9 @@ impl Editor {
             .map(str::to_string)
             .to_vec(),
         );
+        let direction = text_control(ui, "Direction (°)", &mut f.angle)
+            .on_hover_text("Pin orientation in degrees, counterclockwise from the right.");
+        places.push(("electronics:pin-direction".into(), direction.rect));
         let description = ui.label("Description");
         ui.add(
             egui::TextEdit::multiline(&mut f.description)
@@ -252,16 +312,6 @@ impl Editor {
                 .desired_width(f32::INFINITY),
         )
         .labelled_by(description.id);
-        field(ui, "Unit", &mut f.unit);
-        ui.label("Direction");
-        ComboBox::from_id_salt("pin-direction")
-            .width(ui.available_width())
-            .selected_text(format!("{}°", f.angle))
-            .show_ui(ui, |ui| {
-                for a in [0, 90, 180, 270] {
-                    ui.selectable_value(&mut f.angle, a, format!("{a}°"));
-                }
-            });
         let sheet = ux::Sheet::new(t, ux::System::Metric, "");
         sheet.section(ui, "Pin roles");
         if self.doc.role_names.is_empty() {
@@ -307,6 +357,10 @@ impl Editor {
                     }
                 });
         }
+        ui.collapsing("Sub parts", |ui| {
+            field(ui, "Sub part", &mut f.unit);
+            ui.weak("For a dual op-amp, A and B are separate sections of the same chip.");
+        });
     }
     pub(super) fn save_properties(&mut self) -> Result<()> {
         if self.library() && !self.pin.is_empty() {
@@ -320,6 +374,12 @@ impl Editor {
             &self.selected
         };
         let mut ops = vec![];
+        if self.library()
+            && let Some(symbol) = self.doc.symbols.get(id)
+            && symbol.ref_prefix != f.ref_prefix
+        {
+            ops.push(arg(id, "ref_prefix", quote(&f.ref_prefix)));
+        }
         if let Some(row) = self.doc.rows.iter().find(|r| &r.id == id) {
             match &row.item {
                 Item::Place {
@@ -407,7 +467,10 @@ impl Editor {
         let name = f.name.clone();
         let body = match self.tool {
             Tool::Sheet => format!("sheet(title: {})", quote(&f.text)),
-            Tool::NewSymbol => "symbol(pins: {}, graphics: [])".into(),
+            Tool::NewSymbol => format!(
+                "symbol(ref_prefix: {}, pins: {{}}, graphics: [])",
+                quote(&f.ref_prefix)
+            ),
             Tool::Library => format!("library(file: {})", quote(&f.text)),
             Tool::Role => {
                 let rating = match f.role_kind.as_str() {
@@ -562,8 +625,10 @@ impl Editor {
             }
             Select | Properties => {
                 if self.library() && !self.pin.is_empty() {
-                    self.pin_form(ui, t);
-                    if ui.button("Apply pin changes").clicked() {
+                    self.pin_form(ui, t, places);
+                    let apply = ui.button("Apply pin changes");
+                    places.push(("electronics:apply-pin".into(), apply.rect));
+                    if apply.clicked() {
                         result = self.save_properties();
                     }
                 } else if self.library() && self.graphic.is_some() {
@@ -589,7 +654,7 @@ impl Editor {
                         }
                         _ => {}
                     }
-                    field(ui, "Unit (blank for all units)", &mut self.form.unit);
+                    field(ui, "Sub part (blank for all)", &mut self.form.unit);
                     if ui.button("Apply geometry").clicked() {
                         result = self.save_graphic(i);
                     }
@@ -612,6 +677,11 @@ impl Editor {
                         },
                         &mut self.form.name,
                     );
+                    if self.library() {
+                        let r = text_control(ui, "Reference prefix", &mut self.form.ref_prefix)
+                            .on_hover_text("Letters used for new references, e.g. R1, C1 or TP1.");
+                        places.push(("electronics:ref-prefix".into(), r.rect));
+                    }
                     let part = self
                         .doc
                         .rows
@@ -701,7 +771,9 @@ impl Editor {
                             label_scope(ui, &mut self.form.global);
                         }
                     }
-                    if ui.button("Apply changes").clicked() {
+                    let apply = ui.button("Apply changes");
+                    places.push(("electronics:apply-properties".into(), apply.rect));
+                    if apply.clicked() {
                         result = self.save_properties();
                     }
                 } else {
@@ -724,7 +796,7 @@ impl Editor {
                     }
                 }
             }
-            Pin => self.pin_form(ui, t),
+            Pin => self.pin_form(ui, t, places),
             Power => choice(
                 ui,
                 "Power net",
@@ -732,14 +804,18 @@ impl Editor {
                 sch::power_symbols().keys().cloned().collect(),
             ),
             Place => {
+                let previous = self.symbol.clone();
                 choice(
                     ui,
                     "Symbol",
                     &mut self.symbol,
                     self.doc.symbols.keys().cloned().collect(),
                 );
+                if self.symbol != previous {
+                    self.form.name = self.fresh(&self.doc.symbols[&self.symbol].ref_prefix);
+                }
                 field(ui, "Reference", &mut self.form.name);
-                field(ui, "Unit", &mut self.form.unit);
+                field(ui, "Sub part", &mut self.form.unit);
             }
             Gate => {
                 let components = self
@@ -750,7 +826,7 @@ impl Editor {
                     .map(|r| r.id.clone())
                     .collect();
                 choice(ui, "Component", &mut self.selected, components);
-                field(ui, "Unit", &mut self.form.unit);
+                field(ui, "Sub part", &mut self.form.unit);
             }
             Subsheet => {
                 choice(
@@ -852,6 +928,7 @@ impl Editor {
                 field(ui, "Name", &mut self.form.name);
                 match self.tool {
                     Sheet => field(ui, "Sheet title", &mut self.form.text),
+                    NewSymbol => field(ui, "Reference prefix", &mut self.form.ref_prefix),
                     Library => field(ui, "Library file (.fg)", &mut self.form.text),
                     Role => {
                         choice(

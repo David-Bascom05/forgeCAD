@@ -29,16 +29,16 @@ impl Tool {
             Move => (egui::Key::M, "Pick a new position for the selected object."),
             Rotate => (
                 egui::Key::R,
-                "Rotate the selected symbol or gate by a quarter turn.",
+                "Rotate the selected symbol or sub part by a quarter turn.",
             ),
-            Mirror => (egui::Key::Y, "Reflect the selected symbol or gate."),
+            Mirror => (egui::Key::Y, "Reflect the selected symbol or sub part."),
             Delete => (
                 egui::Key::Delete,
                 "Remove the selection after checking its references.",
             ),
             Sheet => (egui::Key::N, "Create a sheet definition."),
             Subsheet => (egui::Key::H, "Place an occurrence of a sheet definition."),
-            Gate => (egui::Key::G, "Place another unit of an existing component."),
+            Gate => (egui::Key::G, "Place another sub part of an existing component."),
             Library => (
                 egui::Key::K,
                 "Reference a project symbol library by its .fg path.",
@@ -74,7 +74,7 @@ impl Tool {
                 egui::Key::A,
                 "Pick a start point, a point on the arc, and its end.",
             ),
-            Text => (egui::Key::T, "Place graphic text in the active symbol unit."),
+            Text => (egui::Key::T, "Place graphic text in the active sub part."),
             Role => (egui::Key::K, "Declare a typed role for symbol pins."),
         }
     }
@@ -96,7 +96,7 @@ impl Tool {
             Delete => ("Delete", "delete"),
             Sheet => ("New Sheet", "sheet"),
             Subsheet => ("Sheet Instance", "subasm"),
-            Gate => ("Place Gate", "schchip"),
+            Gate => ("Place Sub Part", "schchip"),
             Library => ("Link Library", "folder"),
             Checks => ("Electrical Checks", "check"),
             Bom => ("Bill of Materials", "partslist"),
@@ -199,13 +199,16 @@ impl Editor {
                     .collect::<std::collections::BTreeSet<_>>();
                 if units.len() > 1 {
                     let previous = self.unit.clone();
-                    egui::ComboBox::from_label("Unit")
-                        .selected_text(&self.unit)
-                        .show_ui(ui, |ui| {
-                            for unit in units {
-                                ui.selectable_value(&mut self.unit, unit.clone(), unit);
-                            }
-                        });
+                    ui.horizontal(|ui| {
+                        ui.label("Sub part");
+                        egui::ComboBox::from_id_salt("section-picker")
+                            .selected_text(&self.unit)
+                            .show_ui(ui, |ui| {
+                                for unit in units {
+                                    ui.selectable_value(&mut self.unit, unit.clone(), unit);
+                                }
+                            });
+                    });
                     if self.unit != previous {
                         self.pin.clear();
                         self.graphic = None;

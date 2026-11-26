@@ -242,7 +242,7 @@ impl Circuit {
                 self.issues.push(Issue {
                     kind: "UnplacedGate",
                     objects: vec![format!("{scope}/{owner}"), unit.clone()],
-                    message: "symbol unit has no schematic placement".into(),
+                    message: "sub part has no schematic placement".into(),
                 });
             }
         }

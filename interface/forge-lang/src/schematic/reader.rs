@@ -228,6 +228,7 @@ fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
     };
     let mut pins = Map::new();
     let mut numbers = Set::new();
+    let mut pin_names = Set::new();
     for (name, expr) in entries {
         let mut c = Call::new(expr)?;
         if c.name != "pin" {
@@ -240,7 +241,23 @@ fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
         let k = c.req("kind")?;
         let word = string(k)?;
         let electrical = Electrical::parse(&word).ok_or_else(|| fault(k, "UnknownElectricalKind", word))?;
+        if !pin_names.insert(name.clone()) {
+            return Err(fault(expr, "DuplicatePin", name));
+        }
+        let mut aliases = Set::new();
+        if let Some(previous) = c.take("aliases") {
+            for alias in list(previous)? {
+                let E::Name(id) = &alias.kind else {
+                    return Err(fault(alias, "InvalidPinAlias", "use a pin identifier"));
+                };
+                if !pin_names.insert(id.clone()) {
+                    return Err(fault(alias, "DuplicatePin", id));
+                }
+                aliases.insert(id.clone());
+            }
+        }
         let pin = Pin {
+            aliases,
             description: c.take("description").map(string).transpose()?.unwrap_or_default(),
             number: n,
             unit: c
@@ -250,14 +267,17 @@ fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
                 .unwrap_or_else(|| "A".into()),
             electrical,
             at: point(c.req("at")?, p)?,
-            angle: rotation(c.take("angle"), p)?,
+            angle: c
+                .take("angle")
+                .map(|e| measure(e, p, Dim::Angle))
+                .transpose()?
+                .unwrap_or(0.)
+                .rem_euclid(360.),
             wants: roles(c.take("wants"), doc)?,
             gives: roles(c.take("gives"), doc)?,
         };
         c.end()?;
-        if pins.insert(name.clone(), pin).is_some() {
-            return Err(fault(expr, "DuplicatePin", name));
-        }
+        pins.insert(name.clone(), pin);
     }
     let mut graphics = Vec::new();
     if let Some(g) = call.take("graphics") {
@@ -285,7 +305,23 @@ fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
     } else {
         None
     };
+    let ref_prefix = if let Some(e) = call.take("ref_prefix") {
+        let prefix = string(e)?;
+        if prefix.is_empty() || !prefix.bytes().all(|b| b.is_ascii_alphabetic()) {
+            return Err(fault(
+                e,
+                "InvalidReferencePrefix",
+                "use one or more letters, such as R or TP",
+            ));
+        }
+        prefix
+    } else if power_net.is_some() {
+        "PWR".into()
+    } else {
+        "U".into()
+    };
     Ok(Symbol {
+        ref_prefix,
         power_net,
         pins,
         graphics,
@@ -633,7 +669,69 @@ pub fn read(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Docume
         }
         c.end()?;
     }
+    resolve_pin_aliases(&mut doc);
     Ok(doc)
+}
+
+// Resolve historical pin names before graph construction so every consumer sees the
+// same canonical terminal. Project files can keep their original spelling on disk.
+fn resolve_pin_aliases(doc: &mut Document) {
+    let mut symbols = Map::<&str, Vec<(&str, &str)>>::new();
+    for (id, symbol) in &doc.symbols {
+        for (name, pin) in &symbol.pins {
+            for alias in &pin.aliases {
+                symbols.entry(id).or_default().push((alias, name));
+            }
+        }
+    }
+    if symbols.is_empty() {
+        return;
+    }
+    let mut aliases = Map::<String, Map<String, String>>::new();
+    for row in &doc.rows {
+        if let Item::Place { symbol, .. } = &row.item
+            && let Some(pins) = symbols.get(symbol.as_str())
+        {
+            for (alias, name) in pins {
+                aliases
+                    .entry(row.sheet.clone())
+                    .or_default()
+                    .insert(format!("{}.{alias}", row.id), format!("{}.{name}", row.id));
+            }
+        }
+    }
+    if aliases.is_empty() {
+        return;
+    }
+    for row in &mut doc.rows {
+        let Some(sheet) = aliases.get(&row.sheet) else {
+            continue;
+        };
+        let resolve = |p: &mut String| {
+            if let Some(name) = sheet.get(p) {
+                p.clone_from(name);
+            }
+        };
+        match &mut row.item {
+            Item::Wire { from, to, .. } | Item::Flow { from, to } => {
+                resolve(from);
+                resolve(to);
+            }
+            Item::NoConnect(p) | Item::Label { target: p, .. } => resolve(p),
+            Item::Bus(members) => members.values_mut().for_each(resolve),
+            Item::Fulfill {
+                want, give, returns, ..
+            } => {
+                resolve(want);
+                resolve(give);
+                if let Some((a, b)) = returns {
+                    resolve(a);
+                    resolve(b);
+                }
+            }
+            _ => {}
+        }
+    }
 }
 fn load_library(
     file: &str,

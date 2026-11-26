@@ -534,3 +534,48 @@ fn sheet_annotations_round_trip_styles_without_creating_connections() {
         assert!(schematic::compile(&bad, Some(&dir), None).is_err());
     }
 }
+
+#[test]
+fn pin_aliases_preserve_existing_sheet_references() {
+    let lib = include_str!("../../../examples/electronics/analog/analog-symbols.fg");
+    let sheet = include_str!("../../../examples/electronics/analog/sensor-interface.fg");
+    let lib = lib.replacen(
+        "VDD: pin(",
+        "SUPPLY: pin(aliases: [VDD, VPLUS], angle: -22.5deg, ",
+        1,
+    );
+    let sheet = sheet
+        .replace(
+            "analog = library(file: \"analog-symbols.fg\")",
+            lib.trim_start_matches("symbol_library"),
+        )
+        .replace("analog.", "")
+        + "\nold_name = no_connect(sheet: main, on: U1.VPLUS)\n";
+    let (doc, c) = schematic::compile(&sheet, None, None).unwrap();
+    assert_eq!(doc.symbols["Amplifier"].pins["SUPPLY"].angle, 337.5);
+    assert_eq!(c.wires["main/w9"].0, "main/U1.SUPPLY");
+    assert_eq!(c.links[0].want, "main/U1.SUPPLY");
+    assert!(!c.terminals.contains_key("main/U1.VDD"));
+    schematic::sheet_page(&doc, &c, "main").unwrap();
+    let bad = sheet.replace("[VDD, VPLUS]", "[VDD, VSS]");
+    assert_eq!(
+        schematic::compile(&bad, None, None).unwrap_err().kind,
+        "DuplicatePin"
+    );
+}
+
+#[test]
+fn reference_prefixes_are_checked_symbol_metadata() {
+    let lib = "symbol_library\nOld = symbol(pins: {})\nGround = symbol(power_net: \"GND\", pins: {G: pin(number: \"1\", kind: \"passive\", at: (0,0))})\nTestPoint = symbol(ref_prefix: \"TP\", pins: {})\n";
+    let (doc, _) = schematic::compile(lib, None, None).unwrap();
+    assert_eq!(doc.symbols["Old"].ref_prefix, "U");
+    assert_eq!(doc.symbols["Ground"].ref_prefix, "PWR");
+    assert_eq!(doc.symbols["TestPoint"].ref_prefix, "TP");
+    for invalid in ["", "TP1", "R?", " A"] {
+        let src = lib.replace("\"TP\"", &format!("{invalid:?}"));
+        assert_eq!(
+            schematic::compile(&src, None, None).unwrap_err().kind,
+            "InvalidReferencePrefix"
+        );
+    }
+}
