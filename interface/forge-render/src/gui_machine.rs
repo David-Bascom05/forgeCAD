@@ -538,7 +538,7 @@ impl Gui {
                     .models
                     .iter()
                     .position(|x| x.body.as_deref() == Some(b.name.as_str()))?;
-                let o = m.model_checks.get(i)?.as_ref().ok()?;
+                let o = &m.model_checks.get(i)?.as_ref().ok()?.outside;
                 (o.out > 0 && !boxes.is_empty() && m.problem.is_none()).then(|| {
                     let pose = kin::pose(&def, &m.q);
                     (kin::link(&def, &pose, &b.link).apply(o.at), o.worst)

@@ -2117,7 +2117,7 @@ const SPECK: &str = "a face laid out over a span of its parameters below 2^-433"
 /// `finish` as far as the body healed: what is checked of the file's edges and faces, the gaps
 /// measured, and the body made, under the read's budget (returned live: the rest spends it).
 fn healed(
-    proto: Proto,
+    mut proto: Proto,
     uncertainty: f64,
     lim: &Limits,
     stats: &mut Stats,
@@ -2147,7 +2147,7 @@ fn healed(
             return Err("a face's loops go along one edge twice the same way".into());
         }
     }
-    if let Some((fi, gap)) = far_face(&proto, stats) {
+    if let Some((fi, gap)) = repair_slits_and_find_far_face(&mut proto, uncertainty, stats) {
         return Err(far_face_words(&proto, fi, gap));
     }
     heal_rest(proto, uncertainty, lim, stats)
@@ -2156,8 +2156,14 @@ fn healed(
 /// The first face whose edges lie far off its surface (more than both `FAR_FACE_MM` and
 /// `FAR_FACE_PART` of the part), and how far, as `far_gap` measures it; the gaps measured
 /// on the way into `stats`.
-fn far_face(proto: &Proto, stats: &mut Stats) -> Option<(usize, f64)> {
+pub(super) fn repair_slits_and_find_far_face(
+    proto: &mut Proto,
+    uncertainty: f64,
+    stats: &mut Stats,
+) -> Option<(usize, f64)> {
     let gaps = measure_gaps(proto, stats);
+    // Keep as-read statistics, then confirm candidate gaps on the repaired boundaries.
+    proto.cancel_slits(uncertainty.max(forge_math::tol::LINEAR));
     // a face whose edges lie far off its surface has the wrong surface in the file (VS-3 #478011:
     // a B-spline patch 5 m from its face's edges): nothing in the file says where it is
     let size = Box3::from_points(proto.verts.iter().map(|v| v.0)).diagonal();
@@ -2185,8 +2191,6 @@ fn heal_rest(
     stats: &mut Stats,
 ) -> Result<(Body, forge_geom::budget::Budget), String> {
     let budget = forge_geom::budget::scoped(lim.max_evals);
-    // a loop running out and back along two edges that lie on each other (a slit of no width)
-    proto.cancel_slits(uncertainty.max(forge_math::tol::LINEAR));
     proto.split_closed_splines();
     proto.add_seams()?;
     let size = Box3::from_points(proto.verts.iter().map(|v| v.0)).diagonal();
@@ -2326,20 +2330,18 @@ fn draw_far_root(h: &Head<'_>, id: u32, r: Record, ctx: Option<u32>, lim: &Limit
     let (u, built) = b.built?;
     let mut stats = Stats::default();
     let mut proto = built.ok()?;
-    let mut void_flip = true;
+    let mut check_voids = h.f.name(&r) == "BREP_WITH_VOIDS";
     let (fi, gap) = loop {
-        let (fi, gap) = far_face(&proto, &mut stats)?;
+        let (fi, gap) = repair_slits_and_find_far_face(&mut proto, u.uncertainty, &mut stats)?;
         // files differ on what a void's .F. turns, as `finish_root` reads them: told from the
         // whole body, healed as the read heals it
-        if void_flip && h.f.name(&r) == "BREP_WITH_VOIDS" {
+        if check_voids {
             let (body, healing) = heal_rest(proto, u.uncertainty, lim, &mut stats).ok()?;
             drop(healing);
             let inward = voids_inward(&body);
-            void_flip = inward;
-            proto = build_shell(&h.f, id, r, u, void_flip, &mut stats).ok()?;
-            if !inward {
-                continue;
-            }
+            check_voids = false;
+            proto = build_shell(&h.f, id, r, u, inward, &mut stats).ok()?;
+            continue;
         }
         break (fi, gap);
     };

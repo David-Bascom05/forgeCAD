@@ -8,10 +8,20 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 /// Read files, by path and (length, modified time): a file replaced is read again.
-type Read = Mutex<HashMap<(PathBuf, u64, Option<std::time::SystemTime>), Result<Arc<Tris>, String>>>;
+type Read = Mutex<HashMap<(PathBuf, u64, Option<std::time::SystemTime>), Result<FileModel, String>>>;
+
+#[derive(Clone)]
+pub struct FileModel {
+    pub triangles: Arc<Tris>,
+    pub notes: Arc<[String]>,
+}
 
 /// A model file's triangles in its own coordinates and units.
 pub fn file_tris(path: &Path) -> Result<Arc<Tris>, String> {
+    file_model(path).map(|m| m.triangles)
+}
+
+pub fn file_model(path: &Path) -> Result<FileModel, String> {
     static READ: OnceLock<Read> = OnceLock::new();
     // through the app's filesystem: std's has no files in a page
     let meta = forge_dirs::fs::metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -25,8 +35,7 @@ pub fn file_tris(path: &Path) -> Result<Arc<Tris>, String> {
         .map_or(String::new(), |n| n.to_string_lossy().into_owned());
     let r = forge_dirs::fs::read(path)
         .map_err(|e| format!("{name}: {e}"))
-        .and_then(|bytes| read(&name, &bytes))
-        .map(Arc::new);
+        .and_then(|bytes| read_model(&name, &bytes));
     c.lock().expect("no panics while held").insert(key, r.clone());
     r
 }
@@ -34,13 +43,26 @@ pub fn file_tris(path: &Path) -> Result<Arc<Tris>, String> {
 /// A model's bytes to triangles (`name` picks the format): forge_machine_builder::model_files
 /// reads it (the CLI's reader too), flat-shaded here, a patch per part.
 pub fn read(name: &str, bytes: &[u8]) -> Result<Tris, String> {
-    let pieces = forge_machine_builder::model_files::read(name, bytes)?;
+    let (tris, _) = read_noting(name, bytes)?;
+    Ok(tris)
+}
+
+fn read_model(name: &str, bytes: &[u8]) -> Result<FileModel, String> {
+    let (triangles, notes) = read_noting(name, bytes)?;
+    Ok(FileModel {
+        triangles: Arc::new(triangles),
+        notes: notes.into(),
+    })
+}
+
+fn read_noting(name: &str, bytes: &[u8]) -> Result<(Tris, Vec<String>), String> {
+    let (pieces, notes) = forge_machine_builder::model_files::read_noting(name, bytes)?;
     let _ = Format::of(name)?;
     let mut t = Tris::default();
     for p in &pieces {
         push(&mut t, &p.pos, &p.tri);
     }
-    Ok(t)
+    Ok((t, notes))
 }
 
 /// A message's first line and the rest: what a panel shows, and what it shows on hover.
@@ -102,6 +124,37 @@ pub fn placed_points(t: &Tris, m: &Model) -> Vec<[f64; 3]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cached_partial_geometry_keeps_its_warning() {
+        use forge_math::{Frame, Point2};
+        use forge_ops::{Profile, extrude};
+        let plate = Profile {
+            plane: Frame::WORLD,
+            loops: vec![
+                Profile::rectangle(Point2::new(-5., -3.), 10., 6., 0),
+                Profile::rectangle(Point2::new(-1., -1.), 2., 2., 9),
+            ],
+        };
+        let text = forge_step::export(&extrude(&plate, 2., 1).unwrap(), &Default::default())
+            .unwrap()
+            .text;
+        let src = "#33=CARTESIAN_POINT('',(0.,0.,0.));";
+        assert!(text.contains(src));
+        let path =
+            forge_dirs::temp_dir().join(format!("forge-partial-model-{}.step", forge_dirs::process_id()));
+        forge_dirs::fs::write(&path, text.replace(src, "#33=CARTESIAN_POINT('',(0.,0.,-50.));")).unwrap();
+        let first = file_model(&path).unwrap();
+        let reopened = file_model(&path).unwrap();
+        assert!(!first.triangles.tri.is_empty());
+        assert!(
+            first.notes.iter().any(|s| s.contains("50.0 mm")),
+            "{:?}",
+            first.notes
+        );
+        assert!(Arc::ptr_eq(&first.notes, &reopened.notes));
+        forge_dirs::fs::remove_file(&path).unwrap();
+    }
 
     #[test]
     fn an_ascii_stl_reads_and_lands_where_its_model_says() {
