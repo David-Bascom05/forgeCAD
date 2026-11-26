@@ -301,7 +301,7 @@ fn uv_scale(s: &Surface) -> (f64, f64) {
 /// point from the link before the step to the link after it within `chord - sag` (the true curve
 /// lies within `sag` of its chain's links, and a link whose ends lie within d of the chord lies
 /// within d of it: so the true curve lies within `chord` of the chord), and turns no more than
-/// `max_angle` from it at any of them. Fewest steps first (as many links to a step as the sag
+/// half of `max_angle` from it at any of them. This bounds the angle between any two tangents. Fewest steps first (as many links to a step as the sag
 /// allows, `sqrt(chord / sag)`), more by half again until they hold; None where only `old` holds,
 /// for a closed chain, or with `old-sampling`. VF-5_40_SS_TR #252821's slots: chains of 2,000
 /// links over 6 mm put 4,845 points micrometres apart on a plane whose chord is 1 mm, and its
@@ -324,7 +324,7 @@ fn chain_samples(
         return None;
     }
     let room = chord - c.sag;
-    let cos_turn = forge_math::dmath::cos(max_angle);
+    let cos_turn = forge_math::dmath::cos(0.5 * max_angle);
     let per = (chord / c.sag.max(forge_math::tol::LINEAR)).sqrt();
     let mut n = ((range.width() / per).ceil() as usize).max(2);
     while n < old {
@@ -350,7 +350,7 @@ fn chain_samples(
                 // the distance from the segment ab
                 let s = ((p - a).dot(ab) / len2).clamp(0.0, 1.0);
                 let off = (p - (a + ab * s)).length();
-                off <= room && c.tans[i].dot(dir).abs() >= cos_turn
+                off <= room && c.tans[i].dot(dir) >= cos_turn
             })
         });
         if holds {
@@ -3191,6 +3191,42 @@ mod tests {
     use forge_math::rng::Rng;
     use forge_math::{Frame, Point3, Vec3};
     use forge_ops::{Profile, extrude};
+
+    #[test]
+    #[cfg(not(feature = "old-sampling"))]
+    fn coarsened_chain_bounds_the_turn_across_each_chord() {
+        let radius = 100.0;
+        let angle = dmath::PI / 12.0;
+        let (points, tangents) = (0..=1000)
+            .map(|i| {
+                let (s, c) = dmath::sin_cos(i as f64 * dmath::PI / 2000.0);
+                (Point3::new(radius * c, radius * s, 0.0), Vec3::new(-s, c, 0.0))
+            })
+            .unzip();
+        let curve = forge_geom::intcurve::IntCurve::new(
+            Surface::Cylinder(forge_geom::Cylinder {
+                frame: Frame::WORLD,
+                radius,
+            }),
+            Surface::Plane(forge_geom::Plane { frame: Frame::WORLD }),
+            points,
+            tangents,
+            false,
+            0.000056,
+        );
+        let inner = chain_samples(
+            &curve,
+            forge_math::Interval::new(0.0, 1000.0),
+            1000,
+            curve.pts[0],
+            curve.pts[1000],
+            10.0,
+            angle,
+        )
+        .expect("the quarter circle can be coarsened");
+        // These are equal parameter steps around a quarter circle.
+        assert!(dmath::PI / (2.0 * (inner.len() + 1) as f64) <= angle);
+    }
 
     /// A parabola's and a hyperbola's chords stray from them by no more than the chord and turn by
     /// no more than the angle, at every tolerance, near the vertex and far out (where a fixed count
