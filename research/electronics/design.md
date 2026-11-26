@@ -79,3 +79,5 @@ The left tree follows sheet occurrences, including repeated instances. The right
 [Pin inspection](shots/native-pin-inspection.png) · [Parts browser](shots/native-parts.png) · [Signal animation](shots/signal-directions.gif) · [Drawing tools and grid](shots/native-drawing-grid.png)
 
 [Editing a pin name and direction](shots/native-pin-edit.png) · [Reference prefix in symbol properties](shots/native-reference-prefix.png)
+
+The TLV9001 VDD checklist uses the same library symbol and wiring in both captures. Changing J1.OUT from 3.3 V to 12 V fails only the 1.8–5.5 V supply check. [3.3 V source](shots/web-supply-3300.png) · [12 V source](shots/web-supply-12000.png)
