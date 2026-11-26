@@ -8,7 +8,7 @@ use forge_ops::{
 };
 use forge_topo::{Body, Name, extent::exact_box};
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -38,6 +38,7 @@ pub struct Source {
     parts: Vec<Part>,
     pub revision: u128,
     pub imported: bool,
+    path: PathBuf,
     dependencies: deps::Deps,
 }
 
@@ -52,8 +53,14 @@ impl Source {
     }
 
     pub fn current(&self) -> bool {
-        self.dependencies.current()
+        dependencies_current(&self.dependencies, &self.path)
     }
+}
+
+fn dependencies_current(deps: &deps::Deps, source: &Path) -> bool {
+    deps.current_with_limits(|p| {
+        if p == source { forge_step::Limits::default().max_bytes as u64 } else { deps::LIMIT }
+    })
 }
 
 struct Part {
@@ -105,7 +112,7 @@ pub fn load(path: &Path, root: Option<&Path>) -> Result<Source, String> {
         {
             return Err("Some assembly occurrences have no resolved solid".into());
         }
-        if !dependencies.current() {
+        if !dependencies_current(&dependencies, path) {
             return Err("Source dependencies changed while building".into());
         }
         let parts: Vec<_> = model
@@ -126,6 +133,7 @@ pub fn load(path: &Path, root: Option<&Path>) -> Result<Source, String> {
                     .is_some_and(|ext| crate::media::SOLID_KINDS.contains(&ext.to_ascii_lowercase().as_str()))
             });
         return Ok(Source {
+            path: path.to_owned(),
             parts,
             revision: dependencies.digest(),
             imported,
@@ -185,6 +193,7 @@ pub fn load(path: &Path, root: Option<&Path>) -> Result<Source, String> {
             .collect::<Result<_, String>>()?
     };
     Ok(Source {
+        path: path.to_owned(),
         parts,
         revision: hash128(&bytes),
         imported: true,
