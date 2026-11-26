@@ -846,7 +846,7 @@ fn subdivide_pieces(
         .into_iter()
         .map(|(a, b, lip)| (a, b, lip, None, None))
         .collect();
-    let mut leaves: Vec<(f64, f64, Option<f64>, Option<f64>)> = Vec::new();
+    let mut leaves: Vec<Leaf> = Vec::new();
     while let Some((a, b, lip, ga, gb)) = stack.pop() {
         let m = 0.5 * (a + b);
         let p = c.eval(m);
@@ -877,6 +877,17 @@ fn subdivide_pieces(
         stack.push((m, b, lip, Some(gm), gb));
         stack.push((a, m, lip, ga, Some(gm)));
     }
+    #[cfg(feature = "old-subdivision-leaves")]
+    return buffered_leaf_hits(c, &g, &leaves);
+    #[cfg(not(feature = "old-subdivision-leaves"))]
+    scan_leaf_hits(c, &g, &leaves)
+}
+
+type Leaf = (f64, f64, Option<f64>, Option<f64>);
+
+#[cfg(any(test, not(feature = "old-subdivision-leaves")))]
+fn scan_leaf_hits(c: &Curve, g: &impl Fn(f64) -> f64, leaves: &[Leaf]) -> CurveSurface {
+    let known = |t: f64, v: Option<f64>| v.unwrap_or_else(|| g(t));
     let mut hits = Vec::new();
     let mut i = 0;
     while i < leaves.len() {
@@ -908,13 +919,63 @@ fn subdivide_pieces(
             break;
         }
         let hit = if odd {
-            first_crossing.map(|(a, b, fa, fb)| (bisect_sign_from(&g, a, b, fa, fb), Contact::Crossing))
+            first_crossing.map(|(a, b, fa, fb)| (bisect_sign_from(g, a, b, fa, fb), Contact::Crossing))
         } else {
             (closest.1 <= tol::LINEAR).then_some((closest.0, Contact::Touching))
         };
         if let Some((t, contact)) = hit {
-            hits.push(CurveHit { t, point: c.eval(t), contact });
+            hits.push(CurveHit {
+                t,
+                point: c.eval(t),
+                contact,
+            });
         }
+    }
+    CurveSurface::Hits(hits)
+}
+
+#[cfg(any(test, feature = "old-subdivision-leaves"))]
+fn buffered_leaf_hits(c: &Curve, g: &impl Fn(f64) -> f64, leaves: &[Leaf]) -> CurveSurface {
+    let known = |t: f64, v: Option<f64>| v.unwrap_or_else(|| g(t));
+    let mut hits = Vec::new();
+    let mut i = 0;
+    while i < leaves.len() {
+        let (lo, mut hi) = (leaves[i].0, leaves[i].1);
+        let mut j = i + 1;
+        while j < leaves.len() && leaves[j].0 <= hi {
+            hi = leaves[j].1;
+            j += 1;
+        }
+        // sign changes across the group's leaf boundaries
+        let mut marks: Vec<f64> = vec![lo];
+        marks.extend(leaves[i..j].iter().map(|l| l.1));
+        let mut vals: Vec<f64> = vec![known(lo, leaves[i].2)];
+        vals.extend(leaves[i..j].iter().map(|l| known(l.1, l.3)));
+        let changes: Vec<usize> = (1..vals.len())
+            .filter(|&k| (vals[k - 1] < 0.0) != (vals[k] < 0.0))
+            .collect();
+        if changes.len() % 2 == 1 {
+            let k = changes[0];
+            let t = bisect_sign_from(g, marks[k - 1], marks[k], vals[k - 1], vals[k]);
+            hits.push(CurveHit {
+                t,
+                point: c.eval(t),
+                contact: Contact::Crossing,
+            });
+        } else {
+            let (k, v) = vals.iter().enumerate().fold((0, f64::INFINITY), |b, (k, v)| {
+                if v.abs() < b.1 { (k, v.abs()) } else { b }
+            });
+            if v <= tol::LINEAR {
+                let t = marks[k];
+                hits.push(CurveHit {
+                    t,
+                    point: c.eval(t),
+                    contact: Contact::Touching,
+                });
+            }
+        }
+        i = j;
     }
     CurveSurface::Hits(hits)
 }
@@ -1370,6 +1431,36 @@ mod tests {
     /// very first one, before them, could take another way. Pinned on fresh curves (each t the
     /// curve's first evaluation ever) round a screw face cut by a plane: the first point is the
     /// later one, bit for bit, and the search's answer on a fresh curve is a warmed curve's.
+    #[test]
+    fn leaf_scans_agree_across_ties_gaps_and_alternating_signs() {
+        let line = Curve::Line(Line {
+            origin: Point3::ORIGIN,
+            dir: UnitVec3::X,
+        });
+        for signs in 0..81 {
+            let mut code = signs;
+            let values = core::array::from_fn::<_, 4, _>(|_| {
+                let v = [-tol::LINEAR, 0.0, tol::LINEAR][code % 3];
+                code /= 3;
+                v
+            });
+            let g = |t: f64| {
+                let i = (t as usize).min(2);
+                values[i] + (t - i as f64) * (values[i + 1] - values[i])
+            };
+            for omit_middle in [false, true] {
+                let leaves: Vec<_> = (0..3)
+                    .filter(|&i| i != 1 || !omit_middle)
+                    .map(|i| (i as f64, (i + 1) as f64, Some(values[i]), None))
+                    .collect();
+                assert_eq!(
+                    scan_leaf_hits(&line, &g, &leaves),
+                    buffered_leaf_hits(&line, &g, &leaves)
+                );
+            }
+        }
+    }
+
     #[test]
     fn a_traced_curves_first_evaluation_is_its_later_ones() {
         use crate::screw::{Screw, Section};
