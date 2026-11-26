@@ -96,7 +96,7 @@ pub fn put(p: &Path, bytes: &[u8]) -> std::io::Result<()> {
     ))
 }
 
-/// The hash of the text the server last wrote to (or first read from) each document's file:
+/// The hash of each document as last read or written, or the hashes on both sides of an in-flight rename:
 /// a file whose text differs was changed outside the server (an editor, a `git pull`), and the
 /// server refuses to open it rather than silently overwrite the change. (Importing such a
 /// change as ops is DESIGN.md §15.4, phase 4.)
@@ -112,9 +112,27 @@ impl DiskMarks {
     fn path(&self, doc: &str) -> PathBuf {
         self.dir.join(format!("{}.disk", forge_history::names::enc(doc)))
     }
-    pub fn get(&self, doc: &str) -> Option<u64> {
-        let t = std::fs::read_to_string(self.path(doc)).ok()?;
-        u64::from_str_radix(t.trim(), 16).ok()
+    /// One hash at rest, two while replacing the file. After a crash either side of
+    /// that atomic rename is ours. A malformed or unreadable mark is an error.
+    pub fn matches(&self, doc: &str, text: &str) -> std::io::Result<Option<bool>> {
+        let record = match std::fs::read_to_string(self.path(doc)) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            other => other?,
+        };
+        let parse = |s: &str| u64::from_str_radix(s, 16).map_err(|_| std::io::ErrorKind::InvalidData);
+        let mut fields = record.split_whitespace();
+        let before = parse(fields.next().ok_or(std::io::ErrorKind::InvalidData)?)?;
+        let after = fields.next().map(parse).transpose()?;
+        if fields.next().is_some() {
+            return Err(std::io::ErrorKind::InvalidData.into());
+        }
+        let hash = forge_sync::text_hash(text);
+        Ok(Some(before == hash || after == Some(hash)))
+    }
+
+    pub fn begin(&self, doc: &str, before: &str, after: &str) -> std::io::Result<()> {
+        let intent = format!("{:016x} {:016x}\n", forge_sync::text_hash(before), forge_sync::text_hash(after));
+        put(&self.path(doc), intent.as_bytes())
     }
     pub fn set(&self, doc: &str, text: &str) -> std::io::Result<()> {
         put(
@@ -128,6 +146,22 @@ impl DiskMarks {
 #[cfg(all(test, not(target_os = "wasi")))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn interrupted_rename_accepts_only_its_two_recorded_states() {
+        let dir = std::env::temp_dir().join(format!("forge-disk-intent-{}", std::process::id()));
+        let marks = DiskMarks::new(dir.clone()).unwrap();
+        let doc = "part.fg";
+        marks.set(doc, "before").unwrap();
+        marks.begin(doc, "before", "after").unwrap();
+        let marks = DiskMarks::new(dir.clone()).unwrap();
+        assert_eq!(marks.matches(doc, "before").unwrap(), Some(true));
+        assert_eq!(marks.matches(doc, "after").unwrap(), Some(true));
+        assert_eq!(marks.matches(doc, "external").unwrap(), Some(false));
+        marks.set(doc, "after").unwrap();
+        assert_eq!(marks.matches(doc, "before").unwrap(), Some(false));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn one_file_one_name() {

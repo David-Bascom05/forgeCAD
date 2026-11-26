@@ -491,9 +491,9 @@ fn name_the_taker(r: Refusal, op: &Edit, client: &str, since: &[Entry]) -> Refus
     if kind != "NameTaken" {
         return r;
     }
-    let mine: Vec<_> = op.ops().iter().flat_map(crate::rebase::introduced_names).collect();
+    let mine: Vec<_> = op.ops().iter().flat_map(crate::rebase::introduced_keys).collect();
     let taker = since.iter().rev().filter(|e| e.client != client).find(|e| {
-        e.op.ops().iter().flat_map(crate::rebase::introduced_names).any(|n| mine.contains(&n))
+        e.op.ops().iter().flat_map(crate::rebase::introduced_keys).any(|n| mine.contains(&n))
     });
     match taker {
         Some(e) => Refusal::Lang {

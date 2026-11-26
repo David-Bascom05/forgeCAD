@@ -275,7 +275,16 @@ fn soak_with_kills_and_resumes() {
 
 #[test]
 fn recovered_ack_reaches_disk_on_close_without_another_edit() {
-    let root = std::env::temp_dir().join(format!("forge-recovered-close-{}", std::process::id()));
+    recovered_close(false);
+}
+
+#[test]
+fn recovered_disk_rename_finishes_git_checkpoint_after_restart() {
+    recovered_close(true);
+}
+
+fn recovered_close(renamed: bool) {
+    let root = std::env::temp_dir().join(format!("forge-recovered-close-{}-{renamed}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();
     let path = root.join("part.fg");
     std::fs::write(&path, doc_text(1)).unwrap();
@@ -290,6 +299,10 @@ fn recovered_ack_reaches_disk_on_close_without_another_edit() {
     server.kill();
     drop(session);
     assert_ne!(std::fs::read_to_string(&path).unwrap(), expected);
+    if renamed {
+        // State left by an older writer killed after its atomic rename, before its disk mark.
+        std::fs::write(&path, &expected).unwrap();
+    }
     server.start();
     let reopened = Session::start(&connection, "part.fg", None).unwrap();
     wait("replayed head", 10, || reopened.ready() && reopened.text() == expected);

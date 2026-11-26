@@ -1372,22 +1372,22 @@ fn open_doc(shared: &Shared, doc: &str) -> Result<Room, NotOpened> {
     }
     let text = std::fs::read_to_string(&path).map_err(io)?;
     // a file changed outside the server since it last wrote it: never overwritten silently
-    match shared.marks.get(doc) {
-        Some(h) if h != forge_sync::text_hash(&text) => {
-            return Err((
-                format!(
-                    "{doc} changed on disk outside the server (an editor, a git pull): bringing such a change in is not \
-                     in phase 1 (DESIGN.md §15.4)"
-                ),
-                false,
-            ));
-        }
-        Some(_) => {}
-        None => shared.marks.set(doc, &text).map_err(io)?,
-    }
+    let marked = shared.marks.matches(doc, &text).map_err(io)?;
     let mut store = shared.store().map_err(|e| (e, true))?;
+    let changed = || (format!(
+        "{doc} changed on disk outside the server (an editor, a git pull): bringing such a change in is not in phase 1 (DESIGN.md §15.4)"
+    ), false);
+    // An older writer could crash between the rename and updating its single hash.
+    // Only existing durable history may establish that this exact text belongs to us.
+    if marked == Some(false) && store.latest_snapshot(doc).map_err(io)?.is_none() {
+        return Err(changed());
+    }
     let mut seq =
         Sequencer::open(store.as_mut(), doc, &text, path.parent().map(Path::to_path_buf)).map_err(io)?;
+    if marked == Some(false) && seq.head() != text {
+        return Err(changed());
+    }
+    shared.marks.set(doc, &text).map_err(io)?;
     seq.root = Some(c.root.clone());
     let mine = shared
         .abandoned
@@ -1732,7 +1732,7 @@ impl Actor {
         }
         let path = fsx::canonical_doc(&self.s.c.root, &self.doc).map_err(str::to_string)?;
         let now = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        if self.s.marks.get(&self.doc) != Some(forge_sync::text_hash(&now)) {
+        if self.s.marks.matches(&self.doc, &now).map_err(|e| e.to_string())? != Some(true) {
             let why = format!(
                 "{} changed on disk outside the server: it is not written over (bring the change in by hand)",
                 self.doc
@@ -1743,9 +1743,10 @@ impl Actor {
         }
         let head = self.room.seq.head().to_string();
         if head != now {
+            self.s.marks.begin(&self.doc, &now, &head).map_err(|e| e.to_string())?;
             fsx::put(&path, head.as_bytes()).map_err(|e| e.to_string())?;
-            self.s.marks.set(&self.doc, &head).map_err(|e| e.to_string())?;
         }
+        self.s.marks.set(&self.doc, &head).map_err(|e| e.to_string())?;
         Ok(path)
     }
 

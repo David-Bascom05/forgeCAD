@@ -265,3 +265,20 @@ fn queued_set_after_a_lost_name_race_cannot_edit_the_winners_parameter() {
     seq.submit(&mut store, "ada", "ada/a", 0, 3, &set("w", 41.)).unwrap();
     seq.submit(&mut store, "ada", "ada/a", seq.seq(), 4, &set("x", 12.)).unwrap();
 }
+
+#[test]
+fn scoped_names_are_distinct_between_features_and_conflict_within_one_feature() {
+    let mut store = MemStore::default();
+    let mut seq = Sequencer::open(&mut store, "part.fg", DOC, None).unwrap();
+    let add = |owner: &str| Op::AddLocalParam {
+        feature: ParamKey::parse(&format!("{owner}.x")).unwrap().owner,
+        name: "x".into(),
+        value: Literal { value: 20., dim: forge_lang::values::Dim::Length },
+    };
+    seq.submit(&mut store, "bob", "bob/b", 0, 1, &add("plan")).unwrap();
+    assert!(seq.submit(&mut store, "ada", "ada/a", 0, 1, &add("plan")).is_err());
+    assert!(seq.submit(&mut store, "ada", "ada/a", 0, 2, &set("plan.x", 11.)).is_err());
+    seq.submit(&mut store, "ada", "ada/a", 0, 3, &add("ring")).unwrap();
+    seq.submit(&mut store, "ada", "ada/a", 0, 4, &set("ring.x", 11.)).unwrap();
+    assert!(seq.head().contains("param plan.x = 20"));
+}

@@ -3,9 +3,9 @@
 //! Measured on 251 documents (research/hosted/MEASUREMENTS.md §c), every op pair on different
 //! targets either commutes exactly or differs only by list position (server order decides) —
 //! except a Rename committed before an op that still uses the old name. So the only transform is
-//! Rename's **name substitution**; every other op is simply re-validated on the head
-//! (`apply_checked`), which refuses it with its typed error if a collaborator's op made it
-//! invalid (Delete vs Replace of one feature, two Adds of one name, ...).
+//! Rename's **name substitution**. A stale edit cannot use another client's newly introduced
+//! binding as its optimistic target. The resulting op is validated on the head with
+//! `apply_checked` (for example, Delete versus Replace of one feature).
 //!
 //! Same-target rules (DESIGN.md §4.2): SetParam vs SetParam: the later wins (it applies on the
 //! head; `setLit_lww`). Rename vs Rename of one name: the later is refused (`RenameConflict`).
@@ -30,13 +30,11 @@ pub fn rebase<'a>(op: &Op, client: &str, since: impl IntoIterator<Item = &'a Ent
             // A name supplied by another client after our base cannot identify the
             // object we edited locally. This also covers a queued edit following a
             // refused optimistic introduction, even when the refused op was never logged.
-            for name in introduced_names(committed) {
-                // Empty is never an identifier. The same substitution that follows
-                // renames sees structured paths and reads embedded in expression text.
-                if rename_in(&op, &name, "").as_ref() != Ok(&op) {
+            for key in introduced_keys(committed) {
+                if addresses(&op, &key) {
                     return Err(Refusal::Lang {
                         kind: "NameTaken".into(),
-                        text: format!("{name} was introduced by {}'s edit at seq {}", e.author, e.seq),
+                        text: format!("{key} was introduced by {}'s edit at seq {}", e.author, e.seq),
                     });
                 }
             }
@@ -48,15 +46,42 @@ pub fn rebase<'a>(op: &Op, client: &str, since: impl IntoIterator<Item = &'a Ent
     Ok(op)
 }
 
-pub(crate) fn introduced_names(op: &Op) -> Vec<String> {
+pub(crate) fn introduced_keys(op: &Op) -> Vec<ParamKey> {
+    let local = |owner: &[Seg], name: &str| ParamKey { owner: owner.to_vec(), name: name.into() };
     match op {
-        Op::Rename { to, .. } => vec![to.clone()],
-        Op::MakeShared { param } => vec![param.name.clone()],
+        Op::Rename { to, .. } => vec![ParamKey::shared(to)],
+        Op::MakeShared { param } => vec![ParamKey::shared(&param.name)],
+        Op::AddLocalParam { feature, name, .. } => vec![local(feature, name)],
+        Op::SplitInstance { id, param } => vec![local(id, &param.name)],
+        Op::LiftLiteral { name, scope, .. } => vec![match scope {
+            Scope::Shared => ParamKey::shared(name),
+            Scope::Local(owner) => local(owner, name),
+        }],
         Op::AddFeature { text, .. } => forge_lang::syntax::parse(text)
-            .map(|p| forge_lang::edit::bound(&p).into_iter().collect())
+            .map(|p| {
+                let mut keys: Vec<_> = forge_lang::edit::bound(&p).iter().map(|n| ParamKey::shared(n)).collect();
+                keys.extend(p.iter().filter_map(|stmt| match &stmt.kind {
+                    forge_lang::syntax::StmtKind::Param { owner, name, .. } => Some(local(owner, name)),
+                    _ => None,
+                }));
+                keys
+            })
             .unwrap_or_default(),
-        Op::LiftLiteral { name, scope: Scope::Shared, .. } => vec![name.clone()],
         _ => vec![],
+    }
+}
+
+fn addresses(op: &Op, key: &ParamKey) -> bool {
+    if key.is_shared() {
+        // An identifier cannot be empty. Use the ordinary rename rules to recognize
+        // both structured paths and reads in expression text.
+        return rename_in(op, &key.name, "").as_ref() != Ok(op);
+    }
+    match op {
+        Op::SetParam { param, .. } | Op::MakeShared { param } => param == key,
+        Op::SplitInstance { param, id } => param == key || (id == &key.owner && param.name == key.name),
+        Op::AddLocalParam { feature, name, .. } => feature == &key.owner && name == &key.name,
+        _ => false,
     }
 }
 
