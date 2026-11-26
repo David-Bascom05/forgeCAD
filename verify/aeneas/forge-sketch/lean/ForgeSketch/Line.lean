@@ -26,41 +26,23 @@ theorem le_min (a b z : F64) (ha : a.isFinite) (hb : b.isFinite) (hz : z.isFinit
     core.f64.F64.min a b ⦃ m => F64.Ops.le m z = decide (a.val ≤ z.val ∨ b.val ≤ z.val) ⦄ := by
   have nA : a.isNaN = false := by cases a <;> simp_all [IEEE754.FP.isFinite, IEEE754.FP.isNaN]
   have nB : b.isNaN = false := by cases b <;> simp_all [IEEE754.FP.isFinite, IEEE754.FP.isNaN]
-  simp only [core.f64.F64.min, nA, nB, WP.spec_ok, Bool.false_eq_true, ↓reduceIte, F64.Ops.le, F64.Ops.lt]
-  have hl := IEEE754.FP.le_iff ha hz
-  have hl' := IEEE754.FP.le_iff hb hz
-  have hlt := IEEE754.FP.lt_iff hb ha
-  by_cases h : IEEE754.FP.lt b a = true <;> simp only [h, ↓reduceIte, Bool.false_eq_true]
-  · have hba := hlt.1 h
-    rw [Bool.eq_iff_iff, hl', decide_eq_true_iff]
-    constructor
-    · intro h'; exact Or.inr h'
-    · rintro (h' | h') <;> linarith
-  · have hba : ¬ b.val < a.val := fun h' => h (hlt.2 h')
-    rw [Bool.eq_iff_iff, hl, decide_eq_true_iff]
-    constructor
-    · intro h'; exact Or.inl h'
-    · rintro (h' | h') <;> linarith
+  simp only [core.f64.F64.min, nA, nB, WP.spec_ok, Bool.false_eq_true, ↓reduceIte,
+    F64.Ops.le, F64.zeroTie]
+  split_ifs <;> rw [Bool.eq_iff_iff, decide_eq_true_iff] <;>
+    simp_all only [IEEE754.FP.lt_iff ha hb, IEEE754.FP.lt_iff hb ha,
+      IEEE754.FP.le_iff ha hz, IEEE754.FP.le_iff hb hz,
+      IEEE754.FP.le_iff hz ha, IEEE754.FP.le_iff hz hb] <;> grind
 
 theorem le_max (a b z : F64) (ha : a.isFinite) (hb : b.isFinite) (hz : z.isFinite) :
     core.f64.F64.max a b ⦃ m => F64.Ops.le z m = decide (z.val ≤ a.val ∨ z.val ≤ b.val) ⦄ := by
   have nA : a.isNaN = false := by cases a <;> simp_all [IEEE754.FP.isFinite, IEEE754.FP.isNaN]
   have nB : b.isNaN = false := by cases b <;> simp_all [IEEE754.FP.isFinite, IEEE754.FP.isNaN]
-  simp only [core.f64.F64.max, nA, nB, WP.spec_ok, Bool.false_eq_true, ↓reduceIte, F64.Ops.le, F64.Ops.lt]
-  have hl := IEEE754.FP.le_iff hz ha
-  have hl' := IEEE754.FP.le_iff hz hb
-  have hlt := IEEE754.FP.lt_iff ha hb
-  by_cases h : IEEE754.FP.lt a b = true <;> simp only [h, ↓reduceIte, Bool.false_eq_true]
-  · have hab := hlt.1 h
-    rw [Bool.eq_iff_iff, hl', decide_eq_true_iff]
-    constructor
-    · intro h'; exact Or.inr h'
-    · rintro (h' | h') <;> linarith
-  · have hab : ¬ a.val < b.val := fun h' => h (hlt.2 h')
-    rw [Bool.eq_iff_iff, hl, decide_eq_true_iff]
-    constructor
-    · intro h'; exact Or.inl h'
-    · rintro (h' | h') <;> linarith
+  simp only [core.f64.F64.max, nA, nB, WP.spec_ok, Bool.false_eq_true, ↓reduceIte,
+    F64.Ops.le, F64.zeroTie]
+  split_ifs <;> rw [Bool.eq_iff_iff, decide_eq_true_iff] <;>
+    simp_all only [IEEE754.FP.lt_iff ha hb, IEEE754.FP.lt_iff hb ha,
+      IEEE754.FP.le_iff ha hz, IEEE754.FP.le_iff hb hz,
+      IEEE754.FP.le_iff hz ha, IEEE754.FP.le_iff hz hb] <;> grind
 
 /-- What the line test needs of `orient2d` (forge-math's claim for it, proven there): a finite
 result with the sign of the exact determinant of the input doubles. -/
