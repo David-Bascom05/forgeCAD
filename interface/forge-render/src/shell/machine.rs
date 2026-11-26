@@ -124,7 +124,7 @@ pub struct MachineUi {
     /// Where `models` were read from when they are forgecad's own (models::shipped_dir: none
     /// attached in the user's library); the first change copies them there.
     pub models_shipped: Option<PathBuf>,
-    pub model_checks: Vec<Result<Outside, String>>,
+    pub model_checks: Vec<Result<ModelCheck, String>>,
     /// The note the next attach carries: where the file came from and the user's right to use it
     /// (required: forge_machine_builder::model_files::require_from).
     pub model_from: String,
@@ -279,19 +279,26 @@ impl MachineUi {
             .models
             .iter()
             .map(|m| {
-                let t = self.model_tris(m)?;
-                Ok(
-                    match m
-                        .body
-                        .as_ref()
-                        .and_then(|b| d.bodies.iter().find(|x| &x.name == b))
-                    {
-                        Some(b) => {
-                            models::outside(&b.prims, crate::machine_model::placed_points(&t, m).into_iter())
-                        }
-                        None => Outside::default(),
-                    },
-                )
+                let path = self
+                    .models_read_dir()
+                    .ok_or("no folder for your library on this system")?
+                    .join(&m.file);
+                let model = crate::machine_model::file_model(&path)?;
+                let outside = match m
+                    .body
+                    .as_ref()
+                    .and_then(|b| d.bodies.iter().find(|x| &x.name == b))
+                {
+                    Some(b) => models::outside(
+                        &b.prims,
+                        crate::machine_model::placed_points(&model.triangles, m).into_iter(),
+                    ),
+                    None => Outside::default(),
+                };
+                Ok(ModelCheck {
+                    outside,
+                    notes: model.notes,
+                })
             })
             .collect();
     }
@@ -2677,10 +2684,16 @@ pub fn guess_body(def: &MachineDef, part: ([f64; 3], [f64; 3])) -> Option<String
         .map(|x| x.1)
 }
 
+/// A model's envelope check and warnings from loading its geometry.
+pub struct ModelCheck {
+    pub outside: Outside,
+    pub notes: std::sync::Arc<[String]>,
+}
+
 /// The Bodies tab's view of the attached models.
 struct ModelsCtx<'a> {
     models: &'a mut Vec<Model>,
-    checks: &'a [Result<Outside, String>],
+    checks: &'a [Result<ModelCheck, String>],
     /// The note the next attach carries (required).
     from: &'a mut String,
     split: &'a mut Option<Split>,
@@ -2705,7 +2718,7 @@ fn model_rows(
     t: &Theme,
     i: usize,
     m: &mut Model,
-    check: Option<&Result<Outside, String>>,
+    check: Option<&Result<ModelCheck, String>>,
     display_only: bool,
     touch: &mut Touch,
 ) {
@@ -2802,7 +2815,12 @@ fn model_rows(
             touch.open_split = Some(i);
         }
     }
-    match check {
+    if let Some(Ok(model)) = check {
+        for note in model.notes.iter() {
+            said(ui, note, t.warn);
+        }
+    }
+    match check.map(|r| r.as_ref().map(|c| &c.outside)) {
         Some(Ok(o)) if m.body.is_some() && o.out == 0 => {
             ui.label(
                 RichText::new(format!(

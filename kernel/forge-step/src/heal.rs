@@ -1770,8 +1770,12 @@ mod tests {
     /// `down` from (0, 2) to (0, 0), each also used by a face beside it. `x` is how far `up` lies
     /// off `down`'s line.
     fn slit(x: f64) -> (Proto, usize, usize) {
+        slit_to(x, 2.0)
+    }
+
+    fn slit_to(x: f64, tip: f64) -> (Proto, usize, usize) {
         let mut p = Proto::default();
-        for (i, q) in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (x, 1.0), (0.0, 2.0)].iter().enumerate() {
+        for (i, q) in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (x, 1.0), (0.0, tip)].iter().enumerate() {
             p.verts.push((Point3::new(q.0, q.1, 0.0), Name::feature(1 + i as u64)));
         }
         let line = |p: &mut Proto, a: usize, b: usize| {
@@ -1811,6 +1815,25 @@ mod tests {
         face(&mut p, plane(-Vec3::X), vec![(down, false)]);
         p.shells = 1;
         (p, up, down)
+    }
+
+    #[test]
+    fn a_repairable_slit_is_not_a_far_face() {
+        let (mut p, _, _) = slit_to(0.0, 200.0);
+        let knots = vec![0., 0., 1., 1.];
+        let points = [
+            Point3::new(0., 0., 0.),
+            Point3::new(0., 1., 0.),
+            Point3::new(1., 0., 0.),
+            Point3::new(1., 1., 0.),
+        ];
+        p.faces[0].surface = crate::nurbs::Nurbs::new((1, 1), (knots.clone(), knots), (2, 2), &points, None)
+            .unwrap()
+            .surface();
+        let mut stats = crate::read::Stats::default();
+        assert!(crate::read::repair_slits_and_find_far_face(&mut p, 1e-5, &mut stats).is_none());
+        assert!(stats.curve_off_surface >= 199.0 - 1e-5);
+        assert_eq!(p.faces[0].loops[0].len(), 4);
     }
 
     #[test]
