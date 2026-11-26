@@ -276,7 +276,14 @@ fn const_lists() -> Vec<String> {
         let src = std::fs::read_to_string(&f).unwrap();
         for line in src.lines() {
             let t = line.trim_start();
-            let t = t.strip_prefix("pub ").unwrap_or(t);
+            let t = t
+                .strip_prefix("pub ")
+                .or_else(|| {
+                    t.strip_prefix("pub(")?
+                        .split_once(") ")
+                        .map(|(_, declaration)| declaration)
+                })
+                .unwrap_or(t);
             let Some(rest) = t.strip_prefix("const ") else {
                 continue;
             };

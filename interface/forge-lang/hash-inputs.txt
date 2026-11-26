@@ -34,6 +34,7 @@ path kernel/forge-ops
 path kernel/forge-par
 path kernel/forge-sheet
 path kernel/forge-sheet-core
+path kernel/forge-simplify
 path kernel/forge-sketch
 path kernel/forge-step
 path kernel/forge-thermo

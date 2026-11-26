@@ -1278,6 +1278,7 @@ dependencies = [
  "forge-model",
  "forge-ops",
  "forge-sheet",
+ "forge-simplify",
  "forge-sketch",
  "forge-step",
  "forge-thermo",
@@ -1490,6 +1491,15 @@ dependencies = [
 [[package]]
 name = "forge-sheet-core"
 version = "0.1.0"
+
+[[package]]
+name = "forge-simplify"
+version = "0.1.0"
+dependencies = [
+ "forge-geom",
+ "forge-math",
+ "forge-topo",
+]
 
 [[package]]
 name = "forge-sketch"
