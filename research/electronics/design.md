@@ -4,6 +4,8 @@ Design proposal · 25 November 2026
 
 A designer draws a circuit, places it on a board, installs the board in an assembly and connects a harness. Throughout that work ForgeCAD can answer three questions about a selected object: what it is connected to, why it is placed there, and what the last edit changed. The native document is `.fg`. The graphical editor, text editor, CLI and MCP share the same typed model and edit operations. This record describes the proposed electronics tools and the evidence needed to ship them.
 
+The [PCB layout backend and manufacturer-rule study](pcb-layout-rules.md) records verified schematic handoff gaps, fabrication-service comparisons, real-board measurements and the first physical-layout acceptance fixture.
+
 ## First milestone
 
 Determine how ForgeCAD can infer **which components serve which pins or functional groups**, and what that implies for placement, from an ordinary hand-drawn schematic. Start with bypass capacitors. Evaluate the inferred assignments against documented reference designs before looking at their layouts. The cross-view contract supports carrying those findings into the PCB. [Worked RP2040 example, inference design and benchmark](design-intent.md#inferring-which-pins-a-capacitor-serves)

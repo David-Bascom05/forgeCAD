@@ -1,0 +1,117 @@
+# PCB layout backend and manufacturer rules
+
+Research and design recommendation, 26 November 2026. ForgeCAD baseline `8bf56e3`. The first deliverable should let a designer ask **“Can I route these two pads here, on this layer, with this stack and fabrication service? Which rule sets the limit?”** The interactive router, batch DRC, GUI, CLI, and MCP should ask the same question of the same revision. A second question, **“Are these pads physically connected in the manufactured artwork?”**, needs its own independent answer.
+
+## What we can build on today
+
+I ran the native `forgecad schematic FILE board [VARIANT] --json` command against three checked-in designs. All three produced `forgecad.pcb-handoff/1`. These observations establish the interface the first layout backend actually has to consume.
+
+| Fixture | What arrived | First layout obligation |
+|---|---|---|
+| USB data interface | Two component occurrences, two pad assignments each, explicit positive and negative terminals and their resolved net keys. Both footprint fields are null. | Present the unresolved package choices. Bind actual footprint revisions and validate the pad map before promising a route. Preserve pair identity if labels or visible references change. |
+| Two-channel load switch, prototype variant | Four occurrences. The right Q1 is unfitted and retains its four pad assignments, including its exposed pad. Both transistor occurrences name `DFN-3-EP`. | Place the correct channel and persist that placement across reannotation. Resolve the footprint name to geometry. A DNP transistor still contributes its bare-board pads, holes and mask openings. Omit its body from variant-specific assembly checks. |
+| Controller | The confirmed link names `main/u.vdd`, `main/c.plus` and a 3 mm preference. The source also binds `c.minus` to `u.vss`. The handoff omits those return terminals and the link's ID. | Extend the versioned handoff with relationship identity, both returns, source revision and metric. A land-distance measurement can then identify the right capacitor and the board can later measure its routed return loop. |
+
+The current net keys identify a partition in one compiled revision. A label change, merge or split can change that key. Reconcile ECOs by stable occurrence, logical pin, physical pad and net membership. Preview ambiguous split/merge cases and retain routed copper with explicit unresolved ownership until resolved. Geometry, package locks and process settings belong in the board document. [Handoff implementation](../../interface/forge-lang/src/schematic/project.rs) · [USB example](../../examples/electronics/usb-diff-pair.fg) · [Switch variant](../../examples/electronics/load-switch/switch-card.fg) · [Controller](../../examples/electronics/controller.fg)
+
+ForgeCAD already has unit checking, atomic source edits, library resolution, planar Boolean/offset operations, numeric predicates and harness/assembly frames. The existing vendor system also has human-editable built-ins, project/user discovery, source URLs and dates. Its `jlc` entry describes **JLCCNC sheet metal**. Its evaluator understands thickness and bend radius and skips unspecified fields. Reuse the discovery and provenance conventions, give PCB services their own profile type and identity, and expose missing coverage to the board checker. Keep production geometry, rule evaluation and file IO native. [Vendor implementation](../../kernel/forge-vendor/src/lib.rs) · [Existing JLC profile](../../kernel/forge-vendor/data/jlc.toml) · [Geometry reuse analysis](backend.md#4-planar-copper-geometry-and-the-forgecad-reuse-decision)
+
+## What the factories actually specify
+
+These are selected public capabilities read on 26 November 2026. Each is scoped to the cited service. A production profile needs a recorded revision, rule-level source and any order-specific approvals.
+
+| Published evidence | Consequence for our rule model |
+|---|---|
+| JLCPCB's rigid-board table gives ordinary 2-layer width/space of 0.10/0.10 mm at 1 oz and 0.16/0.16 mm at 2 oz. The corresponding multilayer entries are 0.09/0.09 and 0.15/0.15 mm. The table separately discusses BGA fan-out and distinguishes recommended and absolute PTH annular rings. [Rigid PCB capabilities](https://jlcpcb.com/capabilities/pcb-capabilities/) | Select by service, layer count, copper weight, feature pair and region. Give an exception a precise predicate and source. A BGA-specific relaxation cannot leak into an arbitrary nearby route. Preserve the source's stated units and rounding. |
+| Eurocircuits classifies copper pattern and production drill separately. Inner-layer isolation is measured from the production drill or milling tool to unconnected copper. Its published minimum isolation is the larger of 0.200 mm and inner annular ring plus 0.075 mm. Starting foil thickness constrains the attainable pattern class. [Classification](https://www.eurocircuits.com/technical-guidelines/pcb-design-guidelines/classification/) | Store finished-hole request, tool diameter, plating assumptions and source separately. A derived rule can depend on another dimension. If the service-specific tool conversion is missing, a finished-hole measurement alone cannot certify this rule. |
+| OSH Park four-layer publishes 5 mil width/spacing, 4 mil mask web, 10 mil minimum drill and 10 mil plated-drill-to-internal-copper clearance. Its guidance explicitly discusses vias without an inner land. Blind and buried vias are unavailable on this service. [Four-layer service](https://docs.oshpark.com/services/four-layer/) | Model a hole operation even on an unflashed layer. Track-to-track, drill-to-copper and opening-to-opening distances use different geometries. A forbidden via span is a capability failure even if every distance passes. |
+| JLCPCB's assembly guidance describes process rails, tooling holes and fiducials, and distinguishes package-dependent spacing for assembly and rework. [Panel and tooling guidance](https://jlcpcb.com/help/article/specifications-for-adding-process-edges-and-positioning-holes) · [Component spacing](https://jlcpcb.com/help/article/minimum-spacing-for-smd-components) | Give the assembler, assembly service, variant and panel their own context. Component bodies, courtyard, paste, tooling access and depaneling edges participate in different checks. A board can pass bare-board DFM and have an assembly violation. |
+
+**Worked threshold.** On the OSH Park service, assume an ordinary plated through drill and unconnected inner plane. Suppose their nominal edge-to-edge distance is 0.240 mm. This passes a generic 0.127 mm trace-spacing comparison but fails the applicable 0.254 mm hole-to-copper limit by **0.014 mm**. The result should identify the drill, plane, inner layer, nearest points, service row and deficit. Suppressing the inner land must leave this finding intact. A circular centered test at exactly 0.254 mm should pass a minimum-inclusive check. At 0.253999 mm it should fail. This is a proposed synthetic geometry fixture. [Service definition](https://docs.oshpark.com/services/four-layer/)
+
+## A profile change on real copper
+
+I used KiCad 9.0.2's read-only Python bindings as an independent reader on the two pinned boards already used by the repository. Counts are authored route objects and via drill diameters. A width comparison alone says nothing about spacing, registration, signal integrity or whether either board was ordered from the named service. [Fixture revisions and acquisition](probes/README.md)
+
+| Hypothetical process check | Observed result |
+|---|---|
+| Koyomi, 2 layers, ordinary track width, JLCPCB 1 oz → 3.5 oz | With unchanged artwork, **0 of 608** route objects are below 0.10 mm. At 0.25 mm, **139** fall below and **403** sit exactly at the limit. A strict-greater-than implementation would falsely reject all 403. [Published copper-weight rows](https://jlcpcb.com/capabilities/pcb-capabilities/) |
+| Inkplate 2, 4 layers, OSH Park four-layer width and drill rows | **0 of 445** route objects are below 0.127 mm. **393 of 393** via drill requests are 0.200 mm, below the service's 0.254 mm minimum. A width-only preflight would miss the process mismatch across the whole board. [Service rules](https://docs.oshpark.com/services/four-layer/) |
+
+Reproduce with the files named in the fixture guide, from a directory containing both boards. The verifier compares integer nanometres and excludes vias from route-width counts.
+
+```python
+from pathlib import Path
+import pcbnew
+
+for name in ["koyomi-lvds-hat", "inkplate-2"]:
+    board = pcbnew.LoadBoard(str(Path(name + ".kicad_pcb").resolve()))
+    items = list(board.GetTracks())
+    widths = [item.GetWidth() for item in items if not isinstance(item, pcbnew.PCB_VIA)]
+    drills = [item.GetDrillValue() for item in items if isinstance(item, pcbnew.PCB_VIA)]
+    for floor in [100000, 127000, 250000]:
+        print(name, floor, len(widths), sum(w < floor for w in widths), widths.count(floor))
+    print(name, "via drills under 10 mil", sum(d < 254000 for d in drills), len(drills))
+```
+
+## Lessons from production editors
+
+- **KiCad 10.** Board minima constrain local rules. Custom rules resolve with ordering, and min/opt/max carry different meanings for checking and interactive routing. The tagged router source constructs a candidate track with its layer, net and width and calls the DRC engine on segment candidates. A solver that only accepts objects already committed to the board cannot provide this interaction. Preserve KiCad ordering in imported rules or report a semantic loss. The existing architecture study separately tracks development work toward 11. [10.0 PCB editor](https://docs.kicad.org/10.0/en/pcbnew/pcbnew.html) · [Tagged router adapter](https://github.com/KiCad/kicad-source-mirror/blob/e432beac2668303194ba2040274f9e5efe773fc0/pcbnew/router/pns_kicad_iface.cpp#L571) · [Versioned source study](backend.md#evidence-and-versions)
+- **Altium.** Its Constraint Manager distinguishes physical geometry from electrical path constraints. An impedance-profile refresh can update preferred width while leaving independently specified bounds intact. An xSignal can continue across a series component. Push, hug, gloss and BGA fan-out all make proposed changes to surrounding geometry. ForgeCAD needs layer-specific targets, ordered terminal paths, locked features and a multi-object trial edit with an explanation of the limiting rule. These are conclusions from public behavior. [Constraint Manager](https://www.altium.com/documentation/altium-designer/sch-pcb/constraint-manager) · [xSignals](https://www.altium.com/documentation/altium-designer/pcb/high-speed-design/xsignals) · [Interactive routing](https://www.altium.com/documentation/altium-designer/pcb/routing/interactive)
+- **Cadence Allegro.** Reusable constraint sets distinguish physical, spacing, same-net spacing and electrical constraints. Same-net copper needs context: two branches might have a minimum spacing requirement but the legal joining point must remain possible. Index object-pair and contact relationships as well as net classes. [Cadence constraint sets](https://community.cadence.com/cadence_blogs_8/b/pcb/posts/using-constraint-sets-to-manage-design-constraints)
+
+## Proposed native contract
+
+**Physical board.** Keep authored objects in a linked `.fg` board document. Give outlines and cutouts, region-specific stacks, named copper/dielectric strata, footprint occurrences, padstacks, traces/arcs, via spans, zones, keepouts and dimensions stable IDs. Store local coordinates and side/mirror transforms for footprints. Resolve each padstack into per-layer copper, mask openings, paste apertures and a sequence of fabrication operations. A hole operation has a shape, tool and finished dimensions when known, start/end strata, side, plating and process stage. Sequential lamination, slots, filled vias and backdrills can then share a model. Preserve separate authored, filled and exported geometry with a source revision for each. [Prior physical model](backend.md#3-physical-board-padstacks-and-fabrication-process)
+
+**Rule declaration.** A leaf constraint needs a stable ID, owner and revision, source row, applicability predicate, subjects, measured quantity, inclusive/exclusive bounds or allowed set, preferred value if any, and evidence required for evaluation. Owners include fabricator service, assembler, project, schematic intent, and a documented order-specific deviation. Use the existing dimensional machinery at the language boundary. Extend it for any missing electrical/material quantities. Copper weight, finished thickness, nominal tool diameter, impedance and propagation delay have distinct meanings. Preserve source decimal or rational magnitudes through conversion to board-grid units. Track material frequency and tolerance where they affect results. [Existing language and proof approach](language-proof.md)
+
+**Resolution.** First select a process revision, construction, fabrication options and assembly service. Evaluate applicable mandatory floors, ceilings and allowed process sets. Intersect simultaneous hard bounds. If a supplier requires at least 0.16 mm and a design requires at most 0.14 mm for the same width, return an unsatisfiable interval with both sources, before routing. Select a preferred value inside the legal interval, with an explicit conflict when an impedance target has no qualified solution. A geometry target from a calculator cannot certify delivered impedance. Region-specific alternatives replace a named base clause only inside their documented domain. An unqualified proposal to use a special process yields “requires fabricator review.” An unknown input yields “unknown” with the missing field. Keep project waivers, documented fab deviations and rule severity as separate records. [JLCPCB impedance calculator](https://jlcpcb.com/help/article/user-guide-to-the-jlcpcb-impedance-calculator) · [KiCad constraint behavior](https://docs.kicad.org/10.0/en/pcbnew/pcbnew.html)
+
+For example, the following is proposed `.fg` authoring syntax for one coverage row in a project-owned profile. A profile editor could generate it from fields. Here the reader can type-check a plated hole, a copper stratum and a length, and the resolver can index the rule before seeing board geometry. The service revision would own the source URL, quoted units and retrieval date.
+
+```fg
+inner_hole_clearance = rule(
+    service: oshpark.four_layer,
+    measure: edge_distance(plated_drill, unconnected_copper),
+    layers: inner_copper,
+    minimum: 0.254mm
+)
+```
+
+Scope must be precise enough to specify both objects, their connectivity and their layer relationship. Some rules constrain a single object (trace width), some a pair (hole-to-copper), some a group (skew across a byte lane), and some a construction (allowed drill/lamination sequence). A rule compiler can reject a width in degrees or a pair-skew rule applied to a lone pad. The release should retain which profile fields were supplied by a verified source and which remain unanswered.
+
+**Distribution and lifecycle.** Let designers create nested process libraries using the same library-authoring conventions as symbols. A project can pin separate fab and assembly service revisions and a selected stack construction. Resolve editable human names to immutable versions or content digests, including transitive dependencies. Keep source date and service/table row on each numeric claim, support vendor-specific order notes and a recorded quote with its scope, and show the old/new affected findings before accepting an update. Two suppliers selected as alternate builds get two check reports. A “portable to both” mode explicitly takes their common feasible set. Public tables alone cannot establish yield, guarantee an impedance tolerance or approve a quoted exception.
+
+**Shared queries.** The proposed operations below describe semantics for Rust, GUI, CLI and MCP. The names are illustrative. The graphical editor authors the same records and presents the same evidence as a source edit.
+
+| Query | Inputs and response |
+|---|---|
+| Resolve a rule | Revision, candidate primitive or object pair, layer/region, process and net relation → applicable clauses, legal interval, preferred target, suppressed alternatives and source spans. Works before the candidate has a board ID. |
+| Check a trial edit | Base revision and reversible object delta → changed/cleared findings, geometric witnesses, connectivity changes, timings and coverage by rule. Accept commits the identical delta and rejects stale bases. Cancel discards the overlay. |
+| Explain a physical path | Schematic terminals and occurrence → mapped pins/pads, actual conducting islands, holes and vias, routed path and return/reference coverage. A pad mapped to multiple copper lands requires explicit measurement endpoints. |
+| Freeze a release | Board, schematic, process/profile digests, stack, library assets, assembly variant and waivers → coverage report, exact input manifest, fabrication/assembly outputs and datum transforms. A changed profile invalidates the previous release verdict. |
+
+## Tooling these choices unlock
+
+| Tool | Data and checks it consumes |
+|---|---|
+| Placement, repeated channels and harness-aware design | Footprint origins, pads, courtyards, sides, rooms, bodies, volumes/height limits and mating frames. A bypass prefer-distance reports which lands were measured. Connector reach and enclosure clearance use the installed occurrence. |
+| Walk-around, push-and-shove, interactive drag, BGA escape and via stitching | Analytic segments/arcs, layer-specific clearance envelopes, legal via transitions, region boundaries, locked copper, movable neighbors and reversible, multi-object edits. A candidate crossing a neck-down boundary gets checked on both sides. |
+| Differential routing, bus tuning, return-path and SI/PI tools | Explicit pair polarity, actual paired segments, coupled gap, accumulated uncoupled length, per-leg vias, reference planes, intentional net ties, ordered driver-to-receiver paths and package delay. Store electrical-length models at the stack/region level. A designer can satisfy geometric length and still fail skew or lose the return plane. |
+| Planes, thermals, HDI and rigid-flex | Zone priority, thermals, necks, islands, keepouts, via constructions, regional layers and bend geometry. Refill can disconnect distant copper. A stack edit can invalidate every permitted layer transition and impedance estimate on that stack. |
+| DFM, DFA, DFT and CAM | Effective copper and openings, drill spans, plated slots, edge machining, board/panel frames, assembly variant and accessible probe targets. Emit per-layer artwork and attributed drill data, placement/BOM and a netlist for electrical test. Reserve mappings for IPC-2581 and ODB++ and compare exported geometry and connectivity against the frozen revision. [Ucamco specifications and test files](https://www.ucamco.com/en/gerber/downloads/) · [Siemens ODB++](https://www.siemens.com/en-us/products/pcb/odb-plus-plus/) |
+
+## Interactive checking and sign-off
+
+Index per-layer effective copper and swept old/new envelopes, hole spans by stack region, and rule consumers by service option, net class, pair and object. Inflate the search envelope by a proven upper bound on applicable clearance. A new service with larger spacing can introduce violations between untouched objects. Track ownership of each finding and remove obsolete witnesses. Maintain separate graphs for intended electrical membership and actual copper contact, including intentional net ties. For deletion of a bridge, revisit the physical island that could split. Give zone fill and plane continuity explicit dependencies on fill priority and neighboring copper. [Incremental design and previous probe results](live-checks.md)
+
+Each verdict should distinguish pass, fail, unknown, pending and inapplicable on the exact current revision. Show a local, exact clearance during a drag even while a whole-plane refill is pending. A full pass requires coverage of every enabled applicable check. Measure p50/p95/p99 edit-to-painted-verdict on named hardware, cold/warm, and report the fraction of frames with complete current coverage. Target a 16.7 ms frame at 60 Hz. The existing Inkplate probe measured **1.64 µs p95** for one fixed circular via rule on 393 vias. That establishes a local optimization opportunity. It supplies no measured timing for a router, polygon refill or full-board DRC. [Probe and limits](live-checks.md#measurements-on-the-existing-implementation-and-real-boards)
+
+## First implementation and acceptance
+
+1. **A board that can explain one real route.** Import the USB handoff, bind the two unresolved packages from a nested footprint library and verify their pad maps. Author a rigid outline, a pinned four-layer construction, two tracks, an inner plane and an ordinary through via. Implement width, copper spacing, annular ring, drill span and drill-to-inner-copper on this subset. Give the selected service a visible list of supported and unknown checks. The GUI and MCP should be able to ask why a route is legal at the cursor before a router exists.
+2. **Prove consistency under edits.** Move the pair and via through exact threshold, ±1 grid unit, a keepout and a sheet-label rename. Test a missing footprint, a wrong pad map, suppressed inner land, net short, net split, variant switch and service change. Compare incremental results **including cleared findings, witnesses and coverage** with an independent full evaluation on each edit, undo and replay. Use the real-board width/drill counts above as regression oracles. Extend the existing Lean work with feasible-interval intersection, polarity-preserving pad mapping and the conditions under which unaffected findings may be reused.
+3. **Close the manufacturing loop.** Export the supported copper and drill subset, read it back independently and compare layer identity, coordinates, plating, hole spans and recovered physical nets. A missing plating flag or swapped inner layer must fail the fixture. Use external CAD/CAM readers only in verification. Grow the first route, zone and differential tuning tools against this same contract. Qualify each additional service/process and each new rule family separately. [Existing verification sequence](backend.md#11-verification-scale-and-sequencing)
+
+Open decisions for the first implementation are the physical footprint library format/identity, canonical board-grid range and overflow envelope, and which fabrication service/stack revision to qualify first. An OSH Park four-layer pilot has a concrete stack and an unusually good inner-drill regression. JLCPCB's conditional copper-weight rows make a complementary profile-switch test.
