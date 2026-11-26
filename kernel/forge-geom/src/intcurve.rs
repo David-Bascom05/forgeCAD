@@ -933,7 +933,11 @@ fn walk(
             if ends(a, p, d, h) || ends(b, p, d, h) {
                 // (a spline patch's rim short of the march: the branch carried onto it, so the
                 // edge there is met, not missed by the hair the march stopped short)
-                if let Some(q) = rim_point(a, b, p, step).or_else(|| rim_point(b, a, p, step)) {
+                if let Some(q) = [rim_point(a, b, p, d, step), rim_point(b, a, p, d, step)]
+                    .into_iter()
+                    .flatten()
+                    .min_by(|x, y| x.distance(p).total_cmp(&y.distance(p)))
+                {
                     pts.push(q);
                 }
                 return Some((pts, false));
@@ -1064,62 +1068,49 @@ fn ends(s: &Surface, p: Point3, d: Vec3, h: f64) -> bool {
     off > tol::LINEAR && (rim(dom.u, uv.x) || rim(dom.v, uv.y))
 }
 
-/// Where the curve of `s` and `other` near `p` meets the rim of `s`'s parameters (a spline
-/// patch's edge, its face's): on the domain edge nearest `p` (not a wrapping one), along it, the
-/// point where `other`'s implicit vanishes, by Newton steps from `p`'s place. None if `s` is not
-/// procedural, the rim is no nearer than `step`, or the steps do not settle on both surfaces.
+/// Nearest forward intersection with a nonperiodic parameter rim within one marching step.
 #[cold]
 #[inline(never)]
-fn rim_point(s: &Surface, other: &Surface, p: Point3, step: f64) -> Option<Point3> {
+fn rim_point(s: &Surface, other: &Surface, p: Point3, dir: Vec3, step: f64) -> Option<Point3> {
     use crate::surface::SurfaceGeom;
     let Surface::Procedural(pr) = s else { return None };
     let dom = SurfaceGeom::domain(s);
     let uv = pr.project(p);
-    // the rim nearest p: a fixed coordinate (u or v) at an end, the other free
-    let mut best: Option<(f64, bool, f64)> = None;
-    for (fix_u, d1) in [(true, dom.u), (false, dom.v)] {
-        if d1.period.is_some() {
-            continue;
-        }
-        for at in [d1.lo, d1.hi] {
-            let q = if fix_u {
-                Point2::new(at, uv.y)
+    let solve = |fix_u: bool, at: f64| {
+        let free = if fix_u { dom.v } else { dom.u };
+        let on = |t: f64| {
+            pr.point(if fix_u {
+                Point2::new(at, t)
             } else {
-                Point2::new(uv.x, at)
-            };
-            let dist = pr.point(q).distance(p);
-            if best.is_none_or(|b| dist < b.0) {
-                best = Some((dist, fix_u, at));
-            }
-        }
-    }
-    let (dist, fix_u, at) = best?;
-    if dist > step {
-        return None;
-    }
-    let free = if fix_u { dom.v } else { dom.u };
-    let on = |t: f64| {
-        pr.point(if fix_u {
-            Point2::new(at, t)
-        } else {
-            Point2::new(t, at)
-        })
-    };
-    let mut t = if fix_u { uv.y } else { uv.x };
-    let dt = 1e-7 * (free.hi - free.lo).abs().max(1e-12);
-    for _ in 0..30 {
-        let g = other.implicit(on(t));
-        if g.abs() <= 1e-3 * tol::LINEAR {
-            break;
-        }
-        let slope = (other.implicit(on(t + dt)) - other.implicit(on(t - dt))) / (2.0 * dt);
-        if slope.abs().partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
+                Point2::new(t, at)
+            })
+        };
+        let mut t = if fix_u { uv.y } else { uv.x };
+        if on(t).distance(p) > step {
             return None;
         }
-        t = (t - g / slope).clamp(free.lo, free.hi);
-    }
-    let q = on(t);
-    (other.implicit(q).abs() <= tol::LINEAR && q.distance(p) <= step).then_some(q)
+        let dt = 1e-7 * (free.hi - free.lo).abs().max(1e-12);
+        for _ in 0..30 {
+            let g = other.implicit(on(t));
+            if g.abs() <= 1e-3 * tol::LINEAR {
+                break;
+            }
+            let slope = (other.implicit(on(t + dt)) - other.implicit(on(t - dt))) / (2.0 * dt);
+            if !slope.is_finite() || slope == 0.0 {
+                return None;
+            }
+            t = (t - g / slope).clamp(free.lo, free.hi);
+        }
+        let q = on(t);
+        ((q - p).dot(dir) > 0.0 && q.distance(p) <= step && other.implicit(q).abs() <= tol::LINEAR)
+            .then_some(q)
+    };
+    [(true, dom.u), (false, dom.v)]
+        .into_iter()
+        .filter(|(_, d)| d.period.is_none())
+        .flat_map(|(fix_u, d)| [d.lo, d.hi].map(|at| solve(fix_u, at)))
+        .flatten()
+        .min_by(|x, y| x.distance(p).total_cmp(&y.distance(p)))
 }
 
 pub(crate) fn finish(a: &Surface, b: &Surface, pts: Vec<Point3>, closed: bool, step: f64) -> IntCurve {
@@ -1184,6 +1175,31 @@ mod tests {
     use crate::curve::CurveGeom;
     use crate::surface::{Cone, Cylinder, Sphere, SurfaceGeom, Torus};
     use forge_math::{Frame, UnitVec3};
+
+    #[test]
+    fn march_near_a_patch_corner_selects_the_forward_rim() {
+        use crate::spline::{Extruded, Spline};
+        use crate::surface::{Plane, Proc};
+        use forge_math::Interval;
+        use std::sync::Arc;
+        let line = Spline::from_nurbs(
+            1,
+            &[0., 0., 1., 1.],
+            &[Point3::ORIGIN, Point3::new(1., 0., 0.)],
+            None,
+        )
+        .unwrap();
+        let wall = Extruded::new(Frame::WORLD, Arc::new(line), Interval::new(0., 1.)).unwrap();
+        let patch = Surface::Procedural(Proc(Arc::new(wall)));
+        let rim = patch.domain().v.lo;
+        let p = Point3::new(0.00005, 0., rim + 0.00004);
+        let dir = Vec3::new(-1., 0., 0.1);
+        let plane = Surface::Plane(Plane {
+            frame: Frame::from_z(p, Vec3::new(0.1, 0., 1.).normalize().unwrap()),
+        });
+        let q = rim_point(&patch, &plane, p, dir, 0.01).unwrap();
+        assert!(q.distance(Point3::new(0., 0., rim + 0.000045)) < tol::LINEAR);
+    }
 
     fn on_both(c: &IntCurve) {
         for i in 0..=200 {
