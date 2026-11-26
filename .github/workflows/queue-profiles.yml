@@ -13,7 +13,7 @@ jobs:
       matrix:
         revision:
           - 310dd0e623e52336d25f3621deb38eb83456af9c
-          - f7a305bd0e7635f4bc8175e62d0708fe477113ca
+          - 3e457796cbbb6ecea46ee36ed2d1b375ce5ab7c9
     env:
       CARGO_INCREMENTAL: 0
       CARGO_PROFILE_RELEASE_DEBUG: 0
