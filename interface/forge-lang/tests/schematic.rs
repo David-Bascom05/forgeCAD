@@ -276,7 +276,7 @@ fixture = place(sheet: cell, symbol: S, at: (40,0), in_bom: false)
 #[test]
 fn pdf_attachments_are_addressed_by_content() {
     use schematic::datasheet::store_pdf;
-    let dir = std::env::temp_dir().join(format!("forge-pdf-{}", std::process::id()));
+    let dir = forge_dirs::temp_dir().join(format!("forge-pdf-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&dir).unwrap();
     let owner = dir.join("library.fg");
     let bytes = b"%PDF-1.4\n%%EOF";
