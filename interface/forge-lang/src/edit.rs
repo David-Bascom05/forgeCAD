@@ -448,6 +448,9 @@ fn splice(src: &str, lo: u32, hi: u32, text: &str) -> String {
 
 /// The dimension a param's definition gives, from a check of the document.
 pub(crate) fn param_dim(src: &str, key: &ParamKey, at: &At) -> Option<Dim> {
+    if crate::schematic::is_document(src) {
+        return crate::schematic::parameter_dimension(src, key);
+    }
     let (run, _) = crate::run(src, at.options(), Default::default());
     dim_in(&run, key)
 }
@@ -1338,6 +1341,12 @@ pub fn apply_checked_in(src: &str, op: &Op, dir: Option<std::path::PathBuf>) -> 
 /// `apply_checked` for a document in `at`: every evaluation it makes (a param's dimension, the
 /// source's errors, the edited text's) has the document's directory and the session's root.
 pub fn apply_checked_at(src: &str, op: &Op, at: &At) -> R<(String, Option<Reach>)> {
+    if crate::schematic::is_document(src) {
+        let next = apply_at(src, op, at)?;
+        crate::schematic::compile(&next, at.dir.as_deref(), at.root.as_deref())
+            .map_err(|e| Error::Schematic(Box::new(e)))?;
+        return Ok((next, None));
+    }
     // the source evaluated once, when first asked: for a param's dimension (SetParam) and for the
     // errors the edit is checked against (it was two runs of the same text)
     let opts = at.options();

@@ -2297,14 +2297,16 @@ impl<'s> Eval<'s> {
     ) -> R<(usize, u64)> {
         crate::sheet::guard(self, &f, id, span)?;
         let hid = history_id(id);
-        self.push_made(id, kind, span, dims, hid, |b| {
-            b.push(f, hid).map_err(|error| Error::Build {
-                span,
-                id: id.into(),
-                error,
-                fit: None,
-            })
-        })
+        self.register_history_id(id, hid, span)?;
+        let was_building = self.b.building;
+        let result = self.b.push(f, hid).map_err(|error| Error::Build {
+            span,
+            id: id.into(),
+            error,
+            fit: None,
+        });
+        self.record_feature(id, kind, span, dims, was_building, result)
+            .map(|idx| (idx, hid))
     }
 
     /// Adds a feature to the history and builds it by `push`, keeping its record.
@@ -2317,6 +2319,14 @@ impl<'s> Eval<'s> {
         hid: u64,
         push: impl FnOnce(&mut crate::build::Builder) -> R<usize>,
     ) -> R<(usize, u64)> {
+        self.register_history_id(id, hid, span)?;
+        let was_building = self.b.building;
+        let result = push(&mut self.b);
+        self.record_feature(id, kind, span, dims, was_building, result)
+            .map(|idx| (idx, hid))
+    }
+
+    fn register_history_id(&mut self, id: &str, hid: u64, span: Span) -> R<()> {
         // one kernel name, one id: another id hashing to it would name the same entities
         match self.hids.entry(hid) {
             std::collections::hash_map::Entry::Occupied(e) if self.feats[*e.get()].id != id => {
@@ -2333,8 +2343,18 @@ impl<'s> Eval<'s> {
                 e.insert(self.feats.len());
             }
         }
-        let was_building = self.b.building;
-        let r = push(&mut self.b);
+        Ok(())
+    }
+
+    fn record_feature(
+        &mut self,
+        id: &str,
+        kind: &'static str,
+        span: Span,
+        dims: Vec<Dimension>,
+        was_building: bool,
+        r: R<usize>,
+    ) -> R<usize> {
         let idx = self.b.features.len() - 1;
         let status = match (&r, was_building) {
             (Ok(_), true) => Status::Ok,
@@ -2374,7 +2394,7 @@ impl<'s> Eval<'s> {
         if status == Status::Ok && idx > 0 && self.checks && self.no_effect(idx) {
             self.warnings.push(Warning::NoEffect { span, id: id.into() });
         }
-        Ok((idx, hid))
+        Ok(idx)
     }
 
     fn no_effect(&self, idx: usize) -> bool {

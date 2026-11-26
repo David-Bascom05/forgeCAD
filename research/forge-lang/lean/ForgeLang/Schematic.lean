@@ -1,0 +1,124 @@
+/-! Semantics of nominal wants/gives, confirmed bindings and undirected electrical wiring.
+The identifier types are independent of implementation indices or JSON display strings.
+Positions, package pin numbers and sheet decorations do not participate in electrical union. -/
+namespace ForgeLang.Schematic
+
+structure RoleId where
+  name : String
+deriving DecidableEq
+
+/-- A dimensioned rating belongs only to the constructors that accept it in the reader.
+Numeric magnitude is abstract here; the Rust reader checks finite bounds and positive capacitance. -/
+structure Millivolts where
+  value : Rat
+deriving DecidableEq
+
+structure Nanofarads where
+  value : Rat
+deriving DecidableEq
+
+inductive RoleSpec where
+  | power (voltage : Option Millivolts)
+  | reference (voltage : Option Millivolts)
+  | bypass (capacitance : Option Nanofarads)
+  | groundReturn | signal | clock | bias | termination | feedback | protection | interfaceRole
+deriving DecidableEq
+
+abbrev Registry := RoleId → Option RoleSpec
+
+structure Terminal where
+  occurrence : List String
+  pin : String
+deriving DecidableEq
+
+structure Port where
+  wants : List RoleId
+  gives : List RoleId
+deriving DecidableEq
+
+structure Binding where
+  consumer : Terminal
+  provider : Terminal
+  role : RoleId
+deriving DecidableEq
+
+def Admissible (ports : Terminal → Port) (b : Binding) : Prop :=
+  b.consumer ≠ b.provider ∧ b.role ∈ (ports b.consumer).wants ∧ b.role ∈ (ports b.provider).gives
+
+instance (p : Terminal → Port) (b : Binding) : Decidable (Admissible p b) :=
+  inferInstanceAs (Decidable (_ ∧ _ ∧ _))
+
+def checkBinding (ports : Terminal → Port) (b : Binding) : Bool := decide (Admissible ports b)
+
+theorem binding_sound_complete (ports : Terminal → Port) (b : Binding) :
+    checkBinding ports b = true ↔ Admissible ports b := by simp [checkBinding]
+
+theorem missing_give_refused (ports : Terminal → Port) (b : Binding)
+    (h : b.role ∉ (ports b.provider).gives) : checkBinding ports b = false := by
+  simp [checkBinding, Admissible, h]
+
+/-- Resolve a proposed connection to one declared, typed role shared by its two pins. -/
+def resolveBinding (types : Registry) (ports : Terminal → Port) (b : Binding) : Option RoleSpec :=
+  if checkBinding ports b then types b.role else none
+
+theorem resolved_binding_typed (types : Registry) (ports : Terminal → Port) (b : Binding) (spec : RoleSpec) :
+    resolveBinding types ports b = some spec ↔ Admissible ports b ∧ types b.role = some spec := by
+  by_cases h : Admissible ports b <;> simp [resolveBinding, checkBinding, h]
+
+theorem undeclared_role_refused (types : Registry) (ports : Terminal → Port) (b : Binding)
+    (h : types b.role = none) : resolveBinding types ports b = none := by
+  simp [resolveBinding, h]
+
+abbrev Wire := Terminal × Terminal
+
+def touches (e : Wire) (a b : Terminal) : Prop :=
+  (e.1 = a ∧ e.2 = b) ∨ (e.1 = b ∧ e.2 = a)
+
+theorem reverse_wire (e : Wire) (a b : Terminal) :
+    touches (e.2,e.1) a b ↔ touches e a b := by
+  simp only [touches]
+  constructor <;> intro h <;> rcases h with ⟨x,y⟩ | ⟨x,y⟩
+  · exact Or.inr ⟨y,x⟩
+  · exact Or.inl ⟨y,x⟩
+  · exact Or.inr ⟨y,x⟩
+  · exact Or.inl ⟨y,x⟩
+
+abbrev Adj (w : List Wire) (a b : Terminal) := ∃ e ∈ w, touches e a b
+
+inductive Connected (w : List Wire) (a : Terminal) : Terminal → Prop where
+  | here : Connected w a a
+  | step {x y} : Connected w a x → Adj w x y → Connected w a y
+
+theorem same_adjacency {u v : List Wire} (eqv : ∀ a b, Adj u a b ↔ Adj v a b)
+    {a b} (h : Connected u a b) : Connected v a b := by
+  induction h with
+  | here => exact .here
+  | step _ edge ih => exact .step ih ((eqv _ _).mp edge)
+
+theorem reverse_gesture {e : Wire} {ws : List Wire} {a b} :
+    Connected ((e.2,e.1)::ws) a b ↔ Connected (e::ws) a b := by
+  have h : ∀ x y, Adj ((e.2,e.1)::ws) x y ↔ Adj (e::ws) x y := by
+    intro x y
+    simp [Adj, reverse_wire]
+  exact ⟨same_adjacency h, same_adjacency (fun x y => (h x y).symm)⟩
+
+structure Drawing where
+  wires : List Wire
+  bindings : List Binding
+  pose : Terminal → Int × Int
+
+def confirm (d : Drawing) (p : Terminal → Port) (b : Binding) : Option Drawing :=
+  if checkBinding p b then some {d with bindings := b :: d.bindings} else none
+
+theorem confirm_preserves_wiring {d d' : Drawing} {p b} (h : confirm d p b = some d') :
+    d'.wires = d.wires ∧ Admissible p b := by
+  unfold confirm at h
+  split at h
+  next valid => cases h; exact ⟨rfl, (binding_sound_complete p b).mp valid⟩
+  next => contradiction
+
+theorem move_preserves_intent (d : Drawing) (pos : Terminal → Int × Int) :
+    ({d with pose := pos} : Drawing).bindings = d.bindings ∧
+    ({d with pose := pos} : Drawing).wires = d.wires := ⟨rfl,rfl⟩
+
+end ForgeLang.Schematic

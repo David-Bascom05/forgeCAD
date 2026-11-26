@@ -906,6 +906,7 @@ pub enum Error {
     Asm(Box<crate::asm::AsmNote>),
     /// iProperties and materials (`props.rs`).
     Props(Box<crate::props::PropErr>),
+    Schematic(Box<crate::schematic::Fault>),
 }
 
 impl Error {
@@ -996,6 +997,13 @@ impl Error {
             Weld(e) => e.span(),
             Use(e) => e.span(),
             Props(e) => e.span(),
+            Schematic(e) => {
+                if e.file.is_none() {
+                    Some(e.span)
+                } else {
+                    None
+                }
+            }
         }
     }
 
@@ -1065,6 +1073,7 @@ impl Error {
             Weld(e) => e.kind(),
             Use(e) => e.kind(),
             Props(e) => e.kind(),
+            Schematic(e) => e.kind,
             NotWith { .. } => "NotWith",
             TaperOnCurve { .. } => "TaperOnCurve",
             PathGap { .. } => "PathGap",
@@ -1153,6 +1162,7 @@ impl Error {
             Std(e) => e.fixes(),
             Asm(n) => n.fixes(),
             Props(e) => e.fixes(),
+            Schematic(_) => Vec::new(),
             _ => vec![],
         }
     }
@@ -1162,8 +1172,15 @@ impl Error {
     pub fn detail(&self) -> Option<String> {
         match self {
             Error::ExpectFailed {
-                metric, cmp, limit, tol, ..
-            } => Some(format!("expect {}", crate::expect_words::raw(metric.name(), *cmp, *limit, *tol))),
+                metric,
+                cmp,
+                limit,
+                tol,
+                ..
+            } => Some(format!(
+                "expect {}",
+                crate::expect_words::raw(metric.name(), *cmp, *limit, *tol)
+            )),
             Error::Asm(n) => n.issue.detail(),
             _ => None,
         }
@@ -1353,6 +1370,7 @@ impl Error {
             Weld(e) => e.text(),
             Use(e) => e.text(),
             Props(e) => e.text(),
+            Schematic(e) => e.message.clone(),
             NotWith { func, arg, with, .. } => format!("{func}: {arg} does not apply with {with}"),
             TaperOnCurve { sketch, .. } => format!(
                 "sketch {sketch}'s outline has a spline side: a taper has no exact form on it (draw it of lines and arcs, or loft to a smaller outline)"
@@ -1464,7 +1482,10 @@ impl Error {
                 ("measured", (*measured).into()),
                 ("limit", (*limit).into()),
                 ("tol", (*tol).into()),
-                ("expect", s(&crate::expect_words::raw(metric.name(), *cmp, *limit, *tol))),
+                (
+                    "expect",
+                    s(&crate::expect_words::raw(metric.name(), *cmp, *limit, *tol)),
+                ),
             ],
             Regions { sketch, count, .. } => vec![("sketch", s(sketch)), ("count", (*count as f64).into())],
             SketchConflict { sketch, rows, .. } => vec![
@@ -1494,6 +1515,10 @@ impl Error {
             Weld(e) => e.data(),
             Use(e) => e.data(),
             Props(e) => e.data(),
+            Schematic(e) => vec![
+                ("file", e.file.clone().map_or(Json::Null, Into::into)),
+                ("source_span", span_json(e.span)),
+            ],
             NotWith { func, arg, with, .. } => vec![("func", s(func)), ("arg", s(arg)), ("with", s(with))],
             TaperOnCurve { sketch, .. } => vec![("sketch", s(sketch))],
             PathGap { index, .. } => vec![("index", (*index as f64).into())],

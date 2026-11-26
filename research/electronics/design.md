@@ -21,6 +21,8 @@ Determine how ForgeCAD can infer **which components serve which pins or function
 
 Selecting a pin exposes what its library definition wants and gives. Both may apply to one pin. A regulator output gives power and can want a local output capacitor. A passive terminal acquires a job when it fulfills a particular want. **Add bypass capacitor** should create the occurrence, connect supply and return, and record which pin or pin group it serves in one undoable source edit. The designer can make the same connection freehand and inspect suggested associations.
 
+A want or give names a **declared role type**. For example, a regulator pin can give a 3.3 V rail and want a 100 nF bypass at the same time. Roles carry a stable identity, a checked kind and optional typed ratings. A fulfillment must match the same role identity at both endpoints. Libraries share an identity explicitly. CLI, canvas and MCP consumers read the same structured role objects, including units. The [native schematic reference](../../docs/schematic.md) gives the declarations and wire format.
+
 Show a rooted view from any selected pin. Keep electrical attachments undirected, distinguish ordered functional stages from parallel peers, and represent shared nodes or feedback edges by reference. Reversing a wire gesture preserves connectivity and functional intent. PCB placement reads the confirmed endpoints and their preferred metric, including after reannotation.
 
 ## First acceptance test
