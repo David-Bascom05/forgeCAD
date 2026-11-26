@@ -128,6 +128,10 @@ jobs:
           workspaces: |
             . -> target
             interface/forge-speech -> target
+      # hash_inputs resolves metadata for the whole workspace offline, including crates
+      # outside the packages built by this job.
+      - name: Fetch locked workspace dependencies
+        run: cargo fetch --locked
       - name: tests of the platform code
         # every check runs, so one failure does not hide the others
         shell: bash
