@@ -346,6 +346,10 @@ fn headers() -> BTreeSet<(String, String)> {
 /// above (or that only reads the header). A new kind of document (a new file here) must register
 /// its families and its header's row.
 const HEADER_FILES: &[(&str, &str)] = &[
+    (
+        "interface/forge-lang/src/edit.rs",
+        "reads the schematic header for deferred pin and symbol references",
+    ),
     ("interface/forge-lang/src/schematic/mod.rs", "family schematic"),
     ("interface/forge-cam-lang/src/lib.rs", "families cam, cam-expr"),
     ("interface/forge-turn-lang/src/lib.rs", "families turn, turn-expr"),
