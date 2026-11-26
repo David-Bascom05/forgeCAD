@@ -142,7 +142,7 @@ impl Proto {
                     // triangles 8 µm by 0.3 µm), not a slit in one: taking two of its sides out
                     // left a loop that draws nothing, and the solid's integrals with it
                     let n = self.faces[fi].loops[li].len();
-                    if n < 5 {
+                    if n < 4 {
                         continue;
                     }
                     for i in 0..n {
@@ -172,6 +172,11 @@ impl Proto {
                         }
                         if (na - nb).abs() <= near && from != to {
                             // ends a hair apart, not one vertex: left alone
+                            continue;
+                        }
+                        // A partial overlap splits the longer edge before two uses are
+                        // removed. Equal edges need at least five original uses.
+                        if n == 4 && na == nb {
                             continue;
                         }
                         // the longer split at the shorter's far vertex
@@ -1770,13 +1775,17 @@ mod tests {
     /// `down` from (0, 2) to (0, 0), each also used by a face beside it. `x` is how far `up` lies
     /// off `down`'s line.
     fn slit(x: f64) -> (Proto, usize, usize) {
-        slit_to(x, 2.0)
+        slit_to(x, 2.0, false)
     }
 
-    fn slit_to(x: f64, tip: f64) -> (Proto, usize, usize) {
+    fn slit_to(x: f64, tip: f64, triangle: bool) -> (Proto, usize, usize) {
         let mut p = Proto::default();
-        for (i, q) in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (x, 1.0), (0.0, tip)].iter().enumerate() {
-            p.verts.push((Point3::new(q.0, q.1, 0.0), Name::feature(1 + i as u64)));
+        for (i, q) in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (x, 1.0), (0.0, tip)]
+            .iter()
+            .enumerate()
+        {
+            p.verts
+                .push((Point3::new(q.0, q.1, 0.0), Name::feature(1 + i as u64)));
         }
         let line = |p: &mut Proto, a: usize, b: usize| {
             let (pa, pb) = (p.verts[a].0, p.verts[b].0);
@@ -1792,7 +1801,12 @@ mod tests {
             });
             p.edges.len() - 1
         };
-        let (e0, e1, e2) = (line(&mut p, 0, 1), line(&mut p, 1, 2), line(&mut p, 2, 3));
+        let mut boundary = vec![(line(&mut p, 0, 1), true)];
+        if triangle {
+            boundary.push((line(&mut p, 1, 3), true));
+        } else {
+            boundary.extend([(line(&mut p, 1, 2), true), (line(&mut p, 2, 3), true)]);
+        }
         let up = line(&mut p, 3, 4);
         let down = line(&mut p, 4, 0);
         let plane = |n: Vec3| {
@@ -1809,7 +1823,8 @@ mod tests {
                 loops: vec![l],
             });
         };
-        face(&mut p, plane(Vec3::Z), vec![(e0, true), (e1, true), (e2, true), (up, true), (down, true)]);
+        boundary.extend([(up, true), (down, true)]);
+        face(&mut p, plane(Vec3::Z), boundary);
         // the faces beside the slit, each using one of its edges the other way
         face(&mut p, plane(Vec3::X), vec![(up, false)]);
         face(&mut p, plane(-Vec3::X), vec![(down, false)]);
@@ -1819,21 +1834,24 @@ mod tests {
 
     #[test]
     fn a_repairable_slit_is_not_a_far_face() {
-        let (mut p, _, _) = slit_to(0.0, 200.0);
-        let knots = vec![0., 0., 1., 1.];
-        let points = [
-            Point3::new(0., 0., 0.),
-            Point3::new(0., 1., 0.),
-            Point3::new(1., 0., 0.),
-            Point3::new(1., 1., 0.),
-        ];
-        p.faces[0].surface = crate::nurbs::Nurbs::new((1, 1), (knots.clone(), knots), (2, 2), &points, None)
-            .unwrap()
-            .surface();
-        let mut stats = crate::read::Stats::default();
-        assert!(crate::read::repair_slits_and_find_far_face(&mut p, 1e-5, &mut stats).is_none());
-        assert!(stats.curve_off_surface >= 199.0 - 1e-5);
-        assert_eq!(p.faces[0].loops[0].len(), 4);
+        for (triangle, sides) in [(false, 4), (true, 3)] {
+            let (mut p, _, _) = slit_to(0.0, 200.0, triangle);
+            let knots = vec![0., 0., 1., 1.];
+            let points = [
+                Point3::new(0., 0., 0.),
+                Point3::new(0., 1., 0.),
+                Point3::new(1., 0., 0.),
+                Point3::new(1., 1., 0.),
+            ];
+            p.faces[0].surface =
+                crate::nurbs::Nurbs::new((1, 1), (knots.clone(), knots), (2, 2), &points, None)
+                    .unwrap()
+                    .surface();
+            let mut stats = crate::read::Stats::default();
+            assert!(crate::read::repair_slits_and_find_far_face(&mut p, 1e-5, &mut stats).is_none());
+            assert!(stats.curve_off_surface >= 199.0 - 1e-5);
+            assert_eq!(p.faces[0].loops[0].len(), sides);
+        }
     }
 
     #[test]
