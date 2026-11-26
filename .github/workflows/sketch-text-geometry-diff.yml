@@ -1,0 +1,39 @@
+name: Sketch text subdivision geometry differential
+on:
+  push:
+    branches: [diagnostics/sketch-text-geometry-diff]
+permissions:
+  contents: read
+jobs:
+  haas:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    env:
+      CARGO_INCREMENTAL: 0
+      SHARD: ${{ matrix.shard }}
+      REFERENCE: b23ecc5fbe38abae27a883933a1b51975d17a673
+      CANDIDATE: 9f5e094735e7c11f6dddfc0562d3838e9ecf78c8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 9f5e094735e7c11f6dddfc0562d3838e9ecf78c8
+          fetch-depth: 0
+          filter: blob:none
+      - name: Compare the same models under both kernels
+        shell: bash
+        run: |
+          git ls-tree --name-only origin/haas-3d-models research/haas-models/ | sed -n 's@.*/\(.*\.zip\)$@\1@p' > "$RUNNER_TEMP/zips"
+          test "$(wc -l < "$RUNNER_TEMP/zips")" -eq 146
+          mapfile -t zips < <(awk -v k="$SHARD" '(NR-1)%4==k' "$RUNNER_TEMP/zips")
+          tools/kernel-stress/compare.sh "$REFERENCE" "$CANDIDATE" -j 2 -o "$RUNNER_TEMP/train-diff" "${zips[@]}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: haas-diff-${{ matrix.shard }}
+          path: |
+            ${{ runner.temp }}/train-diff/diff-*.md
+            ${{ runner.temp }}/train-diff/*/*.jsonl
