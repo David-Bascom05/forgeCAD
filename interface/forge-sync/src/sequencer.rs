@@ -185,7 +185,9 @@ impl Sequencer {
         // the reopen (a client offline with pending ops is the one to keep)
         let mut seen = snap.seen;
         seen.sort_by_key(|x| x.2);
+        let mut replayed_ids = HashMap::<String, u64>::new();
         for (client, id, seq) in seen {
+            replayed_ids.entry(client.clone()).and_modify(|n| *n = (*n).max(id)).or_insert(id);
             s.mark_committed(&client, id, seq);
         }
         for (client, id) in snap.refused {
@@ -211,6 +213,16 @@ impl Sequencer {
                 )));
             }
             s.head = head;
+            // Only commits enter the log. A gap in this client's increasing ids is
+            // an uncommitted operation, even if its refusal never reached the client.
+            let previous = replayed_ids.get(&e.client).copied().or((floor == 0).then_some(0));
+            if let Some(previous) = previous {
+                let first = previous.saturating_add(1).max(e.id.saturating_sub(s.limits.refused as u64));
+                for missing in first..e.id {
+                    s.mark_refused(&e.client, missing);
+                }
+            }
+            replayed_ids.entry(e.client.clone()).and_modify(|n| *n = (*n).max(e.id)).or_insert(e.id);
             s.remember(&e);
             s.push(e);
         }

@@ -525,6 +525,10 @@ fn retries_are_answered_by_marks_and_refused_ids() {
         "op 2 refused"
     );
     assert!(seq.submit(&mut st, "ada", "ada/c", 1, 3, &set_w(43.0)).is_ok());
+    // A process restart before compaction replays only commits 1 and 3.
+    let mut seq = Sequencer::open(&mut st, "part.fg", DOC, None).unwrap();
+    let retry = seq.submit(&mut st, "ada", "ada/c", 1, 2, &bad);
+    assert!(matches!(retry, Err(forge_sync::Refusal::Lang { .. })), "{retry:?}");
     // in the log: the same entry again
     let again = seq.submit(&mut st, "ada", "ada/c", 0, 1, &set_w(41.0)).unwrap();
     assert!(again.duplicate && again.entry.seq == 1);

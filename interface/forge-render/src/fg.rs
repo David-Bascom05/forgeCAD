@@ -1978,6 +1978,11 @@ pub struct Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
+        // A queued edit may be newer than the last frame's sync poll.
+        #[cfg(not(target_arch = "wasm32"))]
+        if let (Some(file), Some(link)) = (&mut self.sync_file, &self.sync) {
+            file.keep_pending(link.saved());
+        }
         // its thread finishes the build it's in, does no GPU work after, and ends
         self.stop.store(true, Ordering::SeqCst);
     }
@@ -2631,6 +2636,36 @@ impl Session {
     pub fn until(&self) -> Option<String> {
         crate::plat::lock(&self.until).clone()
     }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[test]
+fn closing_before_the_next_poll_keeps_the_offline_edit() {
+    use crate::sync_link::SyncFile;
+    let dir = std::env::temp_dir().join(format!("forge-close-pending-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join(".forgecad")).unwrap();
+    std::fs::write(dir.join(".forgecad/remote.toml"), "remote = \"lab\"\n").unwrap();
+    let path = dir.join("part.fg");
+    let src = "shared w = 40\n";
+    std::fs::write(&path, src).unwrap();
+    let mut file = SyncFile::open(&path, src).unwrap();
+    file.verify(src, src).unwrap();
+    let remote = forge_remote::Remote {
+        name: "offline".into(),
+        url: "ws://127.0.0.1:1/sync".into(),
+        token: "test-token".into(),
+    };
+    let link = forge_remote::Session::start(&remote, "part.fg", None).unwrap();
+    link.local(Op::Rename { from: "w".into(), to: "width".into() }, "shared width = 40\n".into());
+    let pending = link.saved();
+    let mut editor = Session::new(Some(path.to_string_lossy().into_owned()), src.into(), None, Arc::new(|| {}));
+    editor.sync_file = Some(file);
+    editor.sync = Some(Box::new(link));
+    drop(editor);
+    let reopened = SyncFile::open(&path, src).unwrap();
+    assert_eq!(reopened.kept_client().as_deref(), Some(pending.as_str()));
+    drop(reopened);
+    std::fs::remove_dir_all(dir).unwrap();
 }
 
 #[cfg(test)]
