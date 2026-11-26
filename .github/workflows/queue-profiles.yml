@@ -12,10 +12,10 @@ jobs:
       fail-fast: false
       matrix:
         revision:
-          - 3d718a28016a1dd9f67b3f1d8b825686210999fd
-          - b23ecc5fbe38abae27a883933a1b51975d17a673
-          - ec1b7a4fefb0d8b66cdb50566bd7f5e1f38f5391
-          - c91d600057d6f151086415228d5deb6be3032888
+          - b86b2d07f3b915c0e1661fc38dac614a07dc6043
+          - 9f5e094735e7c11f6dddfc0562d3838e9ecf78c8
+          - fe608c9b560ea9fb319678d70b8b97f4b0170ab3
+          - 4af02fa28d84720925f826d57311042361b9ce2b
     env:
       CARGO_INCREMENTAL: 0
       CARGO_PROFILE_RELEASE_DEBUG: 0
