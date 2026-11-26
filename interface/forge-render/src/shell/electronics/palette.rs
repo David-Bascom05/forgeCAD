@@ -3,7 +3,9 @@ use super::*;
 
 impl Editor {
     pub(super) fn focus_on(&mut self, id: &str) {
-        let Some(inspection) = sch::inspect_pin(&self.circuit, id) else {
+        let Some(inspection) =
+            sch::inspect_pin(self.variant_checks.as_ref().map_or(&self.circuit, |(_, c)| c), id)
+        else {
             return;
         };
         let Some((scope, terminal)) = id.rsplit_once('/') else {

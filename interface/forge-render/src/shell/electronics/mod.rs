@@ -58,6 +58,7 @@ pub enum Tool {
     Properties,
     Intent,
     Bus,
+    DiffPair,
     Flow,
     Directions,
     Dots,
@@ -77,6 +78,8 @@ struct Inputs {
     block: std::collections::BTreeSet<String>,
     offset: Point,
     copying: bool,
+    destination: String,
+    diff_suggestions: Vec<(String, String, String, String)>,
     block_preview: Option<sch::BlockPlan>,
     selected_functions: BTreeMap<String, String>,
     pin_functions: Vec<(String, String, Vec<String>, Vec<String>)>,
@@ -179,6 +182,7 @@ pub struct Editor {
     variant: String,
     variant_checks: Option<(String, Circuit)>,
     revision_review: Option<String>,
+    box_start: Option<Pos2>,
     wire_drag: Option<(String, usize, Point, bool)>,
     preview: Option<(String, String, forge_draw::Page)>,
     power_search: String,
@@ -330,6 +334,7 @@ impl Editor {
             variant: String::new(),
             variant_checks: None,
             revision_review: None,
+            box_start: None,
             wire_drag: None,
             preview: None,
             power_search: String::new(),
@@ -367,9 +372,22 @@ impl Editor {
     }
     fn refresh(&mut self) {
         self.preview = None;
+        if self.tool == Tool::DiffPair {
+            self.form.diff_suggestions = sch::pair_suggestions(&self.doc, self.sheet());
+        }
         self.form.block_preview = None;
         self.wire_drag = None;
-        self.variant_checks = None;
+        self.variant_checks = self
+            .doc
+            .variants
+            .get(&self.variant)
+            .and_then(|v| match Circuit::build_fitted(&self.doc, v) {
+                Ok(c) => Some((self.variant.clone(), c)),
+                Err(e) => {
+                    self.message = e.message;
+                    None
+                }
+            });
         if !self.doc.variants.contains_key(&self.variant) {
             self.variant.clear();
         }
@@ -645,6 +663,7 @@ impl Editor {
         }])
     }
     fn start(&mut self, t: Tool) {
+        self.box_start = None;
         if matches!(t, Tool::Directions | Tool::Dots) {
             let was_active = self.markers.active();
             let setting = if t == Tool::Dots {
@@ -717,11 +736,15 @@ impl Editor {
                     Tool::Pin => "pin",
                     Tool::Library => "parts",
                     Tool::Role => "role",
+                    Tool::DiffPair => "pair",
                     Tool::Sheet => "sheet",
                     Tool::Subsheet => "channel",
                     Tool::NewSymbol => "Symbol",
                     _ => "item",
                 });
+                if t == Tool::DiffPair {
+                    self.form.diff_suggestions = sch::pair_suggestions(&self.doc, self.sheet());
+                }
                 if t == Tool::Block && !self.selected.is_empty() {
                     self.form.block.insert(self.selected.clone());
                 }
@@ -939,6 +962,66 @@ chip = place(sheet: main, symbol: S, at: (0,0))
         assert!(!e.src.contains("no_connect("));
         e.step(false);
         assert_eq!(e.src, marked);
+    }
+
+    #[test]
+    fn editing_bias_pairs_and_alignment_uses_normal_undo() {
+        let src = include_str!("../../../../../examples/electronics/i2c-bias.fg");
+        let mut e = Editor::open(None, src.into()).unwrap();
+        e.focus_on("main/U1.SDA");
+        assert!(
+            e.focus_pin
+                .as_ref()
+                .unwrap()
+                .inspection
+                .pins
+                .contains("main/R4.A")
+        );
+        e.variant = "no_sda_pull".into();
+        e.refresh();
+        let focus = e.focus_pin.as_ref().unwrap();
+        assert!(
+            focus
+                .inspection
+                .checks
+                .iter()
+                .any(|v| v.measured && v.peers.iter().any(|(_, state)| *state == sch::Evidence::Invalid))
+        );
+        e.start(Tool::Role);
+        e.form.name = "weak_bias".into();
+        e.form.role_kind = "pull_down".into();
+        e.form.value = "0".into();
+        e.form.part_value = "33 kΩ".into();
+        e.create_record().unwrap();
+        assert_eq!(
+            e.doc.roles[&e.doc.role_names["weak_bias"]].resistance.unwrap()[0].magnitude,
+            33000.
+        );
+        e.step(false);
+        assert_eq!(e.src, src);
+        e.start(Tool::DiffPair);
+        e.click([0., 0.], None, Some("data_drive")).unwrap();
+        e.click([0., 0.], Some("U1.SCL"), None).unwrap();
+        e.create_record().unwrap();
+        assert_eq!(
+            e.circuit.diff_pairs.values().next().unwrap(),
+            &["main/U1.SDA", "main/U1.SCL"]
+        );
+        e.step(false);
+        e.start(Tool::Block);
+        let bounds = Rect::from_two_pos(e.screen([-8., 10.]), e.screen([11., 19.]));
+        let selection = e.box_objects(bounds);
+        assert!(selection.contains(&"R4".to_owned()) && selection.contains(&"R5".to_owned()));
+        assert!(!selection.contains(&"U2".to_owned()));
+        e.form.block = selection.into_iter().collect();
+        e.align_block(0).unwrap();
+        assert_eq!(
+            e.circuit.terminals["main/R4.A"].at,
+            e.circuit.terminals["main/R5.A"].at
+        );
+        assert_ne!(e.circuit.net_of["main/R4.A"], e.circuit.net_of["main/R5.A"]);
+        e.step(false);
+        assert_eq!(e.src, src);
     }
 
     #[test]

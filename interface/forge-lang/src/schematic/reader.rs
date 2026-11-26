@@ -205,25 +205,7 @@ fn nominal_unit(kind: &str) -> Option<&'static str> {
         _ => None,
     }
 }
-fn connection_want(c: &mut Call<'_>) -> Result<Option<ConnectionWant>> {
-    let Some(to) = c.take("connect_to") else {
-        return Ok(None);
-    };
-    let target = reference(to)?;
-    if target.matches('.').count() > 1 {
-        return Err(fault(
-            to,
-            "ExpectedPin",
-            "use a sibling pin or component.pin on this sheet",
-        ));
-    }
-    let through = c
-        .take("through")
-        .map(|e| match &e.kind {
-            E::Str(_) => class_name(e).map(PartType::Kind),
-            _ => reference(e).map(PartType::Symbol),
-        })
-        .transpose()?;
+fn value_bounds(c: &mut Call<'_>) -> Result<Option<[PartValue; 2]>> {
     let quantity = |e: &Expr| {
         PartValue::parse(&string(e)?).ok_or_else(|| {
             fault(
@@ -258,6 +240,28 @@ fn connection_want(c: &mut Call<'_>) -> Result<Option<ConnectionWant>> {
             ));
         }
     };
+    Ok(values)
+}
+fn connection_want(c: &mut Call<'_>) -> Result<Option<ConnectionWant>> {
+    let Some(to) = c.take("connect_to") else {
+        return Ok(None);
+    };
+    let target = reference(to)?;
+    if target.matches('.').count() > 1 {
+        return Err(fault(
+            to,
+            "ExpectedPin",
+            "use a sibling pin or component.pin on this sheet",
+        ));
+    }
+    let through = c
+        .take("through")
+        .map(|e| match &e.kind {
+            E::Str(_) => class_name(e).map(PartType::Kind),
+            _ => reference(e).map(PartType::Symbol),
+        })
+        .transpose()?;
+    let values = value_bounds(c)?;
     let path = c.take("part_path").map(class_name).transpose()?;
     if (values.is_some() || path.is_some()) && through.is_none() {
         return Err(fault(
@@ -698,6 +702,10 @@ fn item(c: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Item> {
             from: reference(c.req("from")?)?,
             to: reference(c.req("to")?)?,
         },
+        "diff_pair" => Item::DiffPair {
+            positive: reference(c.req("positive")?)?,
+            negative: reference(c.req("negative")?)?,
+        },
         "bus" => Item::Bus(map(c.req("members")?, reference)?),
         "subsheet" => Item::SheetInstance {
             of: reference(c.req("of")?)?,
@@ -879,7 +887,10 @@ fn read_nested(
                         let v = measure(arg, &params, Dim::Ratio)?;
                         rating = Some(match (field, kind) {
                             ("capacitance_nf", RoleKind::Bypass) if v > 0.0 => Rating::CapacitanceNf(v),
-                            ("voltage_mv", RoleKind::Power | RoleKind::Reference) => Rating::VoltageMv(v),
+                            (
+                                "voltage_mv",
+                                RoleKind::Power | RoleKind::Reference | RoleKind::PullUp | RoleKind::PullDown,
+                            ) => Rating::VoltageMv(v),
                             _ => {
                                 return Err(fault(
                                     arg,
@@ -891,7 +902,7 @@ fn read_nested(
                     }
                 }
                 if let Some(arg) = c.take("voltage_range_v") {
-                    if kind != RoleKind::Power || rating.is_some() {
+                    if !(kind == RoleKind::Power || kind.is_pull()) || rating.is_some() {
                         return Err(fault(
                             arg,
                             "InvalidRoleRating",
@@ -918,6 +929,26 @@ fn read_nested(
                     }
                     rating = Some(Rating::VoltageRange(range));
                 }
+                let resistance = if kind.is_pull() {
+                    if rating.is_none() {
+                        return Err(fault(
+                            e,
+                            "InvalidRoleRating",
+                            "declare the pull rail voltage or voltage range",
+                        ));
+                    }
+                    let bounds = value_bounds(&mut c)?;
+                    if bounds.is_some_and(|[lo, _]| lo.unit != "Ω" || lo.magnitude <= 0.) {
+                        return Err(fault(
+                            e,
+                            "WrongPartValueDimension",
+                            "pull resistance must be positive ohms",
+                        ));
+                    }
+                    bounds
+                } else {
+                    None
+                };
                 let connection = connection_want(&mut c)?;
                 if connection.is_some() && rating.is_some() {
                     return Err(fault(
@@ -944,6 +975,7 @@ fn read_nested(
                     name.clone(),
                     id,
                     Role {
+                        resistance,
                         connection,
                         kind,
                         rating,
@@ -1241,6 +1273,10 @@ fn resolve_pin_aliases(doc: &mut Document) {
                 resolve(to);
             }
             Item::NoConnect(p) | Item::Label { target: p, .. } => resolve(p),
+            Item::DiffPair { positive, negative } => {
+                resolve(positive);
+                resolve(negative);
+            }
             Item::Bus(members) => members.values_mut().for_each(resolve),
             Item::Fulfill {
                 want, give, returns, ..

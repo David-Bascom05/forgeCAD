@@ -59,6 +59,10 @@ impl Tool {
             Grid => (egui::Key::Q, "Show or hide the sheet grid."),
             Properties => (egui::Key::I, "Inspect and edit the selected object."),
             Intent => (egui::Key::U, "Assign a typed provider to a consumer pin."),
+            DiffPair => (
+                egui::Key::F8,
+                "Associate two nets with positive and negative polarity.",
+            ),
             Bus => (egui::Key::D, "Pick connections for a named bus."),
             Dots => (egui::Key::F7, "Animate dots along known signal paths."),
             Directions => (
@@ -117,6 +121,7 @@ impl Tool {
             Role => ("Pin Role", "schjunction"),
             Properties => ("Properties", "params"),
             Intent => ("Assign Role", "connector"),
+            DiffPair => ("Differential Pair", "schbus"),
             Bus => ("Bus", "schbus"),
             Directions => ("Direction Arrows", "arrowmark"),
             Dots => ("Moving Dots", "schdots"),
@@ -150,7 +155,7 @@ impl Editor {
         match (tab, self.library()) {
             (0, false) => vec![
                 group("Place", &[Place, Wire, Power], &[Junction, Label, Port]),
-                group("Connections", &[Intent], &[NoConnect, Bus, Flow]),
+                group("Connections", &[Intent], &[NoConnect, Bus, DiffPair, Flow]),
                 group("Modify", &[Move, Block], &[Rotate, Mirror, Delete]),
                 group("Sheets", &[Sheet], &[Subsheet, Gate]),
                 group("Library", &[Library], &[]),
@@ -532,6 +537,7 @@ impl Shell {
                     Tool::Bom,
                     Tool::Intent,
                     Tool::Bus,
+                    Tool::DiffPair,
                     Tool::Flow,
                     Tool::Directions,
                     Tool::Dots,

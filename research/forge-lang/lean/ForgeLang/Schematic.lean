@@ -44,6 +44,8 @@ inductive RoleSpec where
   | powerRange (voltage : VoltageInterval)
   | reference (voltage : Option Millivolts)
   | bypass (capacitance : Option Nanofarads)
+  | pullUp (rail : VoltageInterval) (resistance : Option (Rat × Rat))
+  | pullDown (rail : VoltageInterval) (resistance : Option (Rat × Rat))
   | groundReturn | signal | clock | bias | termination | feedback | protection | interfaceRole
 deriving DecidableEq
 
@@ -256,5 +258,18 @@ theorem wrong_entry_refused (a b : Nat) (s : PathWant) (r : Option NominalBounds
 
 theorem one_bridge_witness (a b : Nat) (s : PathWant) (r : Option NominalBounds) (parts : List Bridge) :
     parts.any (bridgeMatches a b s r) = true ↔ ∃ p ∈ parts, bridgeMatches a b s r p = true := by simp
+
+/-- Renaming printed labels preserves the directed pair when its terminal partition is unchanged. -/
+def pairNets (net : Terminal → Nat) (positive negative : Terminal) := (net positive, net negative)
+
+theorem pair_keeps_polarity {before after : Terminal → Nat} (p n : Terminal)
+    (hp : before p = after p) (hn : before n = after n) :
+    pairNets before p n = pairNets after p n := by simp [pairNets, hp, hn]
+
+def pullWitness (enabled : Bool) (wanted offered : VoltageInterval) (ohmsOK : Bool) :=
+  enabled && acceptsVoltage wanted offered && ohmsOK
+
+theorem absent_pull_cannot_supply (w g : VoltageInterval) (r : Bool) :
+    pullWitness false w g r = false := rfl
 
 end ForgeLang.Schematic

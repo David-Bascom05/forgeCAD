@@ -5,7 +5,7 @@ impl Editor {
     pub(super) fn prompt(&self) -> &str {
         use Tool::*;
         match self.tool {
-            Block => "Click objects to add or remove them from the block",
+            Block => "Drag a box to select objects, or click to toggle one",
             Select | Properties => "Select a symbol, pin or connection",
             Place | Gate | Subsheet => "Choose the part, then click its position",
             Wire if self.first.is_some() => "Click a bend or a destination pin · Esc cancels",
@@ -17,6 +17,7 @@ impl Editor {
             Flow => "Click the source, then the destination",
             Label => "Click a pin, port or junction",
             NoConnect => "Click a pin to add or remove its no-connect marker",
+            DiffPair => "Pick the positive terminal, then the negative terminal",
             Bus => "Click member pins, then create the bus",
             Line | Rect | Circle => "Click the first point, then the second point",
             Arc => "Click the start, a point on the arc, then the end",
@@ -24,7 +25,7 @@ impl Editor {
             _ => self.tool.button().0,
         }
     }
-    fn screen(&self, p: Point) -> Pos2 {
+    pub(super) fn screen(&self, p: Point) -> Pos2 {
         self.origin + vec2(p[0] as f32 * self.zoom, -p[1] as f32 * self.zoom)
     }
     fn world(&self, p: Pos2) -> Point {
@@ -169,6 +170,41 @@ impl Editor {
             .min_by(|a, b| a.1.total_cmp(&b.1))
             .map(|(i, _)| i)
     }
+    pub(super) fn box_objects(&self, bounds: Rect) -> Vec<String> {
+        let inside = |p: Point| bounds.contains(self.screen(p));
+        self.doc
+            .rows
+            .iter()
+            .filter(|r| r.sheet == self.sheet())
+            .filter(|r| match &r.item {
+                Item::Place { at, .. }
+                | Item::Gate { at, .. }
+                | Item::SheetInstance { at, .. }
+                | Item::Label { at, .. }
+                | Item::Note { at, .. }
+                | Item::Port(at)
+                | Item::Junction(at) => inside(*at),
+                Item::Drawing { shape, .. } => {
+                    let page = sch::graphic_page(shape);
+                    page.strokes.iter().all(|s| {
+                        let (a, b) = s.geom.bounds();
+                        inside([a.x, a.y]) && inside([b.x, b.y])
+                    }) && page.texts.iter().all(|t| inside([t.at.x, t.at.y]))
+                }
+                Item::Wire { .. } => self
+                    .circuit
+                    .wires
+                    .get(&format!("{}/{}", self.subject, r.id))
+                    .is_some_and(|(a, b, via)| {
+                        inside(self.circuit.locations[a])
+                            && inside(self.circuit.locations[b])
+                            && via.iter().all(|p| inside(*p))
+                    }),
+                _ => false,
+            })
+            .map(|r| r.id.clone())
+            .collect()
+    }
     fn picked(&self, p: Pos2) -> Option<String> {
         let mut best = 12.;
         let mut result = None;
@@ -254,6 +290,27 @@ impl Editor {
         }
         if resp.dragged_by(egui::PointerButton::Middle) {
             self.origin += ui.input(|i| i.pointer.delta());
+        }
+        if self.tool == Tool::Block
+            && (resp.dragged_by(egui::PointerButton::Primary)
+                || resp.drag_stopped_by(egui::PointerButton::Primary))
+            && let (Some(a), Some(b)) = (
+                ui.input(|i| i.pointer.press_origin()).or(self.box_start),
+                resp.interact_pointer_pos(),
+            )
+        {
+            self.box_start = Some(a);
+            let bounds = Rect::from_two_pos(a, b);
+            painter.rect_stroke(bounds, 0., Stroke::new(1., t.focus), egui::StrokeKind::Inside);
+            if resp.drag_stopped_by(egui::PointerButton::Primary) {
+                let objects = self.box_objects(bounds);
+                if !ui.input(|i| i.modifiers.shift) {
+                    self.form.block.clear();
+                }
+                self.form.block.extend(objects);
+                self.form.block_preview = None;
+                self.box_start = None;
+            }
         }
         if self.tool == Tool::Select && !self.library() {
             if resp.drag_started_by(egui::PointerButton::Primary)
@@ -435,6 +492,25 @@ impl Editor {
                     translation: baseline.to_vec2() - bounds.left_bottom().to_vec2() * scale,
                 });
                 painter.add(glyphs);
+            }
+        }
+        if self.tool == Tool::Block {
+            for row in self
+                .doc
+                .rows
+                .iter()
+                .filter(|r| r.sheet == self.sheet() && self.form.block.contains(&r.id))
+            {
+                if let Item::Place { at, .. }
+                | Item::Gate { at, .. }
+                | Item::SheetInstance { at, .. }
+                | Item::Junction(at)
+                | Item::Port(at)
+                | Item::Label { at, .. }
+                | Item::Note { at, .. } = &row.item
+                {
+                    painter.circle_stroke(self.screen(*at), 6., Stroke::new(1.5, t.focus));
+                }
             }
         }
         let anchors = self.anchors();
@@ -1055,6 +1131,25 @@ impl Editor {
                     self.form.bold
                 ),
             ),
+            DiffPair => {
+                let endpoint = near.or_else(|| {
+                    let id = picked?;
+                    let row = self.doc.rows.iter().find(|r| r.id == id)?;
+                    match &row.item {
+                        Item::Label { target, .. } => Some(target.as_str()),
+                        Item::Wire { from, .. } => Some(from.as_str()),
+                        _ => None,
+                    }
+                });
+                if let Some(pin) = endpoint {
+                    if self.form.target_pin.is_empty() {
+                        self.form.target_pin = pin.into();
+                    } else {
+                        self.form.text = pin.into();
+                    }
+                }
+                return Ok(());
+            }
             Bus => {
                 let id = need()?;
                 if !self.form.wants.iter().any(|s| s == id) {

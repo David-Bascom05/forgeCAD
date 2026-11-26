@@ -99,6 +99,55 @@ pub fn search(d: &Document, c: &Circuit, term: &str) -> Vec<SearchHit> {
     hits
 }
 
+/// Suggestions bind existing terminals. Only an explicit diff_pair changes board intent.
+pub fn pair_suggestions(d: &Document, sheet: &str) -> Vec<(String, String, String, String)> {
+    let labels: Map<_, _> = d
+        .rows
+        .iter()
+        .filter(|r| r.sheet == sheet)
+        .filter_map(|r| match &r.item {
+            Item::Label { text, target, .. } => Some((text, target)),
+            _ => None,
+        })
+        .collect();
+    let mut pairs = Vec::new();
+    for (positive, pin) in &labels {
+        for (suffix, mate) in [
+            ("+", "-"),
+            ("+", "−"),
+            ("P", "N"),
+            ("DP", "DM"),
+            ("p", "n"),
+            ("dp", "dm"),
+        ] {
+            if let Some(stem) = positive.strip_suffix(suffix) {
+                let negative = format!("{stem}{mate}");
+                if let Some(other) = labels.get(&negative) {
+                    pairs.push(((*positive).clone(), negative, (*pin).clone(), (*other).clone()));
+                }
+            }
+        }
+    }
+    pairs
+}
+
+pub(super) fn diff_pairs(c: &Circuit) -> Json {
+    Json::Arr(
+        c.diff_pairs
+            .iter()
+            .map(|(id, [p, n])| {
+                Json::obj(vec![
+                    ("id", id.clone().into()),
+                    ("positive", p.clone().into()),
+                    ("negative", n.clone().into()),
+                    ("positive_net", c.net_of[p].clone().into()),
+                    ("negative_net", c.net_of[n].clone().into()),
+                ])
+            })
+            .collect(),
+    )
+}
+
 pub fn board(d: &Document, c: &Circuit, variant: Option<&str>) -> Result<Json> {
     let overrides = variant
         .map(|v| {
@@ -189,6 +238,7 @@ pub fn board(d: &Document, c: &Circuit, variant: Option<&str>) -> Result<Json> {
         .collect();
     Ok(Json::obj(vec![
         ("schema", "forgecad.pcb-handoff/1".into()),
+        ("diff_pairs", diff_pairs(c)),
         ("components", Json::Arr(parts)),
         ("relationships", Json::Arr(links)),
     ]))
@@ -250,7 +300,7 @@ pub fn electrical_diff(a: (&Document, &Circuit), b: (&Document, &Circuit)) -> Re
                 reason.clone().into(),
             );
         }
-        for key in ["links", "erc"] {
+        for key in ["links", "erc", "diff-pairs"] {
             let r = response(d, c, &[key.into()])?;
             if let Some(Json::Arr(entries)) = r.get("result") {
                 for item in entries {

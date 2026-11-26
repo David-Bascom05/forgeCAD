@@ -677,8 +677,9 @@ impl Editor {
         self.refresh();
         Ok(())
     }
-    fn variant_picker(&mut self, ui: &mut Ui) {
+    pub(super) fn variant_picker(&mut self, ui: &mut Ui) {
         if !self.doc.variants.is_empty() {
+            let previous = self.variant.clone();
             ComboBox::from_id_salt("assembly-variant")
                 .selected_text(if self.variant.is_empty() {
                     "Base assembly"
@@ -691,7 +692,52 @@ impl Editor {
                         ui.selectable_value(&mut self.variant, name.clone(), name);
                     }
                 });
+            if previous != self.variant {
+                self.refresh();
+            }
         }
+    }
+    pub(super) fn align_block(&mut self, axis: usize) -> Result<()> {
+        let parts: Vec<_> = self
+            .doc
+            .rows
+            .iter()
+            .filter(|r| r.sheet == self.sheet() && self.form.block.contains(&r.id))
+            .filter_map(|r| match &r.item {
+                Item::Place { at, .. } | Item::Gate { at, .. } => Some((&r.id, *at)),
+                _ => None,
+            })
+            .collect();
+        if parts.len() < 2 {
+            return Err("Select two or more symbols to align.".into());
+        }
+        let line = parts
+            .iter()
+            .map(|(_, p)| p[axis])
+            .reduce(if axis == 0 { f64::min } else { f64::max })
+            .unwrap();
+        let tree = syntax::parse(&self.src).map_err(|e| e.text())?;
+        let mut ops = Vec::new();
+        for (id, at) in parts {
+            if at[axis] == line {
+                continue;
+            }
+            let expr = source_arg(&tree, id, "at").ok_or("Missing symbol position")?;
+            let ExprKind::Tuple(xy) = &expr.kind else {
+                return Err("Expected a coordinate pair".into());
+            };
+            let mut value = self.src[expr.span.lo as usize..expr.span.hi as usize].to_owned();
+            let changed = xy[axis].span;
+            value.replace_range(
+                (changed.lo - expr.span.lo) as usize..(changed.hi - expr.span.lo) as usize,
+                &format!("{line}mm"),
+            );
+            ops.push(arg(id, "at", value));
+        }
+        if !ops.is_empty() {
+            self.apply(ops)?;
+        }
+        Ok(())
     }
     fn set_rule(&mut self, kind: &str, priority: &str) -> Result<()> {
         for stmt in syntax::parse(&self.src).map_err(|e| e.text())? {
@@ -763,7 +809,9 @@ impl Editor {
             Tool::Role => {
                 let rating = match f.role_kind.as_str() {
                     _ if !f.target_pin.trim().is_empty() => String::new(),
-                    "power" if !f.voltage_min.is_empty() || !f.voltage_max.is_empty() => {
+                    "pull_up" | "pull_down" | "power"
+                        if !f.voltage_min.is_empty() || !f.voltage_max.is_empty() =>
+                    {
                         if f.voltage_min.trim().is_empty()
                             || f.voltage_max.trim().is_empty()
                             || !f.value.trim().is_empty()
@@ -774,7 +822,7 @@ impl Editor {
                     }
                     _ if f.value.trim().is_empty() => String::new(),
                     "bypass" => format!(", capacitance_nf: {}", f.value),
-                    "power" | "reference" => format!(", voltage_mv: {}", f.value),
+                    "pull_up" | "pull_down" | "power" | "reference" => format!(", voltage_mv: {}", f.value),
                     _ => String::new(),
                 };
                 let mut connection = String::new();
@@ -803,7 +851,34 @@ impl Editor {
                         }
                     }
                 }
+                if matches!(f.role_kind.as_str(), "pull_up" | "pull_down") {
+                    match (f.part_value.trim(), f.part_value_max.trim()) {
+                        ("", "") => (),
+                        ("", _) => return Err("Enter the minimum resistance.".into()),
+                        (v, "") => connection.push_str(&format!(", value: {}", quote(v))),
+                        (lo, hi) => {
+                            connection.push_str(&format!(", value_range: [{}, {}]", quote(lo), quote(hi)))
+                        }
+                    }
+                }
                 format!("role(kind: {}{rating}{connection})", quote(&f.role_kind))
+            }
+            Tool::DiffPair => {
+                if f.target_pin.is_empty() || f.text.is_empty() {
+                    return Err("Choose both differential pair terminals.".into());
+                }
+                if [&f.target_pin, &f.text]
+                    .iter()
+                    .any(|p| !p.split('.').all(identifier))
+                {
+                    return Err("Choose a terminal or enter its endpoint name.".into());
+                }
+                format!(
+                    "diff_pair(sheet: {}, positive: {}, negative: {})",
+                    self.sheet(),
+                    f.target_pin,
+                    f.text
+                )
             }
             Tool::Bus => {
                 if f.wants.is_empty() {
@@ -923,22 +998,43 @@ impl Editor {
             Block => {
                 ui.label(format!("{} objects selected", self.form.block.len()));
                 ui.weak(self.form.block.iter().cloned().collect::<Vec<_>>().join(", "));
-                let previous = (self.form.offset, self.form.copying);
+                for (axis, title) in [(0, "Align left"), (1, "Align top")] {
+                    if ui.button(title).clicked() {
+                        result = self.align_block(axis);
+                    }
+                }
+                let previous = (self.form.offset, self.form.copying, self.form.destination.clone());
                 checkbox(ui, "Duplicate", &mut self.form.copying);
                 for (label, n) in ["Offset X", "Offset Y"].into_iter().zip(&mut self.form.offset) {
                     property_row(ui, label, |ui, _| {
                         ui.add(egui::DragValue::new(n).suffix(" mm").speed(self.pitch))
                     });
                 }
-                if previous != (self.form.offset, self.form.copying) {
+                if self.form.copying {
+                    if self.form.destination.is_empty() {
+                        self.form.destination = self.subject.clone();
+                    }
+                    choice(
+                        ui,
+                        "Destination sheet",
+                        &mut self.form.destination,
+                        self.circuit.occurrences.keys().cloned().collect(),
+                    );
+                }
+                if previous != (self.form.offset, self.form.copying, self.form.destination.clone()) {
                     self.form.block_preview = None;
                 }
                 if ui.button("Review block edit").clicked() {
-                    match sch::block_plan(
+                    match sch::block_plan_to(
                         &self.src,
                         &self.doc,
                         &self.circuit,
                         &self.subject,
+                        if self.form.copying {
+                            &self.form.destination
+                        } else {
+                            &self.subject
+                        },
                         &self.form.block,
                         self.form.offset,
                         self.form.copying,
@@ -996,22 +1092,7 @@ impl Editor {
             }
             Checks => {
                 self.variant_picker(ui);
-                if let Some(v) = self.doc.variants.get(&self.variant)
-                    && self
-                        .variant_checks
-                        .as_ref()
-                        .is_none_or(|(name, _)| name != &self.variant)
-                {
-                    match Circuit::build_fitted(&self.doc, v) {
-                        Ok(c) => self.variant_checks = Some((self.variant.clone(), c)),
-                        Err(e) => self.message = e.message,
-                    }
-                }
-                let circuit = self
-                    .variant_checks
-                    .as_ref()
-                    .filter(|(name, _)| name == &self.variant)
-                    .map_or(&self.circuit, |(_, c)| c);
+                let circuit = self.variant_checks.as_ref().map_or(&self.circuit, |(_, c)| c);
                 ui.label(format!("{} findings", circuit.issues.len()));
                 if let Some(review) = &self.revision_review {
                     ui.collapsing("Library update review", |ui| {
@@ -1188,6 +1269,18 @@ impl Editor {
                         result = self.modify(Delete);
                         self.graphic = None;
                         self.inspect();
+                    }
+                } else if let Some((_, _, via)) = self
+                    .circuit
+                    .wires
+                    .get(&format!("{}/{}", self.subject, self.selected))
+                {
+                    ui.strong(&self.selected);
+                    if ui
+                        .add_enabled(!via.is_empty(), egui::Button::new("Straighten wire"))
+                        .clicked()
+                    {
+                        result = self.apply(vec![arg(&self.selected, "via", "[]".into())]);
                     }
                 } else if self.library() && !self.subject.is_empty() || !self.selected.is_empty() {
                     if !self.pin.is_empty() {
@@ -1426,7 +1519,21 @@ impl Editor {
                         }
 
                         field(ui, "Text", &mut self.form.text);
-                        if matches!(part, Some(Item::Label { .. })) {
+                        if let Some(Item::Label { text, global, .. }) = part {
+                            let label = if *global {
+                                format!("@global:{text}")
+                            } else {
+                                format!("@local:{}:{text}", self.subject)
+                            };
+                            let net = &self.circuit.net_of[&label];
+                            for (id, [p, n]) in &self.circuit.diff_pairs {
+                                if &self.circuit.net_of[p] == net {
+                                    ui.label(format!("Differential pair {id} (+)"));
+                                }
+                                if &self.circuit.net_of[n] == net {
+                                    ui.label(format!("Differential pair {id} (−)"));
+                                }
+                            }
                             label_scope(ui, &mut self.form.global);
                         }
                     }
@@ -1583,7 +1690,7 @@ impl Editor {
                     }
                 }
             }
-            Sheet | Library | Role | NewSymbol | Bus => {
+            Sheet | Library | Role | NewSymbol | Bus | DiffPair => {
                 field(ui, "Name", &mut self.form.name);
                 match self.tool {
                     Sheet => field(ui, "Sheet title", &mut self.form.text),
@@ -1601,6 +1708,8 @@ impl Editor {
                                 "signal",
                                 "clock",
                                 "bias",
+                                "pull_up",
+                                "pull_down",
                                 "termination",
                                 "feedback",
                                 "protection",
@@ -1610,9 +1719,14 @@ impl Editor {
                             .map(str::to_string)
                             .to_vec(),
                         );
-                        text_control(ui, "Target pin", &mut self.form.target_pin).on_hover_text(
-                            "Optional. Enter OUT on the same component, or J1.P1 on this sheet.",
-                        );
+                        let pull = matches!(self.form.role_kind.as_str(), "pull_up" | "pull_down");
+                        if pull {
+                            self.form.target_pin.clear();
+                        } else {
+                            text_control(ui, "Target pin", &mut self.form.target_pin).on_hover_text(
+                                "Optional. Enter OUT on the same component, or J1.P1 on this sheet.",
+                            );
+                        }
                         if !self.form.target_pin.trim().is_empty() {
                             property_row(ui, "Through part", |ui, caption| {
                                 let selected = &mut self.form.through;
@@ -1673,14 +1787,30 @@ impl Editor {
                         } else {
                             match self.form.role_kind.as_str() {
                                 "bypass" => field(ui, "Capacitance · nF (optional)", &mut self.form.value),
-                                "power" | "reference" => {
+                                "pull_up" | "pull_down" | "power" | "reference" => {
                                     field(ui, "Voltage · mV (optional)", &mut self.form.value);
-                                    if self.form.role_kind == "power" {
+                                    if pull {
+                                        field(ui, "Resistance or minimum", &mut self.form.part_value);
+                                        field(ui, "Maximum resistance", &mut self.form.part_value_max);
+                                    }
+                                    if pull || self.form.role_kind == "power" {
                                         field(ui, "Minimum (V)", &mut self.form.voltage_min);
                                         field(ui, "Maximum (V)", &mut self.form.voltage_max);
                                     }
                                 }
                                 _ => {}
+                            }
+                        }
+                    }
+                    DiffPair => {
+                        field(ui, "Positive terminal", &mut self.form.target_pin);
+                        field(ui, "Negative terminal", &mut self.form.text);
+                        for (name, other, pin, mate) in &self.form.diff_suggestions {
+                            let suggestion = ui.button(format!("{name} / {other}"));
+                            places.push((format!("electronics:pair:{name}:{other}"), suggestion.rect));
+                            if suggestion.clicked() {
+                                self.form.target_pin = pin.clone();
+                                self.form.text = mate.clone();
                             }
                         }
                     }
@@ -1728,14 +1858,13 @@ impl Editor {
                 {
                     result = self.create_child_library();
                 }
-                if ui
-                    .button(if self.tool == Library {
-                        "Link library"
-                    } else {
-                        "Create"
-                    })
-                    .clicked()
-                {
+                let create = ui.button(if self.tool == Library {
+                    "Link library"
+                } else {
+                    "Create"
+                });
+                places.push(("electronics:create-record".into(), create.rect));
+                if create.clicked() {
                     result = self.create_record();
                 }
             }

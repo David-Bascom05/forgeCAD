@@ -64,7 +64,7 @@ const TOOLS: [Tool; 22] = [
             ("file", "path to .fg"),
             (
                 "sel",
-                "summary, symbols, symbol ID, sheet PATH, erc, nets, links, pin PATH, tree PATH, search TERMS, variants, bom [VARIANT], bom-csv [VARIANT], board [VARIANT], erc [VARIANT], plan-reannotate [SHEET], plan-block copy|move SCOPE DX_MM DY_MM OBJECT... or pdf",
+                "summary, symbols, symbol ID, sheet PATH, erc, nets, diff-pairs, links, pin PATH [VARIANT], tree PATH, search TERMS, variants, bom [VARIANT], bom-csv [VARIANT], board [VARIANT], erc [VARIANT], plan-reannotate [SHEET], plan-block copy|move SCOPE DX_MM DY_MM OBJECT..., plan-block copy-to SOURCE DESTINATION DX_MM DY_MM OBJECT... or pdf",
             ),
         ],
     ),

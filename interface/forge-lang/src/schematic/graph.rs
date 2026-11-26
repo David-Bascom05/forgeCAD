@@ -55,6 +55,9 @@ impl Issue {
             | "BusMemberShort"
             | "DriverConflict"
             | "PinConnectionMismatch"
+            | "DiffPairShort"
+            | "DiffPairConflict"
+            | "PullMismatch"
             | "VoltageOutOfRange"
             | "ConnectedNoConnect"
             | "ReturnMismatch"
@@ -106,6 +109,7 @@ pub struct Circuit {
     pub issues: Vec<Issue>,
     // Incidence by both directions is for navigation only. Link direction is retained in Link.
     pub relations: Map<String, Vec<usize>>,
+    pub diff_pairs: Map<String, [String; 2]>,
     pub buses: Map<String, Map<String, String>>,
     pub flows: Map<String, (String, String)>,
     junctions: Set<String>,
@@ -165,8 +169,40 @@ impl Circuit {
             }
         }
         c.partition();
+        let mut assigned = Map::new();
+        for (id, [p, n]) in &c.diff_pairs {
+            let (a, b) = (&c.net_of[p], &c.net_of[n]);
+            if a == b {
+                c.issues.push(Issue {
+                    kind: "DiffPairShort",
+                    unknown: false,
+                    objects: vec![id.clone(), p.clone(), n.clone()],
+                    message: "Both differential pair legs resolve to the same net".into(),
+                });
+                continue;
+            }
+            for (net, mate, positive) in [(a, b, true), (b, a, false)] {
+                if let Some((other, polarity, first)) = assigned.get(net) {
+                    if *other != mate || *polarity != positive {
+                        c.issues.push(Issue {
+                            kind: "DiffPairConflict",
+                            unknown: false,
+                            objects: vec![String::clone(first), id.clone(), net.clone()],
+                            message: "Net has conflicting differential mates or polarity".into(),
+                        });
+                        break;
+                    }
+                } else {
+                    assigned.insert(net, (mate, positive, id.clone()));
+                }
+            }
+        }
+        for scope in c.occurrences.keys() {
+            c.issues.extend(super::wire_readability::findings(&c, scope));
+        }
         c.check_voltages(doc);
         c.check_connections(doc, &by_sheet);
+        c.check_pulls(doc, &by_sheet);
         c.check();
         for (id, members) in &c.buses {
             let mut seen = Map::new();
@@ -422,6 +458,10 @@ impl Circuit {
                     let (a, b) = (endpoint(self, from)?, endpoint(self, to)?);
                     self.flows.insert(id, (a, b));
                 }
+                Item::DiffPair { positive, negative } => {
+                    let ends = [endpoint(self, positive)?, endpoint(self, negative)?];
+                    self.diff_pairs.insert(id, ends);
+                }
                 Item::Bus(members) => {
                     let mut bus = Map::new();
                     for (k, v) in members {
@@ -559,7 +599,9 @@ impl Circuit {
                     sources.push((id, role, voltage));
                 }
                 for role in &pin.wants {
-                    if let Some(Rating::VoltageRange(required)) = doc.roles[role].rating {
+                    if doc.roles[role].kind == RoleKind::Power
+                        && let Some(Rating::VoltageRange(required)) = doc.roles[role].rating
+                    {
                         wants.push((id, role, required));
                     }
                 }

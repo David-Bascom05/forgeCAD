@@ -522,3 +522,47 @@ fn browse_nested_library_and_place_the_leaf_symbol() {
     assert!(c.terminals.contains_key("overview/left/Q2.drain"));
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn inspect_i2c_pull_witness_in_the_native_window() {
+    let Ok(mut h) = Headless::new((1500., 950.), 1.) else {
+        return;
+    };
+    let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/electronics/i2c-bias.fg");
+    h.gui.open(file.to_str().unwrap());
+    h.step();
+    assert!(h.click("electronics:anchor:U1.SDA"));
+    h.step();
+    assert!(
+        h.placed("electronics:connection:main/U1.SDA:logic_high:true")
+            .is_some()
+    );
+    if let Some(out) = std::env::var_os("FORGE_UI_SHOTS") {
+        std::fs::create_dir_all(&out).unwrap();
+        std::fs::write(Path::new(&out).join("i2c-pull.png"), h.png().unwrap()).unwrap();
+    }
+}
+
+#[test]
+fn confirm_differential_net_labels_and_reopen() {
+    let Ok(mut h) = Headless::new((1500., 950.), 1.) else {
+        return;
+    };
+    let dir = std::env::temp_dir().join(format!("fg-diff-pair-ui-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("usb.fg");
+    std::fs::write(&file,"schematic\nmain = sheet()\na = port(sheet:main,at:(0,0))\nb = port(sheet:main,at:(0,6))\npa = label(sheet:main,on:a,value:\"USB_D+\",at:(0,0))\nnb = label(sheet:main,on:b,value:\"USB_D-\",at:(0,6))\n").unwrap();
+    h.gui.open(file.to_str().unwrap());
+    h.step();
+    h.key(egui::Key::F8);
+    h.step();
+    assert!(h.click("electronics:pair:USB_D+:USB_D-"));
+    h.step();
+    assert!(h.click("electronics:create-record"));
+    h.step();
+    h.gui.fg_save();
+    let src = std::fs::read_to_string(file).unwrap();
+    let (_, c) = forge_lang::schematic::compile(&src, Some(&dir), None).unwrap();
+    assert_eq!(c.diff_pairs["main/pair1"], ["main/a", "main/b"]);
+    std::fs::remove_dir_all(dir).unwrap();
+}

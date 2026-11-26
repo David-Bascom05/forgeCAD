@@ -2,12 +2,16 @@
 //! intent; each elaborated sheet occurrence owns a separate graph of electrical terminals.
 mod author;
 mod connection;
+mod pull;
+mod wire_readability;
 pub use connection::{ConnectionCheck, ConnectionWant, PartType, PartValue};
 mod block;
 mod drawing;
-pub use block::{BlockPlan, block_plan};
+pub use block::{BlockPlan, block_plan, block_plan_to};
 mod project;
-pub use project::{SearchHit, board, electrical_diff, project_annotation, reannotate, search};
+pub use project::{
+    SearchHit, board, electrical_diff, pair_suggestions, project_annotation, reannotate, search,
+};
 mod graph;
 mod move_cache;
 mod reader;
@@ -60,6 +64,11 @@ pub const PART_KINDS: &[&str] = &[
 ];
 pub const ERC_RULES: &[&str] = &[
     "DriverConflict",
+    "PullMismatch",
+    "DiffPairShort",
+    "DiffPairConflict",
+    "WireNearPin",
+    "WireOverlap",
     "PinConnectionMismatch",
     "VoltageOutOfRange",
     "ConnectedNoConnect",
@@ -170,6 +179,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
     ("no_connect", &["sheet", "on"]),
     ("note", &["sheet", "at", "value", "size", "bold"]),
     ("flow", &["sheet", "from", "to"]),
+    ("diff_pair", &["sheet", "positive", "negative"]),
     ("bus", &["sheet", "members"]),
     (
         "fulfill",
@@ -203,10 +213,15 @@ macro_rules! vocabulary {
 }
 vocabulary!(RoleKind { Power=>"power", Return=>"return", Bypass=>"bypass", Signal=>"signal",
     Clock=>"clock", Bias=>"bias", Termination=>"termination", Feedback=>"feedback",
-    Protection=>"protection", Reference=>"reference", Interface=>"interface" });
+    Protection=>"protection", Reference=>"reference", Interface=>"interface", PullUp=>"pull_up", PullDown=>"pull_down" });
 vocabulary!(Electrical { Passive=>"passive", Input=>"input", Output=>"output", Bidirectional=>"bidirectional",
     Supply=>"power_in", Source=>"power_out", OpenDrain=>"open_drain", Unused=>"no_connect" });
 
+impl RoleKind {
+    pub fn is_pull(self) -> bool {
+        matches!(self, Self::PullUp | Self::PullDown)
+    }
+}
 /// Nominal identities distinguish two domains with the same electrical function.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RoleId(pub String);
@@ -238,6 +253,7 @@ impl std::fmt::Display for VoltageRange {
 }
 #[derive(Clone, Debug, PartialEq)]
 pub struct Role {
+    pub resistance: Option<[PartValue; 2]>,
     pub connection: Option<ConnectionWant>,
     pub kind: RoleKind,
     pub rating: Option<Rating>,
@@ -329,6 +345,10 @@ pub enum Item {
         to: String,
     },
     Bus(Map<String, String>),
+    DiffPair {
+        positive: String,
+        negative: String,
+    },
     Junction(Point),
     Port(Point),
     Wire {
@@ -485,6 +505,22 @@ impl Cache {
                     &objects.iter().map(|s| s.to_string()).collect(),
                     [amount(x)?, amount(y)?],
                     *mode == "copy",
+                )?)
+            }
+            ["plan-block", "copy-to", scope, destination, x, y, objects @ ..] => {
+                let offset = |v: &str| {
+                    v.parse::<f64>()
+                        .map_err(|_| Fault::new("ExpectedLength", Span::default(), "enter millimetres"))
+                };
+                Some(block_plan_to(
+                    src,
+                    &last.doc,
+                    &last.circuit,
+                    scope,
+                    destination,
+                    &objects.iter().map(|s| s.to_string()).collect(),
+                    [offset(x)?, offset(y)?],
+                    true,
                 )?)
             }
             ["plan-reannotate"] => Some(BlockPlan {

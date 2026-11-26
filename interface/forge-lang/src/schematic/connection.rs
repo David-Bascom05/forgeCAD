@@ -58,7 +58,7 @@ impl PartValue {
         let magnitude = value * factor;
         magnitude.is_finite().then_some(Self { magnitude, unit })
     }
-    fn at_most(self, other: Self) -> bool {
+    pub(super) fn at_most(self, other: Self) -> bool {
         self.unit == other.unit
             && (self.magnitude <= other.magnitude
                 || self.magnitude - other.magnitude <= other.magnitude * (4. * f64::EPSILON))
@@ -97,6 +97,8 @@ pub struct ConnectionWant {
 
 #[derive(Debug)]
 pub struct ConnectionCheck {
+    /// The active pin role witnessing an internal pull, when the check uses one.
+    pub source_role: Option<RoleId>,
     pub target: String,
     pub satisfied: bool,
     pub unknown: bool,
@@ -213,6 +215,7 @@ impl Circuit {
             let end = self.terminals.get(&target);
             let target_net = end.map(|_| &self.net_of[&target]);
             let mut check = ConnectionCheck {
+                source_role: None,
                 target: target.clone(),
                 satisfied: false,
                 unknown: end.is_none(),

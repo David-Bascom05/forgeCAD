@@ -213,6 +213,12 @@ pub fn inspect_pin(c: &Circuit, pin: &str) -> Option<PinInspection> {
                 }
             } else if !need {
                 for other in net {
+                    for check in c.connections.get(other).into_iter().flat_map(|v| v.values()) {
+                        if check.target == pin && check.source_role.as_ref() == Some(role) {
+                            measured = true;
+                            record(other, check.satisfied);
+                        }
+                    }
                     for check in c.voltages.get(other).into_iter().flat_map(|v| v.values()) {
                         for source in &check.providers {
                             if source.pin == pin && source.role == *role {

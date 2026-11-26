@@ -197,3 +197,32 @@ forgecad schematic examples/electronics/load-switch/switch-card.fg pdf -o switch
 - The BOM dock creates and selects named assembly variants. A variant can omit or fit individual occurrences, including one occurrence of a repeated sheet. For example, `prototype = variant(omit: ["overview/right/Q1"])`. CLI and MCP selectors include `variants`, `bom prototype`, `bom-csv prototype`, `erc prototype` and `board prototype`. A DNP part retains its physical footprint and pad mapping.
 
 The `schematic` tool also accepts `plan-block copy|move SCOPE DX_MM DY_MM OBJECT...`, `plan-reannotate` for the whole project, and `plan-reannotate SHEET` for a definition. The plans use the same checked edit operations as the editor.
+
+### Pull-ups and pull-downs
+
+An SDA pin can want a pull-up to a rail between 3.0 and 3.6 V through a resistor between 2.2 and 10 kΩ. In **Pin Role** choose **pull_up**, enter the rail limits and optional resistance limits, then select the role under **Wants**. The same fields are available for **pull_down**. Declare a 0 V power or reference source on the return net for a ground pull-down.
+
+```fg
+logic_high = role(kind: "pull_up", voltage_range_v: [3.0, 3.6], value_range: ["2.2 kΩ", "10 kΩ"])
+weak_pull = role(kind: "pull_up", voltage_mv: 3300, value: "8.2 kΩ")
+```
+
+A fitted resistor supplies the want when its signal-side terminal is on the selected net and the opposite terminal reaches a rated source. An active pin function can instead give a pull role declaring its internal rail and resistance. Put a switchable internal pull under the alternate function that enables it. The check uses the declared operating configuration. Resistance limits apply to an individual path and its declared nominal value or range. Parallel equivalent resistance and I²C rise time require separate checks.
+
+The pin checklist identifies the resistor, value and rail, and highlights both sides of the path. Select an assembly variant in the checklist to see which component was omitted. A direct tie to a voltage source or a path to an incompatible rated rail is a conflict. An uncharacterized rail or unknown resistance is reported as unknown. CLI and MCP accept `pin main/U1.SDA no_sda_pull`. [I²C example](../examples/electronics/i2c-bias.fg)
+
+### Differential pairs
+
+Choose **Differential Pair** (F8). Pick the positive and negative pins, wires or labels, or select a suggested label pair and click **Create**. Matching names include `USB_D+` / `USB_D-`, `RX_P` / `RX_N`, and `USB_DP` / `USB_DM`. Explicit terminal selection also works for unrelated label names. The declaration binds endpoints. Changing printed label text preserves polarity.
+
+```fg
+usb = diff_pair(sheet: main, positive: J1.DP, negative: J1.DM)
+```
+
+The `diff-pairs` query and `board` handoff report both terminal IDs and their resolved nets per occurrence. ERC flags shorted legs and incompatible mate or polarity assignments. The schematic declaration supplies pairing intent for layout. Board geometry determines impedance and length matching.
+
+### Selecting and cleaning up wiring
+
+In **Edit Block**, drag a rectangle around component origins and connection points. Shift-drag adds to the selection. **Align left** sets symbol origins to the leftmost selected origin. **Align top** uses the highest selected origin. Attached wire endpoints follow. Select **Duplicate** and a **Destination sheet** to copy the block. Review the boundary connections before applying. A destination shared by several sheet occurrences updates them all. CLI and MCP can request the same operation with `plan-block copy-to SOURCE_SCOPE DESTINATION_SCOPE DX_MM DY_MM OBJECT...`.
+
+Select a wire and choose **Straighten wire** to remove its bends in one undoable edit. Its two named endpoints remain attached. ERC reports `WireNearPin` when a wire endpoint lies within 0.5 mm of a pin on another net, and `WireOverlap` for collinear wires sharing a length on different nets. An ordinary crossing is allowed.

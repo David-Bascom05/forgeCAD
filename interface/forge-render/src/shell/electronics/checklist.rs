@@ -81,8 +81,10 @@ impl Editor {
     }
 
     pub(super) fn checklist(&mut self, ui: &mut Ui, t: &Theme, places: &mut Vec<(String, Rect)>) {
-        let focus = self.focus_pin.as_ref().unwrap();
-        let pin = &self.circuit.terminals[&focus.id];
+        self.variant_picker(ui);
+        let Some(focus) = &self.focus_pin else { return };
+        let checked = self.variant_checks.as_ref().map_or(&self.circuit, |(_, c)| c);
+        let pin = &checked.terminals[&focus.id];
         let definition = &self.doc.symbols[&pin.symbol].pins[&pin.pin];
         ui.add_space(theme::S2);
         let name = focus.id.rsplit('/').next().unwrap_or(&focus.id);
@@ -150,10 +152,10 @@ impl Editor {
                     None => {}
                 }
                 let voltage = need
-                    .then(|| self.circuit.voltages.get(&focus.id)?.get(&check.role))
+                    .then(|| checked.voltages.get(&focus.id)?.get(&check.role))
                     .flatten();
                 let connection = need
-                    .then(|| self.circuit.connections.get(&focus.id)?.get(&check.role))
+                    .then(|| checked.connections.get(&focus.id)?.get(&check.role))
                     .flatten();
                 let verified = check.peers.iter().any(|(_, e)| *e == sch::Evidence::Verified);
                 let invalid = check.peers.iter().any(|(_, e)| *e == sch::Evidence::Invalid);

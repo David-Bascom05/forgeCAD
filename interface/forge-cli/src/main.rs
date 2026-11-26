@@ -45,7 +45,7 @@ fn usage() -> ExitCode {
          forgecad build|check|query|measure|render|export FILE.fg [ARGS] [--json] [--labels SEL] [--px N] [--at FEAT] [-o OUT]\n       \
          forgecad edit FILE.fg 'OP'.. [--base VERSION]   (typed ops, as a part's fixes give them; export F.fg stl|3mf|obj|urdf|dxf [SHEET])\n       \
          forgecad cam FILE.fg [sheet] [--json] [-o OUT]   (a machining document: certified toolpaths, the program or setup sheet)\n       \
-         forgecad schematic FILE.fg [pin PATH|tree PATH|sheet PATH|nets|links|symbols|erc] [--json]\n       \
+         forgecad schematic FILE.fg [pin PATH [VARIANT]|tree PATH|sheet PATH|nets|diff-pairs|links|symbols|erc] [--json]\n       \
          forgecad bend FILE.fg [sheet|program] [--json] [-o OUT]   (a bending document: simulated; its setup sheet, or its press-brake program where the format is openly specified)\n       \
          forgecad diff A.fg B.fg [volume]   (what B changed from A: features, params, faces, volume)\n       \
          forgecad help [forge | WORD]   (the .fg language, or its sections on WORD)\n       \

@@ -15,6 +15,7 @@ fn dependencies(item: &Item) -> Vec<&str> {
         Item::Wire { from, to, .. } | Item::Flow { from, to } => vec![from, to],
         Item::Gate { of, .. } => vec![of],
         Item::Label { target, .. } | Item::NoConnect(target) => vec![target],
+        Item::DiffPair { positive, negative } => vec![positive, negative],
         Item::Bus(m) => m.values().map(String::as_str).collect(),
         Item::Fulfill {
             want, give, returns, ..
@@ -41,11 +42,32 @@ pub fn block_plan(
     delta: Point,
     copy: bool,
 ) -> Result<BlockPlan> {
+    block_plan_to(src, d, c, scope, scope, selected, delta, copy)
+}
+
+/// Copy into another sheet definition with the same ownership checks and reference remapping.
+pub fn block_plan_to(
+    src: &str,
+    d: &Document,
+    c: &Circuit,
+    scope: &str,
+    destination: &str,
+    selected: &Set<String>,
+    delta: Point,
+    copy: bool,
+) -> Result<BlockPlan> {
     let fail = |msg: &str| Fault::new("BlockSelection", Span::default(), msg);
     let sheet = c
         .occurrences
         .get(scope)
         .ok_or_else(|| fail("choose a sheet occurrence"))?;
+    let destination_sheet = c
+        .occurrences
+        .get(destination)
+        .ok_or_else(|| fail("choose a destination sheet occurrence"))?;
+    if sheet != destination_sheet && !copy {
+        return Err(fail("cross-sheet edits require a copy"));
+    }
     if selected.is_empty() || delta.iter().any(|v| !v.is_finite()) {
         return Err(fail("select objects and enter a finite offset"));
     }
@@ -110,6 +132,9 @@ pub fn block_plan(
         tail.map_or_else(|| next.to_owned(), |s| format!("{next}.{s}"))
     };
     let mut ops = Vec::new();
+    if copy && c.occurrences.values().filter(|s| *s == destination_sheet).count() > 1 {
+        boundary.insert(format!("Every occurrence of {destination_sheet} will change"));
+    }
     for stmt in &tree {
         let StmtKind::Assign { name, value } = &stmt.kind else {
             continue;
@@ -126,6 +151,7 @@ pub fn block_plan(
             let key = &arg.name.as_ref().unwrap().0;
             let expr = &arg.value;
             let next = match (key.as_str(), &row.item) {
+                ("sheet", _) if copy => Some(destination_sheet.clone()),
                 ("at", _) | ("from" | "to" | "mid", Item::Drawing { .. }) => Some(moved(expr)?),
                 ("via", Item::Wire { .. }) => {
                     let ExprKind::List(points) = &expr.kind else {
@@ -136,9 +162,11 @@ pub fn block_plan(
                         points.iter().map(&moved).collect::<Result<Vec<_>>>()?.join(", ")
                     ))
                 }
-                ("from" | "to" | "on" | "want" | "give" | "return_from" | "return_to", _) if copy => {
-                    Some(renamed(&raw(expr).split_whitespace().collect::<String>()))
-                }
+                (
+                    "positive" | "negative" | "from" | "to" | "on" | "want" | "give" | "return_from"
+                    | "return_to",
+                    _,
+                ) if copy => Some(renamed(&raw(expr).split_whitespace().collect::<String>())),
                 ("of", Item::Gate { .. }) if copy => Some(renamed(raw(expr))),
                 ("members", Item::Bus(m)) if copy => Some(format!(
                     "{{{}}}",
@@ -168,12 +196,19 @@ pub fn block_plan(
                         break;
                     }
                     for role in checks.keys() {
-                        let want = d.roles[role].connection.as_ref().unwrap();
+                        let Some(want) = &d.roles[role].connection else {
+                            continue;
+                        };
                         if let Some((original, _)) = want.to.split_once('.') {
                             let target = bindings.get(original).map(String::as_str).unwrap_or(original);
                             if let Some(new) = rename.get(target) {
                                 targets.insert(original.to_owned(), new.clone());
                             } else {
+                                if sheet != destination_sheet {
+                                    return Err(fail(
+                                        "include the component targeted by the pin want before copying across sheets",
+                                    ));
+                                }
                                 boundary.insert(format!("{name} · want {} uses {target}", role.0));
                             }
                         }

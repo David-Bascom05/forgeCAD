@@ -1134,3 +1134,135 @@ fn linked_catalogs_resolve_pdf_assets_from_the_owning_file() {
     );
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+const BIAS: &str = include_str!("../../../examples/electronics/i2c-bias.fg");
+
+#[test]
+fn pull_check_uses_active_internal_or_fitted_resistor_and_actual_rail() {
+    fn evidence(src: &str, omit: bool) -> (bool, bool, String) {
+        let (d, mut c) = run(src).unwrap();
+        if omit {
+            c = Circuit::build_fitted(&d, &d.variants["no_sda_pull"]).unwrap();
+        }
+        let check = &c.connections["main/U1.SDA"][&d.role_names["logic_high"]];
+        (check.satisfied, check.unknown, check.detail.clone())
+    }
+    let (ok, _, why) = evidence(BIAS, false);
+    assert!(
+        ok && why.contains("R4") && why.contains("4.7 kΩ") && why.contains("3.3 V"),
+        "{why}"
+    );
+    let omitted = evidence(BIAS, true);
+    assert!(!omitted.0 && omitted.2.contains("omitted"));
+    let alternate = BIAS.replace(
+        "symbol:Controller,at:",
+        "symbol:Controller,functions:{SDA:BIAS},at:",
+    );
+    assert!(evidence(&alternate, true).0);
+    assert!(
+        !evidence(
+            &BIAS.replace(
+                "v33 = role(kind: \"power\", voltage_mv: 3300)",
+                "v33 = role(kind: \"power\", voltage_mv: 5000)"
+            ),
+            false
+        )
+        .0
+    );
+    assert!(!evidence(&BIAS.replace("4.7 kΩ", "47 kΩ"), false).0);
+    assert!(evidence(&BIAS.replace("4.7 kΩ", "TBD"), false).1);
+    assert!(
+        evidence(
+            &BIAS
+                .replace("pull_up", "pull_down")
+                .replace("[3.0,3.6]", "[0,0]")
+                .replace("3300", "0"),
+            false
+        )
+        .0
+    );
+    let (d, c) = run(BIAS).unwrap();
+    let focus = schematic::inspect_pin(&c, "main/U1.SDA").unwrap();
+    for pin in ["main/R4.A", "main/R4.B", "main/J1.OUT"] {
+        assert!(focus.pins.contains(pin));
+    }
+    assert!(!focus.pins.contains("main/R5.A"));
+    assert!(
+        schematic::response(
+            &d,
+            &c,
+            &["pin".into(), "main/U1.SDA".into(), "no_sda_pull".into()]
+        )
+        .unwrap()
+        .to_string()
+        .contains("omitted")
+    );
+}
+
+#[test]
+fn differential_pairs_keep_polarity_through_copy_and_label_changes() {
+    let src = "schematic\nmain = sheet()\nother = sheet()\nplus = port(sheet:main,at:(0,0))\nminus = port(sheet:main,at:(0,5))\nla = label(sheet:main,on:plus,value:\"USB_D+\",at:(0,0))\nlb = label(sheet:main,on:minus,value:\"USB_D-\",at:(0,5))\nusb = diff_pair(sheet:main,positive:plus,negative:minus)\n";
+    let (d, c) = run(src).unwrap();
+    assert_eq!(
+        schematic::pair_suggestions(&d, "main"),
+        vec![("USB_D+".into(), "USB_D-".into(), "plus".into(), "minus".into())]
+    );
+    for (a, b) in [("USB_DP", "USB_DM"), ("RX_P", "RX_N"), ("TXP", "TXN")] {
+        let (d, _) = run(&src.replace("USB_D+", a).replace("USB_D-", b)).unwrap();
+        assert_eq!(schematic::pair_suggestions(&d, "main").len(), 1);
+    }
+    let pair = &c.diff_pairs["main/usb"];
+    assert_eq!(pair, &["main/plus", "main/minus"]);
+    assert!(
+        schematic::board(&d, &c, None)
+            .unwrap()
+            .to_string()
+            .contains("positive_net")
+    );
+    let (_, renamed) = run(&src.replace("USB_D+", "A")).unwrap();
+    assert_eq!(&renamed.diff_pairs["main/usb"], pair);
+    let plan = schematic::block_plan_to(
+        src,
+        &d,
+        &c,
+        "main",
+        "other",
+        &["plus".into(), "minus".into()].into(),
+        [4., 5.],
+        true,
+    )
+    .unwrap();
+    let mut next = src.to_owned();
+    for op in plan.ops {
+        next = forge_lang::edit::apply(&next, &op).unwrap();
+    }
+    let (_, copied) = run(&next).unwrap();
+    assert_eq!(copied.diff_pairs["other/usb1"], ["other/plus1", "other/minus1"]);
+    let (_, short) = run(&src.replace("USB_D-", "USB_D+")).unwrap();
+    assert!(short.issues.iter().any(|i| i.kind == "DiffPairShort"));
+    let (_, conflict) = run(&format!(
+        "{src}reversed = diff_pair(sheet:main,positive:minus,negative:plus)\n"
+    ))
+    .unwrap();
+    assert!(conflict.issues.iter().any(|i| i.kind == "DiffPairConflict"));
+}
+
+#[test]
+fn visually_ambiguous_wires_remain_electrically_separate() {
+    let src = "schematic\nS = symbol(pins:{P:pin(kind:\"input\",number:\"1\",at:(0,0))})\nmain = sheet()\nU1 = place(sheet:main,symbol:S,at:(10.25,0))\na = junction(sheet:main,at:(0,0))\nb = junction(sheet:main,at:(10,0))\nc = junction(sheet:main,at:(4,0))\nf = junction(sheet:main,at:(6,0))\nw1 = wire(sheet:main,from:a,to:b)\nw2 = wire(sheet:main,from:c,to:f)\n";
+    let (_, c) = run(src).unwrap();
+    assert!(c.issues.iter().any(|i| i.kind == "WireNearPin"));
+    assert!(c.issues.iter().any(|i| i.kind == "WireOverlap"));
+    assert_ne!(c.net_of["main/a"], c.net_of["main/c"]);
+    let (_, clear) = run(&src
+        .replace("10.25,0", "12,0")
+        .replace("4,0", "5,-4")
+        .replace("6,0", "5,4"))
+    .unwrap();
+    assert!(
+        !clear
+            .issues
+            .iter()
+            .any(|i| matches!(i.kind, "WireNearPin" | "WireOverlap"))
+    );
+}

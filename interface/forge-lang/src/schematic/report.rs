@@ -34,6 +34,12 @@ fn role(id: &RoleId, d: &Document) -> Json {
         ("rating", rating),
         ("prefer_mm", r.prefer.map_or(Json::Null, Into::into)),
     ];
+    if let Some([lo, hi]) = r.resistance {
+        fields.push((
+            "resistance_ohm",
+            Json::Arr(vec![lo.magnitude.into(), hi.magnitude.into()]),
+        ));
+    }
     if let Some(w) = &r.connection {
         fields.push((
             "connection",
@@ -300,6 +306,13 @@ fn scene(d: &Document, scope: &str, row: &Row) -> Json {
             "flow",
             vec![("from", from.clone().into()), ("to", to.clone().into())],
         ),
+        Item::DiffPair { positive, negative } => (
+            "diff_pair",
+            vec![
+                ("positive", positive.clone().into()),
+                ("negative", negative.clone().into()),
+            ],
+        ),
         Item::Bus(members) => (
             "bus",
             vec![(
@@ -526,6 +539,7 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
             Ok(Json::Arr(components))
         }
         ["nets"] => Ok(Json::Arr(c.nets.iter().map(|(k, m)| net(k, m, c)).collect())),
+        ["diff-pairs"] => Ok(super::project::diff_pairs(c)),
         ["bus", id] => c
             .buses
             .get(*id)
@@ -590,7 +604,7 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
             let branch = c.drawn_branch(k);
             let mut candidates = Vec::new();
             for role_id in &p.wants {
-                if d.roles[role_id].connection.is_some() {
+                if d.roles[role_id].connection.is_some() || d.roles[role_id].kind.is_pull() {
                     continue;
                 }
                 let mut providers = c.nets[&c.net_of[*k]]
@@ -666,6 +680,13 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
                                 Json::obj(vec![
                                     ("role", role.0.clone().into()),
                                     ("target", check.target.clone().into()),
+                                    (
+                                        "source_role",
+                                        check
+                                            .source_role
+                                            .as_ref()
+                                            .map_or(Json::Null, |id| id.0.clone().into()),
+                                    ),
                                     ("satisfied", check.satisfied.into()),
                                     (
                                         "status",
@@ -711,6 +732,19 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
     }
 }
 pub fn response(d: &Document, c: &Circuit, words: &[String]) -> Result<Json> {
+    if let [cmd, pin, variant] = words
+        && cmd == "pin"
+    {
+        let changes = d
+            .variants
+            .get(variant)
+            .ok_or_else(|| Fault::new("UnknownVariant", Span::default(), variant))?;
+        return response(
+            d,
+            &Circuit::build_fitted(d, changes)?,
+            &[cmd.clone(), pin.clone()],
+        );
+    }
     if let [cmd, variant] = words
         && cmd == "erc"
     {

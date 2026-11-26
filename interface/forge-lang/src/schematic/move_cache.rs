@@ -56,10 +56,12 @@ pub(super) fn update(last: &mut Compiled, src: &str) -> bool {
         .map(|(k, _)| k.clone())
         .collect();
     c.issues.retain(|i| {
-        !matches!(i.kind, "TextBoundsOverlap" | "TextGeometryOverlap")
-            || !i.objects[0]
-                .rsplit_once('/')
-                .is_some_and(|(path, _)| scopes.contains(path))
+        !matches!(
+            i.kind,
+            "TextBoundsOverlap" | "TextGeometryOverlap" | "WireNearPin" | "WireOverlap"
+        ) || !i.objects[0]
+            .rsplit_once('/')
+            .is_some_and(|(path, _)| scopes.contains(path))
     });
     for scope in &scopes {
         for (name, pin) in def.pins.iter().filter(|(_, p)| p.unit == *unit) {
@@ -79,6 +81,7 @@ pub(super) fn update(last: &mut Compiled, src: &str) -> bool {
     for scope in &scopes {
         let findings = drawing::readability(&last.doc, c, scope, &rows);
         c.issues.extend(findings);
+        c.issues.extend(super::wire_readability::findings(c, scope));
     }
     c.sort_findings();
     if delta != 0 {
