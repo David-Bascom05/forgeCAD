@@ -7,6 +7,7 @@ OpenCascade) never become build dependencies; run them through `fbuild`.
 
 ## Topics
 
+- [Native electronics design](electronics/design.md) (proposal) covers graphical and text schematic authoring, placement intent, live DRC, board and harness interfaces, and the language proof.
 - `closed-forms/`: quartics and Cardano for surface pairs, quartic root counts, parabolas (text).
   Also `tools/sympy/meet.py`, which generates `kernel/forge-geom/src/meet_gen.rs`.
 - `predicate-bounds/`: the float filters' error bounds in forge-math's exact predicates.
