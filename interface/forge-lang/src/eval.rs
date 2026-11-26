@@ -1480,7 +1480,7 @@ impl<'s> Eval<'s> {
 
     fn iterable(&mut self, v: Value, span: Span) -> R<Vec<Value>> {
         match v {
-            Value::List(xs) => Ok((*xs).clone()),
+            Value::List(xs) => Ok(Rc::unwrap_or_clone(xs)),
             Value::Map(m) => Ok(m.iter().map(|x| x.1.clone()).collect()),
             other => Err(Error::WrongType {
                 span,

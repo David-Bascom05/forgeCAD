@@ -587,7 +587,7 @@ fn apply_scoped(
         return apply_scoped(src, body, &inner, Some(prog[k].span.hi - 1), &|_| None);
     }
     precheck(prog, op, dim_of)?;
-    apply_in(src, prog, op, end, dim_of)
+    apply_in(src, prog, op, end)
 }
 
 /// Whether an op edits a component's header (its defaults), at any depth.
@@ -742,13 +742,7 @@ fn scoped(prog: &[Stmt], op: &Op) -> R<Option<(usize, Op)>> {
 }
 
 /// The op on `prog` (the document, or a component's statements ending at `end`, its `}`).
-fn apply_in(
-    src: &str,
-    prog: &[Stmt],
-    op: &Op,
-    end: Option<u32>,
-    dim_of: &dyn Fn(&ParamKey) -> Option<Dim>,
-) -> R<String> {
+fn apply_in(src: &str, prog: &[Stmt], op: &Op, end: Option<u32>) -> R<String> {
     let prog = prog.to_vec();
     match op {
         Op::SetArg { id, arg, text } => crate::edit_ops::apply_set_arg(src, &prog, id, arg, text),
@@ -759,16 +753,6 @@ fn apply_in(
         Op::Respell { span, to } => crate::edit_ops::apply_respell(src, *span, to),
         Op::SetParam { param, value } => {
             let s = param_stmt(&prog, param).ok_or(Error::UnknownParam { param: param.clone() })?;
-            if let Some(d) = dim_of(param)
-                && d != value.dim
-                && d != Dim::Any
-            {
-                return Err(Error::EditDim {
-                    param: param.clone(),
-                    want: d,
-                    found: value.dim,
-                });
-            }
             let r = rhs(s).span;
             Ok(splice(src, r.lo, r.hi, &value.text()))
         }
@@ -1451,4 +1435,31 @@ pub fn apply_all_checked_at(src: &str, ops: &[Op], at: &At) -> R<String> {
     let (before, _) = crate::run(src, at.options(), Default::default());
     checked_against(&before, &text, at.options())?;
     Ok(text)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn setting_a_parameter_reads_its_dimension_once() {
+        let op = Op::SetParam {
+            param: ParamKey::parse("w").unwrap(),
+            value: Literal {
+                value: 2.0,
+                dim: Dim::Length,
+            },
+        };
+        let reads = std::cell::Cell::new(0);
+        let result = apply_with("shared w = 1\n", &op, &|_| {
+            reads.set(reads.get() + 1);
+            Some(Dim::Length)
+        });
+        assert!(result.is_ok());
+        assert_eq!(reads.get(), 1);
+        assert!(matches!(
+            apply_with("shared w = 1\n", &op, &|_| Some(Dim::Angle)),
+            Err(Error::EditDim { .. })
+        ));
+    }
 }
