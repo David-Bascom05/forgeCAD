@@ -2,10 +2,8 @@
 //! publishing a new revision is the caller's job.
 use crate::{Options, deps, drawing::Model, kept};
 use forge_math::{Frame, Point2, Point3, Vec3, hash::hash128};
-use forge_ops::{
-    Profile, delete_faces, extrude,
-    simplify::{planar_details, through_bores},
-};
+use forge_ops::{Profile, delete_faces, extrude};
+use forge_simplify::{planar_details, through_bores};
 use forge_topo::{Body, Name, extent::exact_box};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
