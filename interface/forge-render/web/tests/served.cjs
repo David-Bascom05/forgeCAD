@@ -26,18 +26,13 @@ boss = extrude(top.c, t)
 const TOKEN = "0123456789abcdef-browser";
 const server = process.env.FORGE_SERVER ?? path.join(t.repo, "target/release/forge-server");
 
-function startServer(dir, origin, port) {
-  return new Promise((ok, fail) => {
-    const s = spawn(server, [dir, "--port", String(port), "--user", `tab:${TOKEN}`, "--origin", origin], {
-      stdio: ["ignore", "ignore", "pipe"],
-    });
-    s.on("error", fail);
-    s.stderr.on("data", (d) => {
-      if (process.env.VERBOSE) process.stderr.write(d);
-      const m = /at (ws:\S+)/.exec(String(d));
-      if (m) ok({ ws: m[1], proc: s });
-    });
+async function startServer(dir, origin, port) {
+  const proc = spawn(server, [dir, "--port", String(port), "--user", `tab:${TOKEN}`, "--origin", origin], {
+    stdio: ["ignore", "ignore", "pipe"],
   });
+  if (process.env.VERBOSE) proc.stderr.on("data", d => process.stderr.write(d));
+  const ws = await t.readyUrl(proc, proc.stderr, / at (ws:\/\/\S+\/sync)$/);
+  return { ws, proc };
 }
 
 const sync = (p) => p.evaluate(() => window.forgecad.state().sync);
@@ -64,9 +59,12 @@ async function same(a, b, what, min = 0) {
   const wport = 20000 + Math.floor(Math.random() * 20000);
   const sport = 40000 + Math.floor(Math.random() * 10000);
   const { ws, proc: srv } = await startServer(dir, `http://localhost:${wport}`, sport);
-  const { url, proc: web } = await t.serve(dir, app, ["--port", String(wport), "--sync", ws]);
-  const b = await t.browser();
+  let web, b;
   try {
+    const served = await t.serve(dir, app, ["--port", String(wport), "--sync", ws]);
+    const url = served.url;
+    web = served.proc;
+    b = await t.browser();
     const q = `?open=plate.fg&offscreen=640x400&sync=${encodeURIComponent(ws)}&sync_token=${TOKEN}`;
     const [pa, pb] = [await t.page(b, url + q), await t.page(b, url + q)];
     for (const p of [pa, pb]) {
@@ -104,10 +102,17 @@ async function same(a, b, what, min = 0) {
     // B2: edit in a → b has it
     const lat = [];
     for (let k = 0; k < 20; k++) {
-      const want = (await sync(pb)).seq + 1;
+      // Begin each one-way measurement with both editors settled on the previous edit.
+      const previous = await same(pa, pb, "the previous latency sample", s3.seq + k);
+      const want = previous.seq + 1;
       const t0 = Date.now();
       await apply(pa, setParam("t", 5 + (k % 7)));
-      while ((await sync(pb)).seq < want) await new Promise((r) => setTimeout(r, 1));
+      while ((await sync(pb)).seq < want) {
+        if (Date.now() - t0 > 10000) {
+          throw new Error(`edit ${k} did not reach seq ${want}: ${JSON.stringify([await pa.evaluate(() => window.forgecad.state().status), await sync(pa), await sync(pb)])}`);
+        }
+        await new Promise((r) => setTimeout(r, 1));
+      }
       lat.push(Date.now() - t0);
     }
     lat.sort((x, y) => x - y);
@@ -121,9 +126,9 @@ async function same(a, b, what, min = 0) {
     console.log("ok - a tab with no ?sync= is LOCAL");
     for (const p of [pa, pb, local]) t.check(p);
   } finally {
-    await b.close();
+    await b?.close();
     srv.kill();
-    web.kill();
+    web?.kill();
   }
 })().catch((e) => {
   console.error(e);

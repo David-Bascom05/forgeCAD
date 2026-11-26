@@ -73,19 +73,32 @@ async function loaded(p) {
   return until(p, (s) => s.done >= s.seq && s.built?.checked && s.built.seq >= s.seq, "the rebuild after every file");
 }
 
-/// `forgecad web DIR --app APP` on a free port; resolves with its URL once it listens.
-function serve(dir, app, extra = []) {
-  return new Promise((ok, fail) => {
-    const port = 20000 + Math.floor(Math.random() * 20000);
-    const s = spawn(bins.forgecad, ["web", dir, "--app", app, "--port", String(port), ...extra], {
-      stdio: ["ignore", "pipe", "inherit"],
-    });
-    s.on("error", fail);
-    s.stdout.on("data", (d) => {
-      const m = /at (http:\S+)/.exec(String(d));
-      if (m) ok({ url: m[1], proc: s });
+// A child's readiness message can span several pipe writes, including within its URL.
+function readyUrl(child, stream, pattern) {
+  return new Promise((resolve, reject) => {
+    const lines = require("node:readline").createInterface({ input: stream });
+    const closed = (code, signal) => reject(new Error(`Server exited before announcing its URL (${signal ?? code})`));
+    child.once("error", reject);
+    child.once("close", closed);
+    lines.on("line", function announced(line) {
+      const match = pattern.exec(line);
+      if (!match) return;
+      lines.off("line", announced);
+      child.off("close", closed);
+      child.off("error", reject);
+      resolve(match[1]);
     });
   });
+}
+
+/// `forgecad web DIR --app APP` on a free port; resolves with its URL once it listens.
+async function serve(dir, app, extra = []) {
+  const port = 20000 + Math.floor(Math.random() * 20000);
+  const proc = spawn(bins.forgecad, ["web", dir, "--app", app, "--port", String(port), ...extra], {
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+  const url = await readyUrl(proc, proc.stdout, / at (http:\/\/\S+)$/);
+  return { url, proc };
 }
 
 /// The native build of each file, as forge-parity reports it, by file.
@@ -159,4 +172,4 @@ function tmpdir(tag) {
   return fs.mkdtempSync(path.join(require("node:os").tmpdir(), `forgecad-${tag}-`));
 }
 
-module.exports = { repo, bins, browser, page, check, until, loaded, frames, serve, native, differs, tmpdir, pixels, shot, SAME };
+module.exports = { repo, bins, browser, page, check, until, loaded, frames, readyUrl, serve, native, differs, tmpdir, pixels, shot, SAME };
