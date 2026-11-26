@@ -540,7 +540,6 @@ impl Builder {
     /// Adds a feature and, when building, builds it onto the part. Returns its index.
     pub fn push(&mut self, f: Feature, id: u64) -> Result<usize, RegenError> {
         let i = self.features.len();
-        let keyable = keyed(&self.steps, &f);
         self.features.push(f);
         self.ids.push(id);
         if !self.building {
@@ -562,6 +561,7 @@ impl Builder {
             self.steps.push(step);
             return Ok(i);
         }
+        let keyable = keyed(&self.steps, &self.features[i]);
         self.reuse = false;
         if keyable
             && let Some((step, st)) =
