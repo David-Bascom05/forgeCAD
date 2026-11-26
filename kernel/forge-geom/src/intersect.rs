@@ -880,42 +880,41 @@ fn subdivide_pieces(
     let mut hits = Vec::new();
     let mut i = 0;
     while i < leaves.len() {
-        let (lo, mut hi) = (leaves[i].0, leaves[i].1);
-        let mut j = i + 1;
-        while j < leaves.len() && leaves[j].0 <= hi {
-            hi = leaves[j].1;
-            j += 1;
+        // Only the first sign-changing bracket, the parity of crossings, and the
+        // earliest closest boundary are needed. Visit the retained endpoints in order.
+        let (lo, _, left_value, _) = leaves[i];
+        let mut previous = (lo, known(lo, left_value));
+        let mut closest = (lo, f64::INFINITY);
+        if previous.1.abs() < closest.1 {
+            closest.1 = previous.1.abs();
         }
-        // sign changes across the group's leaf boundaries
-        let mut marks: Vec<f64> = vec![lo];
-        marks.extend(leaves[i..j].iter().map(|l| l.1));
-        let mut vals: Vec<f64> = vec![known(lo, leaves[i].2)];
-        vals.extend(leaves[i..j].iter().map(|l| known(l.1, l.3)));
-        let changes: Vec<usize> = (1..vals.len())
-            .filter(|&k| (vals[k - 1] < 0.0) != (vals[k] < 0.0))
-            .collect();
-        if changes.len() % 2 == 1 {
-            let k = changes[0];
-            let t = bisect_sign_from(&g, marks[k - 1], marks[k], vals[k - 1], vals[k]);
-            hits.push(CurveHit {
-                t,
-                point: c.eval(t),
-                contact: Contact::Crossing,
-            });
-        } else {
-            let (k, v) = vals.iter().enumerate().fold((0, f64::INFINITY), |b, (k, v)| {
-                if v.abs() < b.1 { (k, v.abs()) } else { b }
-            });
-            if v <= tol::LINEAR {
-                let t = marks[k];
-                hits.push(CurveHit {
-                    t,
-                    point: c.eval(t),
-                    contact: Contact::Touching,
-                });
+        let mut first_crossing = None;
+        let mut odd = false;
+        loop {
+            let (_, end, _, right_value) = leaves[i];
+            let value = known(end, right_value);
+            if (previous.1 < 0.0) != (value < 0.0) {
+                first_crossing.get_or_insert((previous.0, end, previous.1, value));
+                odd = !odd;
             }
+            if value.abs() < closest.1 {
+                closest = (end, value.abs());
+            }
+            previous = (end, value);
+            i += 1;
+            if leaves.get(i).is_some_and(|next| next.0 <= end) {
+                continue;
+            }
+            break;
         }
-        i = j;
+        let hit = if odd {
+            first_crossing.map(|(a, b, fa, fb)| (bisect_sign_from(&g, a, b, fa, fb), Contact::Crossing))
+        } else {
+            (closest.1 <= tol::LINEAR).then_some((closest.0, Contact::Touching))
+        };
+        if let Some((t, contact)) = hit {
+            hits.push(CurveHit { t, point: c.eval(t), contact });
+        }
     }
     CurveSurface::Hits(hits)
 }
