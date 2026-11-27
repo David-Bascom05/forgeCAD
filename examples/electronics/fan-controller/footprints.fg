@@ -1,156 +1,292 @@
 footprint_library
-# Board-top view. The component origins and plated bores are shared by placement and CAM.
+# Top view. Thermal exposed pads use filled and capped vias.
 
-QuarterBrick = footprint(pads: [
-    pth(number: "1", at: (0,7.62), size: (3,3), shape: "round", drill: 1.35mm, mask: 0.04mm),
-    pth(number: "2", at: (0,0), size: (2.4,2.4), shape: "round", drill: 1.35mm, mask: 0.04mm),
-    pth(number: "3", at: (0,-7.62), size: (3,3), shape: "round", drill: 1.35mm, mask: 0.04mm),
-    pth(number: "4", at: (50.8,-7.62), size: (4.2,4.2), shape: "round", drill: 1.9mm, mask: 0.04mm),
-    pth(number: "6", at: (50.8,0), size: (2.4,2.4), shape: "round", drill: 1.35mm, mask: 0.04mm),
-    pth(number: "8", at: (50.8,7.62), size: (4.2,4.2), shape: "round", drill: 1.9mm, mask: 0.04mm)],
-    courtyard: [(-3.8,-18.6),(54.5,-18.6),(54.5,18.6),(-3.8,18.6)],
-    artwork: [layer_line(layer: "fab", points: [(-3.6,-18.4),(54.3,-18.4),(54.3,18.4),(-3.6,18.4),(-3.6,-18.4)], width: 0.12mm)],
-    legend: [silk_line(points: [(-3.6,-18.4),(54.3,-18.4),(54.3,18.4),(-3.6,18.4),(-3.6,-18.4)], width: 0.18mm)])
-
-Terminal2 = footprint(pads: [
-    pth(number: "1", at: (0,0), size: (3.6,3.6), shape: "round", drill: 1.6mm, mask: 0.04mm),
-    pth(number: "2", at: (0,-7.62), size: (3.6,3.6), shape: "round", drill: 1.6mm, mask: 0.04mm)],
-    courtyard: [(-4.2,-11.4),(4.2,-11.4),(4.2,3.8),(-4.2,3.8)],
-    artwork: [layer_line(layer: "fab", points: [(-4,-11.2),(4,-11.2),(4,3.6),(-4,3.6),(-4,-11.2)], width: 0.12mm)],
-    legend: [silk_line(points: [(-4,-11.2),(4,-11.2),(4,3.6),(-4,3.6),(-4,-11.2)], width: 0.18mm)])
-
-Fan4 = footprint(pads: [
-    pth(number: "1", at: (0,2.54), size: (1.8,1.8), shape: "round", drill: 1.05mm, mask: 0.04mm),
-    pth(number: "2", at: (0,0), size: (1.8,1.8), shape: "round", drill: 1.05mm, mask: 0.04mm),
-    pth(number: "3", at: (0,-2.54), size: (1.8,1.8), shape: "round", drill: 1.05mm, mask: 0.04mm),
-    pth(number: "4", at: (0,-5.08), size: (1.8,1.8), shape: "round", drill: 1.05mm, mask: 0.04mm)],
-    courtyard: [(-3.7,-7),(4.6,-7),(4.6,4.5),(-3.7,4.5)],
-    artwork: [layer_line(layer: "fab", points: [(-3.5,-6.8),(4.4,-6.8),(4.4,4.3),(-3.5,4.3),(-3.5,-6.8)], width: 0.12mm)],
-    legend: [silk_line(points: [(-3.5,-6.8),(4.4,-6.8),(4.4,4.3),(-3.5,4.3),(-3.5,-6.8)], width: 0.18mm)])
-
-SIP3 = footprint(pads: [
-    pth(number: "1", at: (0,0), size: (1.8,1.8), shape: "round", drill: 1mm, mask: 0.04mm),
-    pth(number: "2", at: (2.54,0), size: (1.8,1.8), shape: "round", drill: 1mm, mask: 0.04mm),
-    pth(number: "3", at: (5.08,0), size: (1.8,1.8), shape: "round", drill: 1mm, mask: 0.04mm)],
-    courtyard: [(-3.46,-2.2),(8.54,-2.2),(8.54,6.7),(-3.46,6.7)],
-    artwork: [layer_line(layer: "fab", points: [(-3.26,-2),(8.34,-2),(8.34,6.5),(-3.26,6.5),(-3.26,-2)], width: 0.12mm)],
-    legend: [silk_line(points: [(-3.26,-2),(8.34,-2),(8.34,6.5),(-3.26,6.5),(-3.26,-2)], width: 0.18mm)])
-
-SO8 = footprint(pads: [
-    smd(number: "1", at: (-2.7,1.905), size: (1.5,0.6), paste: -0.025mm, mask: 0.04mm),
-    smd(number: "2", at: (-2.7,0.635), size: (1.5,0.6), paste: -0.025mm, mask: 0.04mm),
-    smd(number: "3", at: (-2.7,-0.635), size: (1.5,0.6), paste: -0.025mm, mask: 0.04mm),
-    smd(number: "4", at: (-2.7,-1.905), size: (1.5,0.6), paste: -0.025mm, mask: 0.04mm),
-    smd(number: "5", at: (2.7,-1.905), size: (1.5,0.6), paste: -0.025mm, mask: 0.04mm),
-    smd(number: "6", at: (2.7,-0.635), size: (1.5,0.6), paste: -0.025mm, mask: 0.04mm),
-    smd(number: "7", at: (2.7,0.635), size: (1.5,0.6), paste: -0.025mm, mask: 0.04mm),
-    smd(number: "8", at: (2.7,1.905), size: (1.5,0.6), paste: -0.025mm, mask: 0.04mm)],
-    courtyard: [(-3.75,-2.85),(3.75,-2.85),(3.75,2.85),(-3.75,2.85)],
-    artwork: [layer_line(layer: "fab", points: [(-3.55,-2.65),(3.55,-2.65),(3.55,2.65),(-3.55,2.65),(-3.55,-2.65)], width: 0.12mm)])
-
-SOT23 = footprint(pads: [
-    smd(number: "1", at: (-1,0.95), size: (1,0.85), paste: -0.025mm, mask: 0.04mm),
-    smd(number: "2", at: (-1,-0.95), size: (1,0.85), paste: -0.025mm, mask: 0.04mm),
-    smd(number: "3", at: (1,0), size: (1,0.85), paste: -0.025mm, mask: 0.04mm)],
-    courtyard: [(-1.85,-1.8),(1.85,-1.8),(1.85,1.8),(-1.85,1.8)],
-    artwork: [layer_line(layer: "fab", points: [(-1.65,-1.6),(1.65,-1.6),(1.65,1.6),(-1.65,1.6),(-1.65,-1.6)], width: 0.12mm)])
-
-Chip0805 = footprint(pads: [
-    smd(number: "1", at: (-0.95,0), size: (1.05,1.15), paste: -0.025mm, mask: 0.04mm),
-    smd(number: "2", at: (0.95,0), size: (1.05,1.15), paste: -0.025mm, mask: 0.04mm)],
-    courtyard: [(-1.75,-0.9),(1.75,-0.9),(1.75,0.9),(-1.75,0.9)],
-    artwork: [layer_line(layer: "fab", points: [(-1.55,-0.7),(1.55,-0.7),(1.55,0.7),(-1.55,0.7),(-1.55,-0.7)], width: 0.12mm)])
-
-Chip1210 = footprint(pads: [
-    smd(number: "1", at: (-1.45,0), size: (1.4,2.55), paste: -0.025mm, mask: 0.04mm),
-    smd(number: "2", at: (1.45,0), size: (1.4,2.55), paste: -0.025mm, mask: 0.04mm)],
-    courtyard: [(-2.55,-1.7),(2.55,-1.7),(2.55,1.7),(-2.55,1.7)],
-    artwork: [layer_line(layer: "fab", points: [(-2.35,-1.5),(2.35,-1.5),(2.35,1.5),(-2.35,1.5),(-2.35,-1.5)], width: 0.12mm)])
-
-Fuse2410 = footprint(pads: [
-    smd(number: "1", at: (-2.55,0), size: (2.25,2.8), paste: -0.025mm, mask: 0.04mm),
-    smd(number: "2", at: (2.55,0), size: (2.25,2.8), paste: -0.025mm, mask: 0.04mm)],
-    courtyard: [(-4.05,-1.75),(4.05,-1.75),(4.05,1.75),(-4.05,1.75)],
-    artwork: [layer_line(layer: "fab", points: [(-3.85,-1.55),(3.85,-1.55),(3.85,1.55),(-3.85,1.55),(-3.85,-1.55)], width: 0.12mm)])
-
-Radial16 = footprint(pads: [
-    pth(number: "1", at: (0,0), size: (2.25,2.25), shape: "round", drill: 1.05mm, mask: 0.04mm),
-    pth(number: "2", at: (0,-7.5), size: (2.25,2.25), shape: "round", drill: 1.05mm, mask: 0.04mm)],
-    courtyard: [(-8.3,-12.05),(8.3,-12.05),(8.3,4.55),(-8.3,4.55)],
-    artwork: [layer_line(layer: "fab", points: [(-8.1,-11.85),(8.1,-11.85),(8.1,4.35),(-8.1,4.35),(-8.1,-11.85)], width: 0.12mm)],
-    legend: [silk_line(points: [(-8.1,-11.85),(8.1,-11.85),(8.1,4.35),(-8.1,4.35),(-8.1,-11.85)], width: 0.18mm)])
-
-Radial12 = footprint(pads: [
-    pth(number: "1", at: (0,0), size: (2.25,2.25), shape: "round", drill: 1.05mm, mask: 0.04mm),
-    pth(number: "2", at: (0,5), size: (2.25,2.25), shape: "round", drill: 1.05mm, mask: 0.04mm)],
-    courtyard: [(-6.6,-4.1),(6.6,-4.1),(6.6,9.1),(-6.6,9.1)],
-    artwork: [layer_line(layer: "fab", points: [(-6.4,-3.9),(6.4,-3.9),(6.4,8.9),(-6.4,8.9),(-6.4,-3.9)], width: 0.12mm)],
-    legend: [silk_line(points: [(-6.4,-3.9),(6.4,-3.9),(6.4,8.9),(-6.4,8.9),(-6.4,-3.9)], width: 0.18mm)])
-
-Header2 = footprint(pads: [
-    pth(number: "1", at: (0,0), size: (1.75,1.75), shape: "round", drill: 1mm, mask: 0.04mm),
-    pth(number: "2", at: (2.54,0), size: (1.75,1.75), shape: "round", drill: 1mm, mask: 0.04mm)],
-    courtyard: [(-1.6,-1.6),(4.14,-1.6),(4.14,1.6),(-1.6,1.6)],
-    artwork: [layer_line(layer: "fab", points: [(-1.4,-1.4),(3.94,-1.4),(3.94,1.4),(-1.4,1.4),(-1.4,-1.4)], width: 0.12mm)],
-    legend: [silk_line(points: [(-1.4,-1.4),(3.94,-1.4),(3.94,1.4),(-1.4,1.4),(-1.4,-1.4)], width: 0.18mm)])
+C0805 = footprint(pads: [
+    smd(number: "1", at: (-0.96,0), size: (1,1.3), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "2", at: (0.96,0), size: (1,1.3), paste: -0.025mm, mask: 0.025mm)],
+    courtyard: [(-1.63,-0.82),(1.63,-0.82),(1.63,0.82),(-1.63,0.82)],
+    artwork: [layer_line(layer: "fab", points: [(-1.53,-0.72),(1.53,-0.72),(1.53,0.72),(-1.53,0.72),(-1.53,-0.72)], width: 0.1mm)])
 
 Can3 = footprint(pads: [
-    pth(number: "1", at: (0,0), size: (2.5,2.5), shape: "round", drill: 1.3mm, mask: 0.04mm),
-    pth(number: "2", at: (-5.08,0), size: (2.5,2.5), shape: "round", drill: 1.3mm, mask: 0.04mm),
-    pth(number: "3", at: (-10.16,0), size: (2.5,2.5), shape: "round", drill: 1.3mm, mask: 0.04mm)],
-    courtyard: [(-12.96,-4.2),(2.8,-4.2),(2.8,4.2),(-12.96,4.2)],
-    artwork: [layer_line(layer: "fab", points: [(-12.76,-4),(2.6,-4),(2.6,4),(-12.76,4),(-12.76,-4)], width: 0.12mm)],
-    legend: [silk_line(points: [(-12.76,-4),(2.6,-4),(2.6,4),(-12.76,4),(-12.76,-4)], width: 0.18mm)])
+    pth(number: "1", at: (0,0), size: (2.2,2.2), shape: "round", drill: 1.2mm, mask: 0.025mm),
+    pth(number: "2", at: (3.81,0), size: (2.2,2.2), shape: "round", drill: 1.2mm, mask: 0.025mm),
+    pth(number: "3", at: (7.62,0), size: (2.2,2.2), shape: "round", drill: 1.2mm, mask: 0.025mm)],
+    courtyard: [(-2.2,-3.8),(9.82,-3.8),(9.82,3.8),(-2.2,3.8)],
+    artwork: [layer_line(layer: "fab", points: [(-2.1,-3.7),(9.72,-3.7),(9.72,3.7),(-2.1,3.7),(-2.1,-3.7)], width: 0.1mm)])
 
-Teensy41 = footprint(pads: [
-    pth(number: "G1", at: (0,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "0", at: (2.54,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "1", at: (5.08,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "2", at: (7.62,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "3", at: (10.16,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "4", at: (12.7,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "5", at: (15.24,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "6", at: (17.78,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "7", at: (20.32,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "8", at: (22.86,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "9", at: (25.4,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "10", at: (27.94,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "11", at: (30.48,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "12", at: (33.02,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "3V3a", at: (35.56,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "24", at: (38.1,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "25", at: (40.64,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "26", at: (43.18,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "27", at: (45.72,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "28", at: (48.26,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "29", at: (50.8,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "30", at: (53.34,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "31", at: (55.88,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "32", at: (58.42,0), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "VIN", at: (0,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "G2", at: (2.54,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "3V3b", at: (5.08,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "23", at: (7.62,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "22", at: (10.16,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "21", at: (12.7,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "20", at: (15.24,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "19", at: (17.78,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "18", at: (20.32,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "17", at: (22.86,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "16", at: (25.4,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "15", at: (27.94,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "14", at: (30.48,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "13", at: (33.02,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "G3", at: (35.56,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "41", at: (38.1,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "40", at: (40.64,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "39", at: (43.18,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "38", at: (45.72,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "37", at: (48.26,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "36", at: (50.8,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "35", at: (53.34,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "34", at: (55.88,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm),
-    pth(number: "33", at: (58.42,15.24), size: (1.72,1.72), shape: "round", drill: 1.02mm, mask: 0.04mm)],
-    courtyard: [(-1.5,-1.55),(59.95,-1.55),(59.95,16.8),(-1.5,16.8)],
-    artwork: [layer_line(layer: "fab", points: [(-1.3,-1.35),(59.75,-1.35),(59.75,16.6),(-1.3,16.6),(-1.3,-1.35)], width: 0.12mm)],
-    legend: [silk_line(points: [(-1.3,-1.35),(59.75,-1.35),(59.75,16.6),(-1.3,16.6),(-1.3,-1.35)], width: 0.18mm)])
+D2PAK = footprint(pads: [
+    smd(number: "1", at: (-4.4,2.54), size: (2.6,1.6), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "2", at: (2.7,0), size: (8.7,10), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "3", at: (-4.4,-2.54), size: (2.6,1.6), paste: -0.025mm, mask: 0.025mm)],
+    courtyard: [(-5.87,-5.17),(7.22,-5.17),(7.22,5.17),(-5.87,5.17)],
+    artwork: [layer_line(layer: "fab", points: [(-5.77,-5.07),(7.12,-5.07),(7.12,5.07),(-5.77,5.07),(-5.77,-5.07)], width: 0.1mm)])
+
+DDA = footprint(pads: [
+    smd(number: "1", at: (-2.7,1.905), size: (1.5,0.62), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "2", at: (-2.7,0.635), size: (1.5,0.62), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "3", at: (-2.7,-0.635), size: (1.5,0.62), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "4", at: (-2.7,-1.905), size: (1.5,0.62), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "5", at: (2.7,-1.905), size: (1.5,0.62), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "6", at: (2.7,-0.635), size: (1.5,0.62), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "7", at: (2.7,0.635), size: (1.5,0.62), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "8", at: (2.7,1.905), size: (1.5,0.62), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "9", at: (0,0), size: (2.71,3.4), paste: -0.025mm, mask: 0.025mm)],
+    courtyard: [(-3.62,-2.385),(3.62,-2.385),(3.62,2.385),(-3.62,2.385)],
+    artwork: [layer_line(layer: "fab", points: [(-3.52,-2.285),(3.52,-2.285),(3.52,2.285),(-3.52,2.285),(-3.52,-2.285)], width: 0.1mm)])
+
+F2410 = footprint(pads: [
+    smd(number: "1", at: (-2.55,0), size: (2.2,2.8), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "2", at: (2.55,0), size: (2.2,2.8), paste: -0.025mm, mask: 0.025mm)],
+    courtyard: [(-3.82,-1.57),(3.82,-1.57),(3.82,1.57),(-3.82,1.57)],
+    artwork: [layer_line(layer: "fab", points: [(-3.72,-1.47),(3.72,-1.47),(3.72,1.47),(-3.72,1.47),(-3.72,-1.47)], width: 0.1mm)])
+
+Fan4 = footprint(pads: [
+    pth(number: "1", at: (0,2.54), size: (1.8,1.8), shape: "round", drill: 1.05mm, mask: 0.025mm),
+    pth(number: "2", at: (0,0), size: (1.8,1.8), shape: "round", drill: 1.05mm, mask: 0.025mm),
+    pth(number: "3", at: (0,-2.54), size: (1.8,1.8), shape: "round", drill: 1.05mm, mask: 0.025mm),
+    pth(number: "4", at: (0,-5.08), size: (1.8,1.8), shape: "round", drill: 1.05mm, mask: 0.025mm)],
+    courtyard: [(-3.7,-6.9),(4.4,-6.9),(4.4,4.4),(-3.7,4.4)],
+    artwork: [layer_line(layer: "fab", points: [(-3.6,-6.8),(4.3,-6.8),(4.3,4.3),(-3.6,4.3),(-3.6,-6.8)], width: 0.1mm)])
+
+JP2 = footprint(pads: [
+    pth(number: "1", at: (0,0), size: (1.65,1.65), shape: "round", drill: 1mm, mask: 0.025mm),
+    pth(number: "2", at: (2.54,0), size: (1.65,1.65), shape: "round", drill: 1mm, mask: 0.025mm)],
+    courtyard: [(-0.995,-0.995),(3.535,-0.995),(3.535,0.995),(-0.995,0.995)],
+    artwork: [layer_line(layer: "fab", points: [(-0.895,-0.895),(3.435,-0.895),(3.435,0.895),(-0.895,0.895),(-0.895,-0.895)], width: 0.1mm)])
+
+LQFP48 = footprint(pads: [
+    smd(number: "1", at: (-4.32,2.75), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "2", at: (-4.32,2.25), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "3", at: (-4.32,1.75), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "4", at: (-4.32,1.25), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "5", at: (-4.32,0.75), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "6", at: (-4.32,0.25), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "7", at: (-4.32,-0.25), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "8", at: (-4.32,-0.75), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "9", at: (-4.32,-1.25), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "10", at: (-4.32,-1.75), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "11", at: (-4.32,-2.25), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "12", at: (-4.32,-2.75), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "13", at: (-2.75,-4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "14", at: (-2.25,-4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "15", at: (-1.75,-4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "16", at: (-1.25,-4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "17", at: (-0.75,-4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "18", at: (-0.25,-4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "19", at: (0.25,-4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "20", at: (0.75,-4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "21", at: (1.25,-4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "22", at: (1.75,-4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "23", at: (2.25,-4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "24", at: (2.75,-4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "25", at: (4.32,-2.75), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "26", at: (4.32,-2.25), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "27", at: (4.32,-1.75), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "28", at: (4.32,-1.25), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "29", at: (4.32,-0.75), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "30", at: (4.32,-0.25), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "31", at: (4.32,0.25), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "32", at: (4.32,0.75), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "33", at: (4.32,1.25), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "34", at: (4.32,1.75), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "35", at: (4.32,2.25), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "36", at: (4.32,2.75), size: (1.42,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "37", at: (2.75,4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "38", at: (2.25,4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "39", at: (1.75,4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "40", at: (1.25,4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "41", at: (0.75,4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "42", at: (0.25,4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "43", at: (-0.25,4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "44", at: (-0.75,4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "45", at: (-1.25,4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "46", at: (-1.75,4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "47", at: (-2.25,4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "48", at: (-2.75,4.32), size: (0.27,1.42), paste: -0.025mm, mask: 0.025mm)],
+    courtyard: [(-5.2,-5.2),(5.2,-5.2),(5.2,5.2),(-5.2,5.2)],
+    artwork: [layer_line(layer: "fab", points: [(-5.1,-5.1),(5.1,-5.1),(5.1,5.1),(-5.1,5.1),(-5.1,-5.1)], width: 0.1mm)])
+
+PWP20 = footprint(pads: [
+    smd(number: "1", at: (-2.97,2.925), size: (1.5,0.45), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "2", at: (-2.97,2.275), size: (1.5,0.45), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "3", at: (-2.97,1.625), size: (1.5,0.45), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "4", at: (-2.97,0.975), size: (1.5,0.45), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "5", at: (-2.97,0.325), size: (1.5,0.45), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "6", at: (-2.97,-0.325), size: (1.5,0.45), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "7", at: (-2.97,-0.975), size: (1.5,0.45), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "8", at: (-2.97,-1.625), size: (1.5,0.45), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "9", at: (-2.97,-2.275), size: (1.5,0.45), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "10", at: (-2.97,-2.925), size: (1.5,0.45), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "11", at: (2.97,-2.925), size: (1.5,0.45), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "12", at: (2.97,-2.275), size: (1.5,0.45), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "13", at: (2.97,-1.625), size: (1.5,0.45), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "14", at: (2.97,-0.975), size: (1.5,0.45), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "15", at: (2.97,-0.325), size: (1.5,0.45), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "16", at: (2.97,0.325), size: (1.5,0.45), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "17", at: (2.97,0.975), size: (1.5,0.45), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "18", at: (2.97,1.625), size: (1.5,0.45), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "19", at: (2.97,2.275), size: (1.5,0.45), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "20", at: (2.97,2.925), size: (1.5,0.45), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "21", at: (0,0), size: (2.96,2.96), paste: -0.025mm, mask: 0.025mm)],
+    courtyard: [(-3.89,-3.32),(3.89,-3.32),(3.89,3.32),(-3.89,3.32)],
+    artwork: [layer_line(layer: "fab", points: [(-3.79,-3.22),(3.79,-3.22),(3.79,3.22),(-3.79,3.22),(-3.79,-3.22)], width: 0.1mm)])
+
+PolyE7 = footprint(pads: [
+    smd(number: "1", at: (-3.475,0), size: (4.15,1.9), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "2", at: (3.475,0), size: (4.15,1.9), paste: -0.025mm, mask: 0.025mm)],
+    courtyard: [(-5.65,-4.3),(5.65,-4.3),(5.65,4.3),(-5.65,4.3)],
+    artwork: [layer_line(layer: "fab", points: [(-5.55,-4.2),(5.55,-4.2),(5.55,4.2),(-5.55,4.2),(-5.55,-4.2)], width: 0.1mm)])
+
+Power2 = footprint(pads: [
+    pth(number: "1", at: (0,0), size: (3.2,3.2), shape: "round", drill: 1.5mm, mask: 0.025mm),
+    pth(number: "2", at: (0,-7.62), size: (3.2,3.2), shape: "round", drill: 1.5mm, mask: 0.025mm)],
+    courtyard: [(-4.1,-11.1),(4.1,-11.1),(4.1,3.9),(-4.1,3.9)],
+    artwork: [layer_line(layer: "fab", points: [(-4,-11),(4,-11),(4,3.8),(-4,3.8),(-4,-11)], width: 0.1mm)])
+
+R0603 = footprint(pads: [
+    smd(number: "1", at: (-0.78,0), size: (0.85,0.9), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "2", at: (0.78,0), size: (0.85,0.9), paste: -0.025mm, mask: 0.025mm)],
+    courtyard: [(-1.375,-0.62),(1.375,-0.62),(1.375,0.62),(-1.375,0.62)],
+    artwork: [layer_line(layer: "fab", points: [(-1.275,-0.52),(1.275,-0.52),(1.275,0.52),(-1.275,0.52),(-1.275,-0.52)], width: 0.1mm)])
+
+R2512 = footprint(pads: [
+    smd(number: "1", at: (-2.65,0), size: (1.9,3.3), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "2", at: (2.65,0), size: (1.9,3.3), paste: -0.025mm, mask: 0.025mm)],
+    courtyard: [(-3.77,-1.82),(3.77,-1.82),(3.77,1.82),(-3.77,1.82)],
+    artwork: [layer_line(layer: "fab", points: [(-3.67,-1.72),(3.67,-1.72),(3.67,1.72),(-3.67,1.72),(-3.67,-1.72)], width: 0.1mm)])
+
+RGY20 = footprint(pads: [
+    smd(number: "1", at: (-0.75,2.15), size: (0.25,0.6), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "20", at: (0.75,2.15), size: (0.25,0.6), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "10", at: (-0.75,-2.15), size: (0.25,0.6), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "11", at: (0.75,-2.15), size: (0.25,0.6), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "2", at: (-1.65,1.75), size: (0.6,0.25), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "3", at: (-1.65,1.25), size: (0.6,0.25), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "4", at: (-1.65,0.75), size: (0.6,0.25), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "5", at: (-1.65,0.25), size: (0.6,0.25), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "6", at: (-1.65,-0.25), size: (0.6,0.25), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "7", at: (-1.65,-0.75), size: (0.6,0.25), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "8", at: (-1.65,-1.25), size: (0.6,0.25), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "9", at: (-1.65,-1.75), size: (0.6,0.25), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "12", at: (1.65,-1.75), size: (0.6,0.25), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "13", at: (1.65,-1.25), size: (0.6,0.25), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "14", at: (1.65,-0.75), size: (0.6,0.25), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "15", at: (1.65,-0.25), size: (0.6,0.25), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "16", at: (1.65,0.25), size: (0.6,0.25), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "17", at: (1.65,0.75), size: (0.6,0.25), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "18", at: (1.65,1.25), size: (0.6,0.25), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "19", at: (1.65,1.75), size: (0.6,0.25), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "21", at: (0,0), size: (1.7,2.7), paste: -0.025mm, mask: 0.025mm)],
+    courtyard: [(-2.12,-2.62),(2.12,-2.62),(2.12,2.62),(-2.12,2.62)],
+    artwork: [layer_line(layer: "fab", points: [(-2.02,-2.52),(2.02,-2.52),(2.02,2.52),(-2.02,2.52),(-2.02,-2.52)], width: 0.1mm)])
+
+Radial10 = footprint(pads: [
+    pth(number: "1", at: (0,0), size: (2,2), shape: "round", drill: 1mm, mask: 0.025mm),
+    pth(number: "2", at: (0,-5), size: (2,2), shape: "round", drill: 1mm, mask: 0.025mm)],
+    courtyard: [(-5.1,-7.6),(5.1,-7.6),(5.1,2.6),(-5.1,2.6)],
+    artwork: [layer_line(layer: "fab", points: [(-5,-7.5),(5,-7.5),(5,2.5),(-5,2.5),(-5,-7.5)], width: 0.1mm)])
+
+SMC = footprint(pads: [
+    smd(number: "1", at: (-3.3,0), size: (2.3,3.3), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "2", at: (3.3,0), size: (2.3,3.3), paste: -0.025mm, mask: 0.025mm)],
+    courtyard: [(-4.62,-1.82),(4.62,-1.82),(4.62,1.82),(-4.62,1.82)],
+    artwork: [layer_line(layer: "fab", points: [(-4.52,-1.72),(4.52,-1.72),(4.52,1.72),(-4.52,1.72),(-4.52,-1.72)], width: 0.1mm)])
+
+SMPC = footprint(pads: [
+    smd(number: "1", at: (-2.65,1.24), size: (2.2,1.38), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "2", at: (-2.65,-1.24), size: (2.2,1.38), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "3", at: (1.35,0), size: (4.15,4.6), paste: -0.025mm, mask: 0.025mm)],
+    courtyard: [(-3.92,-2.47),(3.595,-2.47),(3.595,2.47),(-3.92,2.47)],
+    artwork: [layer_line(layer: "fab", points: [(-3.82,-2.37),(3.495,-2.37),(3.495,2.37),(-3.82,2.37),(-3.82,-2.37)], width: 0.1mm)])
+
+SO8 = footprint(pads: [
+    smd(number: "1", at: (-2.7,1.905), size: (1.5,0.62), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "2", at: (-2.7,0.635), size: (1.5,0.62), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "3", at: (-2.7,-0.635), size: (1.5,0.62), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "4", at: (-2.7,-1.905), size: (1.5,0.62), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "5", at: (2.7,-1.905), size: (1.5,0.62), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "6", at: (2.7,-0.635), size: (1.5,0.62), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "7", at: (2.7,0.635), size: (1.5,0.62), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "8", at: (2.7,1.905), size: (1.5,0.62), paste: -0.025mm, mask: 0.025mm)],
+    courtyard: [(-3.62,-2.385),(3.62,-2.385),(3.62,2.385),(-3.62,2.385)],
+    artwork: [layer_line(layer: "fab", points: [(-3.52,-2.285),(3.52,-2.285),(3.52,2.285),(-3.52,2.285),(-3.52,-2.285)], width: 0.1mm)])
+
+SOD123 = footprint(pads: [
+    smd(number: "1", at: (-1.7,0), size: (1.1,1.45), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "2", at: (1.7,0), size: (1.1,1.45), paste: -0.025mm, mask: 0.025mm)],
+    courtyard: [(-2.42,-0.895),(2.42,-0.895),(2.42,0.895),(-2.42,0.895)],
+    artwork: [layer_line(layer: "fab", points: [(-2.32,-0.795),(2.32,-0.795),(2.32,0.795),(-2.32,0.795),(-2.32,-0.795)], width: 0.1mm)])
+
+SOD523 = footprint(pads: [
+    smd(number: "1", at: (-0.72,0), size: (0.65,0.75), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "2", at: (0.72,0), size: (0.65,0.75), paste: -0.025mm, mask: 0.025mm)],
+    courtyard: [(-1.215,-0.545),(1.215,-0.545),(1.215,0.545),(-1.215,0.545)],
+    artwork: [layer_line(layer: "fab", points: [(-1.115,-0.445),(1.115,-0.445),(1.115,0.445),(-1.115,0.445),(-1.115,-0.445)], width: 0.1mm)])
+
+SOT23 = footprint(pads: [
+    smd(number: "1", at: (-1,0.95), size: (1,0.85), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "2", at: (-1,-0.95), size: (1,0.85), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "3", at: (1,0), size: (1,0.85), paste: -0.025mm, mask: 0.025mm)],
+    courtyard: [(-1.67,-1.545),(1.67,-1.545),(1.67,1.545),(-1.67,1.545)],
+    artwork: [layer_line(layer: "fab", points: [(-1.57,-1.445),(1.57,-1.445),(1.57,1.445),(-1.57,1.445),(-1.57,-1.445)], width: 0.1mm)])
+
+SWD5 = footprint(pads: [
+    pth(number: "1", at: (0,0), size: (1.65,1.65), shape: "round", drill: 1mm, mask: 0.025mm),
+    pth(number: "2", at: (2.54,0), size: (1.65,1.65), shape: "round", drill: 1mm, mask: 0.025mm),
+    pth(number: "3", at: (5.08,0), size: (1.65,1.65), shape: "round", drill: 1mm, mask: 0.025mm),
+    pth(number: "4", at: (7.62,0), size: (1.65,1.65), shape: "round", drill: 1mm, mask: 0.025mm),
+    pth(number: "5", at: (10.16,0), size: (1.65,1.65), shape: "round", drill: 1mm, mask: 0.025mm)],
+    courtyard: [(-0.995,-0.995),(11.155,-0.995),(11.155,0.995),(-0.995,0.995)],
+    artwork: [layer_line(layer: "fab", points: [(-0.895,-0.895),(11.055,-0.895),(11.055,0.895),(-0.895,0.895),(-0.895,-0.895)], width: 0.1mm)])
+
+VC0805 = footprint(pads: [
+    smd(number: "1", at: (0,-0.96), size: (1.3,1), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "2", at: (0,0.96), size: (1.3,1), paste: -0.025mm, mask: 0.025mm)],
+    courtyard: [(-0.82,-1.63),(0.82,-1.63),(0.82,1.63),(-0.82,1.63)],
+    artwork: [layer_line(layer: "fab", points: [(-0.72,-1.53),(0.72,-1.53),(0.72,1.53),(-0.72,1.53),(-0.72,-1.53)], width: 0.1mm)])
+
+VC1210 = footprint(pads: [
+    smd(number: "1", at: (0,-1.65), size: (2.65,1.35), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "2", at: (0,1.65), size: (2.65,1.35), paste: -0.025mm, mask: 0.025mm)],
+    courtyard: [(-1.495,-2.495),(1.495,-2.495),(1.495,2.495),(-1.495,2.495)],
+    artwork: [layer_line(layer: "fab", points: [(-1.395,-2.395),(1.395,-2.395),(1.395,2.395),(-1.395,2.395),(-1.395,-2.395)], width: 0.1mm)])
+
+VR0603 = footprint(pads: [
+    smd(number: "1", at: (0,-0.78), size: (0.9,0.85), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "2", at: (0,0.78), size: (0.9,0.85), paste: -0.025mm, mask: 0.025mm)],
+    courtyard: [(-0.62,-1.375),(0.62,-1.375),(0.62,1.375),(-0.62,1.375)],
+    artwork: [layer_line(layer: "fab", points: [(-0.52,-1.275),(0.52,-1.275),(0.52,1.275),(-0.52,1.275),(-0.52,-1.275)], width: 0.1mm)])
+
+VSSOP10 = footprint(pads: [
+    smd(number: "1", at: (-2.16,1), size: (1.1,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "2", at: (-2.16,0.5), size: (1.1,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "3", at: (-2.16,0), size: (1.1,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "4", at: (-2.16,-0.5), size: (1.1,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "5", at: (-2.16,-1), size: (1.1,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "6", at: (2.16,-1), size: (1.1,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "7", at: (2.16,-0.5), size: (1.1,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "8", at: (2.16,0), size: (1.1,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "9", at: (2.16,0.5), size: (1.1,0.27), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "10", at: (2.16,1), size: (1.1,0.27), paste: -0.025mm, mask: 0.025mm)],
+    courtyard: [(-2.88,-1.305),(2.88,-1.305),(2.88,1.305),(-2.88,1.305)],
+    artwork: [layer_line(layer: "fab", points: [(-2.78,-1.205),(2.78,-1.205),(2.78,1.205),(-2.78,1.205),(-2.78,-1.205)], width: 0.1mm)])
+
+XAL1510 = footprint(pads: [
+    smd(number: "1", at: (-5.3,0), size: (3.18,13.2), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "2", at: (5.3,0), size: (3.18,13.2), paste: -0.025mm, mask: 0.025mm)],
+    courtyard: [(-7.8,-8.3),(7.8,-8.3),(7.8,8.3),(-7.8,8.3)],
+    artwork: [layer_line(layer: "fab", points: [(-7.7,-8.2),(7.7,-8.2),(7.7,8.2),(-7.7,8.2),(-7.7,-8.2)], width: 0.1mm)])
+
+XAL7070 = footprint(pads: [
+    smd(number: "1", at: (-2.41,0), size: (1.92,6.5), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "2", at: (2.41,0), size: (1.92,6.5), paste: -0.025mm, mask: 0.025mm)],
+    courtyard: [(-4.06,-3.75),(4.06,-3.75),(4.06,3.75),(-4.06,3.75)],
+    artwork: [layer_line(layer: "fab", points: [(-3.96,-3.65),(3.96,-3.65),(3.96,3.65),(-3.96,3.65),(-3.96,-3.65)], width: 0.1mm)])
+
+XO3225 = footprint(pads: [
+    smd(number: "1", at: (-1.13,-0.89), size: (1.25,1), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "2", at: (1.13,-0.89), size: (1.25,1), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "3", at: (1.13,0.89), size: (1.25,1), paste: -0.025mm, mask: 0.025mm),
+    smd(number: "4", at: (-1.13,0.89), size: (1.25,1), paste: -0.025mm, mask: 0.025mm)],
+    courtyard: [(-1.925,-1.56),(1.925,-1.56),(1.925,1.56),(-1.925,1.56)],
+    artwork: [layer_line(layer: "fab", points: [(-1.825,-1.46),(1.825,-1.46),(1.825,1.46),(-1.825,1.46),(-1.825,-1.46)], width: 0.1mm)])

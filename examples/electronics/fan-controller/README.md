@@ -1,68 +1,64 @@
-# Six-channel CAN FD fan controller
+# Six-fan STM32 CAN FD controller
 
-Open `fan-controller.fg` in PCB Layout or `controller.fg` in the schematic editor. The power sheet links to the controller/CAN interface and the six fan channels. The board resolves every placement against the schematic. Keep the two libraries beside these files when moving the project.
+Rev B uses one synchronous buck to convert a nominal 48 V input to a common 12 V fan rail. Each of the six 4-pin outputs has its own hardware current limit, short-circuit protection, current reading and fault indication. The design target is 2 A per fan at the same time, or 144 W total. Open [the board](fan-controller.fg) in PCB Layout or [the schematic](controller.fg) in the schematic editor. The local symbol and footprint libraries travel with the project.
 
-## Power and connectors
+## Power path
 
-The design assumes a regulated nominal 48 V DC source and six **12 V**, four-wire fans rated 2 A running current each. The fans alone draw 144 W at full load. At an assumed 90% conversion efficiency that corresponds to 3.33 A from 48 V, before logic consumption. Locked-rotor and simultaneous start current depend on the fans.
-
-| Connection | Pin assignment / use |
+| Stage | Implementation |
 |---|---|
-| J1 | 1 = positive 48 V, 2 = primary return. Provide an externally fused, polarity-controlled feed. TDK specifies a normal-blow input fuse of **15 A maximum**. Select the actual DC voltage rating, interrupt rating and wiring for the source. |
-| J3 through J8 | Fans 1 through 6 in order. 1 = secondary GND, 2 = fused 12 V, 3 = tach, 4 = PWM. Each fan has a 3 A branch fuse. The solder-side and component-side views are mirrored. Pin 1 has a silk corner mark. |
-| J2 | 1 = CANH, 2 = CANL, 3 = secondary GND. The transceiver shares ground with the fans and the controller. |
-| JP1 | Fit the shunt to connect 120 Ω across CANH and CANL when this node is at a physical bus end. Leave it open for an intermediate node. |
+| Input | J1 pin 1 is +48 V and pin 2 is the common return. F1 is an 8 A, 125 V DC fuse. D1 is an SMCJ54CA bidirectional TVS after the fuse. D2 is a series reverse-polarity Schottky. |
+| Hot swap | U1, LM5069-1, drives the 100 V Q1 pass MOSFET. R1 sets a nominal 6.9 A input limit. R2–R5 set input UV/OV thresholds, R6 sets pass-FET power limiting and C2 sets a nominal 10.4 ms fault timeout. The PGD output releases both regulators after the pass FET enhances. An upstream fault can shut down the whole board. |
+| Shared 12 V buck | U4, LM5146, drives two CSD19532KTT MOSFETs at 250 kHz. L1 is a Coilcraft XAL1510 8.2 µH inductor. R20 is a 3 mΩ low-side shunt. The output bank uses two 100 µF polymer capacitors and three 22 µF ceramics. At 48 V and 12 A the ideal inductor ripple is 4.39 A peak-to-peak and peak current is 14.2 A. |
+| Fan protection | U11–U16 are TPS26630 eFuses. Each draws from V12 and feeds only its matching header. A 6.49 kΩ resistor programs about 2.77 A nominal current limit. The fast-trip threshold is typically twice that. The device limits overload current and latches off on thermal shutdown with MODE open. An output fault does not require an STM32 interrupt to limit current. |
+| Logic | A separate LM5013 low-power buck supplies 3.3 V from the protected input for the STM32G0B1CBT6, its 8 MHz oscillator and the TCAN3414. All interfaces share ground. |
 
-U1 is the six-pin, negative-logic **TDK-Lambda iQL48025A120V-0B9-R**. The module accepts 36–75 V and supplies nominal 12 V at up to 25 A under its specified thermal conditions. Pin 2 returns to primary negative to enable it. Pin 6 floats for nominal output. C1, C8 and C9 provide input capacitance. The output has 680 µF bulk plus 47 µF and 1 µF ceramic. Even at −20% tolerance C7 alone exceeds the specified 488 µF minimum output capacitance. The module input rating does not establish a board-level surge rating. [Model record](https://product.tdk.com/en/search/power/switching-power/dc-dc-converter/info?part_no=IQL48025A120V-0B9-R) · [Model-specific mechanical, capacitance, protection and derating specifications](https://product.tdk.com/system/files/dam/doc/product/power/switching-power/dc-dc-converter/specification/iql48025a120v_spec.pdf)
+The 176 × 109 mm board has four copper layers with 2 oz outer copper and 1 oz inner copper. The 7 mm bottom-layer 12 V bus feeds all six branches. The layout uses filled, copper-capped vias in component lands. Review the via-in-pad process, stencil windowing and heavy-copper clearances with the assembler. [Main converter](https://www.ti.com/lit/ds/symlink/lm5146.pdf) · [Main inductor](https://www.coilcraft.com/en-us/products/power/shielded-inductors/molded-inductor/xal/xal1510/xal1510-822/) · [Hot-swap controller](https://www.ti.com/lit/ds/symlink/lm5069.pdf) · [Logic converter](https://www.ti.com/lit/ds/symlink/lm5013.pdf) · [Branch protection](https://www.ti.com/lit/ds/symlink/tps2663.pdf)
 
-U2 generates 5 V for a Teensy 4.1. Its onboard regulator supplies the 3.3 V tach pull-ups and TCAN3414. If the controller will receive external VIN while connected to a USB host, separate VUSB from VIN at the Teensy solder link according to PJRC. Set the controller module close enough to the enclosure opening for the intended USB plug. [RECOM regulator](https://recom-power.com/pdf/Innoline/R-78E-0.5.pdf) · [PJRC pin assignment](https://www.pjrc.com/teensy/card11a_rev4_web.pdf) · [VIN / USB power link](https://www.pjrc.com/teensy/card11b_rev4_web.pdf) · [CAN transceiver](https://www.ti.com/lit/ds/symlink/tcan3414.pdf)
+## Connections and measurements
 
-## Fan control
+| Connector | Pins in numerical order |
+|---|---|
+| J11–J16 | GND, protected +12 V, tach, PWM. J11 is fan 1. The PWM driver is an open-drain MOSFET. Each tach input has a 4.7 kΩ pull-up to 3.3 V. |
+| J2 | CANH, CANL, common ground. Fit JP1 to connect the 120 Ω termination at a bus endpoint. D5 protects both CAN lines. |
+| J3 | Target voltage reference, SWCLK, GND, SWDIO, NRST. Program the STM32 over SWD. |
 
-Each Q1–Q6 sinks only the control input on pin 4. The fan receives continuous fused 12 V on pin 2. A 100 kΩ gate pull-down releases PWM during reset and a 4.7 kΩ resistor pulls the fan's open-collector tach signal up to 3.3 V. The example assumes a fan with an internal PWM pull-up, an open-collector tach output and two tach pulses per revolution. Full-speed behavior with a released PWM input, minimum running duty, cable pin order and contact current rating should be confirmed for the selected fan and mating connector. [Four-wire fan interface and tach timing](https://cdn.noctua.at/media/Noctua_PWM_specifications_white_paper.pdf) · [Molex 47053-1000, 4 A maximum per contact](https://www.molex.com/en-us/products/part-detail/0470531000) · [BSS138BK logic-level MOSFET](https://assets.nexperia.com/documents/data-sheet/BSS138BK.pdf)
+Each TPS26630 IMON output sources nominally 27.9 µA/A. A 10 kΩ series resistor and a 20 kΩ resistor from the ADC tap to ground give 0.558 V/A at the MCU. A 2 A fan reads about 1.12 V. At the eFuse's 4 V monitor compliance limit the ADC tap is 2.67 V. The conversion assumes a 3.3 V ADC reference. The branch FLT lines are separate, active low and pulled up to 3.3 V. A fault bit can also indicate a supply-voltage event. [TPS26630 electrical characteristics and fault behavior](https://www.ti.com/lit/ds/symlink/tps2663.pdf)
 
-| Channel | Fan / fuse | Controller PWM | Controller tach |
-|---|---|---:|---:|
-| 1 | J3 / F1 | 2 | 14 |
-| 2 | J4 / F2 | 3 | 15 |
-| 3 | J5 / F3 | 4 | 16 |
-| 4 | J6 / F4 | 5 | 17 |
-| 5 | J7 / F5 | 6 | 18 |
-| 6 | J8 / F6 | 9 | 19 |
+TH1 senses the buck area, TH2 the branch distribution area and TH3 the board edge. Each uses a 10 kΩ NTC and a 10 kΩ pull-up. Firmware uses a B3435 approximation and reports a sentinel for out-of-range readings. These are local PCB temperatures. Rotor speed assumes two tach pulses per revolution. [Four-wire fan interface](https://cdn.noctua.at/media/Noctua_PWM_specifications_white_paper.pdf) · [STM32G0B1CB](https://www.st.com/en/microcontrollers-microprocessors/stm32g0b1cb.html) · [CAN transceiver](https://www.ti.com/lit/ds/symlink/tcan3414.pdf)
 
-The four-layer, 158 × 106 mm carrier assumes 2 oz outside and 1 oz internal copper. The 10 mm top supply trunk feeds six individually fused branches. An 8 mm bottom return and the inner ground plane carry current back to the converter. Adjacent ground pour areas share boundaries so a refill can handle the two header rows in smaller sections. The primary return remains separate. The second inner layer carries signal crossovers. The local process record specifies a 0.25 mm minimum track, 0.20 mm clearance and 0.35 mm minimum drill. A fabrication quote must support this heavy-copper stack.
+## CAN FD protocol
 
-## CAN FD and firmware
+The firmware uses standard 11-bit IDs at 500 kbit/s nominal and 2 Mbit/s data. Fan PWM runs at 25 kHz. On startup it requests full speed, waits 500 ms, then enables one branch every 200 ms. After one second without a valid duty command it requests full speed on powered channels. A duty command leaves hardware fault latches alone. An operator can cycle a particular output after correcting its fault.
 
-`six_fan_node/six_fan_node.ino` is the Teensy 4.1 sketch. It runs the six PWM outputs at 25 kHz and counts falling tach edges independently. CAN3 uses pin 31 for TX and pin 30 for RX. The external target uses the Teensy board package and FlexCAN_T4. Opening, checking and exporting the ForgeCAD documents require only ForgeCAD. [FlexCAN_T4 interface](https://github.com/tonton81/FlexCAN_T4)
+| ID | Length | Byte layout |
+|---|---:|---|
+| 0x510 duty | 8 | Version 1 at byte 0, host sequence at 1, six integer percentages 0–100 at 2–7. An invalid duty rejects the entire command. |
+| 0x511 telemetry | 48 | Version 2, rolling sequence, full-speed fallback flag and missing-tach mask at 0–3. Applied duty at 4–9. Six RPM readings at 10–21. Last host sequence at 22 and active fault mask at 23. Six currents in mA at 24–35. TH1–TH3 in signed tenths of a degree Celsius at 36–41. Enabled and reset-in-progress masks at 42 and 43. Bytes 44–47 are reserved. |
+| 0x512 branch reset | 3 | Version 1, key 0xA5, six-bit mask. The selected enabled outputs go low for 100 ms and are re-enabled. Bit 0 addresses J11. |
 
-The example assigns standard 11-bit IDs, a nominal bitrate of 500 kbit/s and a 2 Mbit/s data phase. Reserve its IDs before joining an existing bus. All six commands apply together. Invalid frames leave the existing command and its deadline intact.
+Telemetry runs every 500 ms. Multi-byte measurements are little-endian. Temperature −32768 means out of range. Two consecutive empty reporting windows on an enabled channel commanded to at least 20% assert its missing-tach bit. Current readings use the nominal monitor gain, and a saturated sample cannot measure the peak of a hard short.
 
-| ID | Frame | Payload, bytes numbered from zero |
-|---|---|---|
-| `0x510` | Command, 8-byte FD frame | 0 = version 1, 1 = host sequence, 2–7 = duties for fans 1–6 as integers 0–100. Refresh faster than once per second. |
-| `0x511` | Telemetry, 24-byte FD frame with bitrate switching, every 500 ms | 0 = version 1, 1 = rolling report sequence, 2 bit 0 = full-speed fallback, 3 bits 0–5 = missing tach for fans 1–6, 4–9 = applied duty percentages, 10–21 = six little-endian unsigned 16-bit RPM values, 22 = last accepted host sequence, 23 = reserved zero. |
-
-An example SocketCAN command requests 50% duty on all six outputs with sequence 42.
+With an already configured FD-capable SocketCAN interface, these frames set six 50% duties and separately request a reset of fan 3.
 
 ```sh
 cansend can0 510##1012A323232323232
+cansend can0 512##101A504
 ```
 
-Startup and one second without a valid command both request 100% on every channel. At the default report period, one counted pulse corresponds to 60 RPM. A channel at 20% duty or higher raises its missing-tach bit after two empty reporting windows. The bit can indicate a stalled fan, a disconnected plug or a broken tach conductor. This revision measures RPM and reports applied duty. Current and temperature sensing would require additional hardware.
+The standalone firmware is in [firmware/main.c](firmware/main.c). To build it separately, run `make -C firmware` with an Arm bare-metal GCC toolchain on PATH. It targets the STM32G0B1CB at flash address 0x08000000. ForgeCAD loads and exports the example using its native backend.
 
-## Verification and bring-up
-
-From this directory, the following commands use the native backend.
+## Verification and first hardware
 
 ```sh
 forgecad schematic controller.fg erc
-forgecad schematic controller.fg bom-csv
 forgecad pcb fan-controller.fg drc
 forgecad pcb fan-controller.fg ratsnest
-forgecad export fan-controller.fg pcb-fab -o fan-controller-fab.zip
+forgecad pcb fan-controller.fg pads --json > board-pads.json
+forgecad export fan-controller.fg pcb-fab -o board-review.zip
+python ../../../research/electronics/probes/fan_controller_readback.py board-review.zip board-pads.json
+python ../../../research/electronics/probes/fan_controller_loop.py
 ```
 
-The independent verification probe reads Gerber and Excellon, joins physical layers through plated bores, and checks each fan against its fuse, MOSFET, tach pull-up and assigned MCU header pins. It also checks primary/secondary separation, the trim pad, unused CPU pins, the termination jumper and both CAN wires. Run `python fan_controller_readback.py /path/to/fan-controller-fab.zip` in the repository's CAM verification environment. [Readback probe](../../../research/electronics/probes/fan_controller_readback.py)
+The independent readback joins Gerber copper through plated Excellon bores, checks every terminal against the schematic-derived pad manifest, and verifies the main power path and six distinct protection, control and telemetry circuits by pin number. Gerbonara and Shapely are used only for this external verification. The averaged CCM loop estimate spans 190–300 µF effective output capacitance, 4–12 mΩ effective ESR, ±20% inductance and 3–12 A load. Under those assumptions it gives 10–22 kHz crossover and approximately 53–72° phase margin. [CAM probe](../../../research/electronics/probes/fan_controller_readback.py) · [Loop estimate](../../../research/electronics/probes/fan_controller_loop.py)
 
-Bench qualification remains open. Check header keying and purchased mechanical outlines, the permitted fuse and harness ratings, startup with all six motors, steady-state voltage drop and temperature rise on both power paths, and thermal derating with a failed fan. Exercise the CAN node across the intended cable and termination with a second FD-capable node. The included firmware was cross-linked for Teensy 4.1 and its command, tach, telemetry and timeout behaviors were exercised with simulated I/O.
+Hardware qualification remains open. Begin with a current-limited source and unloaded outputs. Check both rails, switch-node ringing, dead time and hot-swap startup before loading the bus. Measure loop gain and load-step response, then run six 2 A loads through thermal equilibrium at the intended enclosure temperature. With five channels loaded, short the sixth at the far end of the intended harness and scope branch current, the shared rail, the other five outputs and MCU reset. Repeat for hot plug, locked rotor and latch reset. Check Q1 against its pulsed safe operating area for the actual source and worst-case input capacitance, and verify the TVS energy, upstream fuse coordination, connector ratings and CAN FD behavior on the intended harness. These measurements establish the operating envelope for a built board.
