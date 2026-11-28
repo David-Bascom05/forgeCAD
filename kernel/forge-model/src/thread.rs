@@ -4,7 +4,7 @@
 //! an exact screw surface. A chamfered start is a cone cut at the mouth; a run-out carries the
 //! groove a turn on, a tapered coil that draws it out of the material.
 
-use crate::pattern::{instance_names, instances, moved, moved_shape};
+use crate::pattern::{instance_name, instances, moved, moved_shape};
 use crate::{Combine, Feature, History, Hole, RegenError, Source, Target, Tool, Turn};
 use forge_geom::{CurveGeom, Surface};
 use forge_math::{Frame, Point2, Vec2, dmath};
@@ -260,10 +260,10 @@ fn placed_tools(
             // `Part::threads` finds them
             let mut placed = Vec::new();
             for (key, m) in h.copies() {
-                let rename = instance_names(features.id(k), key);
                 for (b, op, sh) in &out {
                     let b = if build {
-                        moved(b, &m, rename).map_err(|error| RegenError::Pattern { feature: i, error })?
+                        moved(b, &m, |n| instance_name(features.id(k), key, n))
+                            .map_err(|error| RegenError::Pattern { feature: i, error })?
                     } else {
                         Body::new()
                     };
@@ -287,10 +287,10 @@ fn placed_tools(
                 let copies = instances(features, j, layout)?;
                 let mut added = Vec::new();
                 for (key, m) in &copies {
-                    let rename = instance_names(features.id(j), *key);
                     for (b, op, sh) in &out {
                         let b = if build {
-                            moved(b, m, rename).map_err(|error| RegenError::Pattern { feature: i, error })?
+                            moved(b, m, |n| instance_name(features.id(j), *key, n))
+                                .map_err(|error| RegenError::Pattern { feature: i, error })?
                         } else {
                             Body::new()
                         };

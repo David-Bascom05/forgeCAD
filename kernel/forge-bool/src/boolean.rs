@@ -1308,7 +1308,9 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch, rung: Rung, t
     let mut near_b: Vec<FaceId> = a.faces_where(|x| x.overlaps(&b_box)).collect();
     // what a boolean makes must not follow the order in the arenas, to the bit
     near_b.sort_unstable_by_key(|&f| a.face(f).name);
-    let b_boxes = index[1].boxes();
+    let b_boxes: Vec<Box3> = (0..b.faces.len() as u32)
+        .map(|f| index[1].face_box(FaceId(f)))
+        .collect();
     for &fa in &near_b {
         let ba = index[0].face_box(fa);
         for fb in b.face_ids() {

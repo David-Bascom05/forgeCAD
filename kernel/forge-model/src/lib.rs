@@ -59,7 +59,7 @@ pub use params::{Note, On, Param, Record, Sketch, Unit};
 pub use pattern::{
     At, Layout, PatternError, Row, Source, body_motion, copy_sources, instance_name, placements,
 };
-use pattern::{instance_names, instances, moved, moved_shape};
+use pattern::{instances, moved, moved_shape};
 pub use rib::{Rib, RibError};
 pub use standard::{Convention, Fit, Screw, Standard};
 pub use swept::{Coil, CoilSize, Loft, PathEnds, Sweep};
@@ -1804,7 +1804,7 @@ fn modify(
             let copies = instances(features, i, layout)?;
             let copies = copies
                 .iter()
-                .map(|(key, m)| moved(body, m, instance_names(features.id(i), *key)))
+                .map(|(key, m)| moved(body, m, |n| instance_name(features.id(i), *key, n)))
                 .collect::<Result<Vec<Body>, _>>()
                 .map_err(pe)?;
             if copies.is_empty() {
@@ -2175,7 +2175,7 @@ fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, Rege
             let mut out = Vec::new();
             for (key, m) in h.copies() {
                 let body = if build {
-                    moved(&t.0, &m, instance_names(features.id(i), key)).map_err(pe)?
+                    moved(&t.0, &m, |n| instance_name(features.id(i), key, n)).map_err(pe)?
                 } else {
                     Body::new()
                 };
@@ -2209,9 +2209,8 @@ fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, Rege
             }
             let mut out = Vec::with_capacity(copies.len() * base.len());
             for (key, m) in &copies {
-                let rename = instance_names(features.id(i), *key);
                 for (b, op, sh) in &base {
-                    let body = moved(b, m, rename).map_err(pe)?;
+                    let body = moved(b, m, |n| instance_name(features.id(i), *key, n)).map_err(pe)?;
                     let op = if *op == Combine::New { Combine::Add } else { *op };
                     out.push((body, op, moved_shape(sh, m)));
                 }

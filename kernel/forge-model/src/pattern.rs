@@ -89,13 +89,7 @@ pub enum PatternError {
 /// across regens, so later features can refer to one copy's faces and edges.
 /// Pieces of one whole stay pieces of one (copied) whole.
 pub fn instance_name(id: u64, key: [u64; 2], name: Name) -> Name {
-    instance_names(id, key)(name)
-}
-
-/// Cache the salt shared by all vertices, edges and faces of one copy.
-pub(crate) fn instance_names(id: u64, key: [u64; 2]) -> impl Fn(Name) -> Name + Copy {
-    let salt = Name::feature(id).with_str("instance").with(key[0]).with(key[1]);
-    move |name| name.salted(salt)
+    name.salted(Name::feature(id).with_str("instance").with(key[0]).with(key[1]))
 }
 
 /// A rigid motion (local coordinates of the frame to world), or a reflection in a frame's xy.
