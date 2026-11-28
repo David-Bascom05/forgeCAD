@@ -6,6 +6,14 @@ A designer draws a circuit, places it on a board, installs the board in an assem
 
 The [PCB layout backend and manufacturer-rule study](pcb-layout-rules.md) records verified schematic handoff gaps, fabrication-service comparisons, real-board measurements and the first physical-layout acceptance fixture.
 
+The routing study covers interface-specific quality, rule precedence, negotiated routing and an executable evaluation for AI-generated routes. [Routing quality, priority and AI control](routing-strategy.md)
+
+## Named derived attributes
+
+A symbol can publish several named attributes. Each strap table defines one attribute. The symbol editor lets the librarian choose the participating pins, name their possible states, enter datasheet rows, and give an optional default. A default needs no pin. A symbol with zero pins can publish several constant attributes. Text, seven-bit I²C addresses and current in amperes have typed results. A fitted instance shows its own computed value in Properties.
+
+A state can mean tied to another physical pin of the same instance (for example VSS, VDD, SDA or SCL) or explicitly open. The schematic resolves the net membership and a single fitted resistor with a known resistance. A complete pattern picks its row. An observed combination with no row uses the default if available. An ambiguous input keeps the value unresolved. The handoff includes the matched state and evidence terminals, so an agent can explain which optional resistor selects an address. Address ERC compares both fitted bus nets and the decoded integer. Current and boot-mode checks use the limits or choices declared on the attribute. Each writable truth table opens from the symbol’s attribute list. The schematic displays the resolved values according to inherited field visibility. The example uses illustrative register addresses and current settings. [Runnable strap example](../../examples/electronics/strap-attributes.fg)
+
 ## Physical layout opportunities
 
 - **Review the electrical effect of an edit.** Keep each bypass capacitor associated with the intended supply and return pins through placement, routing and reannotation. Compare the old and new pad distance, copper connection and reference-plane coverage. A designer can inspect the affected pins and geometry even when several capacitors share a rail.
@@ -102,3 +110,9 @@ The left tree follows sheet occurrences, including repeated instances. The right
 The TLV9001 VDD checklist uses the same library symbol and wiring in both captures. Changing J1.P1 from 3.3 V to 12 V fails only the 1.8–5.5 V supply check. [3.3 V source](shots/web-supply-3300.png) · [12 V source](shots/web-supply-12000.png)
 
 J1 uses a generic two-contact connector. The external supply is declared on its first contact in the schematic. [J1 placement roles](shots/native-connector-roles.png)
+
+### Library-defined attributes and electrical rules
+
+Attribute types and severity policies use the existing nested library mechanism. Several named conversion tables can connect the formats of one attribute type. A library can define Hex to Numeric and Numeric to Binary once, and the editor can translate a truth-table result in either direction through Numeric. Each finite lookup value must have one consistent translation in every declared format. [Register-code library](../../examples/electronics/conversion-chain.fg)
+
+Rust is the electronics library authoring language. The Standard Library composes property, ERC, and DRC packages. A project can also load a version-pinned, locally installed Rust worker. I²C addresses are unique per ordered SDA/SCL net pair and fitted variant. Independent buses may reuse an address. [Libraries and rule authoring](rule-libraries.md)

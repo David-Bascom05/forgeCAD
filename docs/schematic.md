@@ -10,6 +10,49 @@ forgecad schematic examples/electronics/controller.fg sheet main --json
 forgecad check examples/electronics/controller.fg --json
 ```
 
+## Datasheet characteristics
+
+In **Properties**, nominal voltage, maximum operating voltage, and absolute maximum voltage have separate optional rows. Resistors also show resistance, capacitors show capacitance, and FETs show on-resistance. A library nominal resistance or capacitance supplies the placed value and BOM value until the placement specifies its own value. Local symbol ratings are shared by placements. Imported ratings can be edited in the source symbol library.
+
+Expand **Advanced properties** for quantities specific to the part type, measurement terminals, conditions, and datasheet references. Capacitors have a DC-bias curve with voltage on the horizontal axis and percent of nominal capacitance retained on the vertical axis. Enter manufacturer points for the selected part. The curve starts empty. A FET can have several on-resistance records at different gate voltages, load currents, and temperatures. Pin and alternate-function Properties retain their own voltage ratings and advanced measurements. Right-clicking a placed pin shows the records that apply to it.
+
+The standard library loads automatically. An unconditional pin voltage bound is checked when the connected voltage is known. **PinOperatingVoltage** reports a recommended range violation and **PinAbsoluteVoltage** reports possible overstress. Pin types, resistance, current capacity and protection can be recorded even when the design lacks the evidence needed to check them electrically. See the [worked symbol library](../examples/electronics/datasheet-characteristics.fg) and the [data model and KiCad comparison](../research/electronics/pin-characteristics.md).
+
+### FET advanced properties
+
+In the symbol's **Advanced properties**, choose **Add characteristic** and search by name or by the abbreviation printed in the datasheet. Searching for `IDSS` on a MOSFET finds off-state drain leakage. The same search on a JFET finds zero-gate drain current. The generic FET type offers both. The symbol starts with no ratings, and a custom quantity can capture a vendor-specific parameter.
+
+| Datasheet section | Examples |
+| --- | --- |
+| Construction and DC | Channel polarity and mode, material, body or Kelvin-source voltage, gate protection, pulsed and package-limited drain current, breakdown, on-resistance, transconductance |
+| Gate and capacitance | Threshold or cutoff, Miller plateau, gate charge partitions, Ciss, Crss, small-signal Coss and its energy- and time-equivalent values |
+| Switching and reverse conduction | Turn-on and turn-off delay and energy, gate-drive resistance, dead time, reverse voltage, recovery charge, current slew and recovery softness |
+| Stress and thermal | Avalanche energy and current, safe operating area, short-circuit withstand, ESD test ratings, transient thermal impedance, thermal resistance, mounting and copper area |
+| Matched pairs and test history | Differential VGS mismatch and drift, ID and gm matching, inter-die thermal coupling, quiescent bias, off-state stress duration, sampling window |
+| Small signal and RF | Noise densities, gain, bandwidth, efficiency, compression and intercept power in watts or dBm, and two-port S-parameter magnitudes and phases |
+
+Open **Advanced properties → Datasheet curves** to enter a family of measurements. **Add curve** offers transfer and output characteristics, gate charge, capacitance, switching energy, safe operating area, transient thermal impedance and noise, or lets you choose two numerical quantities. Each trace has named axes, selectable units and terminals, fixed test conditions, and an editable sample table with minimum, typical and maximum columns. The plot supports linear and logarithmic axes. Each sample retains its reference and note.
+
+For an SOA boundary, choose **Safe operating area**, enter drain voltage on X and the published maximum drain current on Y, and record pulse duration and case temperature as fixed conditions. **New trace at other conditions** copies the coordinates and clears the measured values. You can enter another boundary for a different pulse duration. The same workflow captures transistor output curves at several gate voltages or noise spectra at different bias currents. For a dual device, select the actual terminals of the channel or ordered pairs being compared.
+
+In source, a named sample uses `curve` and a typed `coordinate`. Fixed conditions stay in `when`. Samples in one trace share quantities, units, terminals, basis and fixed conditions, and each coordinate occurs once. ERC compares the published sample at the requested bias. Typical curves, bench measurements and simulations cannot establish an unspecified manufacturer's minimum or maximum. The JFE2140 library symbol demonstrates two noise spectra and a four-terminal matching measurement. [Worked library](../examples/electronics/datasheet-characteristics.fg) · [TI JFE2140, §6.5](https://www.ti.com/lit/ds/symlink/jfe2140.pdf)
+
+The TI example records a typical reverse recovery charge of 145 nC at 30 V, 28 A forward current, 300 A/µs and 25 °C ambient. A requirement for a *maximum* recovery charge at that point produces a missing-evidence entry. The J112 example records a signed gate cutoff interval of −5 to −1 V at its specified current and drain voltage. ERC compares recorded operating points directly. Curve interpolation and waveform simulation are outside this check. [Worked symbols](../examples/electronics/datasheet-characteristics.fg) · [TI CSD18540Q5B, §5.1](https://www.ti.com/lit/ds/symlink/csd18540q5b.pdf) · [onsemi J112, p. 2](https://www.onsemi.com/download/data-sheet/pdf/j111-d.pdf) · [EPC2105 capacitance definitions](https://epc-co.com/epc/Portals/0/epc/documents/datasheets/EPC2105_datasheet.pdf)
+
+#### Gate, output and commutation charge
+
+A FET can have several total gate-charge (`Qg`) ratings at different gate-drive swings, drain voltages, currents and temperatures. The CSD18540Q5B has **20 nC typical, 26 nC maximum at 4.5 V** and **41 nC typical, 53 nC maximum at 10 V** at 30 V drain bias, 28 A and 25 °C ambient. These are two records on the library symbol. A requirement for at most 27 nC at the first point passes. The same ceiling at the second point produces an ERC finding. [TI CSD18540Q5B, §5.1](https://www.ti.com/lit/ds/symlink/csd18540q5b.pdf)
+
+Use `gate_drain_charge` for the Miller interval, `output_charge` for Qoss at the stated drain bias, `output_capacitance_energy` for Eoss and `recovery_charge` for Qrr at the stated forward current and current slew. For a gate-charge curve, record VGS at successive gate-charge points with the same bias and current. **Capacitive charge (Qc)** and **commutation charge (Qcomm)** have separate records with a source, measurement terminals and conditions. Record the manufacturer's definition and voltage endpoints for Qc. When transcribing a double-pulse result, record the commutating device, test method, gate-drive impedances and any loss terms the published measurement already includes.
+
+### Electrical checks and missing evidence
+
+On a placed part, **Datasheet requirements** sets acceptance criteria for that application. A requirement can name terminal roles, protection, internal bias, or a measured quantity such as drain–source on-resistance at a particular gate drive, current and temperature. ERC compares the same ordered terminals, rating class and stated conditions. Each bound checks the corresponding published bound, with unit conversion. A missing maximum or an uncharacterized operating point appears in coverage. See the [two-MOSFET comparison](../examples/electronics/datasheet-review.fg).
+
+**Electrical Checks → Checks missing evidence** lists each blocked comparison, the placed part or pin, and the fields needed to run it. `forgecad check design.fg --json` includes the same data in `not_run`. The findings array and `erc_ok` retain their existing meanings. Population variants have independent coverage. A rule can produce a finding on one part and a missing-evidence entry on another.
+
+The standard checks also compare guaranteed VOH/VOL against destination VIH/VIL, sum declared worst-case loads on singly driven nets, and use an enabled internal pull with a known rail and resistance in the existing bias check. A rail name, typical measurement, configurable pull state or absolute current rating alone is insufficient to guarantee operation.
+
 ## Roles and symbols
 
 ```text
@@ -69,6 +112,36 @@ In the symbol editor, create a power role, enter **Minimum (V)** and **Maximum (
 A symbol can also declare `peripherals: {I2C1: {SDA: [PA0], SCL: [PA1]}, UART2: {TX: [PA0]}}`. Each signal lists the physical pins that can carry it. The reader resolves the names against this symbol and exposes the groups in the symbol query.
 
 A symbol's map keys are logical pin names. Each pin has a unique physical `number` string, sheet-local connection point, and electrical `kind` (`passive`, `input`, `output`, `bidirectional`, `power_in`, `power_out`, `open_drain`, `no_connect`). Optional `angle` gives the pin direction in degrees, counterclockwise from the positive X axis. Fractional and negative angles are accepted. A `unit` string groups pins into sub parts; the default is A. Graphics accept `line(from:, to:)`, `rect(from:, to:)`, `circle(at:, radius:)`, `arc(from:, mid:, to:)`, `polyline(points:)`, and `text(at:, value:)`, each optionally limited to one sub part. A library holds roles, shared numeric expressions and symbols. Import it into a schematic with `parts = library(file: "power-symbols.fg")`. Imports use the session's file fence.
+
+### Named strap attributes
+
+In **Symbol Properties → Derived attributes**, click an attribute name to open its truth table. **Add attribute** opens a named attribute. Choose its **Type** and **Unit** at the top of the dialog. The type list includes the bundled types and types exported by loaded libraries. Click a state or result directly to edit it. Hover at the bottom or right edge to reveal **+**. Click to grow by one or drag outward to add several rows or available pin columns. The **Table** menu also adds rows and columns. A pin header lets you change or remove its column. Right-click a body cell to remove a row. Choose **High**, **Low**, **Floating**, or **Voltage range** directly in each input cell. Enter both voltage limits in the dropdown. **Logic reference pins** identifies the high and low reference for each input. Each result can have a pinless default. **Save** commits the edit as one undoable symbol change. **Cancel** discards the draft.
+
+```fg
+Fixed = symbol(pins: {}, strap_tables: {
+  address: strap_table(kind: "i2c_address", default: "0x2C"),
+  operating_mode: strap_table(kind: "text", default: "standby")
+})
+```
+
+A conditional attribute on a symbol with pins A0, VDD and VSS can use the following table.
+
+```fg
+address: strap_table(kind: "i2c_address",
+  inputs: {A0: {low: VSS, high: VDD}},
+  rows: [[{A0: high}, "0x49"]],
+  default: "0x48")
+```
+
+The attribute name is the table key. Switch an I²C table between hex, binary and decimal, or a current table between A, mA and µA. The editor converts the existing results, default and current limits. A boot-mode table has a customizable list of named results. Each row names a state for every input. Enter a tied pin as a pin reference, or enter `"open"` as a state target for a floating input. Direct ties and a single fitted resistor with a known value are supported. The default needs no pin. It supplies constants on pinless parts and covers observed combinations without a row. Conflicting ties or an unsupported drive circuit leave the value unresolved.
+
+Use `schematic FILE board [VARIANT]` or `pcb FILE handoff [VARIANT]`. Each component exposes `derived_attributes` keyed by name. Each result includes its type, value, resolution status and input evidence. ERC checks reserved addresses and collisions between fitted devices on the same ordered pair of SDA and SCL nets. Explicitly map those pins with `bus:[data,clock]` or use unambiguous active SDA/SCL pin names. A current table can declare `range:["100 mA","2 A"]`. A boot table can declare `modes:["Flash","ROM bootloader"]`. ERC reports out-of-range currents, unsupported modes and unresolved input combinations. [Complete example](../examples/electronics/strap-attributes.fg)
+
+**Schematic text fields** controls the text printed next to each component. Reference, value and derived attributes are visible by default. Other metadata and custom fields start hidden. Symbols supply defaults and placements can override individual fields. Reset removes an override. For example, `visibility:{derived:{address:false},custom:{Manufacturer:true}}` hides an address and shows the manufacturer. Bundled power symbols hide their internal reference. The canvas, sheet export and text-overlap checks use the same field layout. [Two-column address decoder](../examples/electronics/strap-address-matrix.fg)
+
+### Active signal contracts
+
+On each fitted direct driver-to-receiver branch, ERC compares the active nominal signal, clock and interface wants and gives. A mismatched contract raises `PinFunctionMismatch`. A typed endpoint facing an unclassified endpoint raises `UnknownPinFunctionCompatibility`. A compatible alternate is listed when available. Change the pin function in the schematic to accept it. The board handoff exposes the same branch verdict, active functions and roles in `signal_paths`. Role identity can be shared across libraries with the existing `role(key: ...)` argument. [ADC fanout example](../examples/electronics/adc-fanout.fg)
 
 ## Sheets, connections and geometry
 
@@ -226,3 +299,49 @@ The `diff-pairs` query and `board` handoff report both terminal IDs and their re
 In **Edit Block**, drag a rectangle around component origins and connection points. Shift-drag adds to the selection. **Align left** sets symbol origins to the leftmost selected origin. **Align top** uses the highest selected origin. Attached wire endpoints follow. Select **Duplicate** and a **Destination sheet** to copy the block. Review the boundary connections before applying. A destination shared by several sheet occurrences updates them all. CLI and MCP can request the same operation with `plan-block copy-to SOURCE_SCOPE DESTINATION_SCOPE DX_MM DY_MM OBJECT...`.
 
 Select a wire and choose **Straighten wire** to remove its bends in one undoable edit. Its two named endpoints remain attached. ERC reports `WireNearPin` when a wire endpoint lies within 0.5 mm of a pin on another net, and `WireOverlap` for collinear wires sharing a length on different nets. An ordinary crossing is allowed.
+
+### Reusable attribute types and rule policies
+
+A type can live in its own library. For example, `fw = library(file:"attribute-types.fg")` makes `strap_table(kind:fw.startup_source, ...)` available. The type supplies the label and legal firmware choices. Each symbol defines its own pins, rows and default. Import `forge:attribute-types` to refer to a bundled definition by alias. Existing quoted kinds remain supported. [Firmware example](../examples/electronics/attribute-types.fg)
+
+In **Electrical Checks** or the PCB **Design rules** panel, open **Rule severities** to set a project override for any check. **Use inherited severity** restores the library or engine default. These are ordinary undoable edits.
+
+Load multiple policy files with ordinary `library(file:...)` declarations. In a schematic, `address_check = erc_rule(rule:"I2cAddressConflict", severity:"warning")` sets the project severity. In a board, `width_check = drc_rule(rule:"MinTrackWidth", severity:"error")` does the same for DRC. Supported levels are `error`, `warning` and `info`. A project setting resolves different library defaults regardless of import order. [ERC example](../examples/electronics/review-erc.fg) · [DRC example](../examples/electronics/review-drc.fg)
+
+
+A voltage state such as `service:[1.7,1.9]` in a strap input map uses inclusive volts. The activated source must provide a voltage fully contained in the interval. The evaluator checks direct connections and single, valued pull resistors with an unloaded input. A missing rating, partially overlapping provider tolerance, opposing drivers, or ambiguous state leaves the input unresolved. An open pin selects Floating when defined. High and Low use the symbol's reference pins, so a device can have its own logic rails. [Four-state firmware selector](../examples/electronics/strap-address-matrix.fg)
+
+### Declaring units for an attribute
+
+The **Name** is the schematic display name. **Type** chooses the value representation. **Unit** converts the results and default together. Expand **Units** to see the base unit, conversion factors and valid limits in each unit. For an address the selector switches between hexadecimal, binary and decimal. Each address format declares a radix, prefix and padding. The table previews the same address in every format and shows its numerical limits. Text and choices are unitless.
+
+Choose **Custom…** at the end of the type dropdown. Enter the new type's name where the dropdown was, declare its base unit and add any alternate units. Choose **Scaled quantity** for physical units, **Integer encoding** for a register or address, or **Value pairs** for discrete codes listed in a datasheet. Click a local table cell to edit its name, conversion or range. In a scaled quantity the first unit has factor 1. For every other row, multiplying a value by its factor converts it to the base unit. Blank limits use the underlying value kind’s full domain. Integer encodings accept unsigned 32-bit values and bases 2 through 36. **Declare type** enables the unit picker and results. **Save** writes the local type before the symbol that uses it in one undoable edit. The unit table for a locally defined quantity remains editable. Imported definitions appear as references. Choosing **Custom…** with an imported quantity selected starts a local definition with those units.
+
+```forge
+frequency = attribute_type(label:"Frequency", kind:"quantity", units:[
+  {name:"Hz",factor:1,min:0,max:10000000},
+  {name:"kHz",factor:1000,min:0,max:10000},
+  {name:"MHz",factor:1000000,min:0,max:10}])
+```
+
+The three-pin address example has columns A2, A1, A0 and Result. Its 27 authored rows cover the Cartesian product of Low, High and Floating. [Open the complete example](../examples/electronics/ternary-address.fg)
+
+A custom unsigned register can use named representations. Width is a minimum number of digits for display. The engine checks ranges before narrowing and rejects ambiguous prefixes.
+
+```forge
+register_code = attribute_type(label:"Register code", kind:"integer", units:[
+  {name:"Count",radix:10,min:0,max:255},
+  {name:"Octal",radix:8,prefix:"o:",digits:3},
+  {name:"Hex word",radix:16,prefix:"0x",digits:2}])
+```
+
+
+### Connecting several conversion tables
+
+Open **Units** in the derived attribute editor. For a local **Value pairs** type, name each format, then choose **Add conversion table**. Give the table a name, choose its two formats and use **Add pair** to enter corresponding values. Add another table for the next pair of formats. Switching the **Unit** at the top converts every truth-table result and its default.
+
+For example, one datasheet table can pair Hex `0x48` with Numeric `72`, and a second can pair Numeric `72` with Binary `01001000`. Those two entries also define the reverse conversion and the Hex–Binary conversion. A leading zero in a lookup value is preserved. Each admitted value must have exactly one spelling in each declared format. A missing link or two routes that disagree produce a declaration error. [Open the editable register-code library](../examples/electronics/conversion-chain.fg)
+
+For a complete numeric encoding such as a 7-bit I²C address, declare the radix and optional prefix or padding once per format. A conversion table can then name its endpoints and omit the rows. ForgeCAD computes the digits for any admitted address. Numeric routes also respect the ranges of the formats they traverse. [Built-in Rust type definitions](../interface/forge-lang/src/standard_library/properties.rs)
+
+The bundled **Standard Library** and installed Rust packages use the same `library(file:...)` declaration. The **Custom fields** section of a symbol can bind a field to an imported type. Open **Electrical Checks → Rule severities** to change a loaded rule’s severity. [Library authoring and package examples](../research/electronics/rule-libraries.md)

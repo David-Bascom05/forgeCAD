@@ -1,4 +1,6 @@
 use super::*;
+#[path = "../standard_library/erc/connectivity.rs"]
+pub(crate) mod standard;
 use std::collections::VecDeque;
 #[derive(Clone, Debug)]
 pub struct Terminal {
@@ -9,6 +11,7 @@ pub struct Terminal {
     pub populated: bool,
     pub number: String,
     pub function: Option<String>,
+    pub(super) instance_wants: Set<RoleId>,
     pub electrical: Electrical,
     pub wants: Set<RoleId>,
     pub gives: Set<RoleId>,
@@ -42,29 +45,24 @@ impl Issue {
             .map(String::as_str)
     }
     pub fn priority<'a>(&self, d: &'a Document) -> &'a str {
-        d.severities
-            .get(self.kind)
-            .map_or(self.severity(), String::as_str)
+        d.severities.get(self.kind).map_or_else(
+            || {
+                d.packages
+                    .erc
+                    .get(self.kind)
+                    .map_or(self.severity(), |s| s.word())
+            },
+            String::as_str,
+        )
     }
     pub fn status(&self) -> &'static str {
         if self.unknown { "unknown" } else { "failed" }
     }
     pub fn severity(&self) -> &'static str {
-        match self.kind {
-            "PeripheralConflict"
-            | "BusMemberShort"
-            | "DriverConflict"
-            | "PinConnectionMismatch"
-            | "DiffPairShort"
-            | "DiffPairConflict"
-            | "PullMismatch"
-            | "VoltageOutOfRange"
-            | "ConnectedNoConnect"
-            | "ReturnMismatch"
-            | "DisconnectedFulfillment"
-            | "NetLabelConflict" => "error",
-            _ => "warning",
-        }
+        Self::default_severity(self.kind)
+    }
+    pub fn default_severity(kind: &str) -> &'static str {
+        crate::standard_library::default_erc(kind)
     }
 }
 #[derive(Debug)]
@@ -95,6 +93,10 @@ impl VoltageCheck {
 }
 #[derive(Default, Debug)]
 pub struct Circuit {
+    pub(crate) addresses: Vec<crate::electronics_library::worker::Fact>,
+    pub(super) fitted: Map<String, bool>,
+    pub straps: Map<String, Map<String, StrapResult>>,
+    pub(super) signals: super::signal::Signals,
     pub connections: Map<String, Map<RoleId, ConnectionCheck>>,
     pub voltages: Map<String, Map<RoleId, VoltageCheck>>,
     pub origins: Map<String, Span>,
@@ -107,6 +109,7 @@ pub struct Circuit {
     pub net_of: Map<String, String>,
     pub links: Vec<Link>,
     pub issues: Vec<Issue>,
+    pub not_run: Vec<crate::electronics_library::evidence::NotRun>,
     // Incidence by both directions is for navigation only. Link direction is retained in Link.
     pub relations: Map<String, Vec<usize>>,
     pub diff_pairs: Map<String, [String; 2]>,
@@ -116,6 +119,7 @@ pub struct Circuit {
     ports: Set<String>,
     nc: Set<String>,
     labels: Map<String, String>,
+    authored_labels: Map<String, String>,
     pub wires: Map<String, (String, String, Vec<Point>)>,
 }
 pub(super) fn transform(local: Point, at: Point, angle: f64, mirror: bool) -> Point {
@@ -132,11 +136,17 @@ pub(super) fn transform(local: Point, at: Point, angle: f64, mirror: bool) -> Po
     [at[0] + dx, at[1] + dy]
 }
 impl Circuit {
+    pub fn is_fitted(&self, owner: &str, default: bool) -> bool {
+        self.fitted.get(owner).copied().unwrap_or(default)
+    }
     pub fn build(doc: &Document) -> Result<Self> {
         Self::build_fitted(doc, &Map::new())
     }
     pub fn build_fitted(doc: &Document, overrides: &Map<String, bool>) -> Result<Self> {
-        let mut c = Self::default();
+        let mut c = Self {
+            fitted: overrides.clone(),
+            ..Self::default()
+        };
         if doc.library {
             c.issues = super::drawing::library_readability(doc);
             c.sort_findings();
@@ -169,64 +179,19 @@ impl Circuit {
             }
         }
         c.partition();
-        let mut assigned = Map::new();
-        for (id, [p, n]) in &c.diff_pairs {
-            let (a, b) = (&c.net_of[p], &c.net_of[n]);
-            if a == b {
-                c.issues.push(Issue {
-                    kind: "DiffPairShort",
-                    unknown: false,
-                    objects: vec![id.clone(), p.clone(), n.clone()],
-                    message: "Both differential pair legs resolve to the same net".into(),
-                });
-                continue;
-            }
-            for (net, mate, positive) in [(a, b, true), (b, a, false)] {
-                if let Some((other, polarity, first)) = assigned.get(net) {
-                    if *other != mate || *polarity != positive {
-                        c.issues.push(Issue {
-                            kind: "DiffPairConflict",
-                            unknown: false,
-                            objects: vec![String::clone(first), id.clone(), net.clone()],
-                            message: "Net has conflicting differential mates or polarity".into(),
-                        });
-                        break;
-                    }
-                } else {
-                    assigned.insert(net, (mate, positive, id.clone()));
-                }
-            }
-        }
-        for scope in c.occurrences.keys() {
-            c.issues
-                .extend(super::wire_readability::findings(&c, scope, None));
-        }
-        c.check_voltages(doc);
-        c.check_connections(doc, &by_sheet);
-        c.check_pulls(doc, &by_sheet);
-        c.check();
-        for (id, members) in &c.buses {
-            let mut seen = Map::new();
-            for (lane, pin) in members {
-                if let Some(other) = seen.insert(&c.net_of[pin], lane) {
-                    c.issues.push(Issue {
-                        unknown: false,
-                        kind: "BusMemberShort",
-                        objects: vec![id.clone(), members[other].clone(), pin.clone()],
-                        message: format!("{other} and {lane} share a net"),
-                    });
-                }
-            }
-        }
+        let (_, coverage) = crate::electronics_library::evidence::capture(|| {
+            doc.packages.resolve(doc, &mut c, &by_sheet, overrides)
+        });
+        c.not_run = coverage
+            .into_iter()
+            .filter(|r| doc.packages.erc.contains_key(r.rule.as_str()))
+            .collect();
         let mut placed_paths = Set::new();
         for (scope, sheet) in &c.occurrences {
             let mut refs = Set::new();
             for row in by_sheet.get(sheet.as_str()).into_iter().flatten() {
                 if let Item::Place {
-                    symbol,
-                    functions,
-                    reference,
-                    ..
+                    symbol, reference, ..
                 } = &row.item
                 {
                     let path = format!("{scope}/{}", row.id);
@@ -240,23 +205,6 @@ impl Circuit {
                             row.span,
                             format!("{scope}/{display}"),
                         ));
-                    }
-                    for (group, signals) in &doc.symbols[symbol].peripherals {
-                        for (signal, pins) in signals {
-                            let active: Vec<_> = pins
-                                .iter()
-                                .filter(|p| functions.get(*p) == Some(signal))
-                                .map(|p| format!("{scope}/{}.{p}", row.id))
-                                .collect();
-                            if active.len() > 1 {
-                                c.issues.push(Issue {
-                                    unknown: false,
-                                    kind: "PeripheralConflict",
-                                    objects: active,
-                                    message: format!("More than one pin selects {group}.{signal}"),
-                                });
-                            }
-                        }
                     }
                 }
             }
@@ -370,6 +318,7 @@ impl Circuit {
                             power_net: def.power_net.clone(),
                             number: pin.number.clone(),
                             function: functions.get(name).cloned(),
+                            instance_wants: wants.get(name).cloned().unwrap_or_default(),
                             electrical: mode.map_or(pin.electrical, |f| f.electrical),
                             wants: mode
                                 .map_or(&pin.wants, |f| &f.wants)
@@ -426,14 +375,7 @@ impl Circuit {
                 .map(|p| &p.unit)
                 .filter(|unit| !units.contains(&(owner, unit.as_str())))
                 .collect();
-            for unit in missing {
-                self.issues.push(Issue {
-                    unknown: false,
-                    kind: "UnplacedGate",
-                    objects: vec![format!("{scope}/{owner}"), unit.clone()],
-                    message: "sub part has no schematic placement".into(),
-                });
-            }
+            standard::missing_units(self, scope, owner, missing);
         }
         for &row in rows {
             let id = format!("{scope}/{}", row.id);
@@ -489,6 +431,7 @@ impl Circuit {
                         format!("@local:{scope}:{text}")
                     };
                     self.origins.entry(key.clone()).or_insert(row.span);
+                    self.authored_labels.entry(key.clone()).or_insert(id);
                     self.labels.insert(key.clone(), text.clone());
                     self.attached.insert(a.clone());
                     self.edge(&a, &key);
@@ -535,10 +478,17 @@ impl Circuit {
                 _ => {}
             }
         }
-        let findings = super::drawing::readability(doc, self, scope, rows);
-        self.issues.extend(findings);
+
         active.remove(sheet);
         Ok(())
+    }
+    pub(super) fn strap_is_open(&self, net: &str, terminal: &str) -> bool {
+        self.nets[net]
+            .iter()
+            .all(|id| id == terminal || self.inactive_strap_member(id))
+    }
+    pub(super) fn inactive_strap_member(&self, id: &str) -> bool {
+        self.junctions.contains(id) || self.terminals.get(id).is_some_and(|p| !p.populated)
     }
     pub fn is_attached(&self, endpoint: &str) -> bool {
         self.attached.contains(endpoint) || self.nc.contains(endpoint)
@@ -550,6 +500,12 @@ impl Circuit {
     fn edge(&mut self, a: &str, b: &str) {
         self.adjacency.entry(a.into()).or_default().insert(b.into());
         self.adjacency.entry(b.into()).or_default().insert(a.into());
+    }
+    pub(super) fn erc_ok(&self, doc: &Document) -> bool {
+        !self
+            .issues
+            .iter()
+            .any(|i| i.priority(doc) == "error" && i.waiver(doc).is_none())
     }
     pub(super) fn sort_findings(&mut self) {
         self.issues
@@ -576,173 +532,6 @@ impl Circuit {
             self.nets.insert(start.clone(), members);
         }
     }
-    fn check_voltages(&mut self, doc: &Document) {
-        for members in self.nets.values() {
-            let mut sources = Vec::new();
-            let mut wants = Vec::new();
-            for id in members {
-                let Some(pin) = self.terminals.get(id).filter(|p| p.populated) else {
-                    continue;
-                };
-                for role in &pin.gives {
-                    let spec = &doc.roles[role];
-                    if spec.kind != RoleKind::Power {
-                        continue;
-                    }
-                    let voltage = match spec.rating {
-                        Some(Rating::VoltageMv(mv)) => VoltageRange {
-                            min: mv / 1000.,
-                            max: mv / 1000.,
-                        },
-                        Some(Rating::VoltageRange(range)) => range,
-                        _ => continue,
-                    };
-                    sources.push((id, role, voltage));
-                }
-                for role in &pin.wants {
-                    if doc.roles[role].kind == RoleKind::Power
-                        && let Some(Rating::VoltageRange(required)) = doc.roles[role].rating
-                    {
-                        wants.push((id, role, required));
-                    }
-                }
-            }
-            for (pin, role, required) in wants {
-                let mut check = VoltageCheck {
-                    required,
-                    providers: Vec::new(),
-                };
-                for &(peer, give, offered) in &sources {
-                    if peer == pin {
-                        continue;
-                    }
-                    check.providers.push(VoltageProvider {
-                        pin: peer.clone(),
-                        role: give.clone(),
-                        range: offered,
-                    });
-                    if !required.accepts(offered) {
-                        self.issues.push(Issue {
-                            unknown: false,
-                            kind: "VoltageOutOfRange",
-                            objects: vec![pin.clone(), peer.clone()],
-                            message: format!("{pin} wants {required}. {peer} provides {offered}."),
-                        });
-                    }
-                }
-                if check.providers.is_empty() {
-                    self.issues.push(Issue {
-                        unknown: true,
-                        kind: "UnknownSupplyVoltage",
-                        objects: vec![pin.clone()],
-                        message: format!(
-                            "{pin} wants {required}. No connected pin declares a supply voltage."
-                        ),
-                    });
-                }
-                self.voltages
-                    .entry(pin.clone())
-                    .or_default()
-                    .insert(role.clone(), check);
-            }
-        }
-    }
-    fn check(&mut self) {
-        let issue = |kind, objects, message: &str| Issue {
-            unknown: kind == "UnfulfilledWant",
-            kind,
-            objects,
-            message: message.into(),
-        };
-        for (id, pin) in &self.terminals {
-            if !pin.populated {
-                continue;
-            }
-            let connected = self.attached.contains(id);
-            if connected && (self.nc.contains(id) || pin.electrical == Electrical::Unused) {
-                self.issues.push(issue(
-                    "ConnectedNoConnect",
-                    vec![id.clone()],
-                    "a no-connect pin is attached",
-                ));
-            } else if !connected && !self.nc.contains(id) && pin.electrical != Electrical::Unused {
-                self.issues
-                    .push(issue("UnconnectedPin", vec![id.clone()], "pin has no attachment"));
-            }
-        }
-        for members in self.nets.values() {
-            let outputs: Vec<_> = members
-                .iter()
-                .filter(|id| {
-                    self.terminals.get(*id).is_some_and(|p| {
-                        p.populated && matches!(p.electrical, Electrical::Output | Electrical::Source)
-                    })
-                })
-                .cloned()
-                .collect();
-            if outputs.len() > 1 {
-                self.issues.push(issue(
-                    "DriverConflict",
-                    outputs,
-                    "multiple push-pull or power outputs drive one net",
-                ));
-            }
-            let names: Set<_> = members.iter().filter_map(|id| self.labels.get(id)).collect();
-            if names.len() > 1 {
-                self.issues.push(issue(
-                    "NetLabelConflict",
-                    members
-                        .iter()
-                        .filter(|k| self.labels.contains_key(*k))
-                        .cloned()
-                        .collect(),
-                    "different net names are electrically joined",
-                ));
-            }
-        }
-        let mut satisfied = Set::new();
-        for (i, link) in self.links.iter().enumerate() {
-            for pin in [&link.want, &link.give] {
-                self.relations.entry(pin.clone()).or_default().push(i);
-            }
-            if !self.terminals[&link.want].populated {
-                continue;
-            }
-            if !self.terminals[&link.give].populated || self.net_of[&link.want] != self.net_of[&link.give] {
-                self.issues.push(issue(
-                    "DisconnectedFulfillment",
-                    vec![link.id.clone(), link.want.clone(), link.give.clone()],
-                    "functional relationship spans disconnected supply or signal pins",
-                ));
-            } else if link.returns.as_ref().is_some_and(|(a, b)| {
-                a == b || self.net_of[a] != self.net_of[b] || self.net_of[a] == self.net_of[&link.want]
-            }) {
-                self.issues.push(issue(
-                    "ReturnMismatch",
-                    vec![link.id.clone()],
-                    "distinct return endpoints need a common net separate from the supply",
-                ));
-            } else {
-                satisfied.insert((&link.want, &link.role));
-            }
-        }
-        for (id, p) in &self.terminals {
-            for r in &p.wants {
-                if p.populated
-                    && !self.voltages.get(id).is_some_and(|v| v.contains_key(r))
-                    && !self.connections.get(id).is_some_and(|v| v.contains_key(r))
-                    && !satisfied.contains(&(id, r))
-                {
-                    self.issues.push(issue(
-                        "UnfulfilledWant",
-                        vec![id.clone(), r.0.clone()],
-                        "pin wants a role without a verified fulfillment",
-                    ));
-                }
-            }
-        }
-    }
-
     /// Count drawn segments from a pin through explicit junctions. Stop at other pins,
     /// ports and label joins so a remote provider on a named rail has weaker evidence.
     pub(super) fn drawn_branch<'a>(&'a self, root: &'a str) -> Map<&'a str, usize> {

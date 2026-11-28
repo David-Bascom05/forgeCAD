@@ -58,25 +58,25 @@ const TOOLS: [Tool; 23] = [
     ),
     (
         "pcb",
-        "Inspect a rigid PCB document, its stack and authored copper, or run its supported design rules.",
+        "Inspect a rigid PCB document, its stack and authored copper, or repack individual footprints with repack [fixed=J1,J2] [gap=MM] [rotate] [circuit=REF,REF] [independent] [BLOCK:VERSION@REF=X,Y,DEG ...], or compare translated placements with floorplan [variant=ID] [NAME@GROUP=DX,DY ...] in millimetres. Use handoff [VARIANT] for per-branch signal compatibility and fitted component attributes.",
         1,
         &[
             ("file", "path to a PCB .fg"),
             (
                 "sel",
-                "summary, layers, stackup, finishes, routing, placements, pads, ratsnest, artwork LAYER_ID, artwork top|bottom mask|paste|silk, artwork copper LAYER, connectivity, handoff [VARIANT] or drc",
+                "summary, libraries, layers, stackup, finishes, routing, placements, pads, ratsnest, artwork LAYER_ID, artwork top|bottom mask|paste|silk, artwork copper LAYER, connectivity, handoff [VARIANT], floorplan [variant=ID] [NAME@GROUP=DX,DY ...] or drc",
             ),
         ],
     ),
     (
         "schematic",
-        "Inspect a native schematic or symbol library. Typed roles, pin candidates, confirmed links, net partitions, sheet geometry, ERC, rooted wiring and the fitted BOM. Use edit for checked source changes.",
+        "Inspect a native schematic or symbol library. Typed roles, pin candidates, confirmed links, net partitions, sheet geometry, ERC, rooted wiring and the fitted BOM. The board selector returns signal_paths with active pin contracts and per-branch compatibility, plus derived_attributes for each fitted component. Resolve mismatches in the schematic and keep unknown paths unclassified. Use edit for checked source changes.",
         1,
         &[
             ("file", "path to .fg"),
             (
                 "sel",
-                "summary, symbols, symbol ID, sheet PATH, erc, nets, diff-pairs, links, pin PATH [VARIANT], tree PATH, search TERMS, variants, bom [VARIANT], bom-csv [VARIANT], board [VARIANT], erc [VARIANT], plan-reannotate [SHEET], plan-block copy|move SCOPE DX_MM DY_MM OBJECT..., plan-block copy-to SOURCE DESTINATION DX_MM DY_MM OBJECT... or pdf",
+                "summary, libraries, symbols, symbol ID, sheet PATH, erc, nets, diff-pairs, links, pin PATH [VARIANT], tree PATH, search TERMS, variants, bom [VARIANT], bom-csv [VARIANT], board [VARIANT], erc [VARIANT], plan-reannotate [SHEET], plan-block copy|move SCOPE DX_MM DY_MM OBJECT..., plan-block copy-to SOURCE DESTINATION DX_MM DY_MM OBJECT... or pdf",
             ),
         ],
     ),

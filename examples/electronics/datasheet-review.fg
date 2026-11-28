@@ -1,0 +1,16 @@
+schematic
+parts=library(file:"datasheet-characteristics.fg")
+main=sheet()
+# Q1 asks for at most 3.4 mΩ under the manufacturer's stated test conditions.
+q1=place(sheet:main,symbol:parts.Mosfet,reference:"Q1",at:(0,0),spec_limits:[
+ {kind:"on_resistance",pins:[D,S],unit:"mΩ",max:3.4,when:[
+   {kind:"gate_source_voltage",pins:[G,S],typ:4.5},
+   {kind:"drain_current",typ:28},{kind:"ambient_temperature",typ:25}]}
+])
+# Q2 asks for the same guarantee at 1.8 V gate drive. Its coverage entry
+# identifies the missing test point without declaring the part electrically bad.
+q2=place(sheet:main,symbol:parts.Mosfet,reference:"Q2",at:(40,0),spec_limits:[
+ {kind:"on_resistance",pins:[D,S],unit:"mΩ",max:3.4,when:[
+   {kind:"gate_source_voltage",pins:[G,S],typ:1.8},
+   {kind:"drain_current",typ:28},{kind:"ambient_temperature",typ:25}]}
+])

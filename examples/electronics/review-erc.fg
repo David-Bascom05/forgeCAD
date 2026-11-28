@@ -1,0 +1,3 @@
+symbol_library
+address_collision = erc_rule(rule:"I2cAddressConflict", severity:"error")
+unsupported_option = erc_rule(rule:"UnsupportedAttributeValue", severity:"warning")

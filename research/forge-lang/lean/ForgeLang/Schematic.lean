@@ -3,6 +3,31 @@ The identifier types are independent of implementation indices or JSON display s
 Positions, package pin numbers and sheet decorations do not participate in electrical union. -/
 namespace ForgeLang.Schematic
 
+/-- Guaranteed min/max bounds are independently optional. Typical measurements
+    do not enter the overstress decision. All values here are in volts. -/
+def violatesBounds (low high : Option Rat) (seenLow seenHigh : Rat) : Bool :=
+  low.any (fun l => decide (seenLow < l)) || high.any (fun h => decide (h < seenHigh))
+
+theorem no_declared_bounds_no_violation (lo hi : Rat) :
+    violatesBounds none none lo hi = false := rfl
+
+theorem upper_bound_inclusive (limit lo : Rat) :
+    violatesBounds none (some limit) lo limit = false := by
+  simp [violatesBounds]
+
+/-- A comparison is eligible only when every declared field is present. -/
+def eligibleForCheck (fields : List (Option α)) : Bool := fields.all Option.isSome
+
+theorem missing_field_blocks_comparison (before after : List (Option α)) :
+    eligibleForCheck (before ++ none :: after) = false := by
+  simp [eligibleForCheck, List.all_append]
+
+theorem complete_inputs_eligible (values : List α) :
+    eligibleForCheck (values.map some) = true := by
+  induction values with
+  | nil => rfl
+  | cons h t ih => simpa [eligibleForCheck] using ih
+
 structure RoleId where
   name : String
 deriving DecidableEq
@@ -84,6 +109,36 @@ theorem selected_function_wants (base mode placed : Port) (r : RoleId) :
 theorem selected_function_gives (base mode placed : Port) (r : RoleId) :
     r ∈ (selectedPort base (some mode) placed).gives ↔ r ∈ mode.gives ∨ r ∈ placed.gives := by
   exact effective_gives mode placed r
+
+/-- Direct signal roles after selecting the active function, adding occurrence roles and
+filtering to nominal signal, clock and interface contracts on a fitted driver/receiver pair. -/
+inductive SignalCompatibility where
+  | compatible | mismatch | unknown
+deriving DecidableEq
+
+def signalCompatibility (offered required : List RoleId) : SignalCompatibility :=
+  if offered = [] ∨ required = [] then .unknown
+  else if required.all (fun r => decide (r ∈ offered)) then .compatible else .mismatch
+
+theorem signal_compatible_iff (offered required : List RoleId) :
+    signalCompatibility offered required = .compatible ↔
+      offered ≠ [] ∧ required ≠ [] ∧ ∀ r ∈ required, r ∈ offered := by
+  by_cases h : offered = [] ∨ required = []
+  · rcases h with h | h <;> simp [signalCompatibility, h]
+  · simp [signalCompatibility, not_or.mp h, List.all_eq_true]
+
+/-- Once strap input evidence is complete, a datasheet row takes precedence over the default. -/
+def strapValue {α : Type} (known : Bool) (row fallback : Option α) : Option α :=
+  if known then row.orElse (fun _ => fallback) else none
+
+theorem pinless_strap_default {α : Type} (fallback : α) :
+    strapValue true none (some fallback) = some fallback := rfl
+
+theorem strap_row_wins {α : Type} (v : α) (fallback : Option α) :
+    strapValue true (some v) fallback = some v := rfl
+
+theorem unresolved_strap {α : Type} (row fallback : Option α) :
+    strapValue false row fallback = none := rfl
 
 /-- Object lists enter this model after the reader sorts and deduplicates the qualified IDs. -/
 structure FindingKey where
@@ -271,5 +326,63 @@ def pullWitness (enabled : Bool) (wanted offered : VoltageInterval) (ohmsOK : Bo
 
 theorem absent_pull_cannot_supply (w g : VoltageInterval) (r : Bool) :
     pullWitness false w g r = false := rfl
+
+/-- Ordered bus net identities after fitting and resolving both lanes. -/
+def i2cConflict (busA busB : Nat × Nat) (addrA addrB : Nat) : Bool :=
+  decide (busA = busB ∧ addrA = addrB)
+
+theorem separate_buses_reuse_address (a b : Nat × Nat) (address : Nat) (h : a ≠ b) :
+    i2cConflict a b address address = false := by simp [i2cConflict, h]
+
+theorem same_bus_same_address (bus : Nat × Nat) (address : Nat) :
+    i2cConflict bus bus address address = true := by simp [i2cConflict]
+
+/-- One address is exclusive among fitted devices on the same ordered pair of bus nets. -/
+def fittedAddressConflict (fitA fitB : Bool) (busA busB : Nat × Nat) (addrA addrB : Nat) : Bool :=
+  fitA && fitB && i2cConflict busA busB addrA addrB
+
+theorem fitted_address_conflict_iff (fitA fitB : Bool) (busA busB : Nat × Nat) (addrA addrB : Nat) :
+    fittedAddressConflict fitA fitB busA busB addrA addrB = true ↔
+      fitA = true ∧ fitB = true ∧ busA = busB ∧ addrA = addrB := by
+  simp [fittedAddressConflict, i2cConflict, and_assoc]
+
+/-- A declared pin window contains the entire provided interval. Endpoints are inclusive. -/
+def windowAccepts (lo hi offeredLo offeredHi : Int) : Bool :=
+  decide (lo ≤ offeredLo ∧ offeredHi ≤ hi)
+
+theorem window_accepts_boundary (lo hi : Int) : windowAccepts lo hi lo hi = true := by
+  simp [windowAccepts]
+
+theorem window_rejects_partial_overlap (lo hi offeredLo offeredHi : Int)
+    (h : offeredLo < lo ∨ hi < offeredHi) : windowAccepts lo hi offeredLo offeredHi = false := by
+  simp only [windowAccepts, decide_eq_false_iff_not]
+  omega
+
+/-- A unit declaration scales a reading into the attribute type's base unit. -/
+def inBaseUnit (value factor : Rat) : Rat := value * factor
+
+theorem base_unit_identity (value : Rat) : inBaseUnit value 1 = value := by
+  simp [inBaseUnit]
+
+theorem unit_reading_roundtrip (value factor : Rat) (h : factor ≠ 0) :
+    inBaseUnit value factor / factor = value := by
+  unfold inBaseUnit
+  grind
+
+/-- Appending a valid digit and extracting it recovers both parts in any positive base.
+    The Rust loader restricts printable encodings to bases 2 through 36. -/
+theorem encoding_digit_roundtrip (base value digit : Nat)
+    (positive : 0 < base) (inRange : digit < base) :
+    (digit + base * value) / base = value ∧ (digit + base * value) % base = digit := by
+  simp [Nat.add_mul_div_left, Nat.add_mul_mod_self_left, Nat.div_eq_of_lt inRange,
+    Nat.mod_eq_of_lt inRange, positive]
+
+/-- Two partial table lookups compose, including the reverse path on each admitted pair. -/
+theorem conversion_chain_roundtrip {A B C : Type} (ab : A → Option B) (ba : B → Option A)
+    (bc : B → Option C) (cb : C → Option B) {a : A} {b : B} {c : C}
+    (forwardAB : ab a = some b) (forwardBC : bc b = some c)
+    (reverseBA : ba b = some a) (reverseCB : cb c = some b) :
+    (ab a).bind bc = some c ∧ (cb c).bind ba = some a := by
+  simp [forwardAB, forwardBC, reverseBA, reverseCB]
 
 end ForgeLang.Schematic

@@ -952,3 +952,50 @@ fn board_fabrication_uses_the_current_nested_package_revision() {
     let contents = forge_mesh::zip::read(&bytes, 2 * 1024 * 1024).unwrap();
     assert!(contents.iter().any(|(name, _)| name == "top-mask.gbr"));
 }
+
+#[test]
+fn pcb_and_schematic_handoff_share_fitted_attributes_and_active_signal_contracts() {
+    let dir = scratch("fitted-handoff");
+    let board = include_str!("../../../examples/electronics/controller-board.fg")
+        .split("# Example project limits")
+        .next()
+        .unwrap();
+    std::fs::write(dir.join("layout.fg"), board).unwrap();
+    let fixture = dir.join("controller.fg");
+    std::fs::write(
+        &fixture,
+        include_str!("../../../examples/electronics/strap-attributes.fg"),
+    )
+    .unwrap();
+    let mut server = Server::start("mcp", &dir);
+    let (err, reply, _) = server.tool(
+        "pcb",
+        vec![
+            ("file", dir.join("layout.fg").to_str().unwrap().into()),
+            ("sel", "handoff prototype".into()),
+        ],
+    );
+    assert!(!err, "{reply}");
+    let parts = arr(reply.get("result").unwrap(), "components");
+    let u = parts.iter().find(|p| s(p, "id") == "main/U1").unwrap();
+    let attr = u.get("derived_attributes").unwrap().get("i2c_address").unwrap();
+    assert_eq!(s(attr, "status"), "default");
+    assert_eq!(attr.get("value").unwrap().num(), Some(72.));
+    std::fs::write(
+        &fixture,
+        include_str!("../../../examples/electronics/adc-fanout.fg").replace("P0:ADC", "P0:GPIO"),
+    )
+    .unwrap();
+    let (err, reply, _) = server.tool(
+        "schematic",
+        vec![
+            ("file", fixture.to_str().unwrap().into()),
+            ("sel", "board no_monitor".into()),
+        ],
+    );
+    assert!(!err, "{reply}");
+    let paths = arr(reply.get("result").unwrap(), "signal_paths");
+    assert_eq!(paths.len(), 1);
+    assert_eq!(s(&paths[0], "status"), "mismatch");
+    assert_eq!(arr(&paths[0], "compatible_receiver_functions"), &["ADC".into()]);
+}

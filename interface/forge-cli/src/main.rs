@@ -46,8 +46,8 @@ fn usage() -> ExitCode {
          forgecad edit FILE.fg 'OP'.. [--base VERSION]   (typed ops, as a part's fixes give them; export F.fg stl|3mf|obj|urdf|dxf [SHEET])\n       \
          forgecad cam FILE.fg [sheet] [--json] [-o OUT]   (a machining document: certified toolpaths, the program or setup sheet)\n       \
          forgecad export FILE.fg pcb-fab [VARIANT] -o OUTPUT.zip\n       \
-         forgecad pcb FILE.fg [summary|layers|stackup|finishes|routing|placements|pads|connectivity|ratsnest|artwork LAYER_ID|artwork SIDE FILM|handoff [VARIANT]|drc] [--json]\n       \
-         forgecad schematic FILE.fg [pin PATH [VARIANT]|tree PATH|sheet PATH|nets|diff-pairs|links|symbols|erc] [--json]\n       \
+         forgecad pcb FILE.fg [summary|libraries|layers|stackup|finishes|routing|placements|pads|connectivity|ratsnest|artwork LAYER_ID|artwork SIDE FILM|handoff [VARIANT]|repack [fixed=J1,J2] [gap=MM] [rotate] [circuit=REF,REF] [independent] [BLOCK:VERSION@REF=X,Y,DEG ...]|floorplan [variant=ID] [NAME@GROUP=DX,DY ...]|drc] [--json]\n       \
+         forgecad schematic FILE.fg [pin PATH [VARIANT]|tree PATH|sheet PATH|libraries|nets|diff-pairs|links|symbols|board [VARIANT]|erc [VARIANT]] [--json]\n       \
          forgecad bend FILE.fg [sheet|program] [--json] [-o OUT]   (a bending document: simulated; its setup sheet, or its press-brake program where the format is openly specified)\n       \
          forgecad diff A.fg B.fg [volume]   (what B changed from A: features, params, faces, volume)\n       \
          forgecad help [forge | WORD]   (the .fg language, or its sections on WORD)\n       \
@@ -58,6 +58,7 @@ fn usage() -> ExitCode {
          forgecad import FILE.FCStd [-o DIR] [--json]   (each body a part file DIR/<file>.<body>.fg)\n       \
          forgecad import FILE.step|stp|igs|iges|brep|x_t|x_b [-o DIR] [--json]   (the model beside DIR/<file>.fg, which imports it)\n       \
          forgecad convert FILE.step|stp|igs|iges|brep|x_t|x_b -o OUT.step [ap242] [--json]   (its solids as STEP)\n       \
+         forgecad electronics-library install EXECUTABLE   (install a trusted Rust package for this user)\n       \
          forgecad tool import FILE.json|FILE.tools [--project DIR | --user] [--json]   (a Fusion tool library into your own cam/ tools, cited to the file)\n       \
          forgecad machine SETUP.toml [--json]   (posted G-code on a machine: timeline, collisions, removal)\n       \
          forgecad machine list [--json] | new NAME (--from M | --template T) [--project] | check FILE|NAME [--json]   (your own machines)\n       \
@@ -250,6 +251,20 @@ fn main() -> ExitCode {
     match args.get(1).map(String::as_str) {
         None => open_app(&[]),
         Some("open") => open_app(&args[2..]),
+        Some("electronics-library")
+            if matches!(args.get(2).map(String::as_str), Some("install")) && args.len() == 4 =>
+        {
+            match forge_lang::electronics_library::install(std::path::Path::new(&args[3])) {
+                Ok(uri) => {
+                    println!("{uri}");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("{e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Some("agent") => agent_bridge(&args[2..]),
         Some("update") => update(&args[2..]),
         Some(c @ ("photo" | "record")) => capture(c, &args[2..]),

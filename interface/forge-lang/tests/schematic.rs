@@ -356,7 +356,7 @@ fn sensor_interface_has_clear_print_and_four_physical_components() {
     // The example consumes an external 3V3 rail. Naming the rail must not fabricate a driver.
     assert_eq!(
         c.issues.iter().map(|i| i.kind).collect::<Vec<_>>(),
-        ["UnknownSupplyVoltage"]
+        ["UndrivenPowerInput", "UnknownSupplyVoltage"]
     );
     assert_eq!(
         schematic::bom(&doc, &c)
@@ -1280,5 +1280,522 @@ fn visually_ambiguous_wires_remain_electrically_separate() {
             .issues
             .iter()
             .any(|i| matches!(i.kind, "WireNearPin" | "WireOverlap"))
+    );
+}
+
+#[test]
+fn active_signal_contracts_drive_erc_inspection_and_board_handoff_per_branch() {
+    use forge_agent::json::Json;
+    let fixture = include_str!("../../../examples/electronics/adc-fanout.fg");
+    for (mode, status, rule) in [
+        ("ADC", "compatible", None),
+        ("GPIO", "mismatch", Some("PinFunctionMismatch")),
+        ("RAW", "unknown", Some("UnknownPinFunctionCompatibility")),
+    ] {
+        // Change the library pin's display identity and reverse a wire gesture as well.
+        let src = fixture
+            .replace("P0:ADC", &format!("P0:{mode}"))
+            .replace("P0", "PORT")
+            .replace("from:tap,to:U2.PORT", "from:U2.PORT,to:tap");
+        let (d, c) = run(&src).unwrap();
+        let board = schematic::board(&d, &c, None).unwrap();
+        let Some(Json::Arr(paths)) = board.get("signal_paths") else {
+            panic!("missing signal_paths")
+        };
+        assert_eq!(paths.len(), 2);
+        for (i, (receiver, expected)) in [("main/U2.PORT", status), ("main/U3.IN", "compatible")]
+            .iter()
+            .enumerate()
+        {
+            let p = &paths[i];
+            let sink = p.get("receiver").unwrap();
+            assert_eq!(sink.get("terminal").unwrap().str(), Some(*receiver));
+            assert_eq!(
+                p.get("source").unwrap().get("terminal").unwrap().str(),
+                Some("main/U1.OUT")
+            );
+            assert_eq!(p.get("status").unwrap().str(), Some(*expected));
+            if i == 0 {
+                assert_eq!(sink.get("active_function").unwrap().str(), Some(mode));
+                let alternatives = if rule.is_some() {
+                    vec!["ADC".into()]
+                } else {
+                    vec![]
+                };
+                assert_eq!(
+                    p.get("compatible_receiver_functions"),
+                    Some(&Json::Arr(alternatives))
+                );
+            } else {
+                assert_eq!(sink.get("active_function"), Some(&Json::Null));
+            }
+        }
+        let findings: Vec<_> = c
+            .issues
+            .iter()
+            .filter(|f| matches!(f.kind, "PinFunctionMismatch" | "UnknownPinFunctionCompatibility"))
+            .collect();
+        assert_eq!(findings.len(), usize::from(rule.is_some()));
+        if let Some(rule) = rule {
+            let finding = findings[0];
+            assert_eq!(finding.kind, rule);
+            assert_eq!(finding.unknown, mode == "RAW");
+            assert_eq!(finding.objects, ["main/U1.OUT", "main/U2.PORT"]);
+            assert!(finding.message.contains("ADC"));
+        }
+        assert!(!c.issues.iter().any(|i| i.kind == "UnfulfilledWant"));
+        let check = schematic::inspect_pin(&c, "main/U3.IN").unwrap();
+        assert_eq!(
+            check.checks[0].peers,
+            [("main/U1.OUT".into(), schematic::Evidence::Verified)]
+        );
+        let fitted = schematic::board(&d, &c, Some("no_monitor")).unwrap();
+        assert_eq!(
+            fitted.get("signal_paths"),
+            Some(&Json::Arr(vec![paths[0].clone()]))
+        );
+    }
+    let strict = format!(
+        "{}\nstrict=erc_rule(rule:\"PinFunctionMismatch\",severity:\"error\")\nfixed_only=variant(omit:[\"main/U2\"])",
+        fixture.replace("P0:ADC", "P0:GPIO")
+    );
+    let (d, c) = run(&strict).unwrap();
+    let base = schematic::response(&d, &c, &["board".into()]).unwrap();
+    assert_eq!(base.get("erc_ok"), Some(&Json::Bool(false)));
+    let fitted = schematic::response(&d, &c, &["board".into(), "fixed_only".into()]).unwrap();
+    assert_eq!(fitted.get("erc_ok"), Some(&Json::Bool(true)));
+}
+
+#[test]
+fn named_straps_follow_fitted_inputs_and_pinless_defaults_without_erc_findings() {
+    let fixture = include_str!("../../../examples/electronics/strap-attributes.fg");
+    let (d, c) = run(fixture).unwrap();
+    let assert_value = |c: &Circuit, owner: &str, attr: &str, status: &str, value: Option<&str>| {
+        let r = &c.straps[owner][attr];
+        assert_eq!((r.status, r.value.as_deref()), (status, value));
+    };
+    assert_value(&c, "main/U1", "i2c_address", "matched", Some("0x49"));
+    assert_value(&c, "main/U1", "current_limit", "matched", Some("500 mA"));
+    assert_value(&c, "main/U2", "i2c_address", "default", Some("0x48"));
+    assert_value(&c, "main/U2", "current_limit", "matched", Some("1 A"));
+    assert_value(&c, "main/U3", "address", "default", Some("0x2C"));
+    assert_value(&c, "main/U3", "powerup_mode", "default", Some("standby"));
+    assert!(
+        c.straps["main/U1"]["i2c_address"].inputs["main/U1.A0"]
+            .evidence
+            .contains("main/R1.B")
+    );
+    let (d2, rewired) = run(&fixture.replace("from:R1.B,to:U1.VDD", "from:R1.B,to:U1.VSS")).unwrap();
+    assert_value(&rewired, "main/U1", "i2c_address", "default", Some("0x48"));
+    let amb = format!("{fixture}\nshort=wire(sheet:main,from:U1.VDD,to:U1.VSS)");
+    let (_, clash) = run(&amb).unwrap();
+    assert_value(&clash, "main/U1", "i2c_address", "unresolved", None);
+    assert!(!clash.issues.iter().any(|i| i.kind.contains("Strap")));
+    let fitted = Circuit::build_fitted(&d, &d.variants["prototype"]).unwrap();
+    assert!(!fitted.straps.contains_key("main/U3"));
+    assert_value(&fitted, "main/U1", "i2c_address", "default", Some("0x48"));
+    assert!(fitted.straps["main/U1"]["i2c_address"].inputs["main/U1.A0"].open);
+    let handoff = schematic::board(&d2, &rewired, None).unwrap();
+    let Some(forge_agent::json::Json::Arr(parts)) = handoff.get("components") else {
+        panic!()
+    };
+    let values = parts
+        .iter()
+        .find(|p| p.get("id").unwrap().str() == Some("main/U1"))
+        .unwrap()
+        .get("derived_attributes")
+        .unwrap();
+    assert_eq!(
+        values
+            .get("current_limit")
+            .unwrap()
+            .get("value")
+            .unwrap()
+            .get("value")
+            .unwrap()
+            .num(),
+        Some(0.5)
+    );
+    assert_eq!(
+        values.get("i2c_address").unwrap().get("value").unwrap().num(),
+        Some(72.)
+    );
+    assert_eq!(
+        run(&fixture.replace("A0:high", "A0:missing")).unwrap_err().kind,
+        "InvalidStrapRow"
+    );
+    assert_eq!(
+        run(&fixture.replace("0x49", "0x80")).unwrap_err().kind,
+        "InvalidStrapValue"
+    );
+}
+
+#[test]
+fn typed_tables_check_bus_identity_values_variants_and_sheet_fields() {
+    let lib = include_str!("../../../examples/electronics/strap-address-matrix.fg");
+    let source = format!(
+        "{}\nmain=sheet()\na=place(sheet:main,symbol:Device,at:(0,0),value:\"sensor\")\nb=place(sheet:main,symbol:Device,at:(80,0),visibility:{{reference:false,derived:{{address:false}},custom:{{Manufacturer:true}}}})\nsda=wire(sheet:main,from:a.SDA,to:b.SDA)\nscl=wire(sheet:main,from:a.SCL,to:b.SCL)\nprototype=variant(omit:[\"main/b\"])",
+        lib.replacen("symbol_library", "schematic", 1)
+    );
+    let (d, c) = run(&source).unwrap();
+    let conflict: Vec<_> = c
+        .issues
+        .iter()
+        .filter(|i| i.kind == "I2cAddressConflict")
+        .collect();
+    assert_eq!(conflict.len(), 1);
+    assert_eq!(conflict[0].objects, ["main/a:address", "main/b:address"]);
+    assert_eq!(conflict[0].severity(), "error");
+    let fitted = Circuit::build_fitted(&d, &d.variants["prototype"]).unwrap();
+    assert!(!fitted.issues.iter().any(|i| i.kind == "I2cAddressConflict"));
+    let page = schematic::sheet_page(&d, &c, "main").unwrap();
+    let lines: Vec<_> = page.texts.iter().map(|t| t.text.as_str()).collect();
+    assert!(lines.contains(&"a") && !lines.contains(&"b") && lines.contains(&"sensor"));
+    assert_eq!(lines.iter().filter(|s| **s == "address: 0x48").count(), 1);
+    assert_eq!(lines.iter().filter(|s| **s == "Manufacturer: Example").count(), 1);
+    assert_eq!(lines.iter().filter(|s| **s == "boot: Flash").count(), 2);
+    for disconnected in [
+        "sda=wire(sheet:main,from:a.SDA,to:b.SDA)",
+        "scl=wire(sheet:main,from:a.SCL,to:b.SCL)",
+    ] {
+        let (_, c) = run(&source.replace(disconnected, "")).unwrap();
+        assert!(!c.issues.iter().any(|i| i.kind == "I2cAddressConflict"));
+    }
+    let (_, c) = run(&source
+        .replace("500 mA", "3000 mA")
+        .replace("default:\"Flash\"", "default:\"External\"")
+        .replace("default:\"0x48\"", "default:\"0b1111100\""))
+    .unwrap();
+    for rule in ["CurrentOutsideRange", "UnsupportedBootMode", "ReservedI2cAddress"] {
+        assert_eq!(c.issues.iter().filter(|i| i.kind == rule).count(), 2, "{rule}");
+    }
+    let a = schematic::StrapKind::Address7;
+    assert_eq!(a.converted("0b1001000", "Hex").as_deref(), Some("0x48"));
+    assert_eq!(a.converted("0x48", "Decimal").as_deref(), Some("72"));
+    assert_eq!(
+        schematic::StrapKind::Current
+            .converted("500000 µA", "mA")
+            .as_deref(),
+        Some("500 mA")
+    );
+}
+
+#[test]
+fn resolved_field_visibility_controls_overlap_evidence_and_inherits_on_reset() {
+    let src = r#"schematic
+Chip=symbol(pins:{},fields:{MPN:"ABC"},visibility:{custom:{MPN:true}},strap_tables:{address:strap_table(kind:"i2c_address",default:"72")})
+main=sheet()
+part=place(sheet:main,symbol:Chip,at:(0,0))
+"#;
+    let (d, c) = run(src).unwrap();
+    let page = schematic::sheet_page(&d, &c, "main").unwrap();
+    let field = page.texts.iter().find(|t| t.text == "address: 72").unwrap();
+    let source = format!(
+        "{src}\nmarker=note(sheet:main,value:\"aligned\",at:({},{}))",
+        field.at.x, field.at.y
+    );
+    let (_, c) = run(&source).unwrap();
+    let has_overlap = |c: &Circuit| {
+        c.issues.iter().any(|i| {
+            i.kind == "TextBoundsOverlap" && i.objects.iter().any(|s| s == "main/part:derived.address")
+        })
+    };
+    assert!(has_overlap(&c));
+    let (d, c) = run(&source.replace(
+        "symbol:Chip,at:",
+        "symbol:Chip,visibility:{derived:{address:false}},at:",
+    ))
+    .unwrap();
+    assert!(!has_overlap(&c));
+    assert!(
+        schematic::sheet_page(&d, &c, "main")
+            .unwrap()
+            .texts
+            .iter()
+            .any(|t| t.text == "MPN: ABC")
+    );
+    assert_eq!(c.straps["main/part"]["address"].value.as_deref(), Some("72"));
+}
+
+#[test]
+fn nested_attribute_types_keep_identity_and_erc_defaults_compose() {
+    let dir = std::env::temp_dir().join(format!("fg-attribute-packs-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let write = |name: &str, src: &str| std::fs::write(dir.join(name), src).unwrap();
+    write(
+        "firmware.fg",
+        include_str!("../../../examples/electronics/attribute-types.fg"),
+    );
+    write(
+        "parts.fg",
+        r#"symbol_library
+fw=library(file:"firmware.fg")
+IC=symbol(pins:{},strap_tables:{startup:strap_table(kind:fw.startup_source,default:"Typo")})
+policy=erc_rule(rule:"UnsupportedAttributeValue",severity:"warning")"#,
+    );
+    write(
+        "review.fg",
+        r#"symbol_library
+policy=erc_rule(rule:"UnsupportedAttributeValue",severity:"info")"#,
+    );
+    let base = "schematic\ncomponents=library(file:\"parts.fg\")\nmain=sheet()\nu=place(sheet:main,symbol:components.IC,at:(0,0))";
+    let compile = |src: &str| schematic::compile(src, Some(&dir), Some(&dir));
+    let (doc, c) = compile(base).unwrap();
+    let t = &doc.symbols["components.IC"].strap_tables["startup"];
+    assert_eq!(t.source_type.as_deref(), Some("components.fw.startup_source"));
+    assert_eq!(t.modes, doc.attribute_types["components.fw.startup_source"].modes);
+    assert_eq!(
+        c.issues
+            .iter()
+            .find(|i| i.kind == "UnsupportedAttributeValue")
+            .unwrap()
+            .priority(&doc),
+        "warning"
+    );
+    let both = format!("{base}\nreview=library(file:\"review.fg\")");
+    assert_eq!(compile(&both).unwrap_err().kind, "ConflictingRuleDefaults");
+    let override_rule = "local=erc_rule(rule:\"UnsupportedAttributeValue\",severity:\"error\")";
+    for src in [
+        format!("{both}\n{override_rule}"),
+        both.replacen("schematic", &format!("schematic\n{override_rule}"), 1),
+    ] {
+        let (doc, c) = compile(&src).unwrap();
+        assert_eq!(
+            c.issues
+                .iter()
+                .find(|i| i.kind == "UnsupportedAttributeValue")
+                .unwrap()
+                .priority(&doc),
+            "error"
+        );
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn voltage_strap_cells_use_provided_limits_and_evidence() {
+    let src = r#"schematic
+rail=role(kind:"power",voltage_range_v:[1.7,1.9])
+Source=symbol(pins:{OUT:pin(number:"1",kind:"power_out",at:(0,0),gives:[rail])})
+Device=symbol(pins:{MODE:pin(number:"1",kind:"input",at:(0,0))},
+ strap_tables:{boot:strap_table(kind:"text",inputs:{MODE:{window:[1.7,1.9],off:"floating"}},
+ rows:[[{MODE:window},"Service"],[{MODE:off},"Normal"]])})
+main=sheet()
+P=place(sheet:main,symbol:Source,at:(0,0))
+U=place(sheet:main,symbol:Device,at:(20,0))
+w=wire(sheet:main,from:P.OUT,to:U.MODE)"#;
+    let check = |src: &str| run(src).unwrap().1;
+    let c = check(src);
+    let attr = &c.straps["main/U"]["boot"];
+    assert_eq!(attr.value.as_deref(), Some("Service"));
+    assert!(attr.inputs["main/U.MODE"].evidence.contains("main/P.OUT"));
+    assert_eq!(check(&src.replace("voltage_range_v:[1.7,1.9]","voltage_range_v:[1.6,1.9]")).straps["main/U"]["boot"].status,"unresolved");
+    assert_eq!(
+        check(&src.replace("gives:[rail]", "wants:[rail]")).straps["main/U"]["boot"].status,
+        "unresolved"
+    );
+    assert_eq!(
+        check(src.split("\nw=wire").next().unwrap()).straps["main/U"]["boot"]
+            .value
+            .as_deref(),
+        Some("Normal")
+    );
+    for (from, to, kind) in [
+        ("window:[1.7,1.9]", "window:[1.9,1.7]", "InvalidStrapVoltage"),
+        (
+            "window:[1.7,1.9]",
+            "window:[1.7,1.9],other:[1.9,2.1]",
+            "InvalidStrapInput",
+        ),
+        ("window:[1.7,1.9]", "window:[1.7mm,1.9]", "WrongDim"),
+    ] {
+        assert_eq!(run(&src.replace(from, to)).unwrap_err().kind, kind);
+    }
+}
+
+#[test]
+fn library_units_bound_convert_and_name_attributes_without_changing_keys() {
+    let base = r#"schematic
+Rate=attribute_type(label:"Frequency",kind:"quantity",units:[{name:"Hz",factor:1,min:0,max:2000000},{name:"kHz",factor:1000,min:0,max:2000}])
+IC=symbol(pins:{},strap_tables:{f:strap_table(label:"Switching frequency",kind:Rate,unit:"kHz",default:"125000 Hz")})
+main=sheet()
+u=place(sheet:main,symbol:IC,at:(0,0))"#;
+    let (doc, c) = run(base).unwrap();
+    assert_eq!(c.straps["main/u"]["f"].value.as_deref(), Some("125 kHz"));
+    let page = schematic::sheet_page(&doc, &c, "main").unwrap();
+    assert!(
+        page.texts
+            .iter()
+            .any(|t| t.text == "Switching frequency: 125 kHz")
+    );
+    for (old, new, err) in [
+        ("125000 Hz", "2100 kHz", "InvalidStrapValue"),
+        ("125000 Hz", "125 V", "InvalidStrapValue"),
+        ("unit:\"kHz\"", "unit:\"MHz\"", "UnknownAttributeUnit"),
+        ("factor:1000", "factor:0", "InvalidAttributeUnit"),
+        ("factor:1,min:0", "factor:2,min:0", "InvalidAttributeUnit"),
+        ("name:\"kHz\"", "name:\"Hz\"", "InvalidAttributeUnit"),
+        (
+            "label:\"Switching frequency\"",
+            "label:\"\"",
+            "EmptyAttributeLabel",
+        ),
+    ] {
+        assert_eq!(run(&base.replace(old, new)).unwrap_err().kind, err);
+    }
+    let missing = base.replace("kind:Rate", "kind:\"quantity\"");
+    assert_eq!(run(&missing).unwrap_err().kind, "MissingAttributeUnits");
+    let untyped = "symbol_library\nR=attribute_type(label:\"Rate\",kind:\"quantity\")";
+    assert_eq!(run(untyped).unwrap_err().kind, "MissingAttributeUnits");
+    let a = schematic::StrapKind::Address7;
+    let units = a.standard_units();
+    assert_eq!(
+        a.format_unit("48", units, Some("Hex"), "Decimal").as_deref(),
+        Some("72")
+    );
+    assert!(a.typed_with_units("80", units, Some("Hex")).is_none());
+}
+
+#[test]
+fn every_ternary_address_is_selected_by_the_three_fitted_pin_states() {
+    let def = include_str!("../../../examples/electronics/ternary-address.fg").replacen(
+        "symbol_library",
+        "schematic",
+        1,
+    );
+    let base = format!("{def}\nmain=sheet()\nu=place(sheet:main,symbol:Decoder,at:(0,0))");
+    for i in 0..27 {
+        let mut src = base.clone();
+        for (pin, trit) in [("A2", i / 9), ("A1", (i / 3) % 3), ("A0", i % 3)] {
+            if trit < 2 {
+                let rail = ["VSS", "VDD"][trit];
+                src.push_str(&format!("\nw{pin}=wire(sheet:main,from:u.{pin},to:u.{rail})"));
+            }
+        }
+        let (d, c) = run(&src).unwrap();
+        let table = &d.symbols["Decoder"].strap_tables["address"];
+        assert_eq!(table.column_order, ["A2", "A1", "A0"]);
+        assert_eq!(table.rows.len(), 27);
+        assert_eq!(
+            c.straps["main/u"]["address"].value,
+            Some(format!("0x{:02X}", 32 + i))
+        );
+    }
+}
+
+#[test]
+fn integer_formats_round_trip_by_declared_radix_and_report_invalid_digits() {
+    use schematic::StrapKind;
+    let address = StrapKind::Address7;
+    let units = address.standard_units();
+    for n in 0..128 {
+        for from in units {
+            let value = address
+                .format_unit(&n.to_string(), units, Some("Decimal"), &from.name)
+                .unwrap();
+            for to in units {
+                let encoded = address
+                    .format_unit(&value, units, Some(&from.name), &to.name)
+                    .unwrap();
+                assert_eq!(
+                    address
+                        .typed_with_units(&encoded, units, Some(&to.name))
+                        .unwrap()
+                        .num(),
+                    Some(n as f64)
+                );
+            }
+        }
+    }
+    let source = r#"symbol_library
+Register=attribute_type(label:"Register code",kind:"integer",units:[{name:"Count",radix:10,min:0,max:255},{name:"Bank octal",radix:8,prefix:"o:",digits:3},{name:"Word",radix:16,prefix:"$",digits:2}])
+Chip=symbol(pins:{},strap_tables:{code:strap_table(kind:Register,unit:"Word",default:"o:110")})"#;
+    let (d, _) = run(source).unwrap();
+    let t = &d.symbols["Chip"].strap_tables["code"];
+    assert_eq!(t.default.as_deref(), Some("$48"));
+    assert_eq!(
+        t.kind
+            .format_unit("$48", &t.units, Some("Word"), "Bank octal")
+            .as_deref(),
+        Some("o:110")
+    );
+    assert_eq!(
+        t.kind
+            .format_unit("110", &t.units, Some("Bank octal"), "Count")
+            .as_deref(),
+        Some("72")
+    );
+    for (a, b, kind) in [
+        ("o:110", "o:189", "InvalidStrapValue"),
+        ("o:110", "$100", "InvalidStrapValue"),
+        ("radix:8", "radix:1", "InvalidAttributeUnit"),
+        ("radix:8", "factor:2,radix:8", "InvalidAttributeUnit"),
+        ("digits:3", "digits:33", "InvalidAttributeUnit"),
+        ("prefix:\"o:\"", "prefix:\"$\"", "InvalidAttributeUnit"),
+    ] {
+        assert_eq!(run(&source.replace(a, b)).unwrap_err().kind, kind);
+    }
+}
+
+#[test]
+fn multiple_conversion_tables_compose_in_both_directions_and_check_every_value() {
+    let src = include_str!("../../../examples/electronics/conversion-chain.fg");
+    let (doc, _) = run(src).unwrap();
+    let t = &doc.attribute_types["Register_code"];
+    let cv = |s, f, to| t.conversions.convert(t.kind, s, &t.units, Some(f), to);
+    assert_eq!(t.conversions.tables().len(), 2);
+    assert_eq!(cv("0x48", "Hex", "Binary").as_deref(), Some("01001000"));
+    assert_eq!(cv("01001001", "Binary", "Hex").as_deref(), Some("0x49"));
+    assert_eq!(cv("74", "Numeric", "Binary").as_deref(), Some("01001010"));
+    assert!(cv("0xFF", "Hex", "Binary").is_none());
+    let (d, c) = run(&format!(
+        "{}\nmain=sheet()\nu=place(sheet:main,symbol:Device,at:(0,0))",
+        src.replacen("symbol_library", "schematic", 1)
+    ))
+    .unwrap();
+    let json = schematic::response(&d, &c, &["symbol".into(), "Device".into()])
+        .unwrap()
+        .to_string();
+    assert!(json.contains("0x4A"));
+    for (a, b) in [
+        ("{name:\"Binary\"}", "{name:\"Binary\"},{name:\"Orphan\"}"),
+        ("[\"73\",\"01001001\"]", "[\"73\",\"01001000\"]"),
+        (",[\"74\",\"01001010\"]", ""),
+        (
+            "from:\"Numeric\",to:\"Binary\"",
+            "from:\"Numeric\",to:\"Unknown\"",
+        ),
+    ] {
+        assert_eq!(
+            run(&src.replace(a, b)).unwrap_err().kind,
+            "InvalidConversionGraph"
+        );
+    }
+    let cycle = src.replace(
+        "\n ])",
+        ", {name:\"Contradiction\",from:\"Binary\",to:\"Hex\",rows:[[\"01001000\",\"0x49\"]]}\n ])",
+    );
+    assert_eq!(run(&cycle).unwrap_err().kind, "InvalidConversionGraph");
+}
+
+#[test]
+fn computed_conversion_paths_obey_intermediate_ranges_and_find_an_alternative() {
+    let src = r#"symbol_library
+R=attribute_type(label:"Radix", kind:"integer",units:[{name:"Count",radix:10},{name:"Hex",radix:16,prefix:"$"},{name:"Bridge",radix:8,prefix:"o",max:15},{name:"Bits",radix:2,prefix:"b"}],conversions:[
+ {from:"Count",to:"Hex"},{from:"Hex",to:"Bridge"},{from:"Bridge",to:"Bits"}])"#;
+    let run_path = |s: &str| {
+        let (doc, _) = run(s).unwrap();
+        let t = &doc.attribute_types["R"];
+        t.conversions
+            .convert(t.kind, "$48", &t.units, Some("Hex"), "Bits")
+    };
+    assert!(run_path(src).is_none());
+    assert_eq!(
+        run_path(&src.replace(
+            "{from:\"Bridge\",to:\"Bits\"}",
+            "{from:\"Bridge\",to:\"Bits\"},{from:\"Count\",to:\"Bits\"}"
+        ))
+        .as_deref(),
+        Some("b1001000")
     );
 }

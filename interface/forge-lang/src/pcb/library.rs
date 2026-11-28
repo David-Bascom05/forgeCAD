@@ -8,7 +8,22 @@ use std::{
     path::{Path, PathBuf},
 };
 
-type Library = BTreeMap<String, Footprint>;
+pub(super) struct Library {
+    pub packages: crate::electronics_library::Loaded,
+    pub footprints: BTreeMap<String, Footprint>,
+    pub rules: BTreeMap<String, String>,
+}
+pub(super) fn policy(c: &mut Call<'_>, rules: &mut BTreeMap<String, String>) -> Result<()> {
+    let e = c.req("rule")?;
+    let name = string(e)?;
+
+    let level = crate::electronics::rule_severity(c.req("severity")?)?;
+    if rules.insert(name.clone(), level).is_some() {
+        return Err(crate::electronics::fault(e, "DuplicateDrcRule", name));
+    }
+    Ok(())
+}
+
 #[derive(Default)]
 pub(super) struct Imports {
     active: BTreeSet<PathBuf>,
@@ -30,6 +45,19 @@ impl Imports {
                 format!("cannot read footprint library {file}"),
             )
         };
+        if let Some(lib) = crate::electronics_library::resolve_import(file)
+            .map_err(|m| Fault::new("RustLibraryUnavailable", span, m))?
+        {
+            let mut packages = crate::electronics_library::Loaded::default();
+            packages
+                .add(lib)
+                .map_err(|m| Fault::new("InvalidLibrary", span, m))?;
+            return Ok(Library {
+                packages,
+                footprints: BTreeMap::new(),
+                rules: BTreeMap::new(),
+            });
+        }
         let base = dir.unwrap_or_else(|| Path::new("."));
         let fence = forge_dirs::fs::canonicalize(root.unwrap_or(base)).map_err(|_| bad())?;
         let path = forge_dirs::fs::canonicalize(base.join(file)).map_err(|_| bad())?;
@@ -74,6 +102,9 @@ impl Imports {
         }
         let mut names = BTreeSet::new();
         let mut lib = BTreeMap::new();
+        let mut rules = BTreeMap::new();
+        let mut defaults = crate::electronics::RuleDefaults::default();
+        let mut packages = crate::electronics_library::Loaded::standard();
         let mut params = Params::new();
         for s in tree.iter().skip(1) {
             let (name, e) = match &s.kind {
@@ -102,22 +133,50 @@ impl Imports {
                 &[
                     ("footprint", reader_layout::FOOTPRINT_ARGS),
                     ("library", &["file"]),
+                    ("drc_rule", &["rule", "severity"]),
                 ],
             )?;
             if c.name == "library" {
                 let file = string(c.req("file")?)?;
-                for (key, def) in self.load(&file, dir, root, e.span)? {
+                let child = self.load(&file, dir, root, e.span)?;
+                packages
+                    .merge(&child.packages)
+                    .map_err(|m| Fault::new("InvalidLibrary", e.span, m))?;
+                defaults.import(name, child.rules);
+                for (key, def) in child.footprints {
                     lib.insert(format!("{name}.{key}"), def);
                 }
+            } else if c.name == "drc_rule" {
+                policy(&mut c, &mut rules)?;
             } else {
                 lib.insert(name.clone(), reader_layout::package(&mut c, &params)?);
             }
             c.end()?;
         }
-        Ok(lib)
+        defaults.resolve(&mut rules, Span::default())?;
+        if self.active.is_empty() {
+            validate_rules(&packages, &rules, Span::default())?;
+        }
+        Ok(Library {
+            packages,
+            footprints: lib,
+            rules,
+        })
     }
 }
 
+pub(super) fn validate_rules(
+    packages: &crate::electronics_library::Loaded,
+    rules: &BTreeMap<String, String>,
+    span: Span,
+) -> Result<()> {
+    for name in rules.keys() {
+        if Rule::parse(name).is_none() && !packages.drc.contains_key(name.as_str()) {
+            return Err(Fault::new("UnknownDrcRule", span, name));
+        }
+    }
+    Ok(())
+}
 pub fn query(
     src: &str,
     dir: Option<&Path>,
@@ -126,9 +185,22 @@ pub fn query(
 ) -> Result<forge_agent::json::Json> {
     use forge_agent::json::Json;
     if header(src) != Some("footprint_library") {
-        return response(&compile(src, dir, root)?, words);
+        let board = compile(src, dir, root)?;
+        if words.first().is_some_and(|s| s == "floorplan") {
+            return floorplan::compare(&board, src, dir, root, &words[1..]);
+        }
+        if words.first().is_some_and(|s| s == "repack") {
+            return packing::query(&board, src, dir, root, &words[1..]);
+        }
+        return response(&board, words);
     }
     let lib = Imports::default().read(src, dir, root)?;
+    if matches!(words,[w] if w=="libraries") {
+        return Ok(Json::obj(vec![
+            ("ok", true.into()),
+            ("result", lib.packages.json()),
+        ]));
+    }
     if !words.is_empty()
         && !matches!(words,[w] if matches!(w.as_str(),"summary"|"stat"|"check"|"drc"|"footprints"))
     {
@@ -142,9 +214,14 @@ pub fn query(
         ("ok", true.into()),
         ("schema", "forgecad.footprint-library/1".into()),
         (
+            "rule_severities",
+            Json::Obj(lib.rules.into_iter().map(|(k, v)| (k, v.into())).collect()),
+        ),
+        (
             "result",
             Json::Arr(
-                lib.into_iter()
+                lib.footprints
+                    .into_iter()
                     .map(|(id, f)| {
                         Json::obj(vec![
                             ("id", id.into()),

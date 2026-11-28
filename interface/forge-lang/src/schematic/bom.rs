@@ -11,6 +11,7 @@ pub struct PartSpec {
 }
 #[derive(Debug)]
 pub struct BomLine {
+    pub typed_fields: Json,
     pub part: PartSpec,
     pub references: Vec<String>,
 }
@@ -31,6 +32,7 @@ impl BomLine {
             ("footprint", p.footprint.clone().map_or(Json::Null, Into::into)),
             ("datasheet", p.datasheet.clone().map_or(Json::Null, Into::into)),
             ("fields", field_json(&p.fields)),
+            ("typed_fields", self.typed_fields.clone()),
             ("quantity", self.references.len().into()),
             (
                 "references",
@@ -85,7 +87,11 @@ pub fn bom_for(doc: &Document, c: &Circuit, overrides: &Map<String, bool>) -> Ve
     }
     lines
         .into_iter()
-        .map(|(part, references)| BomLine { part, references })
+        .map(|(part, references)| BomLine {
+            typed_fields: doc.symbols[&part.symbol].typed_fields(doc, &part.fields),
+            part,
+            references,
+        })
         .collect()
 }
 pub fn bom_csv(lines: &[BomLine]) -> String {

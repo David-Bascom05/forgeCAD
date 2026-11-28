@@ -1,0 +1,28 @@
+schematic
+# Illustrative datasheet table. Address is the seven-bit device address.
+Device = symbol(pins:{
+  A0:pin(number:"1",kind:"input",at:(-4,0)),
+  ILIM:pin(number:"2",kind:"input",at:(-4,4)),
+  VDD:pin(number:"3",kind:"power_in",at:(4,0)),
+  VSS:pin(number:"4",kind:"power_in",at:(4,4))
+},strap_tables:{
+  i2c_address:strap_table(kind:"i2c_address",inputs:{A0:{low:VSS,high:VDD}},
+    rows:[[{A0:high},"0x49"]],default:"0x48"),
+  current_limit:strap_table(kind:"current",inputs:{ILIM:{low:VSS,high:VDD,nc:"open"}},
+    rows:[[{ILIM:low},"500 mA"],[{ILIM:high},"2 A"],[{ILIM:nc},"1 A"]])
+})
+Fixed = symbol(pins:{},strap_tables:{
+  address:strap_table(kind:"i2c_address",default:"0x2C"),
+  powerup_mode:strap_table(kind:"text",default:"standby")
+})
+Resistor=symbol(part_kind:"resistor",pins:{A:pin(number:"1",kind:"passive",at:(-2,0)),B:pin(number:"2",kind:"passive",at:(2,0))})
+main=sheet()
+U1=place(sheet:main,symbol:Device,at:(0,0))
+U2=place(sheet:main,symbol:Device,at:(40,0))
+U3=place(sheet:main,symbol:Fixed,at:(80,0))
+R1=place(sheet:main,symbol:Resistor,value:"10 kΩ",at:(0,-12))
+strap=wire(sheet:main,from:U1.A0,to:R1.A)
+pull=wire(sheet:main,from:R1.B,to:U1.VDD)
+limit=wire(sheet:main,from:U1.ILIM,to:U1.VSS)
+second=wire(sheet:main,from:U2.A0,to:U2.VSS)
+prototype=variant(omit:["main/R1","main/U3"])

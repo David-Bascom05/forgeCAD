@@ -162,6 +162,23 @@ impl Editor {
             Inspector::Layers => self.layers_ui(ui, t, places),
             Inspector::Checks => {
                 sheet.section(ui, "Design rules");
+                let levels = self
+                    .rev
+                    .board
+                    .packages
+                    .drc_rules()
+                    .map(|(id, _)| (id, self.rev.board.severity(pcb::Rule::Library(id))));
+                if let Some((rule, level)) = super::super::rule_policy::menu(ui, levels) {
+                    match super::super::rule_policy::edit(&self.src, "drc_rule", rule, level, || {
+                        self.next_id("policy")
+                    }) {
+                        Ok(Some(op)) => {
+                            self.edit(vec![op]);
+                        }
+                        Err(e) => self.message = e,
+                        Ok(None) => {}
+                    }
+                }
                 if self.rev.checks.is_empty() {
                     ui.colored_label(t.success, "No findings");
                 }

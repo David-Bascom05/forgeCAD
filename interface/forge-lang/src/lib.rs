@@ -19,6 +19,8 @@ pub mod drawing;
 pub mod edit;
 pub mod edit_ops;
 mod electronics;
+pub mod electronics_library;
+pub mod standard_library;
 pub mod error;
 pub mod eval;
 pub mod expect_words;

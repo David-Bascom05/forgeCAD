@@ -156,6 +156,13 @@ pub fn board(d: &Document, c: &Circuit, variant: Option<&str>) -> Result<Json> {
                 .ok_or_else(|| Fault::new("UnknownVariant", Span::default(), v))
         })
         .transpose()?;
+    let fitted;
+    let c = if let Some(changes) = overrides {
+        fitted = Circuit::build_fitted(d, changes)?;
+        &fitted
+    } else {
+        c
+    };
     let mut parts = Vec::new();
     for (scope, sheet) in &c.occurrences {
         for r in d.rows.iter().filter(|r| &r.sheet == sheet) {
@@ -195,6 +202,8 @@ pub fn board(d: &Document, c: &Circuit, variant: Option<&str>) -> Result<Json> {
             metadata.extend(fields.clone());
             parts.push(Json::obj(vec![
                 ("fields", super::bom::field_json(&metadata)),
+                ("typed_fields", sym.typed_fields(d, &metadata)),
+                ("derived_attributes", c.strap_json(&id)),
                 (
                     "datasheet",
                     datasheet
@@ -247,9 +256,11 @@ pub fn board(d: &Document, c: &Circuit, variant: Option<&str>) -> Result<Json> {
         .collect();
     Ok(Json::obj(vec![
         ("schema", "forgecad.pcb-handoff/1".into()),
+        ("erc_ok", c.erc_ok(d).into()),
         ("diff_pairs", diff_pairs(c)),
         ("components", Json::Arr(parts)),
         ("relationships", Json::Arr(links)),
+        ("signal_paths", c.signal_paths_json(d)),
     ]))
 }
 

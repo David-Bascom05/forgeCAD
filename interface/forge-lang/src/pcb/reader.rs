@@ -8,6 +8,7 @@ use std::{collections::BTreeSet, path::Path};
 
 const SIGNATURES: &[(&str, &[&str])] = &[
     ("library", &["file"]),
+    ("drc_rule", &["rule", "severity"]),
     ("net_class", &["nets", "min_width", "min_spacing"]),
     (
         "zone",
@@ -201,7 +202,10 @@ pub fn compile(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Boa
     if !matches!(&head.kind,StmtKind::Expr(Expr{kind:ExprKind::Name(n),..}) if n=="pcb") {
         return Err(Fault::new("ExpectedHeader", head.span, "expected pcb"));
     }
+    let mut packages = crate::electronics_library::Loaded::standard();
     let mut imports = library::Imports::default();
+    let mut severities = BTreeMap::new();
+    let mut defaults = crate::electronics::RuleDefaults::default();
     let mut classes = BTreeMap::new();
     let mut layout = Layout::default();
     let mut outline = None;
@@ -239,9 +243,15 @@ pub fn compile(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Boa
         }
         let mut c = Call::with_signature(e, SIGNATURES)?;
         match c.name {
+            "drc_rule" => library::policy(&mut c, &mut severities)?,
             "library" => {
                 let file = label(c.req("file")?)?;
-                for (key, def) in imports.load(&file, dir, root, e.span)? {
+                let package = imports.load(&file, dir, root, e.span)?;
+                packages
+                    .merge(&package.packages)
+                    .map_err(|m| fault(e, "InvalidLibrary", m))?;
+                defaults.import(id, package.rules);
+                for (key, def) in package.footprints {
                     layout.footprints.insert(format!("{id}.{key}"), def);
                 }
             }
@@ -627,7 +637,11 @@ pub fn compile(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Boa
             ));
         }
     }
+    defaults.resolve(&mut severities, head.span)?;
+    library::validate_rules(&packages, &severities, head.span)?;
     let mut board = Board {
+        packages,
+        severities,
         classes,
         layout,
         outline,

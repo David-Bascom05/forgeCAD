@@ -876,7 +876,7 @@ fn shadow_families_bound_nowhere() {
         };
         if matches!(
             header.as_deref(),
-            Some("machining" | "drawing" | "schematic" | "symbol_library")
+            Some("machining" | "drawing" | "schematic" | "symbol_library" | "pcb")
         ) {
             continue;
         }

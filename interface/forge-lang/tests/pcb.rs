@@ -191,3 +191,49 @@ fn spacing_is_layer_and_net_specific_and_accounts_for_via_lands() {
             .any(|f| matches!(f.witness, Witness::Spacing { layer: "bottom", .. }))
     );
 }
+
+#[test]
+fn nested_rule_libraries_apply_severity_to_actual_drc_findings() {
+    let dir = std::env::temp_dir().join(format!("fg-board-rule-packs-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let write = |name: &str, src: &str| std::fs::write(dir.join(name), src).unwrap();
+    write(
+        "review.fg",
+        "footprint_library\nw=drc_rule(rule:\"MinTrackWidth\",severity:\"info\")",
+    );
+    write("house.fg", "footprint_library\nr=library(file:\"review.fg\")");
+    write(
+        "production.fg",
+        "footprint_library\nw=drc_rule(rule:\"MinTrackWidth\",severity:\"error\")",
+    );
+    for file in ["controller.fg", "power-symbols.fg"] {
+        std::fs::copy(self::dir().join(file), dir.join(file)).unwrap();
+    }
+    let src = format!(
+        "{}\nhouse=library(file:\"house.fg\")",
+        changed("trace_width = 0.25mm", "trace_width = 0.19mm")
+    );
+    let compile = |s: &str| pcb::compile(s, Some(&dir), Some(&dir));
+    let b = compile(&src).unwrap();
+    let report = pcb::response(&b, &["drc".into()]).unwrap();
+    assert_eq!(report.get("ok").unwrap().to_string(), "true");
+    assert!(report.to_string().contains("\"severity\":\"info\""));
+    let conflict = format!("{src}\nproduction=library(file:\"production.fg\")");
+    assert_eq!(compile(&conflict).unwrap_err().kind, "ConflictingRuleDefaults");
+    let b = compile(&format!(
+        "{conflict}\nw=drc_rule(rule:\"MinTrackWidth\",severity:\"error\")"
+    ))
+    .unwrap();
+    let report = pcb::response(&b, &["drc".into()]).unwrap();
+    assert_eq!(report.get("ok").unwrap().to_string(), "false");
+    assert_eq!(
+        compile(&src.replace(
+            "house=library(file:\"house.fg\")",
+            "w=drc_rule(rule:\"Bogus\",severity:\"info\")"
+        ))
+        .unwrap_err()
+        .kind,
+        "UnknownDrcRule"
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}

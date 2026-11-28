@@ -1,8 +1,11 @@
 //! Native schematic and symbol documents. Source owns drawing geometry and functional
 //! intent; each elaborated sheet occurrence owns a separate graph of electrical terminals.
 mod author;
+#[path = "../standard_library/erc/connection.rs"]
 mod connection;
+#[path = "../standard_library/erc/pull.rs"]
 mod pull;
+#[path = "../standard_library/erc/wire_readability.rs"]
 mod wire_readability;
 pub use connection::{ConnectionCheck, ConnectionWant, PartType, PartValue};
 mod block;
@@ -13,17 +16,27 @@ pub use project::{
     SearchHit, board, electrical_diff, pair_suggestions, project_annotation, reannotate, search,
 };
 mod graph;
+pub(crate) use graph::standard;
 mod move_cache;
 mod reader;
 mod report;
 use crate::syntax::Span;
+mod attribute_units;
+mod conversions;
+pub use conversions::{ConversionGraph, ConversionTable};
 mod inspection;
+#[path = "../standard_library/erc/signal.rs"]
+mod signal;
+mod strap;
+pub use attribute_units::{AttributeUnit, Radix, validate_units};
 pub use drawing::{
     graphic_page, pin_inspection_page, sheet_page, sheet_pdf, sheet_selection_page, symbol_page,
 };
-pub use graph::Circuit;
+pub use graph::{Circuit, Issue};
 pub use inspection::{Direction, Evidence, PinInspection, inspect_pin, wire_directions};
+pub use strap::{StrapCondition, StrapInputState, StrapResult, StrapTable};
 mod bom;
+pub mod characteristics;
 pub mod datasheet;
 pub use crate::electronics::{Fault, Result, parameter_dimension};
 pub use bom::{BomLine, PartSpec, bom, bom_csv, bom_for};
@@ -33,6 +46,43 @@ use std::collections::{BTreeMap as Map, BTreeSet as Set};
 use std::path::Path;
 
 pub const NEW_SCHEMATIC: &str = "schematic\nframes = library(file: \"forge:frames\")\nmain = sheet(title: \"Main sheet\", template: frames.A4)\n";
+#[derive(Debug, Clone)]
+pub struct AttributeType {
+    pub origin: Option<&'static str>,
+    pub conversions: ConversionGraph,
+    pub units: Vec<AttributeUnit>,
+    pub label: String,
+    pub kind: StrapKind,
+    pub modes: Vec<String>,
+    pub range: Option<[String; 2]>,
+}
+impl AttributeType {
+    pub fn value(&self, text: &str) -> Option<forge_agent::json::Json> {
+        if !self.modes.is_empty() && !self.modes.iter().any(|m| m == text) {
+            return None;
+        }
+        let parse = |s: &str| {
+            self.conversions.typed(
+                self.kind,
+                s,
+                &self.units,
+                self.units.first().map(|u| u.name.as_str()),
+            )
+        };
+        let value = parse(text)?;
+        if let Some([lo, hi]) = &self.range {
+            let n = value.get("value")?.num()?;
+            if n < parse(lo)?.get("value")?.num()? || n > parse(hi)?.get("value")?.num()? {
+                return None;
+            }
+        }
+        Some(value)
+    }
+}
+pub fn standard_attribute_types() -> &'static Map<String, AttributeType> {
+    static TYPES: std::sync::OnceLock<Map<String, AttributeType>> = std::sync::OnceLock::new();
+    TYPES.get_or_init(crate::standard_library::types)
+}
 pub const POWER_LIBRARY: &str = include_str!("power.fg");
 pub fn power_symbols() -> &'static std::collections::BTreeMap<String, String> {
     static NAMES: std::sync::OnceLock<std::collections::BTreeMap<String, String>> =
@@ -63,31 +113,36 @@ pub const PART_KINDS: &[&str] = &[
     "crystal",
     "ic",
 ];
-pub const ERC_RULES: &[&str] = &[
-    "DriverConflict",
-    "PullMismatch",
-    "DiffPairShort",
-    "DiffPairConflict",
-    "WireNearPin",
-    "WireOverlap",
-    "PinConnectionMismatch",
-    "VoltageOutOfRange",
-    "ConnectedNoConnect",
-    "ReturnMismatch",
-    "DisconnectedFulfillment",
-    "NetLabelConflict",
-    "UnknownSupplyVoltage",
-    "UnconnectedPin",
-    "UnfulfilledWant",
-    "UnplacedGate",
-    "TextGeometryOverlap",
-    "TextBoundsOverlap",
-    "PeripheralConflict",
-    "BusMemberShort",
-];
+pub static ERC_RULES: std::sync::LazyLock<Vec<&'static str>> = std::sync::LazyLock::new(|| {
+    crate::electronics_library::Loaded::standard()
+        .erc_rules()
+        .map(|(id, _)| id)
+        .collect()
+});
 
+/// Built-in text properties available in the field visibility editor.
+pub const DISPLAY_FIELDS: &[&str] = &[
+    "reference",
+    "value",
+    "symbol",
+    "footprint",
+    "datasheet",
+    "part_kind",
+    "ref_prefix",
+    "unit",
+    "power_net",
+    "populated",
+    "in_bom",
+];
+pub fn default_field_visibility(key: &str) -> bool {
+    matches!(key, "reference" | "value") || key.starts_with("derived.")
+}
 pub const HEADERS: &[&str] = &["schematic", "symbol_library"];
 pub const ARGS: &[(&str, &[&str])] = &[
+    (
+        "attribute_type",
+        &["label", "kind", "modes", "range", "units", "conversions"],
+    ),
     (
         "role",
         &[
@@ -111,11 +166,15 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "graphics",
             "datasheet",
             "fields",
+            "field_types",
+            "visibility",
             "power_net",
             "ref_prefix",
             "peripherals",
+            "strap_tables",
             "part_kind",
             "paths",
+            "specs",
         ],
     ),
     (
@@ -132,6 +191,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "aliases",
             "functions",
             "pads",
+            "specs",
         ],
     ),
     ("line", &["from", "to", "unit", "sheet", "width"]),
@@ -146,7 +206,13 @@ pub const ARGS: &[(&str, &[&str])] = &[
     ("waiver", &["rule", "objects", "reason"]),
     ("annotation", &["occurrence", "reference", "locked"]),
     ("variant", &["omit", "fit"]),
-    ("function", &["kind", "wants", "gives"]),
+    (
+        "strap_table",
+        &[
+            "kind", "inputs", "rows", "default", "bus", "range", "modes", "label", "unit",
+        ],
+    ),
+    ("function", &["kind", "wants", "gives", "specs"]),
     (
         "place",
         &[
@@ -156,6 +222,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "value",
             "footprint",
             "fields",
+            "visibility",
             "datasheet",
             "populated",
             "in_bom",
@@ -163,6 +230,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "value_offset",
             "reference",
             "bindings",
+            "spec_limits",
             "functions",
             "wants",
             "gives",
@@ -212,6 +280,7 @@ macro_rules! vocabulary {
         }
     };
 }
+vocabulary!(StrapKind { Text=>"text", Address7=>"i2c_address", Current=>"current", BootMode=>"boot_mode", Choice=>"choice", Quantity=>"quantity",Integer=>"integer",Lookup=>"lookup" });
 vocabulary!(RoleKind { Power=>"power", Return=>"return", Bypass=>"bypass", Signal=>"signal",
     Clock=>"clock", Bias=>"bias", Termination=>"termination", Feedback=>"feedback",
     Protection=>"protection", Reference=>"reference", Interface=>"interface", PullUp=>"pull_up", PullDown=>"pull_down" });
@@ -238,6 +307,21 @@ pub struct VoltageRange {
     pub min: f64,
     pub max: f64,
 }
+impl Role {
+    pub fn provided_voltage(&self) -> Option<VoltageRange> {
+        if self.kind != RoleKind::Power {
+            return None;
+        }
+        match self.rating {
+            Some(Rating::VoltageRange(v)) => Some(v),
+            Some(Rating::VoltageMv(mv)) => Some(VoltageRange {
+                min: mv / 1000.,
+                max: mv / 1000.,
+            }),
+            _ => None,
+        }
+    }
+}
 impl VoltageRange {
     pub fn accepts(self, offered: Self) -> bool {
         self.min <= offered.min && offered.max <= self.max
@@ -263,12 +347,14 @@ pub struct Role {
 
 #[derive(Clone, Debug)]
 pub struct PinFunction {
+    pub specs: Vec<characteristics::Specification>,
     pub electrical: Electrical,
     pub wants: Set<RoleId>,
     pub gives: Set<RoleId>,
 }
 #[derive(Clone, Debug)]
 pub struct Pin {
+    pub specs: Vec<characteristics::Specification>,
     pub functions: Map<String, PinFunction>,
     pub pads: Vec<String>,
     pub aliases: Set<String>,
@@ -297,6 +383,10 @@ pub enum Shape {
 }
 #[derive(Clone, Debug)]
 pub struct Symbol {
+    pub specs: Vec<characteristics::Specification>,
+    pub field_types: Map<String, String>,
+    pub visibility: Map<String, bool>,
+    pub strap_tables: Map<String, StrapTable>,
     pub part_kind: Option<String>,
     pub paths: Map<String, [String; 2]>,
     pub ref_prefix: String,
@@ -307,9 +397,31 @@ pub struct Symbol {
     pub pins: Map<String, Pin>,
     pub graphics: Vec<Graphic>,
 }
+impl Symbol {
+    /// Default printed/BOM value for a single nominal passive. An explicit placement value wins.
+    pub fn nominal_value(&self) -> Option<String> {
+        let kind = match self.part_kind.as_deref()? {
+            "resistor" => "resistance",
+            "capacitor" => "capacitance",
+            _ => return None,
+        };
+        let mut rows = self.specs.iter().filter(|s| {
+            s.class == "characteristic"
+                && s.value.kind == kind
+                && s.value.pins.is_empty()
+                && s.conditions.is_empty()
+        });
+        let v = &rows.next()?.value;
+        if rows.next().is_some() {
+            return None;
+        }
+        Some(format!("{} {}", v.typ?, v.unit))
+    }
+}
 #[derive(Clone, Debug)]
 pub enum Item {
     Place {
+        spec_limits: Vec<characteristics::Specification>,
         reference: Option<String>,
         bindings: Map<String, String>,
         functions: Map<String, String>,
@@ -320,6 +432,7 @@ pub enum Item {
         value: String,
         footprint: Option<String>,
         fields: Map<String, String>,
+        visibility: Map<String, bool>,
         datasheet: Option<String>,
         populated: bool,
         in_bom: bool,
@@ -398,6 +511,9 @@ pub struct Annotation {
 }
 #[derive(Default, Debug)]
 pub struct Document {
+    pub(crate) implicit_std: bool,
+    pub packages: crate::electronics_library::Loaded,
+    pub attribute_types: Map<String, AttributeType>,
     pub(super) imports: Vec<(std::path::PathBuf, std::path::PathBuf)>,
     /// Qualified import namespace and owning file. Bundled libraries have no disk path.
     pub libraries: Map<String, Option<std::path::PathBuf>>,
@@ -561,5 +677,71 @@ impl Document {
     }
     pub fn library_paths(&self) -> impl Iterator<Item = &Path> {
         self.imports.iter().map(|(_, path)| path.as_path())
+    }
+}
+
+pub(crate) fn intent(
+    doc: &Document,
+    c: &mut Circuit,
+    sheets: &crate::electronics_library::Sheets,
+    _: &Map<String, bool>,
+) {
+    c.check_connections(doc, sheets);
+    c.check_pulls(doc, sheets);
+}
+pub(crate) fn attributes(
+    doc: &Document,
+    c: &mut Circuit,
+    sheets: &crate::electronics_library::Sheets,
+    fit: &Map<String, bool>,
+) {
+    c.resolve_straps(doc, sheets, fit);
+}
+pub(crate) fn signals(
+    doc: &Document,
+    c: &mut Circuit,
+    _: &crate::electronics_library::Sheets,
+    _: &Map<String, bool>,
+) {
+    c.check_signals(doc);
+}
+pub(crate) fn drawings(
+    doc: &Document,
+    c: &mut Circuit,
+    sheets: &crate::electronics_library::Sheets,
+    _: &Map<String, bool>,
+) {
+    for (scope, sheet) in &c.occurrences {
+        c.issues.extend(wire_readability::findings(c, scope, None));
+        c.issues.extend(drawing::readability(
+            doc,
+            c,
+            scope,
+            sheets.get(sheet.as_str()).map(Vec::as_slice).unwrap_or_default(),
+        ));
+    }
+}
+
+impl Symbol {
+    pub fn typed_fields(&self, d: &Document, fields: &Map<String, String>) -> forge_agent::json::Json {
+        use forge_agent::json::Json;
+        Json::Obj(
+            self.field_types
+                .iter()
+                .filter_map(|(key, ty)| {
+                    Some((
+                        key.clone(),
+                        Json::obj(vec![
+                            ("type", ty.clone().into()),
+                            (
+                                "type_id",
+                                d.attribute_types.get(ty)?.origin.unwrap_or(ty.as_str()).into(),
+                            ),
+                            ("value", d.attribute_types.get(ty)?.value(fields.get(key)?)?),
+                        ]),
+                    ))
+                })
+                .collect(),
+        )
     }
 }

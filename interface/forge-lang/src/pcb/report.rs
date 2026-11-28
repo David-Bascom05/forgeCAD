@@ -13,6 +13,12 @@ fn path(points: &[Point]) -> Json {
 }
 
 impl Board {
+    pub fn severity(&self, rule: Rule) -> &str {
+        self.severities.get(rule.name()).map_or_else(
+            || self.packages.drc.get(rule.name()).map_or("error", |s| s.word()),
+            String::as_str,
+        )
+    }
     fn finishes(&self) -> Json {
         Json::Arr(
             self.layout
@@ -103,17 +109,28 @@ impl Board {
 }
 
 impl Check<'_> {
-    pub(super) fn json(&self) -> Json {
+    pub(super) fn json(&self, board: &Board) -> Json {
         let findings = self
             .findings
             .iter()
             .map(|f| {
                 let mut fields = vec![
                     ("rule", f.rule.name().into()),
+                    ("severity", board.severity(f.rule).into()),
                     ("object", f.object.into()),
                     ("span", crate::error::span_json(f.span)),
                 ];
                 match f.witness {
+                    Witness::Library {
+                        ref message,
+                        ref objects,
+                    } => fields.extend([
+                        ("message", message.clone().into()),
+                        (
+                            "objects",
+                            Json::Arr(objects.iter().cloned().map(Into::into).collect()),
+                        ),
+                    ]),
                     Witness::Pair { other, layer } => {
                         fields.extend([("other", other.into()), ("layer", layer.into())])
                     }
@@ -200,39 +217,50 @@ pub(super) fn airwires(board: &Board) -> Vec<(&str, &str, &str, i64)> {
             })
             .filter(|g| !g.is_empty())
             .collect();
-        if pads.is_empty() {
-            continue;
-        }
-        let mut visited = vec![false; pads.len()];
-        let mut best = vec![None; pads.len()];
-        let mut current = 0;
-        for _ in 1..pads.len() {
-            visited[current] = true;
-            for (j, group) in pads.iter().enumerate().filter(|(j, _)| !visited[*j]) {
-                for &a in &pads[current] {
-                    for &b in group {
-                        let pa = board.layout.pads[a].at;
-                        let pb = board.layout.pads[b].at;
-                        let dist = (pa[0] - pb[0]).pow(2) + (pa[1] - pb[1]).pow(2);
-                        let candidate = (dist, a, b);
-                        if best[j].is_none_or(|old| candidate < old) {
-                            best[j] = Some(candidate);
-                        }
+        wires.extend(
+            pad_tree(board, &pads, |a, b| (a[0] - b[0]).pow(2) + (a[1] - b[1]).pow(2))
+                .into_iter()
+                .map(|(a, b, d)| (net, a, b, d)),
+        );
+    }
+    wires
+}
+pub(super) fn pad_tree<'a>(
+    board: &Board,
+    pads: &[Vec<&'a str>],
+    metric: impl Fn(Point, Point) -> i64,
+) -> Vec<(&'a str, &'a str, i64)> {
+    let mut edges = Vec::new();
+
+    let mut visited = vec![false; pads.len()];
+    let mut best = vec![None; pads.len()];
+    let mut current = 0;
+    for _ in 1..pads.len() {
+        visited[current] = true;
+        for (j, group) in pads.iter().enumerate().filter(|(j, _)| !visited[*j]) {
+            for &a in &pads[current] {
+                for &b in group {
+                    let pa = board.layout.pads[a].at;
+                    let pb = board.layout.pads[b].at;
+                    let dist = metric(pa, pb);
+                    let candidate = (dist, a, b);
+                    if best[j].is_none_or(|old| candidate < old) {
+                        best[j] = Some(candidate);
                     }
                 }
             }
-            let (j, (dist, a, b)) = best
-                .iter()
-                .enumerate()
-                .filter(|(j, _)| !visited[*j])
-                .filter_map(|(j, v)| Some((j, (*v)?)))
-                .min_by_key(|(_, v)| *v)
-                .unwrap();
-            wires.push((net, a, b, dist));
-            current = j;
         }
+        let (j, (dist, a, b)) = best
+            .iter()
+            .enumerate()
+            .filter(|(j, _)| !visited[*j])
+            .filter_map(|(j, v)| Some((j, (*v)?)))
+            .min_by_key(|(_, v)| *v)
+            .unwrap();
+        edges.push((a, b, dist));
+        current = j;
     }
-    wires
+    edges
 }
 fn ratsnest(board: &Board) -> Json {
     Json::Arr(
@@ -254,6 +282,7 @@ fn ratsnest(board: &Board) -> Json {
 pub fn response(board: &Board, words: &[String]) -> Result<Json> {
     let mut ok = true;
     let result = match words.first().map(String::as_str).unwrap_or("summary") {
+        "libraries" => board.packages.json(),
         "summary" | "stat" if words.len() <= 1 => Json::obj(vec![
             (
                 "classes",
@@ -513,14 +542,14 @@ pub fn response(board: &Board, words: &[String]) -> Result<Json> {
         "routing" if words.len() == 1 => board.routing(),
         "check" | "drc" if words.len() == 1 => {
             let report = board.check();
-            ok = report.findings.is_empty();
-            report.json()
+            ok = !report.findings.iter().any(|f| board.severity(f.rule) == "error");
+            report.json(board)
         }
         _ => {
             return Err(Fault::new(
                 "UnknownBoardQuery",
                 Span::default(),
-                "choose summary, stackup, finishes, layers, routing, placements, pads, ratsnest, artwork, connectivity, handoff [variant] or drc",
+                "choose summary, stackup, finishes, layers, routing, placements, pads, ratsnest, artwork, connectivity, handoff [variant], floorplan or drc",
             ));
         }
     };

@@ -1,0 +1,32 @@
+symbol_library
+# Illustrative two-bit address decoder and independently strapped boot selector.
+firmware = library(file:"attribute-types.fg")
+frequency = attribute_type(label:"Frequency",kind:"quantity",units:[
+ {name:"Hz",factor:1,min:0,max:10000000},
+ {name:"kHz",factor:1000,min:0,max:10000},
+ {name:"MHz",factor:1000000,min:0,max:10}])
+Device = symbol(ref_prefix:"U",fields:{Manufacturer:"Example"},pins:{
+ A0:pin(number:"1",kind:"input",at:(-15,5)),
+ A1:pin(number:"2",kind:"input",at:(-15,0)),
+ BOOT:pin(number:"3",kind:"input",at:(-15,-5)),
+ SDA:pin(number:"4",kind:"bidirectional",at:(15,5)),
+ SCL:pin(number:"5",kind:"input",at:(15,0)),
+ VDD:pin(number:"6",kind:"power_in",at:(5,12)),
+ VSS:pin(number:"7",kind:"power_in",at:(5,-12))
+},graphics:[rect(from:(-9,-8),to:(9,8)),line(from:(-15,5),to:(-9,5)),
+ line(from:(-15,0),to:(-9,0)),line(from:(-15,-5),to:(-9,-5)),
+ line(from:(9,5),to:(15,5)),line(from:(9,0),to:(15,0)),
+ line(from:(5,8),to:(5,12)),line(from:(5,-8),to:(5,-12))],
+strap_tables:{
+ address:strap_table(kind:"i2c_address",bus:[SDA,SCL],inputs:{A1:{low:VSS,high:VDD},A0:{low:VSS,high:VDD}},
+   rows:[[{A1:low,A0:low},"0x48"],[{A1:low,A0:high},"0x49"],
+         [{A1:high,A0:low},"0x4A"],[{A1:high,A0:high},"0x4B"]],default:"0x48"),
+ startup_source:strap_table(kind:firmware.startup_source,inputs:{BOOT:{high:VDD,low:VSS,floating:"floating",service:[1.7,1.9]}},
+   rows:[[{BOOT:high},"Application flash"],[{BOOT:low},"Factory ROM"],
+         [{BOOT:floating},"Recovery image"],[{BOOT:service},"External flash"]],default:"Application flash"),
+ boot:strap_table(kind:"boot_mode",inputs:{BOOT:{low:VSS,high:VDD}},
+   rows:[[{BOOT:low},"Flash"],[{BOOT:high},"ROM bootloader"]],default:"Flash",modes:["Flash","ROM bootloader"]),
+ switching_frequency:strap_table(label:"Switching frequency",kind:frequency,unit:"kHz",inputs:{BOOT:{low:VSS,high:VDD}},
+   rows:[[{BOOT:low},"400 kHz"],[{BOOT:high},"800 kHz"]],default:"400 kHz"),
+ current_limit:strap_table(kind:"current",default:"500 mA",range:["100 mA","2 A"])
+})

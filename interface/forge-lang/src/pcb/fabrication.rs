@@ -333,7 +333,20 @@ impl Board {
         }
         let lines = grouped
             .into_iter()
-            .map(|(part, references)| crate::schematic::BomLine { part, references })
+            .map(|(part, references)| crate::schematic::BomLine {
+                typed_fields: self
+                    .schematic
+                    .as_ref()
+                    .and_then(|s| {
+                        s.document
+                            .symbols
+                            .get(&part.symbol)
+                            .map(|sym| sym.typed_fields(&s.document, &part.fields))
+                    })
+                    .unwrap_or_else(|| forge_agent::json::Json::Obj(vec![])),
+                part,
+                references,
+            })
             .collect::<Vec<_>>();
         files.insert("bom.csv".into(), crate::schematic::bom_csv(&lines));
         let mut positions = String::from("Reference,Footprint,Side,X_mm,Y_mm,Rotation_deg,Occurrence\n");
@@ -360,7 +373,7 @@ impl Board {
             "review.json".into(),
             Json::obj(vec![
                 ("schema", "forgecad.pcb-fabrication/1".into()),
-                ("drc", self.check().json()),
+                ("drc", self.check().json(self)),
                 (
                     "unplaced",
                     Json::Arr(unplaced.into_iter().map(Into::into).collect()),

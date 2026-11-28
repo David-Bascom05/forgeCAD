@@ -2,6 +2,12 @@
 
 Rev B uses one synchronous buck to convert a nominal 48 V input to a common 12 V fan rail. Each of the six 4-pin outputs has its own hardware current limit, short-circuit protection, current reading and fault indication. The design target is 2 A per fan at the same time, or 144 W total. Open [the board](fan-controller.fg) in PCB Layout or [the schematic](controller.fg) in the schematic editor. The local symbol and footprint libraries travel with the project.
 
+The [compact 6 A placement study](compact-study.md) keeps local pin circuits together while comparing fan-port arrangements, converter layouts and outlines. It includes a pad-level before-and-after of the oscillator and STM32. Open [its selected board](compact-six-amp.fg) in PCB Layout.
+
+Two routing trials use that same 116 × 76 mm placement. The [fully connected board](compact-six-amp-pin-escape.fg) has two 0.40 mm-long, 0.20 mm-wide tracks at LM5069 pins VIN and OUT. DRC flags both against the input-power class's 0.80 mm minimum. The [width-compliant trial](compact-six-amp-routed.fg) leaves those two pins open. On both boards, the oscillator reaches the STM32 on a 2.06 mm top-layer trace with zero vias.
+
+The [earlier 6 A placement study](six-amp-study.md) uses a cascaded 12 V, 5 V and 3.3 V power tree and compares six floorplans on the same outline.
+
 ## Power path
 
 | Stage | Implementation |

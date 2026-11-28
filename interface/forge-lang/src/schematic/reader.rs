@@ -4,6 +4,17 @@ use crate::syntax::{self, Expr, ExprKind as E, StmtKind as S};
 use crate::values::Dim;
 use std::path::PathBuf;
 
+fn add_package_paths(doc: &mut Document, prefix: &str, library: &crate::electronics_library::Library) {
+    for child in library.children {
+        let path = if prefix.is_empty() {
+            child.name.to_string()
+        } else {
+            format!("{prefix}.{}", child.name)
+        };
+        doc.libraries.insert(path.clone(), None);
+        add_package_paths(doc, &path, child);
+    }
+}
 impl<'a> Call<'a> {
     fn new(expr: &'a Expr) -> Result<Self> {
         Self::with_signature(expr, ARGS)
@@ -191,6 +202,34 @@ fn graphic_shape(c: &mut Call<'_>, p: &Params, span: Span) -> Result<Shape> {
         _ => return Err(Fault::new("UnknownGraphic", span, c.name)),
     })
 }
+fn pin_aliases(pins: &Map<String, Pin>) -> Map<String, String> {
+    pins.iter()
+        .flat_map(|(id, pin)| {
+            std::iter::once(id)
+                .chain(&pin.aliases)
+                .map(move |key| (key.clone(), id.clone()))
+        })
+        .collect()
+}
+fn resolve_spec(
+    spec: &mut characteristics::Specification,
+    aliases: &Map<String, String>,
+    e: &Expr,
+) -> Result<()> {
+    for reading in std::iter::once(&mut spec.value).chain(&mut spec.conditions) {
+        let mut seen = Set::new();
+        for pin in &mut reading.pins {
+            *pin = aliases
+                .get(pin)
+                .ok_or_else(|| fault(e, "UnknownSpecificationPin", &*pin))?
+                .clone();
+            if !seen.insert(pin.clone()) {
+                return Err(fault(e, "DuplicateSpecificationPin", &*pin));
+            }
+        }
+    }
+    Ok(())
+}
 fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
     let e = call.req("pins")?;
     let E::Map(entries) = &e.kind else {
@@ -239,6 +278,7 @@ fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
                         fault(kind, "UnknownElectricalKind", "unknown function electrical kind")
                     })?;
                     let mode = PinFunction {
+                        specs: characteristics::parse(alt.take("specs"), p)?,
                         electrical,
                         wants: roles(alt.take("wants"), doc, false)?,
                         gives: roles(alt.take("gives"), doc, true)?,
@@ -270,6 +310,7 @@ fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
             vec![n.clone()]
         };
         let pin = Pin {
+            specs: characteristics::parse(c.take("specs"), p)?,
             functions,
             pads,
             aliases,
@@ -405,7 +446,39 @@ fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
         })
         .transpose()?
         .unwrap_or_default();
+    let strap_tables = strap::read_tables(call.take("strap_tables"), &pins, p, doc)?;
+    let field_types = call
+        .take("field_types")
+        .map(|e| {
+            map(e, |ty| {
+                let id = reference(ty)?;
+                doc.attribute_types
+                    .contains_key(&id)
+                    .then_some(id.clone())
+                    .ok_or_else(|| fault(ty, "UnknownPropertyType", id))
+            })
+        })
+        .transpose()?
+        .unwrap_or_default();
+    let fields = property_fields(call, &field_types, doc)?;
+    let mut specs = characteristics::parse(call.take("specs"), p)?;
+    let aliases = pin_aliases(&pins);
+    for spec in &mut specs {
+        resolve_spec(spec, &aliases, e)?;
+    }
+    for pin in pins.values_mut() {
+        for spec in pin
+            .specs
+            .iter_mut()
+            .chain(pin.functions.values_mut().flat_map(|f| &mut f.specs))
+        {
+            resolve_spec(spec, &aliases, e)?;
+        }
+    }
     Ok(Symbol {
+        specs,
+        field_types,
+        strap_tables,
         paths,
         part_kind,
         peripherals,
@@ -413,7 +486,8 @@ fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
         power_net,
         pins,
         graphics,
-        fields: fields(call)?,
+        visibility: visibility(call)?,
+        fields,
         datasheet: call
             .take("datasheet")
             .map(string)
@@ -421,7 +495,7 @@ fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
             .filter(|s| !s.is_empty()),
     })
 }
-fn map<T>(e: &Expr, mut f: impl FnMut(&Expr) -> Result<T>) -> Result<Map<String, T>> {
+pub(super) fn map<T>(e: &Expr, mut f: impl FnMut(&Expr) -> Result<T>) -> Result<Map<String, T>> {
     let E::Map(entries) = &e.kind else {
         return Err(fault(e, "ExpectedMap", "expected named members"));
     };
@@ -433,11 +507,55 @@ fn map<T>(e: &Expr, mut f: impl FnMut(&Expr) -> Result<T>) -> Result<Map<String,
     }
     Ok(out)
 }
-fn fields(c: &mut Call<'_>) -> Result<Map<String, String>> {
-    Ok(c.take("fields")
-        .map(|v| map(v, string))
-        .transpose()?
-        .unwrap_or_default())
+fn visibility(c: &mut Call<'_>) -> Result<Map<String, bool>> {
+    let mut out = Map::new();
+    if let Some(e) = c.take("visibility") {
+        let E::Map(entries) = &e.kind else {
+            return Err(fault(e, "ExpectedMap", "expected field visibility flags"));
+        };
+        let mut seen = Set::new();
+        for (key, v) in entries {
+            if !seen.insert(key) {
+                return Err(fault(v, "DuplicateMember", key));
+            }
+            if matches!(key.as_str(), "custom" | "derived") {
+                for (name, on) in map(v, boolean)? {
+                    if out.insert(format!("{key}.{name}"), on).is_some() {
+                        return Err(fault(v, "DuplicateMember", name));
+                    }
+                }
+            } else if DISPLAY_FIELDS.contains(&key.as_str()) {
+                out.insert(key.clone(), boolean(v)?);
+            } else {
+                return Err(fault(v, "UnknownDisplayField", key));
+            }
+        }
+    }
+    Ok(out)
+}
+fn property_fields(
+    c: &mut Call<'_>,
+    types: &Map<String, String>,
+    doc: &Document,
+) -> Result<Map<String, String>> {
+    let Some(e) = c.take("fields") else {
+        return Ok(Map::new());
+    };
+    let fields = map(e, string)?;
+    if let E::Map(entries) = &e.kind {
+        for (key, arg) in entries {
+            if let Some(ty) = types.get(key)
+                && doc.attribute_types[ty].value(&fields[key]).is_none()
+            {
+                return Err(fault(
+                    arg,
+                    "InvalidPropertyValue",
+                    format!("{key} expects {ty}, received {}", fields[key]),
+                ));
+            }
+        }
+    }
+    Ok(fields)
 }
 fn field_offset(expr: Option<&Expr>, p: &Params) -> Result<Option<Point>> {
     expr.filter(|e| !matches!(&e.kind,E::Name(n) if n=="auto"))
@@ -502,7 +620,15 @@ fn item(c: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Item> {
             {
                 return Err(fault(e, "InvalidReference", "use a reference such as U2"));
             }
+            let mut spec_limits = characteristics::parse(c.take("spec_limits"), p)?;
+            if !spec_limits.is_empty() {
+                let aliases = pin_aliases(&def.pins);
+                for spec in &mut spec_limits {
+                    resolve_spec(spec, &aliases, e)?;
+                }
+            }
             Item::Place {
+                spec_limits,
                 bindings: c
                     .take("bindings")
                     .map(|e| map(e, reference_name))
@@ -518,7 +644,11 @@ fn item(c: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Item> {
                     .map(string)
                     .transpose()?
                     .unwrap_or_else(|| "A".into()),
-                value: c.take("value").map(string).transpose()?.unwrap_or_default(),
+                value: c
+                    .take("value")
+                    .map(string)
+                    .transpose()?
+                    .unwrap_or_else(|| def.nominal_value().unwrap_or_default()),
                 footprint: c
                     .take("footprint")
                     .map(string)
@@ -526,7 +656,8 @@ fn item(c: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Item> {
                     .filter(|s| !s.is_empty()),
                 ref_offset: field_offset(c.take("ref_offset"), p)?,
                 value_offset: field_offset(c.take("value_offset"), p)?,
-                fields: fields(c)?,
+                visibility: visibility(c)?,
+                fields: property_fields(c, &def.field_types, doc)?,
                 datasheet: c
                     .take("datasheet")
                     .map(string)
@@ -690,11 +821,32 @@ fn read_nested(
             ));
         }
     };
+    // An existing document may already use "std" as a local name or an explicit import.
+    let implicit_std = !body
+        .iter()
+        .any(|s| matches!(&s.kind,S::Assign{name,..}|S::Shared{name,..} if name=="std"));
     let mut doc = Document {
+        packages: crate::electronics_library::Loaded::standard(),
         library,
+        implicit_std,
         ..Default::default()
     };
+    if implicit_std {
+        static TYPES: std::sync::OnceLock<Map<String, AttributeType>> = std::sync::OnceLock::new();
+        doc.attribute_types = TYPES
+            .get_or_init(|| {
+                crate::standard_library::STANDARD
+                    .exported_types()
+                    .into_iter()
+                    .map(|(k, v)| (format!("std.{k}"), v))
+                    .collect()
+            })
+            .clone();
+        doc.libraries.insert("std".into(), None);
+        add_package_paths(&mut doc, "std", &crate::standard_library::STANDARD);
+    }
     let mut names = Set::new();
+    let mut defaults = RuleDefaults::default();
     let mut params = Map::new();
     for stmt in body {
         let (name, e) = match &stmt.kind {
@@ -827,6 +979,10 @@ fn read_nested(
                     e,
                 )?;
             }
+            "attribute_type" => {
+                let t = strap::read_type(&mut c)?;
+                doc.attribute_types.insert(name.clone(), t);
+            }
             "symbol" => {
                 let s = symbol(&mut c, &params, &doc)?;
                 doc.symbols.insert(name.clone(), s);
@@ -839,12 +995,27 @@ fn read_nested(
                     "forge:frames" => Some(include_str!("frames.fg")),
                     _ => None,
                 };
-                let library = if let Some(text) = bundled {
+                let package = if file == "forge:attribute-types" {
+                    Some(&crate::standard_library::PROPERTIES)
+                } else {
+                    crate::electronics_library::resolve_import(&file)
+                        .map_err(|m| fault(e, "RustLibraryUnavailable", m))?
+                };
+                let library = if let Some(lib) = package {
+                    let mut d = Document {
+                        library: true,
+                        attribute_types: lib.exported_types(),
+                        ..Default::default()
+                    };
+                    add_package_paths(&mut d, "", lib);
+                    d.packages.add(lib).map_err(|m| fault(e, "InvalidLibrary", m))?;
+                    d
+                } else if let Some(text) = bundled {
                     read_nested(text, None, None, state)?
                 } else {
                     load_library(&file, dir, root, e, &mut doc.imports, state)?
                 };
-                let owner = if bundled.is_some() {
+                let owner = if bundled.is_some() || package.is_some() {
                     None
                 } else {
                     doc.imports.last().map(|(_, p)| p.clone())
@@ -863,11 +1034,20 @@ fn read_nested(
                     }
                     None
                 });
+                let shared_std = doc.implicit_std && library.implicit_std;
+                let qualified = |id: &str| {
+                    if shared_std && id.starts_with("std.") {
+                        id.to_string()
+                    } else {
+                        format!("{name}.{id}")
+                    }
+                };
                 doc.libraries.insert(name.clone(), owner);
                 doc.libraries.extend(
                     library
                         .libraries
                         .into_iter()
+                        .filter(|(child, _)| !shared_std || (child != "std" && !child.starts_with("std.")))
                         .map(|(child, path)| (format!("{name}.{child}"), path)),
                 );
                 doc.imports.extend(library.imports);
@@ -887,7 +1067,25 @@ fn read_nested(
                     }
                     register_role(&mut doc, format!("{name}.{alias}"), qualify(id), ty, e)?;
                 }
+                doc.packages
+                    .merge(&library.packages)
+                    .map_err(|m| fault(e, "InvalidLibrary", m))?;
+                defaults.import(name, library.severities);
+                for (id, t) in library.attribute_types {
+                    if !(shared_std && id.starts_with("std.")) {
+                        doc.attribute_types.insert(qualified(&id), t);
+                    }
+                }
                 for (id, mut sym) in library.symbols {
+                    for ty in sym.field_types.values_mut() {
+                        *ty = qualified(ty);
+                    }
+                    for table in sym.strap_tables.values_mut() {
+                        if let Some(id) = &mut table.source_type {
+                            *id = qualified(id);
+                        }
+                    }
+
                     if let Some(link) = &mut sym.datasheet
                         && !link.contains("://")
                         && !Path::new(link).is_absolute()
@@ -927,11 +1125,9 @@ fn read_nested(
                 }
                 doc.sheets.insert(name.clone(), title);
             }
-            "erc_rule" | "waiver" if !library => {
+            "erc_rule" | "waiver" if !library || c.name == "erc_rule" => {
                 let rule = string(c.req("rule")?)?;
-                if !ERC_RULES.contains(&rule.as_str()) {
-                    return Err(fault(e, "UnknownErcRule", rule));
-                }
+
                 if c.name == "waiver" {
                     let mut objects = list(c.req("objects")?)?
                         .iter()
@@ -951,10 +1147,7 @@ fn read_nested(
                         return Err(fault(e, "DuplicateWaiver", name));
                     }
                 } else {
-                    let severity = string(c.req("severity")?)?;
-                    if !["error", "warning", "info"].contains(&severity.as_str()) {
-                        return Err(fault(e, "InvalidSeverity", severity));
-                    }
+                    let severity = rule_severity(c.req("severity")?)?;
                     if doc.severities.insert(rule, severity).is_some() {
                         return Err(fault(e, "DuplicateErcRule", name));
                     }
@@ -1068,6 +1261,15 @@ fn read_nested(
         }
     }
     resolve_pin_aliases(&mut doc);
+    defaults.resolve(&mut doc.severities, head.span)?;
+    for id in doc.severities.keys().chain(doc.waivers.keys().map(|(id, _)| id)) {
+        if state.active.is_empty()
+            && !doc.packages.erc.contains_key(id.as_str())
+            && !crate::standard_library::known_erc(id)
+        {
+            return Err(Fault::new("UnknownErcRule", head.span, id));
+        }
+    }
     Ok(doc)
 }
 

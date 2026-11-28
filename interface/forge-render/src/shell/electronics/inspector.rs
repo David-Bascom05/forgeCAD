@@ -1,7 +1,11 @@
 use super::*;
 use crate::shell::{theme, ux};
 use egui::{ComboBox, RichText};
-fn property_row<R>(ui: &mut Ui, label: &str, control: impl FnOnce(&mut Ui, egui::Response) -> R) -> R {
+pub(super) fn property_row<R>(
+    ui: &mut Ui,
+    label: &str,
+    control: impl FnOnce(&mut Ui, egui::Response) -> R,
+) -> R {
     ui.horizontal(|ui| {
         let width = (ui.available_width() * 0.35).min(116.);
         let caption = ui
@@ -18,7 +22,7 @@ fn property_row<R>(ui: &mut Ui, label: &str, control: impl FnOnce(&mut Ui, egui:
     })
     .inner
 }
-fn field(ui: &mut Ui, label: &str, value: &mut String) {
+pub(super) fn field(ui: &mut Ui, label: &str, value: &mut String) {
     text_control(ui, label, value);
 }
 fn text_control(ui: &mut Ui, label: &str, value: &mut String) -> egui::Response {
@@ -30,6 +34,143 @@ fn text_control(ui: &mut Ui, label: &str, value: &mut String) -> egui::Response 
         .labelled_by(caption.id)
         .on_hover_text(value.as_str())
     })
+}
+
+fn visibility_source(values: &BTreeMap<String, bool>) -> String {
+    let mut base = Vec::new();
+    let mut groups: BTreeMap<&str, Vec<String>> = BTreeMap::new();
+    for (key, on) in values {
+        if let Some((group, name)) = key.split_once('.') {
+            groups.entry(group).or_default().push(format!("{name}: {on}"));
+        } else {
+            base.push(format!("{key}: {on}"));
+        }
+    }
+    for (g, fields) in groups {
+        base.push(format!("{g}: {{{}}}", fields.join(", ")));
+    }
+    format!("{{{}}}", base.join(", "))
+}
+
+fn field_visibility(
+    ui: &mut Ui,
+    symbol: &sch::Symbol,
+    form: &mut Inputs,
+    library: bool,
+    id: &str,
+    results: Option<&BTreeMap<String, sch::StrapResult>>,
+) {
+    ui.collapsing("Schematic text fields", |ui| {
+        let mut keys: Vec<String> = sch::DISPLAY_FIELDS.iter().map(|s| s.to_string()).collect();
+        let custom: std::collections::BTreeSet<_> = symbol
+            .fields
+            .keys()
+            .chain(form.fields.iter().map(|(k, _)| k))
+            .filter(|k| identifier(k))
+            .collect();
+        keys.extend(custom.into_iter().map(|s| format!("custom.{s}")));
+        keys.extend(symbol.strap_tables.keys().map(|s| format!("derived.{s}")));
+        egui::Grid::new("visible-symbol-fields")
+            .striped(true)
+            .spacing([5., 3.])
+            .show(ui, |ui| {
+                ui.strong("Show");
+                ui.strong("Field");
+                ui.strong("Text");
+                ui.end_row();
+                for key in keys {
+                    let base = if library {
+                        None
+                    } else {
+                        symbol.visibility.get(&key).copied()
+                    }
+                    .unwrap_or_else(|| sch::default_field_visibility(&key));
+                    let mut shown = form.visibility.get(&key).copied().unwrap_or(base);
+                    let id_label = key.split_once('.').map_or(key.as_str(), |(_, s)| s);
+                    let label = key
+                        .strip_prefix("derived.")
+                        .and_then(|id| symbol.strap_tables.get(id)?.label.as_deref())
+                        .unwrap_or(id_label);
+                    if ui
+                        .checkbox(&mut shown, "")
+                        .on_hover_text(format!("Show {label} on schematic"))
+                        .changed()
+                    {
+                        form.visibility.insert(key.clone(), shown);
+                    }
+                    ui.label(label);
+                    let edit = |ui: &mut Ui, v: &mut String| {
+                        ui.add(egui::TextEdit::singleline(v).desired_width(90.))
+                    };
+                    match key.as_str() {
+                        "reference" if !library => {
+                            edit(ui, &mut form.name);
+                        }
+                        "value" if !library => {
+                            edit(ui, &mut form.value);
+                        }
+                        "footprint" if !library => {
+                            edit(ui, &mut form.footprint);
+                        }
+                        "datasheet" => {
+                            edit(ui, &mut form.datasheet);
+                        }
+                        "ref_prefix" if library => {
+                            edit(ui, &mut form.ref_prefix);
+                        }
+                        _ if key.starts_with("custom.") => {
+                            if let Some((_, v)) = form.fields.iter_mut().find(|(k, _)| k == label) {
+                                edit(ui, v);
+                            } else {
+                                let mut inherited = symbol.fields.get(label).cloned().unwrap_or_default();
+                                if edit(ui, &mut inherited).changed() {
+                                    form.fields.push((label.into(), inherited));
+                                }
+                            }
+                        }
+                        _ => {
+                            let value = match key.as_str() {
+                                "reference" | "value" | "footprint" => "At placement",
+                                "symbol" => id,
+                                "ref_prefix" => &symbol.ref_prefix,
+                                "part_kind" => symbol.part_kind.as_deref().unwrap_or("Generic"),
+                                "unit" => &form.unit,
+                                "power_net" => symbol.power_net.as_deref().unwrap_or("—"),
+                                "populated" if !library => {
+                                    if form.populated {
+                                        "yes"
+                                    } else {
+                                        "no"
+                                    }
+                                }
+                                "in_bom" if !library => {
+                                    if form.in_bom {
+                                        "yes"
+                                    } else {
+                                        "no"
+                                    }
+                                }
+                                _ if key.starts_with("derived.") => results
+                                    .and_then(|r| r.get(label))
+                                    .map(|r| r.value.as_deref().unwrap_or("?"))
+                                    .unwrap_or("From table"),
+                                _ => "At placement",
+                            };
+                            ui.add(egui::Label::new(value).truncate()).on_hover_text(value);
+                        }
+                    }
+                    if form.visibility.contains_key(&key)
+                        && ui
+                            .small_button("↶")
+                            .on_hover_text("Reset to inherited visibility")
+                            .clicked()
+                    {
+                        form.visibility.remove(&key);
+                    }
+                    ui.end_row();
+                }
+            });
+    });
 }
 
 fn checkbox(ui: &mut Ui, label: &str, value: &mut bool) -> egui::Response {
@@ -48,7 +189,7 @@ fn checkbox(ui: &mut Ui, label: &str, value: &mut bool) -> egui::Response {
     })
 }
 
-fn choice(ui: &mut Ui, label: &str, value: &mut String, items: Vec<String>) {
+pub(super) fn choice(ui: &mut Ui, label: &str, value: &mut String, items: Vec<String>) {
     property_row(ui, label, |ui, caption| {
         ComboBox::from_id_salt(label)
             .selected_text(if value.is_empty() {
@@ -66,10 +207,16 @@ fn choice(ui: &mut Ui, label: &str, value: &mut String, items: Vec<String>) {
             .labelled_by(caption.id);
     });
 }
-fn custom(ui: &mut Ui, rows: &mut Vec<(String, String)>) {
+fn custom(
+    ui: &mut Ui,
+    rows: &mut Vec<(String, String)>,
+    types: &mut std::collections::BTreeMap<String, String>,
+    options: Option<&std::collections::BTreeMap<String, sch::AttributeType>>,
+) {
     let mut remove = None;
     for (i, (k, v)) in rows.iter_mut().enumerate() {
         ui.push_id(i, |ui| {
+            let original = k.clone();
             ui.horizontal(|ui| {
                 let width = ui.available_width();
                 ui.add(
@@ -86,10 +233,32 @@ fn custom(ui: &mut Ui, rows: &mut Vec<(String, String)>) {
                     remove = Some(i);
                 }
             });
+            if let Some(catalog) = options.filter(|opts| !opts.is_empty()) {
+                if original != *k
+                    && let Some(ty) = types.remove(&original)
+                {
+                    types.insert(k.clone(), ty);
+                }
+                let mut selected = types.get(k).cloned().unwrap_or_default();
+                egui::ComboBox::from_id_salt("field-type")
+                    .selected_text(catalog.get(&selected).map_or("Text", |t| &t.label))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut selected, String::new(), "Text");
+                        for (id, t) in catalog {
+                            ui.selectable_value(&mut selected, id.clone(), format!("{} · {}", t.label, id));
+                        }
+                    });
+                if selected.is_empty() {
+                    types.remove(k);
+                } else {
+                    types.insert(k.clone(), selected);
+                }
+            }
         });
     }
     if let Some(i) = remove {
-        rows.remove(i);
+        let (key, _) = rows.remove(i);
+        types.remove(&key);
     }
     if ui.small_button("+ Add field").clicked() {
         rows.push(Default::default());
@@ -108,8 +277,12 @@ impl Editor {
             if let Some(sym) = self.doc.symbols.get(&self.subject) {
                 self.form.name = self.subject.clone();
                 self.form.ref_prefix = sym.ref_prefix.clone();
+                self.form.straps = strap_editor::load(sym);
+                self.form.visibility = sym.visibility.clone();
+                self.form.symbol_specs = sym.specs.clone();
                 self.form.part_kind = sym.part_kind.clone().unwrap_or_default();
                 self.form.part_paths = sym.paths.clone().into_iter().collect();
+                self.form.field_types = sym.field_types.clone();
                 self.form.fields = sym.fields.clone().into_iter().collect();
                 self.form.datasheet = sym.datasheet.clone().unwrap_or_default();
                 if let Some(g) = self.graphic.and_then(|i| sym.graphics.get(i)) {
@@ -131,6 +304,7 @@ impl Editor {
                 }
                 if let Some(p) = sym.pins.get(&self.pin) {
                     self.form.name = self.pin.clone();
+                    self.form.pin_specs = p.specs.clone();
                     self.form.number = p.number.clone();
                     self.form.description = p.description.clone();
                     self.form.electrical = p.electrical.word().into();
@@ -163,6 +337,7 @@ impl Editor {
                                 f.electrical.word().to_owned(),
                                 names(&f.wants),
                                 names(&f.gives),
+                                f.specs.clone(),
                             )
                         })
                         .collect();
@@ -185,6 +360,7 @@ impl Editor {
                     if let Item::Place {
                         reference,
                         functions,
+                        spec_limits,
                         symbol,
                         ..
                     } = &row.item
@@ -201,8 +377,13 @@ impl Editor {
                             .annotations
                             .get(&format!("{}/{}", self.subject, row.id))
                             .is_some_and(|a| a.locked);
+                        self.form.symbol_specs = spec_limits.clone();
+                        self.form.inherited_specs = self.doc.symbols[symbol].specs.clone();
                         self.form.selected_functions = functions.clone();
                         self.form.replacement = symbol.clone();
+                    }
+                    if let Item::Place { visibility, .. } = &row.item {
+                        self.form.visibility = visibility.clone();
                     }
                     self.form.ref_offset = *ref_offset;
                     self.form.value_offset = *value_offset;
@@ -289,21 +470,32 @@ impl Editor {
             .and_then(|_| original("angle"))
             .unwrap_or_else(|| format!("{deg}deg"));
         let mut optional = String::new();
+        if !f.pin_specs.is_empty() {
+            optional.push_str(&format!(
+                ", specs: {}",
+                sch::characteristics::source(&f.pin_specs)
+            ));
+        }
         if !f.pads.trim().is_empty() {
             let pads = f.pads.split(',').map(|p| quote(p.trim())).collect::<Vec<_>>();
             optional.push_str(&format!(", pads: [{}]", pads.join(", ")));
         }
         if !f.pin_functions.is_empty() {
             let mut fs = Vec::new();
-            for (name, kind, wants, gives) in &f.pin_functions {
+            for (name, kind, wants, gives, specs) in &f.pin_functions {
                 if !identifier(name) {
                     return Err("Enter a unique function name.".into());
                 }
                 fs.push(format!(
-                    "{name}: function(kind: {}, wants: [{}], gives: [{}])",
+                    "{name}: function(kind: {}, wants: [{}], gives: [{}]{})",
                     quote(kind),
                     wants.join(", "),
-                    gives.join(", ")
+                    gives.join(", "),
+                    if specs.is_empty() {
+                        String::new()
+                    } else {
+                        format!(", specs: {}", sch::characteristics::source(specs))
+                    }
                 ));
             }
             optional.push_str(&format!(", functions: {{{}}}", fs.join(", ")));
@@ -359,6 +551,15 @@ impl Editor {
     }
     fn pin_form(&mut self, ui: &mut Ui, t: &Theme, places: &mut Vec<(String, Rect)>) {
         let f = &mut self.form;
+        let symbol = self.doc.symbols.get(&self.subject);
+        let fet = symbol.and_then(|s| {
+            let kind = s.part_kind.as_deref()?;
+            sch::characteristics::fet::is_fet(kind).then_some((kind, s))
+        });
+        let pin_names = symbol
+            .into_iter()
+            .flat_map(|s| s.pins.keys().cloned())
+            .collect::<Vec<_>>();
         let name = text_control(ui, "Pin name", &mut f.name);
         places.push(("electronics:pin-name".into(), name.rect));
         field(ui, "Pin number", &mut f.number);
@@ -441,7 +642,7 @@ impl Editor {
         });
         ui.collapsing("Alternate functions", |ui| {
             let mut remove = None;
-            for (i, (name, kind, wants, gives)) in f.pin_functions.iter_mut().enumerate() {
+            for (i, (name, kind, wants, gives, specs)) in f.pin_functions.iter_mut().enumerate() {
                 ui.push_id(i, |ui| {
                     field(ui, "Name", name);
                     choice(
@@ -479,6 +680,7 @@ impl Editor {
                             }
                         });
                     }
+                    spec_editor::edit(ui, specs, &pin_names, kind, fet);
                     if ui.small_button("Remove function").clicked() {
                         remove = Some(i);
                     }
@@ -489,15 +691,19 @@ impl Editor {
             }
             if ui.small_button("Add function").clicked() {
                 f.pin_functions
-                    .push((String::new(), "input".into(), vec![], vec![]));
+                    .push((String::new(), "input".into(), vec![], vec![], vec![]));
             }
         });
+        spec_editor::edit(ui, &mut f.pin_specs, &pin_names, &f.electrical, fet);
         ui.collapsing("Sub parts", |ui| {
             field(ui, "Sub part", &mut f.unit);
             ui.weak("For a dual op-amp, A and B are separate sections of the same chip.");
         });
     }
     pub(super) fn save_properties(&mut self) -> Result<()> {
+        self.save_properties_with(Vec::new())
+    }
+    pub(super) fn save_properties_with(&mut self, mut ops: Vec<Op>) -> Result<()> {
         if self.library() && !self.pin.is_empty() {
             let at = self.doc.symbols[&self.subject].pins[&self.pin].at;
             return self.save_pin(at);
@@ -508,10 +714,23 @@ impl Editor {
         } else {
             &self.selected
         };
-        let mut ops = vec![];
+
         if self.library()
             && let Some(symbol) = self.doc.symbols.get(id)
         {
+            if symbol.specs != f.symbol_specs {
+                ops.push(arg(id, "specs", sch::characteristics::source(&f.symbol_specs)));
+            }
+            if symbol.visibility != f.visibility {
+                ops.push(arg(id, "visibility", visibility_source(&f.visibility)));
+            }
+            if strap_editor::load(symbol) != f.straps {
+                ops.push(arg(
+                    id,
+                    "strap_tables",
+                    strap_editor::source(&f.straps, &self.doc)?,
+                ));
+            }
             if symbol.ref_prefix != f.ref_prefix {
                 ops.push(arg(id, "ref_prefix", quote(&f.ref_prefix)));
             }
@@ -543,10 +762,33 @@ impl Editor {
         if let Some(row) = self.doc.rows.iter().find(|r| &r.id == id) {
             match &row.item {
                 Item::Place {
+                    spec_limits,
                     ref_offset,
                     value_offset,
                     ..
                 } => {
+                    if let Item::Place { symbol, .. } = &row.item
+                        && !symbol.contains('.')
+                        && self.doc.symbols[symbol].specs != f.inherited_specs
+                    {
+                        ops.push(arg(
+                            symbol,
+                            "specs",
+                            sch::characteristics::source(&f.inherited_specs),
+                        ));
+                    }
+                    if *spec_limits != f.symbol_specs {
+                        ops.push(arg(
+                            id,
+                            "spec_limits",
+                            sch::characteristics::source(&f.symbol_specs),
+                        ));
+                    }
+                    if let Item::Place { visibility, .. } = &row.item
+                        && *visibility != f.visibility
+                    {
+                        ops.push(arg(id, "visibility", visibility_source(&f.visibility)));
+                    }
                     for (key, old, new) in [
                         ("ref_offset", ref_offset, f.ref_offset),
                         ("value_offset", value_offset, f.value_offset),
@@ -587,10 +829,17 @@ impl Editor {
                 .any(|r| &r.id == id && matches!(&r.item, Item::Place { symbol, .. } if self.doc.symbols[symbol].power_net.is_none()))
         {
             ops.push(arg(id, "fields", field_text(&f.fields)?));
+            if self.library() && self.doc.symbols.get(id).is_some_and(|s|s.field_types!=f.field_types){
+                let pairs=f.field_types.iter().filter(|(_,ty)|!ty.is_empty()).map(|(key,ty)|format!("{key}: {ty}")).collect::<Vec<_>>();
+                ops.push(arg(id,"field_types",format!("{{{}}}",pairs.join(", "))));
+            }
             ops.push(arg(id, "datasheet", quote(&f.datasheet)));
             if !self.library() {
+                if self.doc.rows.iter().any(|row|&row.id==id && matches!(&row.item,Item::Place{value,..} if value!=&f.value)){
+                    ops.push(arg(id,"value",quote(&f.value)));
+                }
                 for (k, v) in [
-                    ("value", quote(&f.value)),
+
                     ("footprint", quote(&f.footprint)),
                     ("populated", f.populated.to_string()),
                     ("in_bom", f.in_bom.to_string()),
@@ -739,23 +988,13 @@ impl Editor {
         }
         Ok(())
     }
-    fn set_rule(&mut self, kind: &str, priority: &str) -> Result<()> {
-        for stmt in syntax::parse(&self.src).map_err(|e| e.text())? {
-            if let StmtKind::Assign { name, value } = &stmt.kind
-                && let ExprKind::Call(head, args) = &value.kind
-                && matches!(&head.kind,ExprKind::Name(n) if n=="erc_rule")
-                && args.iter().any(|a| {
-                    a.name.as_ref().is_some_and(|(k, _)| k == "rule")
-                        && matches!(&a.value.kind,ExprKind::Str(v) if v==kind)
-                })
-            {
-                return self.apply(vec![arg(name, "severity", quote(priority))]);
-            }
+    fn set_rule(&mut self, kind: &str, priority: Option<&str>) -> Result<()> {
+        if let Some(op) =
+            super::super::rule_policy::edit(&self.src, "erc_rule", kind, priority, || self.fresh("policy"))?
+        {
+            self.apply(vec![op])?;
         }
-        self.add(
-            &self.fresh("policy"),
-            format!("erc_rule(rule: {}, severity: {})", quote(kind), quote(priority)),
-        )
+        Ok(())
     }
     pub(super) fn create_child_library(&mut self) -> Result<()> {
         use std::io::Write;
@@ -1091,9 +1330,38 @@ impl Editor {
                 });
             }
             Checks => {
+                let levels = self.doc.packages.erc_rules().map(|(rule, default)| {
+                    (
+                        rule,
+                        self.doc
+                            .severities
+                            .get(rule)
+                            .map_or_else(|| default.word(), String::as_str),
+                    )
+                });
+                if let Some((rule, level)) = super::super::rule_policy::menu(ui, levels) {
+                    result = self.set_rule(rule, level);
+                }
                 self.variant_picker(ui);
                 let circuit = self.variant_checks.as_ref().map_or(&self.circuit, |(_, c)| c);
                 ui.label(format!("{} findings", circuit.issues.len()));
+                let mut navigate = None;
+                if !circuit.not_run.is_empty() {
+                    egui::CollapsingHeader::new(format!(
+                        "Checks missing evidence ({})",
+                        circuit.not_run.len()
+                    ))
+                    .id_salt("erc_coverage")
+                    .show(ui, |ui| {
+                        for item in &circuit.not_run {
+                            ui.strong(&item.rule);
+                            if ui.link(&item.object).clicked() {
+                                navigate = Some(item.object.clone());
+                            }
+                            ui.label(format!("Missing {}", item.fields.join(", ")));
+                        }
+                    });
+                }
                 if let Some(review) = &self.revision_review {
                     ui.collapsing("Library update review", |ui| {
                         if review.is_empty() {
@@ -1117,6 +1385,9 @@ impl Editor {
                         )
                     })
                     .collect::<Vec<_>>();
+                if let Some(id) = navigate {
+                    self.follow_finding(&id);
+                }
                 for (kind, severity, status, waived, msg, ids) in issues {
                     ui.separator();
                     ui.colored_label(
@@ -1146,7 +1417,7 @@ impl Editor {
                                     ["info", "warning", "error"].map(str::to_owned).to_vec(),
                                 );
                                 if priority != severity {
-                                    result = self.set_rule(kind, &priority);
+                                    result = self.set_rule(kind, Some(&priority));
                                 }
                                 field(ui, "Waiver reason", &mut self.form.waiver_reason);
                                 if ui
@@ -1341,6 +1612,32 @@ impl Editor {
                                 .response
                                 .labelled_by(caption.id);
                         });
+                        let def = &self.doc.symbols[&self.subject];
+
+                        ui.push_id((&self.subject, "part_properties"), |ui| {
+                            part_properties::normal(
+                                ui,
+                                def,
+                                &self.form.part_kind,
+                                &mut self.form.symbol_specs,
+                                true,
+                            );
+                            part_properties::advanced(
+                                ui,
+                                &self.form.part_kind,
+                                &mut self.form.symbol_specs,
+                                def,
+                                true,
+                            );
+                        });
+                        sheet.section(ui, "Derived attributes");
+                        strap_editor::list(
+                            ui,
+                            &self.form.straps,
+                            &self.doc,
+                            &mut self.form.attribute_window,
+                            places,
+                        );
                         ui.collapsing("Terminal paths", |ui| {
                             let pins: Vec<_> = self.doc.symbols[&self.subject].pins.keys().cloned().collect();
                             let mut remove = None;
@@ -1367,6 +1664,32 @@ impl Editor {
                             }
                         });
                     }
+                    let circuit = self
+                        .variant_checks
+                        .as_ref()
+                        .filter(|(v, _)| v == &self.variant)
+                        .map_or(&self.circuit, |(_, c)| c);
+                    if let Some(attrs) = circuit.straps.get(&format!("{}/{}", self.subject, self.selected)) {
+                        ui.label(RichText::new("Derived attributes").font(theme::title()));
+                        for (name, r) in attrs {
+                            property_row(ui, r.label.as_deref().unwrap_or(name), |ui, _| {
+                                ui.label(r.value.as_deref().unwrap_or(r.status))
+                                    .on_hover_text(format!(
+                                        "{} · {}\n{}",
+                                        r.kind.word(),
+                                        r.status,
+                                        r.inputs
+                                            .iter()
+                                            .map(|(p, s)| format!(
+                                                "{p} = {}",
+                                                s.state.as_deref().unwrap_or("unresolved")
+                                            ))
+                                            .collect::<Vec<_>>()
+                                            .join("\n")
+                                    ))
+                            });
+                        }
+                    }
                     let part = self
                         .doc
                         .rows
@@ -1377,6 +1700,14 @@ impl Editor {
                         && let Some(net) = &self.doc.symbols[symbol].power_net
                     {
                         ui.label(format!("Global power net · {net}"));
+                        field_visibility(
+                            ui,
+                            &self.doc.symbols[symbol],
+                            &mut self.form,
+                            false,
+                            symbol,
+                            circuit.straps.get(&format!("{}/{}", self.subject, self.selected)),
+                        );
                     } else if self.library() || matches!(part, Some(Item::Place { .. })) {
                         if let Some(Item::Place { symbol, .. }) = part {
                             property_row(ui, "Symbol", |ui, _| ui.label(symbol));
@@ -1449,6 +1780,28 @@ impl Editor {
                             }
                             checkbox(ui, "Lock reference", &mut self.form.ref_locked);
                             field(ui, "Value", &mut self.form.value);
+                            let kind = def.part_kind.as_deref().unwrap_or("");
+
+                            let local = !symbol.contains('.');
+                            if local {
+                                ui.weak("Symbol ratings · shared by placements of this symbol");
+                            } else if let Some((alias, _)) = symbol.rsplit_once('.')
+                                && let Some(Some(path)) = self.doc.libraries.get(alias)
+                                && ui.link("Edit ratings in symbol library").clicked()
+                            {
+                                self.open_file = Some(path.to_string_lossy().into_owned());
+                            }
+                            ui.push_id((&self.subject, &self.selected, "part_properties"), |ui| {
+                                part_properties::normal(ui, def, kind, &mut self.form.inherited_specs, local);
+                                part_properties::advanced(
+                                    ui,
+                                    kind,
+                                    &mut self.form.inherited_specs,
+                                    def,
+                                    local,
+                                );
+                                part_properties::requirements(ui, kind, &mut self.form.symbol_specs, def);
+                            });
                             ui.collapsing("Field positions", |ui| {
                                 for (label, offset) in [
                                     ("Reference", &mut self.form.ref_offset),
@@ -1509,7 +1862,27 @@ impl Editor {
                             self.attach_requested = true;
                         }
                         sheet.section(ui, "Custom fields");
-                        custom(ui, &mut self.form.fields);
+                        let options = self.library().then_some(&self.doc.attribute_types);
+                        custom(ui, &mut self.form.fields, &mut self.form.field_types, options);
+                        let library = self.library();
+                        let symbol = if library {
+                            Some(&self.subject)
+                        } else if let Some(Item::Place { symbol, .. }) = part {
+                            Some(symbol)
+                        } else {
+                            None
+                        };
+                        if let Some((id, s)) = symbol.and_then(|id| self.doc.symbols.get(id).map(|s| (id, s)))
+                        {
+                            field_visibility(
+                                ui,
+                                s,
+                                &mut self.form,
+                                library,
+                                id,
+                                circuit.straps.get(&format!("{}/{}", self.subject, self.selected)),
+                            );
+                        }
                     } else if let Some(Item::Drawing { shape, .. }) = part {
                         annotation::controls(ui, &mut self.form, Some(shape));
                     } else if matches!(part, Some(Item::Note { .. } | Item::Label { .. })) {
@@ -1695,7 +2068,7 @@ impl Editor {
                 match self.tool {
                     Sheet => field(ui, "Sheet title", &mut self.form.text),
                     NewSymbol => field(ui, "Reference prefix", &mut self.form.ref_prefix),
-                    Library => field(ui, "Library file (.fg)", &mut self.form.text),
+                    Library => field(ui, "Library file or Rust package", &mut self.form.text),
                     Role => {
                         choice(
                             ui,

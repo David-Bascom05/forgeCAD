@@ -229,6 +229,15 @@ pub fn inspect_pin(c: &Circuit, pin: &str) -> Option<PinInspection> {
                     }
                 }
             }
+            for other in net {
+                if let Some(evidence) = c.signals.peers(pin, role, need, other) {
+                    measured = true;
+                    let previous = peers.entry(other.clone()).or_insert(evidence);
+                    if *previous != Evidence::Invalid {
+                        *previous = evidence;
+                    }
+                }
+            }
             targets.extend(peers.keys().filter(|k| c.net_of[*k] == c.net_of[pin]).cloned());
             inspection.checks.push(RoleCheck {
                 role: role.clone(),

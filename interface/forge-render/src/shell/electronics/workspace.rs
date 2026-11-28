@@ -637,6 +637,7 @@ impl Shell {
                 editor.inspector_open = true;
             }
         }
+        editor.attribute_window(&ctx, &t);
         self.state_status(
             &ctx,
             if editor.message.is_empty() {

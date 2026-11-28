@@ -2,8 +2,12 @@
 mod annotation;
 mod canvas;
 mod checklist;
+mod fet_curves;
 mod inspector;
 mod palette;
+mod part_properties;
+mod spec_editor;
+mod strap_editor;
 mod workspace;
 use super::{
     Action, Shell, Theme,
@@ -75,6 +79,9 @@ pub fn tab_name(library: bool, tab: usize) -> &'static str {
 
 #[derive(Default)]
 struct Inputs {
+    straps: Vec<strap_editor::Attribute>,
+    attribute_window: Option<strap_editor::TableWindow>,
+    visibility: BTreeMap<String, bool>,
     block: std::collections::BTreeSet<String>,
     offset: Point,
     copying: bool,
@@ -82,7 +89,16 @@ struct Inputs {
     diff_suggestions: Vec<(String, String, String, String)>,
     block_preview: Option<sch::BlockPlan>,
     selected_functions: BTreeMap<String, String>,
-    pin_functions: Vec<(String, String, Vec<String>, Vec<String>)>,
+    symbol_specs: Vec<sch::characteristics::Specification>,
+    inherited_specs: Vec<sch::characteristics::Specification>,
+    pin_specs: Vec<sch::characteristics::Specification>,
+    pin_functions: Vec<(
+        String,
+        String,
+        Vec<String>,
+        Vec<String>,
+        Vec<sch::characteristics::Specification>,
+    )>,
     pads: String,
     waiver_reason: String,
     kind_search: String,
@@ -109,6 +125,7 @@ struct Inputs {
     footprint: String,
     datasheet: String,
     fields: Vec<(String, String)>,
+    field_types: std::collections::BTreeMap<String, String>,
     populated: bool,
     in_bom: bool,
     global: bool,
@@ -463,7 +480,12 @@ impl Editor {
                 self.selected.clear();
                 self.pin.clear();
             }
-            self.page = sch::sheet_page(&self.doc, &self.circuit, &self.subject).unwrap_or_default();
+            self.page = sch::sheet_page(
+                &self.doc,
+                self.variant_checks.as_ref().map_or(&self.circuit, |(_, c)| c),
+                &self.subject,
+            )
+            .unwrap_or_default();
             self.catalog = self
                 .doc
                 .symbols
@@ -1060,6 +1082,49 @@ chip = place(sheet: main, symbol: S, at: (0,0))
         assert!(!e.circuit.connections["main/U1.INP"].contains_key(&role));
     }
 
+    #[test]
+    fn ordinary_fields_bind_to_a_rust_library_type_and_undo_atomically() {
+        let src = "symbol_library\nratings=library(file:\"forge:standard/properties/ratings\")\nChip=symbol(pins:{})";
+        let mut e = Editor::open(None, src.into()).unwrap();
+        e.subject = "Chip".into();
+        e.inspect();
+        e.form.fields = vec![("Maximum".into(), "3600 mV".into())];
+        e.form
+            .field_types
+            .insert("Maximum".into(), "ratings.maximum_supply_voltage".into());
+        e.save_properties().unwrap();
+        let saved = e.src.clone();
+        let sym = &e.doc.symbols["Chip"];
+        assert_eq!(sym.field_types["Maximum"], "ratings.maximum_supply_voltage");
+        e.inspect();
+        e.form.fields[0].1 = "3 A".into();
+        assert!(e.save_properties().is_err());
+        assert_eq!(e.src, saved);
+        e.step(false);
+        assert_eq!(e.src, src);
+    }
+    #[test]
+    fn pin_editor_round_trips_base_mode_and_device_ratings() {
+        let src = include_str!("../../../../../examples/electronics/datasheet-characteristics.fg");
+        let mut e = Editor::open(None, src.into()).unwrap();
+        e.subject = "IoDevice".into();
+        e.pin = "IO".into();
+        e.inspect();
+        let before = e.doc.symbols["IoDevice"].clone();
+        e.form.pin_specs[1].value.max = Some(4.5);
+        e.form.name = "PAD".into();
+        e.save_pin(before.pins["IO"].at).unwrap();
+        let reopened = Editor::open(None, e.src.clone()).unwrap();
+        let sym = &reopened.doc.symbols["IoDevice"];
+        assert_eq!(sym.pins["PAD"].specs[1].value.max, Some(4.5));
+        assert_eq!(
+            sym.pins["PAD"].functions["sense"].specs,
+            before.pins["IO"].functions["sense"].specs
+        );
+        assert_eq!(sym.specs[1].value.pins, ["PAD", "GND"]);
+        e.step(false);
+        assert_eq!(e.src, src);
+    }
     #[test]
     fn symbol_properties_define_the_terminal_pair_for_a_custom_part_type() {
         let src = r#"symbol_library

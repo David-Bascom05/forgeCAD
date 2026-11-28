@@ -221,3 +221,43 @@ impl Fault {
         ])
     }
 }
+
+/// Compose library defaults independently of import order. The consuming document
+/// may resolve a disagreement with its own explicit setting.
+#[derive(Default)]
+pub(crate) struct RuleDefaults(Map<String, Map<String, String>>);
+impl RuleDefaults {
+    pub(crate) fn import(&mut self, alias: &str, rules: Map<String, String>) {
+        for (rule, level) in rules {
+            self.0.entry(rule).or_default().insert(alias.into(), level);
+        }
+    }
+    pub(crate) fn resolve(self, local: &mut Map<String, String>, span: Span) -> Result<()> {
+        for (rule, sources) in self.0 {
+            if local.contains_key(&rule) {
+                continue;
+            }
+            let mut values = sources.values();
+            let first = values.next().expect("a policy source");
+            if values.any(|v| v != first) {
+                return Err(Fault::new(
+                    "ConflictingRuleDefaults",
+                    span,
+                    format!(
+                        "{rule} has conflicting library severities {sources:?}. Set its severity in this document."
+                    ),
+                ));
+            }
+            local.insert(rule, first.clone());
+        }
+        Ok(())
+    }
+}
+pub(crate) fn rule_severity(e: &Expr) -> Result<String> {
+    let v = string(e)?;
+    if matches!(v.as_str(), "error" | "warning" | "info") {
+        Ok(v)
+    } else {
+        Err(fault(e, "InvalidSeverity", v))
+    }
+}

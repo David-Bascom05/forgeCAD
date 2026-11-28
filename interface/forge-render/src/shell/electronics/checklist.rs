@@ -105,6 +105,40 @@ impl Editor {
         }
 
         ui.add_space(theme::S3);
+        let symbol = &self.doc.symbols[&pin.symbol];
+        let rows = definition
+            .specs
+            .iter()
+            .chain(
+                pin.function
+                    .as_ref()
+                    .and_then(|k| definition.functions.get(k))
+                    .into_iter()
+                    .flat_map(|f| &f.specs),
+            )
+            .chain(symbol.specs.iter().filter(|s| s.value.pins.contains(&pin.pin)));
+        if rows.clone().next().is_some() {
+            ui.collapsing("Datasheet characteristics", |ui| {
+                for spec in rows {
+                    ui.strong(spec.value.kind.replace('_', " "));
+                    ui.label(super::spec_editor::summary(&spec.value));
+                    ui.weak(spec.class.replace('_', " "));
+                    for c in &spec.conditions {
+                        ui.label(format!(
+                            "When {} · {}",
+                            c.kind.replace('_', " "),
+                            super::spec_editor::summary(c)
+                        ));
+                    }
+                    if !spec.source.is_empty() {
+                        ui.small(&spec.source);
+                    }
+                    if !spec.note.is_empty() {
+                        ui.small(&spec.note);
+                    }
+                }
+            });
+        }
         ui.label(RichText::new("Pin checklist").font(theme::semi(16.)).color(t.ink));
         ui.separator();
         let mut action = None;

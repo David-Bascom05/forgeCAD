@@ -149,12 +149,14 @@ fn component_fields(page: &mut Page, lo: Point2, hi: Point2, row: &Row, referenc
     );
     let locate =
         |offset: Option<Point>, default| offset.map_or(default, |p| Point2::new(at[0] + p[0], at[1] + p[1]));
-    text(
-        page,
-        locate(reference_offset, default_ref),
-        REFERENCE_HEIGHT,
-        reference,
-    );
+    if !reference.is_empty() {
+        text(
+            page,
+            locate(reference_offset, default_ref),
+            REFERENCE_HEIGHT,
+            reference,
+        );
+    }
     if !value.is_empty() {
         text(
             page,
@@ -368,7 +370,10 @@ fn visit_rows(
                 symbol, reference, ..
             } = &r.item
             {
-                Some((&r.id, (symbol, reference.as_ref().unwrap_or(&r.id))))
+                let Item::Place { visibility, .. } = &r.item else {
+                    unreachable!()
+                };
+                Some((&r.id, (symbol, reference.as_ref().unwrap_or(&r.id), visibility)))
             } else {
                 None
             }
@@ -404,28 +409,108 @@ fn visit_rows(
                     !(sym.pins.len() == 2 && sym.pins.values().all(|p| p.electrical == Electrical::Passive));
                 let (lo, hi) = glyph(&mut page, sym, unit, *at, *angle, *mirror, show_pins);
                 glyph_ids(&mut text_ids, sym, unit, &key, show_pins);
-                if let Some(net) = &sym.power_net {
-                    let x = (lo.x + hi.x - forge_draw::page::text_width(net, VALUE_HEIGHT)) / 2.;
-                    let y = if hi.y > at[1] {
-                        hi.y + 0.55
-                    } else {
-                        lo.y - VALUE_HEIGHT - 0.55
-                    };
-                    text(&mut page, Point2::new(x, y), VALUE_HEIGHT, net);
-                    text_ids.push(key.clone());
+                let Item::Place {
+                    visibility,
+                    fields,
+                    datasheet,
+                    footprint,
+                    populated,
+                    in_bom,
+                    ..
+                } = &row.item
+                else {
+                    unreachable!()
+                };
+                let visible = |k: &str| {
+                    visibility
+                        .get(k)
+                        .or_else(|| sym.visibility.get(k))
+                        .copied()
+                        .unwrap_or_else(|| default_field_visibility(k))
+                };
+                let reference = if visible("reference") {
+                    d.reference(&key, reference.as_ref().unwrap_or(&row.id))
                 } else {
-                    component_fields(
-                        &mut page,
-                        lo,
-                        hi,
-                        row,
-                        d.reference(&key, reference.as_ref().unwrap_or(&row.id)),
-                        value,
-                    );
-                    text_ids.push(format!("{key}:reference"));
+                    ""
+                };
+                let value = if visible("value") {
+                    sym.power_net
+                        .as_deref()
+                        .filter(|_| value.is_empty())
+                        .unwrap_or(value.as_str())
+                } else {
+                    ""
+                };
+                if sym.power_net.is_some() {
+                    component_fields(&mut page, lo, hi, row, reference, "");
                     if !value.is_empty() {
-                        text_ids.push(format!("{key}:value"));
+                        let x = (lo.x + hi.x - forge_draw::page::text_width(value, VALUE_HEIGHT)) / 2.;
+                        let y = if hi.y > at[1] {
+                            hi.y + 0.55
+                        } else {
+                            lo.y - VALUE_HEIGHT - 0.55
+                        };
+                        text(&mut page, Point2::new(x, y), VALUE_HEIGHT, value);
                     }
+                } else {
+                    component_fields(&mut page, lo, hi, row, reference, value);
+                }
+                if !reference.is_empty() {
+                    text_ids.push(format!("{key}:reference"));
+                }
+                if !value.is_empty() {
+                    text_ids.push(format!("{key}:value"));
+                }
+                let mut y = page.texts.iter().map(|t| t.at.y + t.h).fold(hi.y, f64::max) + 0.8;
+                let mut field = |id: &str, label: &str, v: &str| {
+                    if visible(id) && !v.is_empty() {
+                        let line = format!("{label}: {v}");
+                        text(&mut page, Point2::new(lo.x, y), VALUE_HEIGHT, &line);
+                        text_ids.push(format!("{key}:{id}"));
+                        y += VALUE_HEIGHT + 0.65;
+                    }
+                };
+                for (k, v) in [
+                    ("symbol", symbol.as_str()),
+                    ("footprint", footprint.as_deref().unwrap_or("")),
+                    (
+                        "datasheet",
+                        datasheet
+                            .as_ref()
+                            .or(sym.datasheet.as_ref())
+                            .map(String::as_str)
+                            .unwrap_or(""),
+                    ),
+                    ("part_kind", sym.part_kind.as_deref().unwrap_or("")),
+                    ("ref_prefix", sym.ref_prefix.as_str()),
+                    ("unit", unit.as_str()),
+                    ("power_net", sym.power_net.as_deref().unwrap_or("")),
+                    (
+                        "populated",
+                        if *c.fitted.get(&key).unwrap_or(populated) {
+                            "yes"
+                        } else {
+                            "no"
+                        },
+                    ),
+                    ("in_bom", if *in_bom { "yes" } else { "no" }),
+                ] {
+                    field(k, k, v);
+                }
+                for (k, v) in sym
+                    .fields
+                    .iter()
+                    .filter(|(k, _)| !fields.contains_key(*k))
+                    .chain(fields)
+                {
+                    field(&format!("custom.{k}"), k, v);
+                }
+                for (k, r) in c.straps.get(&key).into_iter().flatten() {
+                    field(
+                        &format!("derived.{k}"),
+                        r.label.as_deref().unwrap_or(k),
+                        r.value.as_deref().unwrap_or("?"),
+                    );
                 }
             }
             Item::Gate {
@@ -438,15 +523,23 @@ fn visit_rows(
                 let sym = &d.symbols[placed[of].0];
                 let (lo, hi) = glyph(&mut page, sym, unit, *at, *angle, *mirror, true);
                 glyph_ids(&mut text_ids, sym, unit, &format!("{scope}/{of}"), true);
-                component_fields(
-                    &mut page,
-                    lo,
-                    hi,
-                    row,
-                    &format!("{}.{unit}", d.reference(&format!("{scope}/{of}"), placed[of].1)),
-                    "",
-                );
-                text_ids.push(format!("{key}:reference"));
+                if placed[of]
+                    .2
+                    .get("reference")
+                    .or_else(|| sym.visibility.get("reference"))
+                    .copied()
+                    .unwrap_or(true)
+                {
+                    component_fields(
+                        &mut page,
+                        lo,
+                        hi,
+                        row,
+                        &format!("{}.{unit}", d.reference(&format!("{scope}/{of}"), placed[of].1)),
+                        "",
+                    );
+                    text_ids.push(format!("{key}:reference"));
+                }
             }
             Item::Wire { .. } => {
                 let (a, b, via) = &c.wires[&key];
@@ -592,192 +685,6 @@ pub(super) fn sheet_svg(d: &Document, c: &Circuit, scope: &str) -> Result<String
     sheet_page(d, c, scope).map(fit)
 }
 
-#[derive(Clone, Copy)]
-struct Extent {
-    left: f64,
-    right: f64,
-    bottom: f64,
-    top: f64,
-}
-impl Extent {
-    fn overlaps(self, b: Self) -> bool {
-        self.left < b.right && b.left < self.right && self.bottom < b.top && b.bottom < self.top
-    }
-    fn cuts(self, a: Point2, b: Point2) -> bool {
-        // Clip the segment to the text rectangle, including horizontal and vertical strokes.
-        let (mut enter, mut leave) = (0.0_f64, 1.0_f64);
-        for (p, d, min, max) in [
-            (a.x, b.x - a.x, self.left, self.right),
-            (a.y, b.y - a.y, self.bottom, self.top),
-        ] {
-            if d == 0. {
-                if p < min || p > max {
-                    return false;
-                }
-            } else {
-                let (u, v) = ((min - p) / d, (max - p) / d);
-                enter = enter.max(u.min(v));
-                leave = leave.min(u.max(v));
-            }
-        }
-        enter <= leave
-    }
-}
-struct PrintedItem {
-    extent: Extent,
-    owner: String,
-    kind: Ink,
-}
-enum Ink {
-    Text(String),
-    Outline(Vec<Point2>, f64, bool),
-}
-fn inside(points: &[Point2], p: Point2) -> bool {
-    if points.len() < 4 || (points[0] - points[points.len() - 1]).length() > 1e-7 {
-        return false;
-    }
-    points.windows(2).fold(false, |odd, s| {
-        let (a, b) = (s[0], s[1]);
-        odd ^ ((a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x)
-    })
-}
-pub(super) fn readability(d: &Document, c: &Circuit, scope: &str, rows: &[&Row]) -> Vec<super::graph::Issue> {
-    let mut items = Vec::new();
-    visit_rows(d, c, scope, rows, |_, owner, page, ids| {
-        collect_ink(&mut items, owner, page, ids)
-    });
-    intersections(items)
-}
-pub(super) fn library_readability(d: &Document) -> Vec<super::graph::Issue> {
-    let mut findings = vec![];
-    for (id, s) in &d.symbols {
-        let units: Set<_> = s
-            .pins
-            .values()
-            .map(|p| p.unit.as_str())
-            .chain(s.graphics.iter().filter_map(|g| g.unit.as_deref()))
-            .chain(std::iter::once("A"))
-            .collect();
-        for unit in units {
-            let owner = format!("{id}/{unit}");
-            let mut page = Page::default();
-            glyph(&mut page, s, unit, [0., 0.], 0., false, true);
-            let mut ids = vec![];
-            glyph_ids(&mut ids, s, unit, &owner, true);
-            let mut items = vec![];
-            collect_ink(&mut items, owner, page, ids);
-            findings.extend(intersections(items));
-        }
-    }
-    findings
-}
-fn collect_ink(items: &mut Vec<PrintedItem>, owner: String, page: Page, ids: Vec<String>) {
-    for (t, id) in page.texts.into_iter().zip(ids) {
-        let extent = Extent {
-            left: t.at.x,
-            right: t.at.x + forge_draw::page::text_width(&t.text, t.h),
-            bottom: t.at.y,
-            top: t.at.y + t.h,
-        };
-        items.push(PrintedItem {
-            extent,
-            owner: owner.clone(),
-            kind: Ink::Text(id),
-        });
-    }
-    let outlines = page
-        .strokes
-        .into_iter()
-        .map(|s| {
-            let graphic = matches!(s.pen, Pen::Annotation(_));
-            let pad = if graphic { s.pen.width() / 2. } else { 0.08 };
-            (s.geom, pad, graphic)
-        })
-        .chain(page.fills.into_iter().filter_map(|(_, mut points)| {
-            points.push(*points.first()?);
-            Some((Geom2::Poly(points), 0.08, false))
-        }));
-    for (geometry, pad, annotation) in outlines {
-        let (a, b) = geometry.bounds();
-        // Small stroke allowance also handles the zero-width bounds of a vertical wire.
-        let extent = Extent {
-            left: a.x - pad,
-            right: b.x + pad,
-            bottom: a.y - pad,
-            top: b.y + pad,
-        };
-        items.push(PrintedItem {
-            extent,
-            owner: owner.clone(),
-            kind: Ink::Outline(geometry.points(0.03), pad, annotation),
-        });
-    }
-}
-fn intersections(mut items: Vec<PrintedItem>) -> Vec<super::graph::Issue> {
-    items.sort_by(|a, b| a.extent.left.total_cmp(&b.extent.left));
-    let mut active_text = Vec::new();
-    let mut active_outline = Vec::new();
-    let mut pairs = Set::new();
-    for (i, a) in items.iter().enumerate() {
-        active_text.retain(|j: &usize| items[*j].extent.right >= a.extent.left);
-        let is_text = matches!(a.kind, Ink::Text(_));
-        if is_text {
-            active_outline.retain(|j: &usize| items[*j].extent.right >= a.extent.left);
-        }
-        let others = active_text
-            .iter()
-            .chain(if is_text { active_outline.as_slice() } else { &[] });
-        for &j in others {
-            let b = &items[j];
-            if !a.extent.overlaps(b.extent) {
-                continue;
-            }
-            let (kind, first, second) = match (&a.kind, &b.kind) {
-                (Ink::Text(x), Ink::Text(y)) => ("TextBoundsOverlap", x.min(y), x.max(y)),
-                _ => {
-                    let (txt, line) = if is_text { (a, b) } else { (b, a) };
-                    let (Ink::Text(id), Ink::Outline(pts, pad, annotation)) = (&txt.kind, &line.kind) else {
-                        continue;
-                    };
-                    let bounds = txt.extent;
-                    let ink_bounds = Extent {
-                        left: bounds.left - pad,
-                        right: bounds.right + pad,
-                        bottom: bounds.bottom - pad,
-                        top: bounds.top + pad,
-                    };
-                    let crosses = pts.windows(2).any(|s| ink_bounds.cuts(s[0], s[1]));
-                    let intentional =
-                        txt.owner == line.owner && (id == &line.owner || id.contains(":graphic"));
-                    if !crosses
-                        && (*annotation
-                            || intentional
-                            || !inside(pts, Point2::new(bounds.left, bounds.bottom)))
-                    {
-                        continue;
-                    }
-                    ("TextGeometryOverlap", id, &line.owner)
-                }
-            };
-            pairs.insert((kind, first.clone(), second.clone()));
-        }
-        if is_text {
-            active_text.push(i);
-        } else {
-            active_outline.push(i);
-        }
-    }
-    pairs
-        .into_iter()
-        .map(|(kind, a, b)| super::graph::Issue {
-            unknown: false,
-            kind,
-            message: if kind == "TextBoundsOverlap" {
-                format!("Printed text overlaps: {a} and {b}")
-            } else {
-                format!("Printed text {a} overlaps geometry of {b}")
-            },
-            objects: vec![a, b],
-        })
-        .collect()
-}
+#[path = "../standard_library/erc/drawing.rs"]
+mod checks;
+pub(super) use checks::{library_readability, readability};

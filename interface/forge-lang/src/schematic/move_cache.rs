@@ -5,6 +5,9 @@ use super::*;
 /// Expressions are bracketed by their original parentheses, with identical bytes on both sides.
 /// This keeps the surrounding tokens unchanged. All other edits go through the complete reader.
 pub(super) fn update(last: &mut Compiled, src: &str) -> bool {
+    if last.doc.packages.custom_erc() {
+        return false;
+    }
     let start = last
         .src
         .bytes()

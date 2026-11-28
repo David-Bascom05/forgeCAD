@@ -68,6 +68,7 @@ impl Revision {
             .map(|f| {
                 use pcb::Witness;
                 let why = match f.witness {
+                    Witness::Library { ref message, .. } => message.clone(),
                     Witness::Pair { other, layer } => format!("{other} on {layer}"),
                     Witness::Disconnected { other, net } => format!("{other} on {net}"),
                     Witness::Spacing {
@@ -87,7 +88,11 @@ impl Revision {
                     } => format!("{:.4} mm / {:.4} mm", mm(twice_measured_nm) / 2., mm(minimum_nm)),
                     Witness::Outside { .. } => "Outside board profile".into(),
                 };
-                (f.rule.name().into(), f.object.into(), why)
+                (
+                    f.rule.name().into(),
+                    f.object.into(),
+                    format!("{} · {why}", board.severity(f.rule)),
+                )
             })
             .collect();
         let profiles = pcb::profiles(dir, root.as_deref());

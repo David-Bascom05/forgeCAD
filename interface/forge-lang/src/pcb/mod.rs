@@ -2,7 +2,11 @@
 //! order and named copper routes. All planar geometry is stored on a 1 nm grid.
 mod arc;
 mod check;
+#[path = "../standard_library/drc/board.rs"]
+pub(crate) mod standard;
 pub use check::{Check, Finding, Rule, Witness};
+mod floorplan;
+pub mod packing;
 mod geometry;
 mod laminate;
 mod library;
@@ -21,6 +25,7 @@ mod fabrication;
 mod reader;
 mod reader_layout;
 mod report;
+#[path = "../standard_library/drc/spacing.rs"]
 mod spacing;
 use crate::syntax::Span;
 pub use geometry::{Point, Shape};
@@ -107,6 +112,8 @@ pub struct SchematicSource {
 
 #[derive(Debug)]
 pub struct Board {
+    pub packages: crate::electronics_library::Loaded,
+    pub severities: BTreeMap<String, String>,
     pub layout: Layout,
     pub classes: BTreeMap<String, NetClass>,
     pub outline: Vec<Point>,

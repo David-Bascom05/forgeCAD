@@ -56,6 +56,7 @@ pub mod panel;
 pub mod pcb;
 pub(crate) mod placed;
 mod ribbon;
+mod rule_policy;
 pub mod robot;
 pub mod settings;
 pub mod sheet;

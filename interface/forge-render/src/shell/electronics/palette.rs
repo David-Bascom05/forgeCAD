@@ -18,7 +18,13 @@ impl Editor {
             return;
         }
         self.select(component, pin);
-        let page = sch::pin_inspection_page(&self.doc, &self.circuit, scope, &inspection).unwrap_or_default();
+        let page = sch::pin_inspection_page(
+            &self.doc,
+            self.variant_checks.as_ref().map_or(&self.circuit, |(_, c)| c),
+            scope,
+            &inspection,
+        )
+        .unwrap_or_default();
         self.focus_pin = Some(PinFocus {
             manage: None,
             id: id.into(),

@@ -21,6 +21,7 @@ struct PullSource {
     volts: Option<VoltageRange>,
     ohms: Option<[PartValue; 2]>,
     internal: Option<RoleId>,
+    direction: Option<RoleKind>,
     fitted: bool,
 }
 
@@ -38,7 +39,7 @@ enum PullEvidence {
 }
 
 impl PullSource {
-    fn evaluate(&self, want: &Role, doc: &Document) -> (PullEvidence, String) {
+    fn evaluate(&self, want: &Role) -> (PullEvidence, String) {
         use PullEvidence::*;
         if !self.fitted {
             return (
@@ -56,12 +57,7 @@ impl PullSource {
             );
         };
         let path = format!("{} to {v} ({})", self.description, self.target);
-        if self
-            .internal
-            .as_ref()
-            .is_some_and(|id| doc.roles[id].kind != want.kind)
-            || !want.volts().unwrap().accepts(v)
-        {
+        if self.direction.is_some_and(|kind| kind != want.kind) || !want.volts().unwrap().accepts(v) {
             return (
                 RailConflict,
                 format!("{path} conflicts with the required {} rail", want.kind.word()),
@@ -71,7 +67,7 @@ impl PullSource {
             (_, Some([lo, _])) if lo.magnitude == 0. => {
                 (RailConflict, format!("{path}: zero-ohm connection to rail"))
             }
-            (bounds, None) if bounds.is_some() || self.internal.is_none() => {
+            (bounds, None) if bounds.is_some() || self.direction.is_none() => {
                 (UnknownValue, format!("{path}: resistance unknown"))
             }
             (Some([lo, hi]), Some([a, b])) if !lo.at_most(a) || !b.at_most(hi) => (
@@ -115,6 +111,7 @@ impl Circuit {
                                 .unwrap_or_default()
                         ),
                         internal: Some(role.clone()),
+                        direction: Some(spec.kind),
                         fitted: true,
                     });
                 } else if matches!(spec.kind, RoleKind::Power | RoleKind::Reference)
@@ -122,6 +119,94 @@ impl Circuit {
                 {
                     rails.entry(net).or_default().push((id, v));
                 }
+            }
+        }
+        for (id, term) in self.terminals.iter().filter(|(_, t)| t.populated) {
+            let symbol = &doc.symbols[&term.symbol];
+            let pin = &symbol.pins[&term.pin];
+            let mode = term.function.as_ref().and_then(|f| pin.functions.get(f));
+            let records = || {
+                pin.specs
+                    .iter()
+                    .chain(mode.into_iter().flat_map(|f| &f.specs))
+                    .chain(
+                        symbol
+                            .specs
+                            .iter()
+                            .filter(|s| s.value.pins.first() == Some(&term.pin)),
+                    )
+            };
+            for spec in records() {
+                let kind = match spec.value.kind.as_str() {
+                    "pull_up" => RoleKind::PullUp,
+                    "pull_down" => RoleKind::PullDown,
+                    _ => continue,
+                };
+                let net = self.net_of[id].as_str();
+                if !self.nets[net]
+                    .iter()
+                    .filter_map(|k| self.terminals.get(k))
+                    .any(|p| p.populated && p.wants.iter().any(|r| doc.roles[r].kind.is_pull()))
+                {
+                    continue;
+                }
+                if matches!(spec.value.state.as_str(), "disabled" | "absent") {
+                    continue;
+                }
+                if spec.value.state != "enabled" || !spec.conditions.is_empty() {
+                    crate::electronics_library::evidence::missing(
+                        "PullMismatch",
+                        id,
+                        "active internal pull state under operating conditions",
+                    );
+                    continue;
+                }
+                let owner = id.rsplit_once('.').unwrap().0;
+                let [near, far] = spec.value.pins.as_slice() else {
+                    crate::electronics_library::evidence::missing(
+                        "PullMismatch",
+                        id,
+                        "internal pull signal and rail terminals",
+                    );
+                    continue;
+                };
+                if near != &term.pin {
+                    continue;
+                }
+                let target = format!("{owner}.{far}");
+                let resist_kind = format!("{}_resistance", spec.value.kind);
+                let ohms = records().find_map(|s| {
+                    let v = &s.value;
+                    if v.kind != resist_kind
+                        || !s.conditions.is_empty()
+                        || s.class == "absolute_max"
+                        || s.class == "test_rating"
+                        || !v.pins.is_empty() && v.pins != spec.value.pins
+                    {
+                        return None;
+                    }
+                    Some([v.min?, v.max?].map(|n| PartValue {
+                        magnitude: n * v.unit_scale(),
+                        unit: "Ω",
+                    }))
+                });
+                let ranges = self.net_of.get(&target).and_then(|key| rails.get(key.as_str()));
+                let volts = ranges.and_then(|rs| {
+                    rs.iter().map(|(_, v)| *v).reduce(|a, b| VoltageRange {
+                        min: a.min.min(b.min),
+                        max: a.max.max(b.max),
+                    })
+                });
+                sources.entry(net).or_default().push(PullSource {
+                    target,
+                    bridge: vec![id.clone()],
+                    description: format!("Datasheet {} on {id}", spec.value.kind),
+                    volts,
+                    ohms,
+                    internal: None,
+                    direction: Some(kind),
+                    fitted: true,
+                });
             }
         }
         for (scope, sheet) in &self.occurrences {
@@ -141,12 +226,7 @@ impl Circuit {
                 }
                 let owner = format!("{scope}/{}", row.id);
                 let display = doc.reference(&owner, reference.as_ref().unwrap_or(&row.id));
-                let mut paths: Vec<_> = def.paths.values().cloned().collect();
-                if paths.is_empty() && def.pins.len() == 2 {
-                    let mut pins = def.pins.keys();
-                    paths.push([pins.next().unwrap().clone(), pins.next().unwrap().clone()]);
-                }
-                for [a, b] in paths {
+                for [a, b] in def.resistor_paths() {
                     let ends = [format!("{owner}.{a}"), format!("{owner}.{b}")];
                     for (near, far) in [(&ends[0], &ends[1]), (&ends[1], &ends[0])] {
                         let (Some(net), Some(other)) = (self.net_of.get(near), self.net_of.get(far)) else {
@@ -164,6 +244,7 @@ impl Circuit {
                                 ohms: PartValue::parse(value).filter(|v| v.unit == "Ω").map(|v| [v; 2]),
                                 description: format!("{display} ({value})"),
                                 internal: None,
+                                direction: None,
                                 fitted: self.terminals[near].populated,
                             });
                         };
@@ -199,7 +280,18 @@ impl Circuit {
                 // may be an unrelated signal path, so prefer demonstrated evidence to it.
                 let mut best = PullEvidence::Missing;
                 for s in sources.get(self.net_of[pin].as_str()).into_iter().flatten() {
-                    let (rank, detail) = s.evaluate(want, doc);
+                    let (rank, detail) = s.evaluate(want);
+                    if matches!(rank, PullEvidence::UnknownRail | PullEvidence::UnknownValue) {
+                        crate::electronics_library::evidence::missing(
+                            "PullMismatch",
+                            &s.target,
+                            if rank == PullEvidence::UnknownRail {
+                                "pull rail voltage"
+                            } else {
+                                "pull resistance"
+                            },
+                        );
+                    }
                     if rank > best {
                         best = rank;
                         check = ConnectionCheck {

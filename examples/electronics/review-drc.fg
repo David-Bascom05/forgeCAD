@@ -1,0 +1,3 @@
+footprint_library
+short = drc_rule(rule:"ShortCircuit", severity:"error")
+unrouted = drc_rule(rule:"UnroutedNet", severity:"info")

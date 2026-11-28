@@ -1,0 +1,13 @@
+symbol_library
+# The datasheet assigns discrete codes; only two pair tables are required.
+Register_code=attribute_type(label:"Register code",kind:"lookup",
+ units:[{name:"Hex"},{name:"Numeric"},{name:"Binary"}],
+ conversions:[
+   {name:"Hex to numeric",from:"Hex",to:"Numeric",rows:[["0x48","72"],["0x49","73"],["0x4A","74"]]},
+   {name:"Numeric to binary",from:"Numeric",to:"Binary",rows:[["72","01001000"],["73","01001001"],["74","01001010"]]}
+ ])
+Device=symbol(ref_prefix:"U",pins:{CFG:pin(number:"1",kind:"input",at:(-10,0)),VDD:pin(number:"2",kind:"power_in",at:(0,10)),VSS:pin(number:"3",kind:"power_in",at:(0,-10))},
+graphics:[rect(from:(-7,-6),to:(7,6))],strap_tables:{
+ code:strap_table(label:"Configuration code",kind:Register_code,unit:"Hex",inputs:{CFG:{low:VSS,high:VDD,floating:"open"}},
+ rows:[[{CFG:low},"0x48"],[{CFG:high},"0x49"],[{CFG:floating},"0x4A"]],default:"0x48")
+})
