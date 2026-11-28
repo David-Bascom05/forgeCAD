@@ -291,6 +291,19 @@ window.forge_export = async (json) => {
   window.forge_exported = fname;
   tell(`Downloaded ${fname}`);
 };
+window.forge_pick_datasheet = (path, id) => {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "application/pdf,.pdf";
+  input.onchange = async () => {
+    const file = input.files[0];
+    if (!file) return;
+    if (file.size > 32 * 1024 * 1024) return fc.app_say("Choose a PDF of at most 32 MiB");
+    try { fc.app_attach_pdf(path, id, new Uint8Array(await file.arrayBuffer())); }
+    catch (error) { fc.app_say(String(error)); }
+  };
+  input.click();
+};
 window.forge_save_as = (name) => {
   const n = prompt("Save as (a path in the project)", name || "part.fg");
   if (!n) return;

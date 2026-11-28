@@ -1,0 +1,13 @@
+symbol_library
+PowerFET = symbol(ref_prefix: "Q", part_kind: "mosfet", paths: {channel: [drain, source]}, fields: {Family: "load switch"}, pins: {
+  drain: pin(number: "2", pads: ["2","EP"], kind: "passive", at: (-6,0)),
+  source: pin(number: "3", kind: "passive", at: (6,0)),
+  gate_in: pin(number: "1", kind: "input", at: (0,-6), description: "Gate drive relative to source.")
+}, graphics: [
+  line(from: (-6,0), to: (-2,0)), line(from: (-2,0), to: (-2,-2)),
+  line(from: (2,0), to: (6,0)), line(from: (2,0), to: (2,-2)),
+  line(from: (-2.6,-2), to: (-1.4,-2)), line(from: (-0.6,-2), to: (0.6,-2)),
+  line(from: (1.4,-2), to: (2.6,-2)), line(from: (-2.6,-2.7), to: (2.6,-2.7)),
+  line(from: (0,-2.7), to: (0,-6)), line(from: (2,0), to: (0,0)),
+  line(from: (0,0), to: (0,-2)), polyline(points: [(-0.45,-0.9),(0,-1.8),(0.45,-0.9)])
+])

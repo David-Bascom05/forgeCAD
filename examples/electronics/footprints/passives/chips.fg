@@ -1,0 +1,5 @@
+footprint_library
+chip = footprint(courtyard: [(-1,-2.8),(1,-2.8),(1,2.8),(-1,2.8)],
+                legend: [silk_text(at: (1.2,0), value: "{ref}", height: 0.8mm, width: 0.12mm)],
+                pads: [smd(number: "1", at: (0,-2), size: (1.4,1), mask: 0.05mm, paste: -0.05mm),
+                        smd(number: "2", at: (0,2), size: (1.4,1), mask: 0.05mm, paste: -0.05mm)])

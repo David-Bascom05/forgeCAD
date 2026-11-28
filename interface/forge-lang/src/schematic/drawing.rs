@@ -48,45 +48,126 @@ fn arc(page: &mut Page, a: Point2, m: Point2, b: Point2) {
         },
     );
 }
-pub(super) fn pin_label(pin: &Pin, name: &str) -> (Point, String) {
-    (
-        super::graph::transform([0.8, 0.], pin.at, pin.angle, false),
-        format!("{name} ({})", pin.number),
-    )
+fn graphic(page: &mut Page, shape: &Shape, f: impl Fn(Point) -> Point2) {
+    match shape {
+        Shape::Line(a, b) => path(page, vec![f(*a), f(*b)]),
+        Shape::Rect(a, b) => path(page, vec![f(*a), f([a[0], b[1]]), f(*b), f([b[0], a[1]]), f(*a)]),
+        Shape::Circle(a, r) => stroke(
+            page,
+            Geom2::Conic {
+                c: f(*a),
+                u: Vec2::new(*r, 0.),
+                v: Vec2::new(0., *r),
+                t0: 0.,
+                t1: TAU,
+            },
+        ),
+        Shape::Text(a, t) => text(page, f(*a), 1.2, t),
+        Shape::Arc(a, m, b) => arc(page, f(*a), f(*m), f(*b)),
+        Shape::Polyline(ps) => path(page, ps.iter().copied().map(f).collect()),
+    }
 }
-fn glyph(page: &mut Page, s: &Symbol, unit: &str, at: Point, angle: f64, mirror: bool) {
-    let f = |p: Point| pt(super::graph::transform(p, at, angle, mirror));
+/// Drawing primitives for hit testing or highlighting a single library graphic.
+pub fn graphic_page(shape: &Shape) -> Page {
+    let mut page = Page::default();
+    graphic(&mut page, shape, pt);
+    page
+}
+const PIN_HEIGHT: f64 = 0.95;
+const REFERENCE_HEIGHT: f64 = 2.0;
+const VALUE_HEIGHT: f64 = 1.55;
+
+fn glyph(
+    page: &mut Page,
+    s: &Symbol,
+    unit: &str,
+    at: Point,
+    angle: f64,
+    mirror: bool,
+    show_pins: bool,
+) -> (Point2, Point2) {
+    let f = |p| pt(super::graph::transform(p, at, angle, mirror));
     for g in &s.graphics {
-        if g.unit.as_deref().is_some_and(|u| u != unit) {
+        if g.unit.as_deref().is_none_or(|u| u == unit) {
+            graphic(page, &g.shape, f);
+        }
+    }
+    let mut lo = pt(at);
+    let mut hi = pt(at);
+    for stroke in &page.strokes {
+        let (a, b) = stroke.geom.bounds();
+        lo.x = lo.x.min(a.x);
+        lo.y = lo.y.min(a.y);
+        hi.x = hi.x.max(b.x);
+        hi.y = hi.y.max(b.y);
+    }
+    for (name, p) in s.pins.iter().filter(|(_, p)| p.unit == unit) {
+        let tip = f(p.at);
+        lo.x = lo.x.min(tip.x);
+        lo.y = lo.y.min(tip.y);
+        hi.x = hi.x.max(tip.x);
+        hi.y = hi.y.max(tip.y);
+        if !show_pins || s.power_net.is_some() {
             continue;
         }
-        match &g.shape {
-            Shape::Line(a, b) => path(page, vec![f(*a), f(*b)]),
-            Shape::Rect(a, b) => path(page, vec![f(*a), f([a[0], b[1]]), f(*b), f([b[0], a[1]]), f(*a)]),
-            Shape::Circle(a, r) => stroke(
-                page,
-                Geom2::Conic {
-                    c: f(*a),
-                    u: Vec2::new(*r, 0.),
-                    v: Vec2::new(0., *r),
-                    t0: 0.,
-                    t1: TAU,
-                },
-            ),
-            Shape::Text(a, t) => text(page, f(*a), 1.2, t),
-            Shape::Arc(a, m, b) => arc(page, f(*a), f(*m), f(*b)),
-            Shape::Polyline(ps) => path(page, ps.iter().copied().map(f).collect()),
-        }
+        let label = format!("{name} ({})", p.number);
+        let dx = tip.x - at[0];
+        let dy = tip.y - at[1];
+        let left = if dx < -dy.abs() {
+            tip.x - forge_draw::page::text_width(&label, PIN_HEIGHT) - 0.45
+        } else {
+            tip.x + 0.65
+        };
+        text(page, Point2::new(left, tip.y + 0.4), PIN_HEIGHT, &label);
     }
-    for (name, p) in &s.pins {
-        if p.unit == unit {
-            let (tip, label) = pin_label(p, name);
-            path(page, vec![f(p.at), f(tip)]);
-            text(page, f(tip), 0.8, &label);
-        }
+    (lo, hi)
+}
+
+fn component_fields(page: &mut Page, lo: Point2, hi: Point2, row: &Row, reference: &str, value: &str) {
+    let (at, reference_offset, value_offset) = match &row.item {
+        Item::Place {
+            at,
+            ref_offset,
+            value_offset,
+            ..
+        } => (*at, *ref_offset, *value_offset),
+        Item::Gate { at, .. } => (*at, None, None),
+        _ => unreachable!(),
+    };
+    let w = |s, h| forge_draw::page::text_width(s, h);
+    let vertical = hi.y - lo.y > hi.x - lo.x;
+    let mid = (lo.x + hi.x) / 2.;
+    let x = |s, h| if vertical { hi.x + 1.0 } else { mid - w(s, h) / 2. };
+    let y = if vertical {
+        (lo.y + hi.y) / 2. - VALUE_HEIGHT - 0.3
+    } else {
+        hi.y + 0.85
+    };
+    let default_ref = Point2::new(
+        x(reference, REFERENCE_HEIGHT),
+        y + if value.is_empty() { 0. } else { VALUE_HEIGHT + 0.65 },
+    );
+    let locate =
+        |offset: Option<Point>, default| offset.map_or(default, |p| Point2::new(at[0] + p[0], at[1] + p[1]));
+    if !reference.is_empty() {
+        text(
+            page,
+            locate(reference_offset, default_ref),
+            REFERENCE_HEIGHT,
+            reference,
+        );
+    }
+    if !value.is_empty() {
+        text(
+            page,
+            locate(value_offset, Point2::new(x(value, VALUE_HEIGHT), y)),
+            VALUE_HEIGHT,
+            value,
+        );
     }
 }
-fn fit(mut p: Page) -> String {
+
+fn fit_page(mut p: Page) -> Page {
     let (mut x0, mut y0, mut x1, mut y1) =
         (f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
     let mut include = |a: Point2, b: Point2| {
@@ -127,9 +208,28 @@ fn fit(mut p: Page) -> String {
             *v = place.point(*v);
         }
     }
-    forge_draw::svg::svg(&p)
+    p
 }
-pub(super) fn symbol_svg(d: &Document, id: &str, unit: &str) -> Result<String> {
+fn fit(p: Page) -> String {
+    forge_draw::svg::svg(&fit_page(p))
+}
+
+pub fn sheet_pdf(d: &Document, c: &Circuit) -> Result<Vec<u8>> {
+    if c.occurrences.is_empty() {
+        return Err(Fault::new(
+            "NoSheets",
+            Span::default(),
+            "the document has no sheets to print",
+        ));
+    }
+    let pages = c
+        .occurrences
+        .keys()
+        .map(|s| sheet_page(d, c, s).map(fit_page))
+        .collect::<Result<Vec<_>>>()?;
+    Ok(forge_draw::pdf::pdf(&pages))
+}
+pub fn symbol_page(d: &Document, id: &str, unit: &str) -> Result<Page> {
     let s = d
         .symbols
         .get(id)
@@ -138,27 +238,160 @@ pub(super) fn symbol_svg(d: &Document, id: &str, unit: &str) -> Result<String> {
         return Err(Fault::new("UnknownUnit", Span::default(), unit));
     }
     let mut page = Page::default();
-    glyph(&mut page, s, unit, [0., 0.], 0., false);
-    Ok(fit(page))
+    glyph(&mut page, s, unit, [0., 0.], 0., false, true);
+    Ok(page)
 }
-pub(super) fn sheet_svg(d: &Document, c: &Circuit, scope: &str) -> Result<String> {
+pub fn sheet_page(d: &Document, c: &Circuit, scope: &str) -> Result<Page> {
+    let mut page = sheet_selection_page(d, c, scope, |_, _| true)?;
+    let sheet = &c.occurrences[scope];
+    if let Some(template) = d.templates.get(sheet) {
+        let mut frame = Page::default();
+        for g in &d.symbols[template].graphics {
+            graphic(&mut frame, &g.shape, pt);
+        }
+        let index = c.occurrences.keys().position(|s| s == scope).unwrap() + 1;
+        for text in &mut frame.texts {
+            text.text = text
+                .text
+                .replace("{page}", &index.to_string())
+                .replace("{pages}", &c.occurrences.len().to_string())
+                .replace("{sheet}", scope)
+                .replace("{title}", &d.sheets[sheet]);
+        }
+        frame.texts.append(&mut page.texts);
+        frame.strokes.append(&mut page.strokes);
+        frame.fills.append(&mut page.fills);
+        return Ok(frame);
+    }
+    Ok(page)
+}
+/// Project selected rows with the full sheet's gate and attachment context.
+pub fn sheet_selection_page(
+    d: &Document,
+    c: &Circuit,
+    scope: &str,
+    include: impl Fn(&Row, &str) -> bool,
+) -> Result<Page> {
     let sheet = c
         .occurrences
         .get(scope)
         .ok_or_else(|| Fault::new("UnknownSheet", Span::default(), scope))?;
+    let rows = d.rows.iter().filter(|r| r.sheet == *sheet).collect::<Vec<_>>();
     let mut page = Page::default();
+    visit_rows(d, c, scope, &rows, |row, key, mut ink, _| {
+        if !include(row, &key) {
+            return;
+        }
+        page.texts.append(&mut ink.texts);
+        page.strokes.append(&mut ink.strokes);
+        page.fills.append(&mut ink.fills);
+    });
+    Ok(page)
+}
+/// Foreground geometry for one pin. Keep component bodies and fields in context,
+/// but dim the labels and authored leads of the other terminals on each gate.
+pub fn pin_inspection_page(d: &Document, c: &Circuit, scope: &str, focus: &PinInspection) -> Result<Page> {
+    let sheet = c
+        .occurrences
+        .get(scope)
+        .ok_or_else(|| Fault::new("UnknownSheet", Span::default(), scope))?;
+    let mut gates = Map::new();
+    for id in &focus.pins {
+        let Some((owner, _)) = id.rsplit_once('.') else {
+            continue;
+        };
+        if owner.rsplit_once('/').is_some_and(|(s, _)| s == scope) {
+            let pin = &c.terminals[id];
+            let sym = &d.symbols[&pin.symbol];
+            gates.insert(c.origins[id].lo, (owner, &sym.pins[&pin.pin].unit, sym));
+        }
+    }
+    let mut endpoints = Set::new();
+    for wire in &focus.wires {
+        let (a, b, _) = &c.wires[wire];
+        endpoints.extend([a, b]);
+    }
     let rows: Vec<_> = d.rows.iter().filter(|r| r.sheet == *sheet).collect();
+    let mut page = Page::default();
+    visit_rows(d, c, scope, &rows, |row, key, mut ink, text_ids| {
+        if focus.wires.contains(&key) {
+            page.strokes.append(&mut ink.strokes);
+            return;
+        }
+        if matches!(row.item, Item::Junction(_)) && endpoints.contains(&key) {
+            page.fills.append(&mut ink.fills);
+            return;
+        }
+        let Some(&(owner, unit, sym)) = gates.get(&row.span.lo) else {
+            return;
+        };
+        // Symbol leads are authored graphics. Match their open endpoints against
+        // this specific gate's transformed pin anchors, including rotated instances.
+        let inactive: Vec<_> = sym
+            .pins
+            .iter()
+            .filter(|(_, p)| &p.unit == unit)
+            .map(|(name, _)| format!("{owner}.{name}"))
+            .filter(|id| !focus.pins.contains(id))
+            .filter_map(|id| c.locations.get(&id).copied().map(pt))
+            .collect();
+        ink.strokes.retain(|s| match &s.geom {
+            Geom2::Poly(ps) if ps.first() != ps.last() => ![ps.first(), ps.last()]
+                .into_iter()
+                .flatten()
+                .any(|p| inactive.contains(p)),
+            Geom2::Line { a, b } => !inactive.contains(a) && !inactive.contains(b),
+            _ => true,
+        });
+        page.strokes.append(&mut ink.strokes);
+        page.fills.append(&mut ink.fills);
+        page.texts.extend(
+            ink.texts
+                .into_iter()
+                .zip(text_ids)
+                .filter(|(_, id)| !c.terminals.contains_key(id) || focus.pins.contains(id))
+                .map(|(text, _)| text),
+        );
+    });
+    Ok(page)
+}
+// The editor, SVG export and readability checks consume the same positioned primitives.
+fn visit_rows(
+    d: &Document,
+    c: &Circuit,
+    scope: &str,
+    rows: &[&Row],
+    mut visit: impl FnMut(&Row, String, Page, Vec<String>),
+) {
     let placed: Map<_, _> = rows
         .iter()
         .filter_map(|r| {
-            if let Item::Place { symbol, .. } = &r.item {
-                Some((&r.id, symbol))
+            if let Item::Place {
+                symbol, reference, ..
+            } = &r.item
+            {
+                let Item::Place { visibility, .. } = &r.item else {
+                    unreachable!()
+                };
+                Some((&r.id, (symbol, reference.as_ref().unwrap_or(&r.id), visibility)))
             } else {
                 None
             }
         })
         .collect();
-    for row in rows {
+    let mut right_wires = Set::new();
+    for row in rows.iter().filter(|r| matches!(r.item, Item::Wire { .. })) {
+        let (a, b, via) = &c.wires[&format!("{scope}/{}", row.id)];
+        if via.first().unwrap_or(&c.locations[b])[0] > c.locations[a][0] {
+            right_wires.insert(a.as_str());
+        }
+        if via.last().unwrap_or(&c.locations[a])[0] > c.locations[b][0] {
+            right_wires.insert(b.as_str());
+        }
+    }
+    for &row in rows {
+        let mut page = Page::default();
+        let mut text_ids = Vec::new();
         let key = format!("{scope}/{}", row.id);
         match &row.item {
             Item::Place {
@@ -168,15 +401,117 @@ pub(super) fn sheet_svg(d: &Document, c: &Circuit, scope: &str) -> Result<String
                 angle,
                 mirror,
                 value,
+                reference,
                 ..
             } => {
-                glyph(&mut page, &d.symbols[symbol], unit, *at, *angle, *mirror);
-                text(
-                    &mut page,
-                    pt(*at) + Vec2::new(0., 1.5),
-                    1.,
-                    &format!("{} {value}", row.id),
-                );
+                let sym = &d.symbols[symbol];
+                let show_pins =
+                    !(sym.pins.len() == 2 && sym.pins.values().all(|p| p.electrical == Electrical::Passive));
+                let (lo, hi) = glyph(&mut page, sym, unit, *at, *angle, *mirror, show_pins);
+                glyph_ids(&mut text_ids, sym, unit, &key, show_pins);
+                let Item::Place {
+                    visibility,
+                    fields,
+                    datasheet,
+                    footprint,
+                    populated,
+                    in_bom,
+                    ..
+                } = &row.item
+                else {
+                    unreachable!()
+                };
+                let visible = |k: &str| {
+                    visibility
+                        .get(k)
+                        .or_else(|| sym.visibility.get(k))
+                        .copied()
+                        .unwrap_or_else(|| default_field_visibility(k))
+                };
+                let reference = if visible("reference") {
+                    d.reference(&key, reference.as_ref().unwrap_or(&row.id))
+                } else {
+                    ""
+                };
+                let value = if visible("value") {
+                    sym.power_net
+                        .as_deref()
+                        .filter(|_| value.is_empty())
+                        .unwrap_or(value.as_str())
+                } else {
+                    ""
+                };
+                if sym.power_net.is_some() {
+                    component_fields(&mut page, lo, hi, row, reference, "");
+                    if !value.is_empty() {
+                        let x = (lo.x + hi.x - forge_draw::page::text_width(value, VALUE_HEIGHT)) / 2.;
+                        let y = if hi.y > at[1] {
+                            hi.y + 0.55
+                        } else {
+                            lo.y - VALUE_HEIGHT - 0.55
+                        };
+                        text(&mut page, Point2::new(x, y), VALUE_HEIGHT, value);
+                    }
+                } else {
+                    component_fields(&mut page, lo, hi, row, reference, value);
+                }
+                if !reference.is_empty() {
+                    text_ids.push(format!("{key}:reference"));
+                }
+                if !value.is_empty() {
+                    text_ids.push(format!("{key}:value"));
+                }
+                let mut y = page.texts.iter().map(|t| t.at.y + t.h).fold(hi.y, f64::max) + 0.8;
+                let mut field = |id: &str, label: &str, v: &str| {
+                    if visible(id) && !v.is_empty() {
+                        let line = format!("{label}: {v}");
+                        text(&mut page, Point2::new(lo.x, y), VALUE_HEIGHT, &line);
+                        text_ids.push(format!("{key}:{id}"));
+                        y += VALUE_HEIGHT + 0.65;
+                    }
+                };
+                for (k, v) in [
+                    ("symbol", symbol.as_str()),
+                    ("footprint", footprint.as_deref().unwrap_or("")),
+                    (
+                        "datasheet",
+                        datasheet
+                            .as_ref()
+                            .or(sym.datasheet.as_ref())
+                            .map(String::as_str)
+                            .unwrap_or(""),
+                    ),
+                    ("part_kind", sym.part_kind.as_deref().unwrap_or("")),
+                    ("ref_prefix", sym.ref_prefix.as_str()),
+                    ("unit", unit.as_str()),
+                    ("power_net", sym.power_net.as_deref().unwrap_or("")),
+                    (
+                        "populated",
+                        if *c.fitted.get(&key).unwrap_or(populated) {
+                            "yes"
+                        } else {
+                            "no"
+                        },
+                    ),
+                    ("in_bom", if *in_bom { "yes" } else { "no" }),
+                ] {
+                    field(k, k, v);
+                }
+                for (k, v) in sym
+                    .fields
+                    .iter()
+                    .filter(|(k, _)| !fields.contains_key(*k))
+                    .chain(fields)
+                {
+                    field(&format!("custom.{k}"), k, v);
+                }
+                for (k, r) in c.straps.get(&key).into_iter().flatten() {
+                    field(
+                        &format!("derived.{k}"),
+                        r.label.as_deref().unwrap_or(k),
+                        r.value.as_deref().unwrap_or("?"),
+                    );
+                }
             }
             Item::Gate {
                 of,
@@ -185,13 +520,26 @@ pub(super) fn sheet_svg(d: &Document, c: &Circuit, scope: &str) -> Result<String
                 angle,
                 mirror,
             } => {
-                glyph(&mut page, &d.symbols[placed[of]], unit, *at, *angle, *mirror);
-                text(
-                    &mut page,
-                    pt(*at) + Vec2::new(0., 1.5),
-                    1.,
-                    &format!("{of}.{unit}"),
-                );
+                let sym = &d.symbols[placed[of].0];
+                let (lo, hi) = glyph(&mut page, sym, unit, *at, *angle, *mirror, true);
+                glyph_ids(&mut text_ids, sym, unit, &format!("{scope}/{of}"), true);
+                if placed[of]
+                    .2
+                    .get("reference")
+                    .or_else(|| sym.visibility.get("reference"))
+                    .copied()
+                    .unwrap_or(true)
+                {
+                    component_fields(
+                        &mut page,
+                        lo,
+                        hi,
+                        row,
+                        &format!("{}.{unit}", d.reference(&format!("{scope}/{of}"), placed[of].1)),
+                        "",
+                    );
+                    text_ids.push(format!("{key}:reference"));
+                }
             }
             Item::Wire { .. } => {
                 let (a, b, via) = &c.wires[&key];
@@ -200,7 +548,35 @@ pub(super) fn sheet_svg(d: &Document, c: &Circuit, scope: &str) -> Result<String
                 ps.push(pt(c.locations[b]));
                 path(&mut page, ps);
             }
-            Item::Label { text: s, at, .. } | Item::Note(at, s) => text(&mut page, pt(*at), 1.2, s),
+            Item::Label {
+                text: s,
+                at,
+                global,
+                target,
+            } => net_label(
+                &mut page,
+                *at,
+                s,
+                if *global { Tag::Global } else { Tag::Local },
+                right_wires.contains(format!("{scope}/{target}").as_str()),
+            ),
+            Item::Note {
+                at,
+                text: s,
+                size,
+                bold,
+            } => {
+                text(&mut page, pt(*at), *size, s);
+                if *bold && let Some(t) = page.texts.last_mut() {
+                    t.pen = Pen::BoldText;
+                }
+            }
+            Item::Drawing { shape, width } => {
+                graphic(&mut page, shape, pt);
+                for stroke in &mut page.strokes {
+                    stroke.pen = Pen::Annotation((width * 1000.).round().max(1.) as u32);
+                }
+            }
             Item::Junction(at) => {
                 let a = pt(*at);
                 page.fills.push((
@@ -213,7 +589,14 @@ pub(super) fn sheet_svg(d: &Document, c: &Circuit, scope: &str) -> Result<String
                         .collect(),
                 ));
             }
-            Item::Port(at) | Item::SheetInstance { at, .. } => text(&mut page, pt(*at), 1.2, &row.id),
+            Item::Port(at) => net_label(
+                &mut page,
+                *at,
+                &row.id,
+                Tag::Port,
+                right_wires.contains(key.as_str()),
+            ),
+            Item::SheetInstance { at, .. } => text(&mut page, pt(*at), VALUE_HEIGHT, &row.id),
             Item::NoConnect(p) => {
                 let a = pt(c.locations[&format!("{scope}/{p}")]);
                 for sign in [-1., 1.] {
@@ -223,48 +606,85 @@ pub(super) fn sheet_svg(d: &Document, c: &Circuit, scope: &str) -> Result<String
             }
             _ => {}
         }
+        text_ids.resize(page.texts.len(), key.clone());
+        visit(row, key, page, text_ids);
     }
-    Ok(fit(page))
+}
+fn glyph_ids(ids: &mut Vec<String>, sym: &Symbol, unit: &str, owner: &str, show: bool) {
+    for (i, _) in
+        sym.graphics.iter().enumerate().filter(|(_, g)| {
+            g.unit.as_deref().is_none_or(|u| u == unit) && matches!(g.shape, Shape::Text(..))
+        })
+    {
+        ids.push(format!("{owner}:graphic{i}"));
+    }
+    if show && sym.power_net.is_none() {
+        ids.extend(
+            sym.pins
+                .iter()
+                .filter(|(_, p)| p.unit == unit)
+                .map(|(n, _)| format!("{owner}.{n}")),
+        );
+    }
+}
+enum Tag {
+    Local,
+    Global,
+    Port,
+}
+fn net_label(page: &mut Page, at: Point, name: &str, tag: Tag, left: bool) {
+    let a = pt(at);
+    let h = VALUE_HEIGHT;
+    let w = forge_draw::page::text_width(name, h);
+    let dir = if left { -1. } else { 1. };
+    let p = |x, y| a + Vec2::new(dir * x, y);
+    let pad = 0.48;
+    let dy = h / 2. + pad;
+    let x = match tag {
+        Tag::Local => {
+            text(
+                page,
+                Point2::new(a.x + if left { -w - 0.25 } else { 0.25 }, a.y + 0.4),
+                h,
+                name,
+            );
+            return;
+        }
+        Tag::Global => {
+            let end = dy + w + 2. * pad;
+            path(page, vec![a, p(dy, dy), p(end, dy), p(end, -dy), p(dy, -dy), a]);
+            dy + pad
+        }
+        Tag::Port => {
+            let end = w + 2. * pad;
+            path(
+                page,
+                vec![
+                    p(0., -dy),
+                    p(0., dy),
+                    p(end, dy),
+                    p(end + dy, 0.),
+                    p(end, -dy),
+                    p(0., -dy),
+                ],
+            );
+            pad
+        }
+    };
+    text(
+        page,
+        Point2::new(a.x + if left { -x - w } else { x }, a.y - h / 2.),
+        h,
+        name,
+    );
+}
+pub(super) fn symbol_svg(d: &Document, id: &str, unit: &str) -> Result<String> {
+    symbol_page(d, id, unit).map(fit)
+}
+pub(super) fn sheet_svg(d: &Document, c: &Circuit, scope: &str) -> Result<String> {
+    sheet_page(d, c, scope).map(fit)
 }
 
-/// Use the same print coordinates and text widths for diagnostics and export.
-pub(super) type TextBounds = [f64; 4];
-pub(super) fn bounds(at: Point, s: &str, h: f64) -> TextBounds {
-    [
-        at[0],
-        at[0] + forge_draw::page::text_width(s, h),
-        at[1],
-        at[1] + h,
-    ]
-}
-pub(super) fn text_bounds(
-    rows: &[&Row],
-    scope: &str,
-    pins: Vec<(String, Point, String)>,
-) -> Map<String, TextBounds> {
-    let mut boxes: Map<_, _> = pins
-        .into_iter()
-        .map(|(id, at, s)| (id, bounds(at, &s, 0.8)))
-        .collect();
-    for r in rows {
-        if let Item::Note(at, s) | Item::Label { at, text: s, .. } = &r.item {
-            boxes.insert(format!("{scope}/{}", r.id), bounds(*at, s, 1.2));
-        }
-    }
-    boxes
-}
-pub(super) fn check_text(boxes: &Map<String, TextBounds>, issues: &mut Vec<super::graph::Issue>) {
-    let mut ordered: Vec<_> = boxes.iter().collect();
-    ordered.sort_by(|(_, a), (_, b)| a[0].total_cmp(&b[0]));
-    for (i, (id, a)) in ordered.iter().enumerate() {
-        for (other, b) in ordered[i + 1..].iter().take_while(|(_, b)| b[0] < a[1]) {
-            if a[2] < b[3] && b[2] < a[3] {
-                issues.push(super::graph::Issue {
-                    kind: "TextBoundsOverlap",
-                    objects: vec![(*id).clone(), (*other).clone()],
-                    message: "printed pin name, label or note extents intersect".into(),
-                });
-            }
-        }
-    }
-}
+#[path = "../standard_library/erc/drawing.rs"]
+mod checks;
+pub(super) use checks::{library_readability, readability};

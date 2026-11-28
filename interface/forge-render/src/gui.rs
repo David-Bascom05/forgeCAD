@@ -490,6 +490,38 @@ impl Gui {
             }
             return true;
         }
+        if path.ends_with(".fg")
+            && let Ok(src) = forge_dirs::fs::read_to_string(path)
+        {
+            if forge_lang::pcb::is_board(&src) {
+                return match crate::shell::pcb::Editor::open(Some(path), src) {
+                    Ok(e) => {
+                        self.shell.pcb = Some(e);
+                        self.shell.name = name_of(path);
+                        self.shell.tab = 0;
+                        true
+                    }
+                    Err(e) => {
+                        self.shell.status = e;
+                        false
+                    }
+                };
+            }
+            if forge_lang::schematic::is_document(&src) {
+                return match crate::shell::electronics::Editor::open(Some(path), src) {
+                    Ok(editor) => {
+                        self.shell.name = name_of(path);
+                        self.shell.electronics = Some(editor);
+                        self.shell.tab = 0;
+                        true
+                    }
+                    Err(msg) => {
+                        self.shell.status = msg;
+                        false
+                    }
+                };
+            }
+        }
         // a drawing opens in the Drawing environment
         if path.ends_with(".fg")
             && forge_dirs::fs::read_to_string(path).is_ok_and(|s| forge_lang::drawing::is_drawing(&s))
@@ -1005,7 +1037,19 @@ impl Gui {
     }
 
     /// The tool calls and view changes the chrome asked for; the window's things go to the host.
+    pub fn attach_pdf(&mut self, path: &str, id: &str, bytes: &[u8]) -> Result<(), String> {
+        self.shell
+            .electronics
+            .as_mut()
+            .ok_or("Select the original document and attach again.")?
+            .attach(path, id, bytes)
+    }
+
     fn apply(&mut self) -> Vec<Action> {
+        if let Some(path) = self.shell.electronics.as_mut().and_then(|e| e.open_file.take()) {
+            self.open_document(&path, true);
+        }
+
         self.versions_frame();
         let mut host = Vec::new();
         for a in std::mem::take(&mut self.shell.out) {
@@ -1099,6 +1143,43 @@ impl Gui {
                 // after the rest, which are this document's
                 Action::Doc(c) => {
                     self.doc_later.push(c);
+                    continue;
+                }
+                Action::NewPcb => {
+                    self.new_typed_document(crate::shell::docs::DocKind::Pcb);
+                    continue;
+                }
+                Action::Undo | Action::Redo if self.shell.pcb.is_some() => {
+                    self.shell.pcb.as_mut().unwrap().step(a == Action::Redo);
+                    self.sync_tab();
+                    continue;
+                }
+                Action::FitAll | Action::Home if self.shell.pcb.is_some() => {
+                    self.shell.pcb.as_mut().unwrap().fit = true;
+                    continue;
+                }
+                Action::NewElectronics(library) => {
+                    self.new_typed_document(if library {
+                        crate::shell::docs::DocKind::SymbolLibrary
+                    } else {
+                        crate::shell::docs::DocKind::Schematic
+                    });
+                    continue;
+                }
+                Action::Undo | Action::Redo if self.shell.electronics.is_some() => {
+                    let e = self.shell.electronics.as_mut().unwrap();
+                    e.step(a == Action::Redo);
+                    self.sync_tab();
+                    continue;
+                }
+                Action::Fg(crate::shell::FgCmd::Save)
+                    if self.shell.electronics.is_some() || self.shell.pcb.is_some() =>
+                {
+                    self.fg_save();
+                    continue;
+                }
+                Action::FitAll | Action::Home if self.shell.electronics.is_some() => {
+                    self.shell.electronics.as_mut().unwrap().fit = true;
                     continue;
                 }
                 Action::New => {
@@ -3812,6 +3893,20 @@ impl Gui {
 
     /// Writes the Forge part's text to its file.
     pub fn fg_save(&mut self) {
+        let path = self
+            .shell
+            .pcb
+            .as_ref()
+            .map(|e| e.path.clone())
+            .or_else(|| self.shell.electronics.as_ref().map(|e| e.path.clone()));
+        if let Some(path) = path {
+            if let Some(path) = path {
+                self.save_as(&path);
+            } else {
+                self.shell.out.push(Action::SaveAs);
+            }
+            return;
+        }
         let Some(s) = &mut self.fg else { return };
         // an untitled one: the host asks where
         if s.path.is_none() {

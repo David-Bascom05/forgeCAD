@@ -117,4 +117,22 @@ local_bypass = role(kind: \"bypass\")
 Cap = symbol(pins: {plus: pin(number: \"1\", kind: \"passive\", at: (0, 0), gives: [local_bypass])})
 " = true := by decide +kernel
 
+/-- A board and its package library use the same expression and named-argument grammar. -/
+theorem pcb_doc_accepted : accepts "pcb
+packages = library(file: \"parts.fg\")
+top = copper(weight_oz_ft2: 1, thickness: 0.035mm)
+cap = place(footprint: packages.chip, occurrence: \"main/c\", side: \"bottom\", at: (2,3))
+" = true := by decide +kernel
+
+theorem footprint_doc_accepted : accepts "footprint_library
+chip = footprint(pads: [smd(number: \"1\", at: (0,0), size: (1,2), paste: -0.05mm)])
+" = true := by decide +kernel
+
+/-- Service selection, a custom layer and its geometry share the ordinary PCB grammar. -/
+theorem pcb_layer_doc_accepted : accepts "pcb
+shop = process(vendor: \"oshpark\", service: \"two-layer\")
+test = user_layer(name: \"Probe map\")
+target = layer_dot(layer: \"user.test\", at: (2,3), diameter: 1mm)
+" = true := by decide +kernel
+
 end ForgeLang.LL1.Documents

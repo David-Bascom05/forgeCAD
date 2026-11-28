@@ -86,7 +86,7 @@ pub(crate) fn colour(p: Pen) -> &'static str {
         Pen::Hidden => "8",
         Pen::Tangent => "9",
         Pen::Center | Pen::Phantom => "1",
-        Pen::Thin => "3",
+        Pen::Thin | Pen::Annotation(_) | Pen::BoldText => "3",
         Pen::Hatch => "4",
         Pen::Cut => "1",
         Pen::Sick => "6",

@@ -22,6 +22,83 @@ The first research question is whether ForgeCAD can recognize **what a component
 
 The same approach can later describe a crystal and its load network, a feedback divider and sense pin, or ESD protection at a connector. Each role supplies its own electrical evidence and physical measurement.
 
+## Datasheet requirements and alternate pin functions
+
+**Proposed extension.** Pins list declared role IDs. Power roles can now carry an operating interval in volts or a single voltage in millivolts. Bypass roles can carry capacitance in nanofarads. A confirmed fulfillment checks the role IDs, the common net and any explicit return. Component values such as `"10k"` are display strings. There is no present basis for a checklist to certify the resistance of R7, the operating voltage at its far end or the state of an MCU pad after reset. Keep the current nominal role for intentional ownership. Add typed requirements and guarantees for compatibility across independently authored libraries. [Reader and types](../../interface/forge-lang/src/schematic/mod.rs) · [Fulfillment checks](../../interface/forge-lang/src/schematic/graph.rs)
+
+The analog example already contains a concrete test. Its TLV9001IDBVR VDD pin now requests a supply-voltage interval. TI specifies a 1.8–5.5 V supply span and recommends a local 0.1 µF bypass. A designer can legitimately use this op-amp at 5 V. Put the operating span between the two supply pins in the reusable symbol, keep the choice of 3.3 V in the project, and give the capacitor its own role. Show a separate board placement preference when the datasheet says “close” without giving a numeric distance. [Analog library](../../examples/electronics/analog/analog-symbols.fg) · [TI TLV900x datasheet, Power Supply Recommendations and Layout Guidelines](https://www.ti.com/lit/ds/symlink/tlv9001.pdf)
+
+### What a library author declares
+
+| Subject | Example of an authored fact |
+| --- | --- |
+| Physical pin | Package pin 17 belongs to the VDDIO bank. Its absolute input bounds depend on VDDIO. These limits apply to every function. |
+| Function of that pin | SDA uses an open-drain driver, accepts lows and highs, and needs a pull-up to the selected I/O domain. UART TX on the same pin drives push-pull and has a different set of guarantees. |
+| Operating state | During reset the pin is high impedance with an internal pull-down. Firmware can enable a pull-up later. Record the assumed configuration and the phase in which it takes effect. |
+| Two-terminal device | This resistor offers an unordered pin pair, resistance and tolerance. A diode offers an ordered anode/cathode pair. A resistor array declares individual pairs and any shared terminal. |
+| Evidence | Each limit carries the part/package, datasheet revision, page or table, condition and whether the value is guaranteed, typical, recommended, or an absolute maximum. Project exceptions carry their own rationale and scope. |
+
+Select a function on each **placed occurrence**. Save its stable library function key. The library defines the default and the legal options. Invariant pad limits and the selected function's requirements apply together. An inactive function contributes no function-specific drive, pull or requirement. The physical pin number, net, wires, board-pad link and existing designator survive a switch. If a library update removes a selected function, surface the unresolved selection. KiCad 10 already allows changing the displayed name, electrical type and graphic style per placed pin. ForgeCAD can make the selected function change the checks and the direction overlay as well. [KiCad 10 schematic editor, Alternate Pin Function Definitions](https://docs.kicad.org/10.0/en/eeschema/eeschema.html#alternate_pin_function_definitions)
+
+### Three predicates for the first implementation
+
+1. **Voltage across two terminals.** A consumer accepts an inclusive operating interval relative to its return pin. A source offers a guaranteed interval between its output and return under declared load and temperature conditions. A specific voltage is a single-point interval, and a nominal value with tolerance expands to an interval. Verify containment of the entire offered interval plus the return connection and required domain. A partial overlap gives a worst-case violation of the requirement. A nominal-only source leaves tolerance-dependent results open. Keep absolute maximum and recommended operating range separately visible. A net label such as +3V3 is a name and can appear on an undriven net.
+2. **A connection through a device.** From a particular terminal, follow its net to a fitted device pin, cross a declared pin pair of the requested type, then follow that pin's net to the target. Accept an exact target pin, or an explicitly scoped target such as this chip's VDDIO domain. Check each device parameter and tolerance against its typed bounds. Return the qualified endpoints, device and pin pair. Keep the two net IDs distinct. Check any declared exclusions, such as a parallel short around a required series resistor. Start with one device and compose bounded, ordered steps for later networks.
+3. **Bias in a named state.** Model `wants pull-up`, `wants pull-down`, `provides internal pull-up` and `provides internal pull-down` separately. A need specifies its destination domain, acceptable effective resistance, allowed internal/external sources, and reset/run/sleep condition. Identify all participating pulls and calculate the parallel bounds for resistors to the same potential. Opposing pulls form a divider and need a threshold check with input leakage. A configurable pull contributes only when its enable state is known. A requirement for an external fitted part still needs its own path witness.
+
+Extend the existing quantity parser and driver provenance for voltage and resistance first. Add current, capacitance, time and frequency as check families need them. In source, units such as `3.3V`, `6800ohm` and `6.8kohm` should produce dimensioned values and source spans. Keep the printed Value independently editable, and let the UI generate it from a typed value when requested. Use explicitly closed bounds and conservative arithmetic at comparisons. Record the reference terminal for voltage and direction for current. [Forge quantities](../../interface/forge-lang/src/values.rs)
+
+Here is one candidate spelling in `.fg`. These declarations describe the teaching fixture below. They illustrate the proposed syntax.
+
+```fg
+io_supply = supply(relative_to: VSS, operating: range(1.8V, 3.6V))
+sda_bias = pull_up(to: VDDIO, resistance: range(4.7kohm, 10kohm), source: external)
+series_out = path(to: peer.IN, through: resistor(resistance: range(22ohm, 47ohm)),
+                  count: 1, allow_bypass: false)
+
+# Inside a library symbol's pin map
+IO3: pin(number: "17", kind: "input", at: (0, 0), functions: {
+  SDA: function(kind: "open_drain", wants: [sda_bias], gives: [i2c_data]),
+  TX:  function(kind: "output", wants: [series_out], gives: [uart_data])
+})
+# Select a function when placing a symbol. Bind peer to the intended receiver
+# in the occurrence's interface mapping. The wire still attaches to U1.IO3.
+U1 = place(sheet: main, symbol: parts.MCU, functions: {IO3: TX}, at: (10, 5))
+```
+
+`relative_to` and `to` resolve scoped terminal references. `i2c_data` and `uart_data` are previously declared interface capabilities. The symbol author would put `io_supply` on VDDIO. A source library can independently publish its output range and return. A diagnostics row can then quote the two declarations and the measured containment margin. If the MCU datasheet requires an open drain only when a peripheral configuration bit is set, the function carries that condition.
+
+### What the designer sees
+
+The symbol editor provides **Add requirement** and **Add guarantee** under each function. Choosing *Connection through part* exposes fields for endpoint, device type, pin pair and parameter range. Limits can reference another pin or a library parameter. The schematic pin inspector offers a function picker, a state selector and a checklist assembled from the resulting predicates. Clicking a row highlights its specific terminals and parts across sheets. The same typed result powers text diagnostics and MCP queries. A unique electrically sufficient witness can satisfy a check directly. Reserve manual assignment for ambiguities or intentional ownership such as which capacitor serves which power pin.
+
+Consider a teaching fixture with U1.IO3 selected as SDA, a source guaranteeing 3.201–3.399 V relative to VSS, an allowed bank supply of 1.8–3.6 V, and a project pull-up requirement of 4.7–10 kΩ. These are fixture inputs, independent of any manufacturer's SDA specification.
+
+| Edit | Inspector result |
+| --- | --- |
+| Fit R7, 6.8 kΩ ±1%, from SDA to VDDIO | Supply range passes. Pull-up passes with 6.732–6.868 kΩ. Selecting it highlights U1.IO3 → R7.1 → R7.2 → VDDIO and identifies the source. |
+| Move R7's far pin to 5 V | The value check still passes. The destination check fails, even though both nets have supply symbols. |
+| Add another identical pull-up in parallel | Each resistor meets the individual range. Effective resistance becomes 3.366–3.434 kΩ, below the minimum. Show both reference designators. |
+| Leave the source tolerance unspecified | The connection is known. List the missing guaranteed output bounds before awarding a supply pass. |
+| Mark R7 unpopulated in a variant with no other pull | That variant loses the external path. An enabled internal pull can satisfy only an obligation that permits it and accepts its guaranteed range. |
+| Switch this occurrence to UART TX | Keep its wire and pad. Remove the SDA pull-up obligation, check the new drive mode against every other enabled driver and flag conflicting peripheral assignments. Undo restores the SDA checks. |
+
+Library symbols own peripheral membership. The model can record both SDA and SCL under I2C1 and multiple possible pin mappings. Interaction design for using that information while drawing is open.
+
+### Next checks worth adding
+
+- **Logic margins and power-off behavior.** Compare the sender's worst-case VOH/VOL at the actual load against the receiver's VIH/VIL for its bank voltage. Check whether an attached device can back-power an unpowered bank and surface any clamp-current limit.
+- **Resource budgets and shared buses.** Sum worst-case active loads on a regulator and drive group. For I²C, use effective pull resistance, bus capacitance and sink capability to check rise time and low-level current at the selected bus speed. A missing capacitance estimate leaves the rise-time result open. [TI, I²C Bus Pullup Resistor Calculation](https://www.ti.com/lit/an/slva689/slva689.pdf)
+- **Pin groups and mutually exclusive choices.** Bind SDA and SCL to the same peripheral instance, enforce differential P/N pairs, reserve debug pins, and detect two devices answering at the same fixed address.
+- **Startup and sequencing.** A strap must be at the required level when sampled. An enable may require power-good from a particular source. A design that works in the run state can fail during reset or power-down.
+- **Local networks with board obligations.** A regulator output capacitor can require effective capacitance under DC bias and an ESR interval. A series termination can require a resistor of the right value close to the driver. Report electrical suitability, component ownership and board distance as individually inspectable results.
+
+### Implementation and proof boundary
+
+Start with a small native checker for interval containment and one-device paths in a fitted occurrence graph. Index device pin pairs by net and type. Cache each verdict by the identities and revisions it read, including target domain, active function, selected operating state, variant and device value. Track candidate nets as well as the matched path so adding a parallel pull invalidates an existing pass. Moving text preserves these results. Cutting a wire, changing R7 or switching one pin function invalidates the affected checks. Keep unknown, contradicted and satisfied results distinct and show the offending value or missing input.
+
+Extend the existing Lean schematic model with dimensioned intervals, effective functions and witnesses over net and device edges. Prove that a satisfied interval accepts every guaranteed value, switching a function preserves the terminal partition, and a series-device witness never merges its two nets. Differential-test Rust against exhaustive small fixtures, including equality at a bound, reversed diode, disconnected return, a shunt around a series part, a DNP bridge and a removed pin function. Compare incremental and fresh results after edits and undo. The first graphical acceptance test is the SDA fixture above, drawn without writing source, saved, reopened and inspected via MCP. [Current schematic proof](../forge-lang/lean/ForgeLang/Schematic.lean) · [Live-check design](live-checks.md)
+
 ## What the prior art actually encodes
 
 ### KiCad separates symbol identity, page geometry, board geometry and synchronization

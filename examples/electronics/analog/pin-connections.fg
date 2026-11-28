@@ -1,0 +1,30 @@
+schematic
+
+analog = library(file: "analog-symbols.fg")
+power = library(file: "forge:power")
+main = sheet(title: "Amplifier input and feedback")
+supply_voltage = role(kind: "power", voltage_mv: 3300)
+feedback = role(kind: "feedback", connect_to: OUT)
+input_filter = role(kind: "signal", connect_to: J1.P1, through: analog.Resistor, value_range: ["2.2 kΩ", "4.7 kΩ"])
+
+J1 = place(sheet: main, symbol: analog.Connector2, at: (-34,3))
+R1 = place(sheet: main, symbol: analog.Resistor, value: "4.7 kΩ", at: (-15,3))
+U1 = place(sheet: main, symbol: analog.Amplifier, at: (6,0), ref_offset: (2.3,5.65), value_offset: (2.3,3.4), wants: {INP: [input_filter], INM: [feedback]})
+input_wire = wire(sheet: main, from: J1.P1, to: R1.A)
+filtered_wire = wire(sheet: main, from: R1.B, to: U1.INP)
+feedback_wire = wire(sheet: main, from: U1.OUT, to: U1.INM, via: [(21,0), (21,-12), (-3,-12), (-3,-3)])
+
+# The sheet receives 3.3 V from the project supply.
+supply = place(sheet: main, symbol: power.V3V3, gives: {net: [supply_voltage]}, at: (6,24))
+gnd = place(sheet: main, symbol: power.GND, at: (6,-21))
+connector_gnd = place(sheet: main, symbol: power.GND, at: (-28,-9))
+C1 = place(sheet: main, symbol: analog.Capacitor, value: "100 nF", at: (27,14))
+cap_gnd = place(sheet: main, symbol: power.GND, at: (27,7))
+rail = junction(sheet: main, at: (6,18))
+supply_wire = wire(sheet: main, from: supply.net, to: rail)
+vdd_wire = wire(sheet: main, from: rail, to: U1.VDD)
+cap_wire = wire(sheet: main, from: rail, to: C1.P)
+ground_wire = wire(sheet: main, from: U1.VSS, to: gnd.net)
+return_wire = wire(sheet: main, from: J1.P2, to: connector_gnd.net, via: [(-28,-2)])
+cap_return = wire(sheet: main, from: C1.N, to: cap_gnd.net)
+local_bypass = fulfill(sheet: main, want: U1.VDD, give: C1.P, role: analog.bypass, return_from: C1.N, return_to: U1.VSS)

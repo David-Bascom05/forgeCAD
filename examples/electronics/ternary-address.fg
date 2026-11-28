@@ -1,0 +1,38 @@
+symbol_library
+# Illustrative datasheet assignment. Each pin can be tied low, tied high, or left open.
+Decoder=symbol(ref_prefix:"U",pins:{
+ A2:pin(number:"1",kind:"input",at:(-12,6)),A1:pin(number:"2",kind:"input",at:(-12,0)),A0:pin(number:"3",kind:"input",at:(-12,-6)),
+ VDD:pin(number:"4",kind:"power_in",at:(0,12)),VSS:pin(number:"5",kind:"power_in",at:(0,-12)),
+ SDA:pin(number:"6",kind:"bidirectional",at:(12,3)),SCL:pin(number:"7",kind:"input",at:(12,-3))
+},graphics:[rect(from:(-9,-8),to:(9,8))],strap_tables:{
+ address:strap_table(label:"Device address",kind:"i2c_address",unit:"Hex",bus:[SDA,SCL],
+ inputs:{A2:{low:VSS,high:VDD,floating:"open"},A1:{low:VSS,high:VDD,floating:"open"},A0:{low:VSS,high:VDD,floating:"open"}},
+ rows:[
+    [{A2:low,A1:low,A0:low},"0x20"],
+    [{A2:low,A1:low,A0:high},"0x21"],
+    [{A2:low,A1:low,A0:floating},"0x22"],
+    [{A2:low,A1:high,A0:low},"0x23"],
+    [{A2:low,A1:high,A0:high},"0x24"],
+    [{A2:low,A1:high,A0:floating},"0x25"],
+    [{A2:low,A1:floating,A0:low},"0x26"],
+    [{A2:low,A1:floating,A0:high},"0x27"],
+    [{A2:low,A1:floating,A0:floating},"0x28"],
+    [{A2:high,A1:low,A0:low},"0x29"],
+    [{A2:high,A1:low,A0:high},"0x2A"],
+    [{A2:high,A1:low,A0:floating},"0x2B"],
+    [{A2:high,A1:high,A0:low},"0x2C"],
+    [{A2:high,A1:high,A0:high},"0x2D"],
+    [{A2:high,A1:high,A0:floating},"0x2E"],
+    [{A2:high,A1:floating,A0:low},"0x2F"],
+    [{A2:high,A1:floating,A0:high},"0x30"],
+    [{A2:high,A1:floating,A0:floating},"0x31"],
+    [{A2:floating,A1:low,A0:low},"0x32"],
+    [{A2:floating,A1:low,A0:high},"0x33"],
+    [{A2:floating,A1:low,A0:floating},"0x34"],
+    [{A2:floating,A1:high,A0:low},"0x35"],
+    [{A2:floating,A1:high,A0:high},"0x36"],
+    [{A2:floating,A1:high,A0:floating},"0x37"],
+    [{A2:floating,A1:floating,A0:low},"0x38"],
+    [{A2:floating,A1:floating,A0:high},"0x39"],
+    [{A2:floating,A1:floating,A0:floating},"0x3A"]
+ ])})

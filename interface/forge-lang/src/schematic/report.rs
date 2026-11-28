@@ -16,20 +16,61 @@ fn role(id: &RoleId, d: &Document) -> Json {
             ("unit", "nF".into()),
             ("value", v.into()),
         ]),
+        Some(Rating::VoltageRange(v)) => Json::obj(vec![
+            ("kind", "voltage_range".into()),
+            ("unit", "V".into()),
+            ("min", v.min.into()),
+            ("max", v.max.into()),
+        ]),
         Some(Rating::VoltageMv(v)) => Json::obj(vec![
             ("kind", "voltage".into()),
             ("unit", "mV".into()),
             ("value", v.into()),
         ]),
     };
-    Json::obj(vec![
+    let mut fields = vec![
         ("id", id.0.clone().into()),
         ("kind", r.kind.word().into()),
         ("rating", rating),
         ("prefer_mm", r.prefer.map_or(Json::Null, Into::into)),
-    ])
+    ];
+    if let Some([lo, hi]) = r.resistance {
+        fields.push((
+            "resistance_ohm",
+            Json::Arr(vec![lo.magnitude.into(), hi.magnitude.into()]),
+        ));
+    }
+    if let Some(w) = &r.connection {
+        fields.push((
+            "connection",
+            Json::obj(vec![
+                ("target", w.to.clone().into()),
+                ("path", w.path.clone().map_or(Json::Null, Into::into)),
+                (
+                    "through",
+                    w.through.as_ref().map_or(Json::Null, |selector| match selector {
+                        PartType::Kind(k) => Json::obj(vec![("kind", k.clone().into())]),
+                        PartType::Symbol(s) => Json::obj(vec![("symbol", s.clone().into())]),
+                    }),
+                ),
+                (
+                    "value_range",
+                    w.values.map_or(Json::Null, |[lo, hi]| {
+                        Json::obj(vec![
+                            // The CAD JSON number formatter rounds small geometry values.
+                            // Decimal strings preserve electrical limits down to picofarads.
+                            ("min", lo.magnitude.to_string().into()),
+                            ("max", hi.magnitude.to_string().into()),
+                            ("unit", lo.unit.into()),
+                        ])
+                    }),
+                ),
+            ]),
+        ));
+    }
+    Json::obj(fields)
 }
-fn roles(ids: &Set<RoleId>, d: &Document) -> Json {
+pub(super) fn roles(ids: &Set<RoleId>, d: &Document) -> Json {
     Json::Arr(ids.iter().map(|r| role(r, d)).collect())
 }
 fn graphic(g: &Graphic) -> Json {
@@ -52,8 +93,60 @@ fn graphic(g: &Graphic) -> Json {
     fields.push(("unit", g.unit.clone().map_or(Json::Null, Into::into)));
     Json::obj(fields)
 }
+fn specs(values: &[characteristics::Specification]) -> Json {
+    Json::Arr(values.iter().map(|s| s.json()).collect())
+}
 fn symbol(id: &str, s: &Symbol, d: &Document) -> Json {
     Json::obj(vec![
+        ("specs", specs(&s.specs)),
+        (
+            "visibility",
+            Json::Obj(
+                s.visibility
+                    .iter()
+                    .map(|(k, v)| (k.clone(), (*v).into()))
+                    .collect(),
+            ),
+        ),
+        (
+            "strap_tables",
+            Json::Obj(
+                s.strap_tables
+                    .iter()
+                    .map(|(name, t)| (name.clone(), t.json()))
+                    .collect(),
+            ),
+        ),
+        (
+            "peripherals",
+            Json::Obj(
+                s.peripherals
+                    .iter()
+                    .map(|(id, signals)| {
+                        (
+                            id.clone(),
+                            Json::Obj(
+                                signals
+                                    .iter()
+                                    .map(|(signal, pins)| (signal.clone(), strings(pins)))
+                                    .collect(),
+                            ),
+                        )
+                    })
+                    .collect(),
+            ),
+        ),
+        ("part_kind", s.part_kind.clone().map_or(Json::Null, Into::into)),
+        (
+            "paths",
+            Json::Obj(
+                s.paths
+                    .iter()
+                    .map(|(name, pair)| (name.clone(), strings(pair)))
+                    .collect(),
+            ),
+        ),
+        ("ref_prefix", s.ref_prefix.clone().into()),
         ("id", id.into()),
         (
             "pins",
@@ -63,6 +156,29 @@ fn symbol(id: &str, s: &Symbol, d: &Document) -> Json {
                     .map(|(id, p)| {
                         Json::obj(vec![
                             ("id", id.clone().into()),
+                            ("description", p.description.clone().into()),
+                            ("specs", specs(&p.specs)),
+                            ("aliases", strings(&p.aliases)),
+                            ("pads", strings(&p.pads)),
+                            (
+                                "functions",
+                                Json::Obj(
+                                    p.functions
+                                        .iter()
+                                        .map(|(k, f)| {
+                                            (
+                                                k.clone(),
+                                                Json::obj(vec![
+                                                    ("electrical", f.electrical.word().into()),
+                                                    ("specs", specs(&f.specs)),
+                                                    ("wants", roles(&f.wants, d)),
+                                                    ("gives", roles(&f.gives, d)),
+                                                ]),
+                                            )
+                                        })
+                                        .collect(),
+                                ),
+                            ),
                             ("number", p.number.clone().into()),
                             ("unit", p.unit.clone().into()),
                             ("electrical", p.electrical.word().into()),
@@ -75,6 +191,10 @@ fn symbol(id: &str, s: &Symbol, d: &Document) -> Json {
                     .collect(),
             ),
         ),
+        ("power_net", s.power_net.clone().map_or(Json::Null, Into::into)),
+        ("datasheet", s.datasheet.clone().map_or(Json::Null, Into::into)),
+        ("fields", super::bom::field_json(&s.fields)),
+        ("field_types", super::bom::field_json(&s.field_types)),
         ("graphics", Json::Arr(s.graphics.iter().map(graphic).collect())),
     ])
 }
@@ -93,14 +213,16 @@ fn link(l: &Link, d: &Document) -> Json {
         ),
     ])
 }
-fn findings(c: &Circuit) -> Json {
+fn findings(d: &Document, c: &Circuit) -> Json {
     Json::Arr(
         c.issues
             .iter()
             .map(|i| {
                 Json::obj(vec![
                     ("kind", i.kind.into()),
-                    ("severity", i.severity().into()),
+                    ("severity", i.priority(d).into()),
+                    ("status", i.status().into()),
+                    ("waiver", i.waiver(d).map_or(Json::Null, Into::into)),
                     ("objects", strings(&i.objects)),
                     (
                         "locations",
@@ -108,12 +230,17 @@ fn findings(c: &Circuit) -> Json {
                             i.objects
                                 .iter()
                                 .filter_map(|id| {
-                                    c.origins.get(id).map(|s| {
-                                        Json::obj(vec![
-                                            ("id", id.clone().into()),
-                                            ("span", crate::error::span_json(*s)),
-                                        ])
-                                    })
+                                    c.origins
+                                        .get(id)
+                                        .or_else(|| {
+                                            id.split_once(':').and_then(|(owner, _)| c.origins.get(owner))
+                                        })
+                                        .map(|s| {
+                                            Json::obj(vec![
+                                                ("id", id.clone().into()),
+                                                ("span", crate::error::span_json(*s)),
+                                            ])
+                                        })
                                 })
                                 .collect(),
                         ),
@@ -125,19 +252,61 @@ fn findings(c: &Circuit) -> Json {
     )
 }
 
-fn scene(row: &Row) -> Json {
+fn placement_roles(roles: &Map<String, Set<RoleId>>) -> Json {
+    Json::Obj(
+        roles
+            .iter()
+            .map(|(pin, roles)| (pin.clone(), strings(roles.iter().map(|r| &r.0))))
+            .collect(),
+    )
+}
+fn scene(d: &Document, c: &Circuit, scope: &str, row: &Row) -> Json {
     let (kind, mut fields) = match &row.item {
         Item::Place {
             symbol,
+            pins,
             unit,
             value,
             footprint,
             at,
             angle,
             mirror,
+            fields,
+            datasheet,
+            populated,
+            in_bom,
+            ref_offset,
+            value_offset,
+            reference,
+            spec_limits,
+            visibility,
         } => (
             "place",
             vec![
+                (
+                    "visibility",
+                    Json::Obj(visibility.iter().map(|(k, v)| (k.clone(), (*v).into())).collect()),
+                ),
+                ("derived_attributes", c.strap_json(&format!("{scope}/{}", row.id))),
+                (
+                    "reference",
+                    d.reference(
+                        &format!("{scope}/{}", row.id),
+                        reference.as_ref().unwrap_or(&row.id),
+                    )
+                    .into(),
+                ),
+                ("spec_limits", specs(spec_limits)),
+                ("functions", super::bom::field_json(&pins.functions)),
+                ("bindings", super::bom::field_json(&pins.bindings)),
+                ("wants", placement_roles(&pins.wants)),
+                ("gives", placement_roles(&pins.gives)),
+                ("ref_offset", ref_offset.map_or(Json::Null, point)),
+                ("value_offset", value_offset.map_or(Json::Null, point)),
+                ("fields", super::bom::field_json(fields)),
+                ("datasheet", datasheet.clone().map_or(Json::Null, Into::into)),
+                ("populated", (*populated).into()),
+                ("in_bom", (*in_bom).into()),
                 ("unit", unit.clone().into()),
                 ("value", value.clone().into()),
                 ("footprint", footprint.clone().map_or(Json::Null, Into::into)),
@@ -166,6 +335,13 @@ fn scene(row: &Row) -> Json {
         Item::Flow { from, to } => (
             "flow",
             vec![("from", from.clone().into()), ("to", to.clone().into())],
+        ),
+        Item::DiffPair { positive, negative } => (
+            "diff_pair",
+            vec![
+                ("positive", positive.clone().into()),
+                ("negative", negative.clone().into()),
+            ],
         ),
         Item::Bus(members) => (
             "bus",
@@ -215,7 +391,28 @@ fn scene(row: &Row) -> Json {
             ],
         ),
         Item::NoConnect(on) => ("no_connect", vec![("on", on.clone().into())]),
-        Item::Note(at, text) => ("note", vec![("at", point(*at)), ("value", text.clone().into())]),
+        Item::Note { at, text, size, bold } => (
+            "note",
+            vec![
+                ("at", point(*at)),
+                ("value", text.clone().into()),
+                ("size", (*size).into()),
+                ("bold", (*bold).into()),
+            ],
+        ),
+        Item::Drawing { shape, width } => (
+            "drawing",
+            vec![
+                (
+                    "shape",
+                    graphic(&Graphic {
+                        unit: None,
+                        shape: shape.clone(),
+                    }),
+                ),
+                ("width", (*width).into()),
+            ],
+        ),
         Item::Fulfill { .. } => ("fulfill", vec![]),
     };
     fields.extend([
@@ -227,9 +424,30 @@ fn scene(row: &Row) -> Json {
     Json::obj(fields)
 }
 fn pin(id: &str, p: &Terminal, d: &Document, c: &Circuit) -> Json {
+    let symbol = &d.symbols[&p.symbol];
+    let pin = &symbol.pins[&p.pin];
     Json::obj(vec![
+        ("specs", specs(&pin.specs)),
+        (
+            "function_specs",
+            Json::Arr(
+                p.function
+                    .as_ref()
+                    .and_then(|f| pin.functions.get(f))
+                    .into_iter()
+                    .flat_map(|f| &f.specs)
+                    .map(|s| s.json())
+                    .collect(),
+            ),
+        ),
+        ("device_specs", specs(&symbol.specs)),
         ("id", id.into()),
         ("pin", p.pin.clone().into()),
+        ("function", p.function.clone().map_or(Json::Null, Into::into)),
+        (
+            "description",
+            d.symbols[&p.symbol].pins[&p.pin].description.clone().into(),
+        ),
         ("number", p.number.clone().into()),
         ("symbol", p.symbol.clone().into()),
         ("at", point(p.at)),
@@ -249,6 +467,7 @@ fn net(id: &str, m: &[String], c: &Circuit) -> Json {
 fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
     let words: Vec<_> = w.iter().map(String::as_str).collect();
     match words.as_slice() {
+        ["libraries"] => Ok(d.packages.json()),
         [] | ["summary"] => Ok(Json::obj(vec![
             (
                 "documents",
@@ -264,18 +483,68 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
                         .collect(),
                 ),
             ),
+            ("libraries", strings(d.libraries.keys())),
+            (
+                "attribute_types",
+                Json::Obj(
+                    d.attribute_types
+                        .iter()
+                        .map(|(id, t)| {
+                            (
+                                id.clone(),
+                                Json::obj(vec![
+                                    ("label", t.label.clone().into()),
+                                    ("kind", t.kind.word().into()),
+                                    (
+                                        "conversions",
+                                        Json::Arr(
+                                            t.conversions
+                                                .tables()
+                                                .iter()
+                                                .map(ConversionTable::json)
+                                                .collect(),
+                                        ),
+                                    ),
+                                    (
+                                        "units",
+                                        Json::Arr(t.units.iter().map(AttributeUnit::json).collect()),
+                                    ),
+                                    ("modes", strings(t.modes.iter())),
+                                    (
+                                        "formats",
+                                        Json::Arr(t.units.iter().map(|u| u.name.clone().into()).collect()),
+                                    ),
+                                    (
+                                        "range",
+                                        t.range.as_ref().map_or(Json::Null, |r| strings(r.iter())),
+                                    ),
+                                ]),
+                            )
+                        })
+                        .collect(),
+                ),
+            ),
+            (
+                "rule_severities",
+                Json::Obj(
+                    d.severities
+                        .iter()
+                        .map(|(id, s)| (id.clone(), s.clone().into()))
+                        .collect(),
+                ),
+            ),
             ("symbols", strings(d.symbols.keys())),
             ("sheets", strings(c.occurrences.keys())),
             ("pin_count", c.terminals.len().into()),
             ("net_count", c.nets.len().into()),
-            ("findings", findings(c)),
+            ("findings", findings(d, c)),
         ])),
         ["plan-fulfillment", args @ ..] => super::author::fulfillment(d, c, args),
         ["plan-bypass", args @ ..] => super::author::bypass(d, c, args),
         ["svg", scope] => Ok(super::drawing::sheet_svg(d, c, scope)?.into()),
         ["symbol-svg", id] => Ok(super::drawing::symbol_svg(d, id, "A")?.into()),
         ["symbol-svg", id, unit] => Ok(super::drawing::symbol_svg(d, id, unit)?.into()),
-        ["erc"] => Ok(findings(c)),
+        ["erc"] => Ok(findings(d, c)),
         ["netlist"] => Ok(Json::Arr(
             c.nets
                 .iter()
@@ -295,6 +564,41 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
                 })
                 .collect(),
         )),
+        ["search", terms @ ..] => Ok(Json::Arr(
+            search(d, c, &terms.join(" "))
+                .into_iter()
+                .map(|h| {
+                    Json::obj(vec![
+                        ("id", h.id.into()),
+                        ("label", h.label.into()),
+                        ("zone", h.zone.map_or(Json::Null, Into::into)),
+                    ])
+                })
+                .collect(),
+        )),
+        ["board"] => board(d, c, None),
+        ["board", v] => board(d, c, Some(v)),
+        ["plan-reannotate", sheet] if d.sheets.contains_key(*sheet) => Ok(Json::obj(vec![(
+            "ops",
+            Json::Arr(reannotate(d, sheet).iter().map(|op| op.json()).collect()),
+        )])),
+        ["variants"] => Ok(strings(d.variants.keys())),
+        [cmd @ ("bom" | "bom-csv"), variant] => {
+            let changes = d
+                .variants
+                .get(*variant)
+                .ok_or_else(|| Fault::new("UnknownVariant", Span::default(), *variant))?;
+            let lines = bom_for(d, c, changes);
+            if *cmd == "bom-csv" {
+                Ok(bom_csv(&lines).into())
+            } else {
+                Ok(Json::Arr(lines.iter().map(|l| l.json()).collect()))
+            }
+        }
+        ["bom-csv"] => Ok(super::bom_csv(&super::bom(d, c)).into()),
+        ["bom"] => Ok(Json::Arr(
+            super::bom(d, c).iter().map(|line| line.json()).collect(),
+        )),
         ["components"] => {
             let mut components = Vec::new();
             for (scope, sheet) in &c.occurrences {
@@ -303,11 +607,23 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
                         symbol,
                         value,
                         footprint,
+                        reference,
                         ..
                     } = &row.item
                     {
+                        if d.symbols[symbol].power_net.is_some() {
+                            continue;
+                        }
                         components.push(Json::obj(vec![
                             ("occurrence", format!("{scope}/{}", row.id).into()),
+                            (
+                                "reference",
+                                d.reference(
+                                    &format!("{scope}/{}", row.id),
+                                    reference.as_ref().unwrap_or(&row.id),
+                                )
+                                .into(),
+                            ),
                             ("symbol", symbol.clone().into()),
                             ("value", value.clone().into()),
                             ("footprint", footprint.clone().map_or(Json::Null, Into::into)),
@@ -319,6 +635,7 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
             Ok(Json::Arr(components))
         }
         ["nets"] => Ok(Json::Arr(c.nets.iter().map(|(k, m)| net(k, m, c)).collect())),
+        ["diff-pairs"] => Ok(super::project::diff_pairs(c)),
         ["bus", id] => c
             .buses
             .get(*id)
@@ -358,7 +675,13 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
                 ("title", d.sheets[sheet].clone().into()),
                 (
                     "items",
-                    Json::Arr(d.rows.iter().filter(|r| r.sheet == *sheet).map(scene).collect()),
+                    Json::Arr(
+                        d.rows
+                            .iter()
+                            .filter(|r| r.sheet == *sheet)
+                            .map(|r| scene(d, c, id, r))
+                            .collect(),
+                    ),
                 ),
             ]))
         }
@@ -377,6 +700,9 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
             let branch = c.drawn_branch(k);
             let mut candidates = Vec::new();
             for role_id in &p.wants {
+                if d.roles[role_id].connection.is_some() || d.roles[role_id].kind.is_pull() {
+                    continue;
+                }
                 let mut providers = c.nets[&c.net_of[*k]]
                     .iter()
                     .filter(|other| {
@@ -402,6 +728,80 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
             }
             Ok(Json::obj(vec![
                 ("terminal", pin(k, p, d, c)),
+                (
+                    "voltage_checks",
+                    Json::Arr(
+                        c.voltages
+                            .get(*k)
+                            .into_iter()
+                            .flatten()
+                            .map(|(id, check)| {
+                                Json::obj(vec![
+                                    ("want", role(id, d)),
+                                    ("status", check.status().into()),
+                                    (
+                                        "providers",
+                                        Json::Arr(
+                                            check
+                                                .providers
+                                                .iter()
+                                                .map(|source| {
+                                                    Json::obj(vec![
+                                                        ("pin", source.pin.clone().into()),
+                                                        ("give", role(&source.role, d)),
+                                                        ("min_v", source.range.min.into()),
+                                                        ("max_v", source.range.max.into()),
+                                                        (
+                                                            "accepted",
+                                                            check.required.accepts(source.range).into(),
+                                                        ),
+                                                    ])
+                                                })
+                                                .collect(),
+                                        ),
+                                    ),
+                                ])
+                            })
+                            .collect(),
+                    ),
+                ),
+                (
+                    "connection_checks",
+                    Json::Arr(
+                        c.connections
+                            .get(*k)
+                            .into_iter()
+                            .flatten()
+                            .map(|(role, check)| {
+                                Json::obj(vec![
+                                    ("role", role.0.clone().into()),
+                                    ("target", check.target.clone().into()),
+                                    (
+                                        "source_role",
+                                        check
+                                            .source_role
+                                            .as_ref()
+                                            .map_or(Json::Null, |id| id.0.clone().into()),
+                                    ),
+                                    ("satisfied", check.satisfied.into()),
+                                    (
+                                        "status",
+                                        if check.satisfied {
+                                            "satisfied"
+                                        } else if check.unknown {
+                                            "unknown"
+                                        } else {
+                                            "failed"
+                                        }
+                                        .into(),
+                                    ),
+                                    ("bridge_pins", strings(&check.bridge_pins)),
+                                    ("detail", check.detail.clone().into()),
+                                ])
+                            })
+                            .collect(),
+                    ),
+                ),
                 ("fulfillments", Json::Arr(links)),
                 ("candidates", Json::Arr(candidates)),
             ]))
@@ -428,30 +828,54 @@ fn query(d: &Document, c: &Circuit, w: &[String]) -> Result<Json> {
     }
 }
 pub fn response(d: &Document, c: &Circuit, words: &[String]) -> Result<Json> {
-    Ok(Json::obj(vec![
+    if let [cmd, pin, variant] = words
+        && cmd == "pin"
+    {
+        let changes = d
+            .variants
+            .get(variant)
+            .ok_or_else(|| Fault::new("UnknownVariant", Span::default(), variant))?;
+        return response(
+            d,
+            &Circuit::build_fitted(d, changes)?,
+            &[cmd.clone(), pin.clone()],
+        );
+    }
+    if let [cmd, variant] = words
+        && cmd == "erc"
+    {
+        let changes = d
+            .variants
+            .get(variant)
+            .ok_or_else(|| Fault::new("UnknownVariant", Span::default(), variant))?;
+        return response(d, &Circuit::build_fitted(d, changes)?, &["erc".into()]);
+    }
+    let result = query(d, c, words)?;
+    let erc_ok = if words.first().is_some_and(|cmd| cmd == "board") {
+        result
+            .get("erc_ok")
+            .cloned()
+            .unwrap_or_else(|| c.erc_ok(d).into())
+    } else {
+        c.erc_ok(d).into()
+    };
+    let mut reply = vec![
         ("schema", "forgecad.schematic/1".into()),
         ("ok", true.into()),
-        (
-            "erc_ok",
-            (!c.issues.iter().any(|i| i.severity() == "error")).into(),
-        ),
-        ("result", query(d, c, words)?),
-    ]))
+        ("erc_ok", erc_ok),
+        ("result", result),
+    ];
+    if words.is_empty()
+        || words
+            .first()
+            .is_some_and(|w| matches!(w.as_str(), "erc" | "summary"))
+    {
+        reply.push(("not_run", Json::Arr(c.not_run.iter().map(|r| r.json()).collect())));
+    }
+    Ok(Json::obj(reply))
 }
 impl Fault {
     pub fn json(&self) -> Json {
-        Json::obj(vec![
-            ("schema", "forgecad.schematic/1".into()),
-            ("ok", false.into()),
-            (
-                "error",
-                Json::obj(vec![
-                    ("kind", self.kind.into()),
-                    ("message", self.message.clone().into()),
-                    ("span", crate::error::span_json(self.span)),
-                    ("file", self.file.clone().map_or(Json::Null, Into::into)),
-                ]),
-            ),
-        ])
+        self.json_for("forgecad.schematic/1")
     }
 }

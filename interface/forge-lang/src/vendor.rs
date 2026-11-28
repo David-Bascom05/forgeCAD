@@ -62,10 +62,13 @@ impl VendorTag {
 /// The profiles a document sees: its project's, the user's, the built-in ones.
 pub fn profiles(ev: &crate::eval::Eval) -> Arc<Profiles> {
     // a session kept to its root reads no file: the built-in ones only
-    if ev.root.is_some() {
+    document_profiles(ev.dir.as_deref(), ev.root.is_some())
+}
+
+pub(crate) fn document_profiles(dir: Option<&std::path::Path>, fenced: bool) -> Arc<Profiles> {
+    if fenced {
         return Arc::new(Profiles::builtin());
     }
-    let dir = ev.dir.as_deref();
     if let Some(d) = dir {
         crate::deps::tomls(&forge_vendor::project_dir(d));
     }
@@ -334,6 +337,44 @@ pub fn profile_json(v: &Vendor) -> Json {
             ),
         ),
         ("materials", Json::Arr(materials)),
+        (
+            "pcb_services",
+            Json::Arr(
+                v.pcb
+                    .iter()
+                    .map(|s| {
+                        Json::obj(vec![
+                            ("id", s.id.clone().into()),
+                            ("source", s.source.clone().into()),
+                            ("layers", s.layers.into()),
+                            ("min_width_mm", (v.units.mm() * s.min_width).into()),
+                            ("min_spacing_mm", (v.units.mm() * s.min_spacing).into()),
+                            ("min_drill_mm", (v.units.mm() * s.min_drill).into()),
+                            ("min_annular_ring_mm", (v.units.mm() * s.min_annular_ring).into()),
+                            ("outer_oz", s.outer_oz.into()),
+                            ("inner_oz", s.inner_oz.map_or(Json::Null, Into::into)),
+                            (
+                                "min_slot_mm",
+                                s.min_slot.map_or(Json::Null, |n| (n * v.units.mm()).into()),
+                            ),
+                            (
+                                "inner_drill_clearance_mm",
+                                s.inner_drill_clearance
+                                    .map_or(Json::Null, |n| (n * v.units.mm()).into()),
+                            ),
+                            (
+                                "min_edge_mm",
+                                s.min_edge.map_or(Json::Null, |n| (n * v.units.mm()).into()),
+                            ),
+                            (
+                                "min_mask_web_mm",
+                                s.min_mask_web.map_or(Json::Null, |n| (n * v.units.mm()).into()),
+                            ),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
         ("text", v.to_text().into()),
     ])
 }

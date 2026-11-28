@@ -1,6 +1,6 @@
 # Native schematics and symbols
 
-A schematic compiles to sheet occurrences, electrical nets, drawable geometry and functional relationships. Pin requirements and offerings carry nominal role IDs and a checked role kind. The same symbol can want and give several roles. The [controller](../examples/electronics/controller.fg) uses the [power symbol library](../examples/electronics/power-symbols.fg).
+A schematic compiles to sheet occurrences, electrical nets, drawable geometry and functional relationships. Pin requirements and offerings carry nominal role IDs and a checked role kind. The same symbol can want and give several roles. The [controller](../examples/electronics/controller.fg) uses an [example library of power-circuit components](../examples/electronics/power-symbols.fg).
 
 ```sh
 forgecad build examples/electronics/controller.fg --json
@@ -9,6 +9,49 @@ forgecad schematic examples/electronics/controller.fg tree main/reg.out --json
 forgecad schematic examples/electronics/controller.fg sheet main --json
 forgecad check examples/electronics/controller.fg --json
 ```
+
+## Datasheet characteristics
+
+In **Properties**, nominal voltage, maximum operating voltage, and absolute maximum voltage have separate optional rows. Resistors also show resistance, capacitors show capacitance, and FETs show on-resistance. A library nominal resistance or capacitance supplies the placed value and BOM value until the placement specifies its own value. Local symbol ratings are shared by placements. Imported ratings can be edited in the source symbol library.
+
+Expand **Advanced properties** for quantities specific to the part type, measurement terminals, conditions, and datasheet references. Capacitors have a DC-bias curve with voltage on the horizontal axis and percent of nominal capacitance retained on the vertical axis. Enter manufacturer points for the selected part. The curve starts empty. A FET can have several on-resistance records at different gate voltages, load currents, and temperatures. Pin and alternate-function Properties retain their own voltage ratings and advanced measurements. Right-clicking a placed pin shows the records that apply to it.
+
+The standard library loads automatically. An unconditional pin voltage bound is checked when the connected voltage is known. **PinOperatingVoltage** reports a recommended range violation and **PinAbsoluteVoltage** reports possible overstress. Pin types, resistance, current capacity and protection can be recorded even when the design lacks the evidence needed to check them electrically. See the [worked symbol library](../examples/electronics/datasheet-characteristics.fg) and the [data model and KiCad comparison](../research/electronics/pin-characteristics.md).
+
+### FET advanced properties
+
+In the symbol's **Advanced properties**, choose **Add characteristic** and search by name or by the abbreviation printed in the datasheet. Searching for `IDSS` on a MOSFET finds off-state drain leakage. The same search on a JFET finds zero-gate drain current. The generic FET type offers both. The symbol starts with no ratings, and a custom quantity can capture a vendor-specific parameter.
+
+| Datasheet section | Examples |
+| --- | --- |
+| Construction and DC | Channel polarity and mode, material, body or Kelvin-source voltage, gate protection, pulsed and package-limited drain current, breakdown, on-resistance, transconductance |
+| Gate and capacitance | Threshold or cutoff, Miller plateau, gate charge partitions, Ciss, Crss, small-signal Coss and its energy- and time-equivalent values |
+| Switching and reverse conduction | Turn-on and turn-off delay and energy, gate-drive resistance, dead time, reverse voltage, recovery charge, current slew and recovery softness |
+| Stress and thermal | Avalanche energy and current, safe operating area, short-circuit withstand, ESD test ratings, transient thermal impedance, thermal resistance, mounting and copper area |
+| Matched pairs and test history | Differential VGS mismatch and drift, ID and gm matching, inter-die thermal coupling, quiescent bias, off-state stress duration, sampling window |
+| Small signal and RF | Noise densities, gain, bandwidth, efficiency, compression and intercept power in watts or dBm, and two-port S-parameter magnitudes and phases |
+
+Open **Advanced properties → Datasheet curves** to enter a family of measurements. **Add curve** offers transfer and output characteristics, gate charge, capacitance, switching energy, safe operating area, transient thermal impedance and noise, or lets you choose two numerical quantities. Each trace has named axes, selectable units and terminals, fixed test conditions, and an editable sample table with minimum, typical and maximum columns. The plot supports linear and logarithmic axes. Each sample retains its reference and note.
+
+For an SOA boundary, choose **Safe operating area**, enter drain voltage on X and the published maximum drain current on Y, and record pulse duration and case temperature as fixed conditions. **New trace at other conditions** copies the coordinates and clears the measured values. You can enter another boundary for a different pulse duration. The same workflow captures transistor output curves at several gate voltages or noise spectra at different bias currents. For a dual device, select the actual terminals of the channel or ordered pairs being compared.
+
+In source, a named sample uses `curve` and a typed `coordinate`. Fixed conditions stay in `when`. Samples in one trace share quantities, units, terminals, basis and fixed conditions, and each coordinate occurs once. ERC compares the published sample at the requested bias. Typical curves, bench measurements and simulations cannot establish an unspecified manufacturer's minimum or maximum. The JFE2140 library symbol demonstrates two noise spectra and a four-terminal matching measurement. [Worked library](../examples/electronics/datasheet-characteristics.fg) · [TI JFE2140, §6.5](https://www.ti.com/lit/ds/symlink/jfe2140.pdf)
+
+The TI example records a typical reverse recovery charge of 145 nC at 30 V, 28 A forward current, 300 A/µs and 25 °C ambient. A requirement for a *maximum* recovery charge at that point produces a missing-evidence entry. The J112 example records a signed gate cutoff interval of −5 to −1 V at its specified current and drain voltage. ERC compares recorded operating points directly. Curve interpolation and waveform simulation are outside this check. [Worked symbols](../examples/electronics/datasheet-characteristics.fg) · [TI CSD18540Q5B, §5.1](https://www.ti.com/lit/ds/symlink/csd18540q5b.pdf) · [onsemi J112, p. 2](https://www.onsemi.com/download/data-sheet/pdf/j111-d.pdf) · [EPC2105 capacitance definitions](https://epc-co.com/epc/Portals/0/epc/documents/datasheets/EPC2105_datasheet.pdf)
+
+#### Gate, output and commutation charge
+
+A FET can have several total gate-charge (`Qg`) ratings at different gate-drive swings, drain voltages, currents and temperatures. The CSD18540Q5B has **20 nC typical, 26 nC maximum at 4.5 V** and **41 nC typical, 53 nC maximum at 10 V** at 30 V drain bias, 28 A and 25 °C ambient. These are two records on the library symbol. A requirement for at most 27 nC at the first point passes. The same ceiling at the second point produces an ERC finding. [TI CSD18540Q5B, §5.1](https://www.ti.com/lit/ds/symlink/csd18540q5b.pdf)
+
+Use `gate_drain_charge` for the Miller interval, `output_charge` for Qoss at the stated drain bias, `output_capacitance_energy` for Eoss and `recovery_charge` for Qrr at the stated forward current and current slew. For a gate-charge curve, record VGS at successive gate-charge points with the same bias and current. **Capacitive charge (Qc)** and **commutation charge (Qcomm)** have separate records with a source, measurement terminals and conditions. Record the manufacturer's definition and voltage endpoints for Qc. When transcribing a double-pulse result, record the commutating device, test method, gate-drive impedances and any loss terms the published measurement already includes.
+
+### Electrical checks and missing evidence
+
+On a placed part, **Datasheet requirements** sets acceptance criteria for that application. A requirement can name terminal roles, protection, internal bias, or a measured quantity such as drain–source on-resistance at a particular gate drive, current and temperature. ERC compares the same ordered terminals, rating class and stated conditions. Each bound checks the corresponding published bound, with unit conversion. A missing maximum or an uncharacterized operating point appears in coverage. See the [two-MOSFET comparison](../examples/electronics/datasheet-review.fg).
+
+**Electrical Checks → Checks missing evidence** lists each blocked comparison, the placed part or pin, and the fields needed to run it. `forgecad check design.fg --json` includes the same data in `not_run`. The findings array and `erc_ok` retain their existing meanings. Population variants have independent coverage. A rule can produce a finding on one part and a missing-evidence entry on another.
+
+The standard checks also compare guaranteed VOH/VOL against destination VIH/VIL, sum declared worst-case loads on singly driven nets, and use an enabled internal pull with a known rail and resistance in the existing bias check. A rail name, typical measurement, configurable pull state or absolute current rating alone is insufficient to guarantee operation.
 
 ## Roles and symbols
 
@@ -24,15 +67,89 @@ Reg = symbol(pins: {
 
 A role declaration binds an identifier. Pin lists and `fulfill(role: ...)` take references to these declarations. The schema encodes a role as an object, for example `{"id":"@example.3v3","kind":"power","rating":{"kind":"voltage","unit":"mV","value":3300},"prefer_mm":null}`. A quoted role name in a pin list, an unknown role, a mismatch between a want and a give, and incompatible definitions of a shared key produce located compile errors. Distinct libraries can intentionally share a type by using the same explicit key and definition. Without a key the import namespace qualifies the role. The declared kind is one of `power`, `return`, `bypass`, `signal`, `clock`, `bias`, `termination`, `feedback`, `protection`, `reference`, or `interface`. Optional capacitance in nF applies to bypass roles, voltage in mV to power and reference roles. An optional positive length `prefer` records a project placement preference. The PCB consumer owns its eventual measurement.
 
-A symbol's map keys are logical pin names. Each pin has a unique physical `number` string, sheet-local connection point, and electrical `kind` (`passive`, `input`, `output`, `bidirectional`, `power_in`, `power_out`, `open_drain`, `no_connect`). Optional `angle` gives the pin direction. A `unit` string groups pins into gates; the default is A. Graphics accept `line(from:, to:)`, `rect(from:, to:)`, `circle(at:, radius:)`, `arc(from:, mid:, to:)`, `polyline(points:)`, and `text(at:, value:)`, each optionally limited to a unit. A library holds roles, shared numeric expressions and symbols. Import it into a schematic with `parts = library(file: "power-symbols.fg")`. Imports use the session's file fence.
+### Pin-to-pin connection wants
+
+A target pin can be a sibling such as `OUT` on the requesting component, or a pin such as `J1.P1` on the same sheet occurrence. A direct want checks net equality, including connections made through junctions, labels and sheet ports. A through-part want checks for one fitted component bridging two distinct nets through a permitted pair of terminals. A wire shorting those nets fails the check. The target pin can be passive and needs no role declaration.
+
+```fg
+feedback = role(kind: "feedback", connect_to: OUT)
+input_filter = role(kind: "signal", connect_to: J1.P1, through: "resistor", value_range: ["2.2 kΩ", "4.7 kΩ"])
+```
+
+A quoted type accepts any symbol declaring that `part_kind`. Part types are open names such as `"capacitor"`, `"inductor"`, `"mosfet"`, and `"relay"`. A symbol reference such as `through: analog.Resistor` selects one library symbol. Set **Part type** and **Terminal paths** in symbol properties.
+
+Two-pin symbols with no named paths can be traversed in either order. Other symbols declare ordered pin pairs. For example, a MOSFET can declare `paths: {channel: [D, S]}`. A want such as `role(kind: "return", connect_to: P2, through: "mosfet", part_path: "channel")` checks that the requester reaches the drain and the target reaches the source on the same fitted MOSFET. A second MOSFET symbol can map the same path to differently named pins. With one declared path, the want may omit its name. With several paths, select one explicitly. These rules check wiring topology. Gate voltage and transistor operating state are separate electrical questions. [MOSFET, capacitor and inductor example](../examples/electronics/analog/switched-load.fg)
+
+Put the roles in the pin's Wants list or on a placement, for example `wants: {INP: [input_filter], INM: [feedback]}`. Omit the value constraint to accept any nominal value, or use `value: "4.7 kΩ"` for an exact match. Values use Ω, ohm, F or H with SI prefixes. Resistor markings such as `4k7` are accepted. An unknown or dimensionally incompatible placed value fails a value-constrained check. These checks concern nominal values and the two terminals of a single component. Ordered paths can specify polarity. Multi-part chains and manufacturing tolerances remain outside this check.
+
+In **Pin Role**, enter the target pin and choose **Direct connection**, a declared part type, or a specific symbol. For a symbol, enter one value or both inclusive limits. The pin checklist and `forgecad schematic FILE pin main/U1.INP --json` report the result and the bridging pins. The pin query returns value bounds as decimal strings with a common base unit to preserve small electrical values. [Amplifier input and feedback example](../examples/electronics/analog/pin-connections.fg)
+
+### Connector pin roles
+
+A generic connector starts with numbered passive contacts and empty wants and provides. Put the external circuit's signal or supply on the placed connector. In the schematic, select the contact, expand **Placement roles**, and check **Wants** or **Provides** for that pin. **New role…** declares a typed role in the schematic.
+
+```fg
+incoming = role(kind: "power", voltage_mv: 3300)
+J1 = place(sheet: main, symbol: analog.Connector2, at: (0,0), gives: {P1: [incoming]})
+J2 = place(sheet: main, symbol: analog.Connector2, at: (20,0))
+```
+
+Here J1 pin 1 declares that the attached equipment supplies 3.3 V. J2 inherits the connector's passive contacts. For a dedicated connector with a fixed interface, the library author can specify pin roles once. Each placement inherits those roles and can add its own. A contact's hardware voltage rating is a limit on the connector, independent of the voltage supplied by the external circuit. Like the wiring, a role on a placement in a repeated sheet definition applies in each instance of that sheet.
+
+### Voltage wants and provides
+
+Attach a reusable operating range to a normal pin through its Wants list. A power source can declare a single voltage or a guaranteed range. All endpoints are inclusive.
+
+```fg
+operating_supply = role(kind: "power", voltage_range_v: [1.8, 5.5])
+regulated_output = role(kind: "power", voltage_mv: 3300)
+IC = symbol(pins: {VDD: pin(number: "5", kind: "power_in", at: (0,8), wants: [operating_supply])})
+Reg = symbol(pins: {OUT: pin(number: "1", kind: "power_out", at: (4,0), gives: [regulated_output])})
+```
+
+In the symbol editor, create a power role, enter **Minimum (V)** and **Maximum (V)**, then check **Wants** on the supply pin. The schematic checks the connected net automatically. The checklist shows the required interval and the pin and voltage of each fitted provider. A 3.3 V source satisfies this want. A 12 V source produces `VoltageOutOfRange`. A source range must fit entirely inside the wanted range. Without a declared source, ERC reports `UnknownSupplyVoltage`. Rail labels alone establish connectivity. This check assumes a shared voltage reference. The pin query exposes `voltage_checks` for CLI and MCP. [Powered TLV9001 example](../examples/electronics/analog/powered-amplifier.fg)
+
+A symbol can also declare `peripherals: {I2C1: {SDA: [PA0], SCL: [PA1]}, UART2: {TX: [PA0]}}`. Each signal lists the physical pins that can carry it. The reader resolves the names against this symbol and exposes the groups in the symbol query.
+
+A symbol's map keys are logical pin names. Each pin has a unique physical `number` string, sheet-local connection point, and electrical `kind` (`passive`, `input`, `output`, `bidirectional`, `power_in`, `power_out`, `open_drain`, `no_connect`). Optional `angle` gives the pin direction in degrees, counterclockwise from the positive X axis. Fractional and negative angles are accepted. A `unit` string groups pins into sub parts; the default is A. Graphics accept `line(from:, to:)`, `rect(from:, to:)`, `circle(at:, radius:)`, `arc(from:, mid:, to:)`, `polyline(points:)`, and `text(at:, value:)`, each optionally limited to one sub part. A library holds roles, shared numeric expressions and symbols. Import it into a schematic with `parts = library(file: "power-symbols.fg")`. Imports use the session's file fence.
+
+### Named strap attributes
+
+In **Symbol Properties → Derived attributes**, click an attribute name to open its truth table. **Add attribute** opens a named attribute. Choose its **Type** and **Unit** at the top of the dialog. The type list includes the bundled types and types exported by loaded libraries. Click a state or result directly to edit it. Hover at the bottom or right edge to reveal **+**. Click to grow by one or drag outward to add several rows or available pin columns. The **Table** menu also adds rows and columns. A pin header lets you change or remove its column. Right-click a body cell to remove a row. Choose **High**, **Low**, **Floating**, or **Voltage range** directly in each input cell. Enter both voltage limits in the dropdown. **Logic reference pins** identifies the high and low reference for each input. Each result can have a pinless default. **Save** commits the edit as one undoable symbol change. **Cancel** discards the draft.
+
+```fg
+Fixed = symbol(pins: {}, strap_tables: {
+  address: strap_table(kind: "i2c_address", default: "0x2C"),
+  operating_mode: strap_table(kind: "text", default: "standby")
+})
+```
+
+A conditional attribute on a symbol with pins A0, VDD and VSS can use the following table.
+
+```fg
+address: strap_table(kind: "i2c_address",
+  inputs: {A0: {low: VSS, high: VDD}},
+  rows: [[{A0: high}, "0x49"]],
+  default: "0x48")
+```
+
+The attribute name is the table key. Switch an I²C table between hex, binary and decimal, or a current table between A, mA and µA. The editor converts the existing results, default and current limits. A boot-mode table has a customizable list of named results. Each row names a state for every input. Enter a tied pin as a pin reference, or enter `"open"` as a state target for a floating input. Direct ties and a single fitted resistor with a known value are supported. The default needs no pin. It supplies constants on pinless parts and covers observed combinations without a row. Conflicting ties or an unsupported drive circuit leave the value unresolved.
+
+Use `schematic FILE board [VARIANT]` or `pcb FILE handoff [VARIANT]`. Each component exposes `derived_attributes` keyed by name. Each result includes its type, value, resolution status and input evidence. ERC checks reserved addresses and collisions between fitted devices on the same ordered pair of SDA and SCL nets. Explicitly map those pins with `bus:[data,clock]` or use unambiguous active SDA/SCL pin names. A current table can declare `range:["100 mA","2 A"]`. A boot table can declare `modes:["Flash","ROM bootloader"]`. ERC reports out-of-range currents, unsupported modes and unresolved input combinations. [Complete example](../examples/electronics/strap-attributes.fg)
+
+**Schematic text fields** controls the text printed next to each component. Reference, value and derived attributes are visible by default. Other metadata and custom fields start hidden. Symbols supply defaults and placements can override individual fields. Reset removes an override. For example, `visibility:{derived:{address:false},custom:{Manufacturer:true}}` hides an address and shows the manufacturer. Bundled power symbols hide their internal reference. The canvas, sheet export and text-overlap checks use the same field layout. [Two-column address decoder](../examples/electronics/strap-address-matrix.fg)
+
+### Active signal contracts
+
+On each fitted direct driver-to-receiver branch, ERC compares the active nominal signal, clock and interface wants and gives. A mismatched contract raises `PinFunctionMismatch`. A typed endpoint facing an unclassified endpoint raises `UnknownPinFunctionCompatibility`. A compatible alternate is listed when available. Change the pin function in the schematic to accept it. The board handoff exposes the same branch verdict, active functions and roles in `signal_paths`. Role identity can be shared across libraries with the existing `role(key: ...)` argument. [ADC fanout example](../examples/electronics/adc-fanout.fg)
 
 ## Sheets, connections and geometry
 
-- Define a sheet with `main = sheet(title: "Power")`. Use `u = place(sheet: main, symbol: parts.Reg, at: (10mm, 5mm))`. Optional fields are `angle` (quarter turns), `mirror`, `value`, `footprint`, and `unit`. Place an additional gate on its sheet with `second = gate(sheet: main, of: u, unit: "B", at: (20, 5))`. Both gates use the same component and pin identity. Unplaced units appear in ERC.
+- Define a sheet with `main = sheet(title: "Power")`. Use `u = place(sheet: main, symbol: parts.Reg, at: (10mm, 5mm))`. Optional fields are `angle` (quarter turns), `mirror`, `value`, `footprint`, and `unit`. Use **Place Sub Part** to draw another sub part on its sheet with `second = gate(sheet: main, of: u, unit: "B", at: (20, 5))`. Both sub parts use the same component and pin identity. Unplaced sub parts appear in ERC.
 - Connect `wire(sheet:, from:, to:, via: [...])` between explicitly named terminals, junctions and ports. Coordinates give the presentation. Endpoint attachment gives conductivity. Crossing two wires leaves their nets separate. A `junction(sheet:, at:)` shared by the wires joins them. `no_connect(sheet:, on:)` marks an intentionally unused pin.
 - `label(sheet:, on:, value:, at:, global: true)` connects like names throughout the project. The default scope is one sheet occurrence. `note(sheet:, value:, at:)` adds text. `bus(sheet:, members: {scl: u.scl, sda: u.sda})` groups named endpoints while retaining their separate nets.
 - A definition with `out = port(sheet: cell, at: (0, 0))` exposes that port at each `channel = subsheet(sheet: main, of: cell, at: (10, 10), ports: {out: (2, 0)})`. A wire on main refers to `channel.out`. The `ports` map is optional and supplies parent-side offsets. Sheet definitions can repeat, and cyclic instantiation is refused. Queries use qualified paths such as `main/channel/u.out`.
-- `flow(sheet:, from:, to:)` records an ordered functional stage. `fulfill(sheet:, want:, give:, role:, return_from:, return_to:, prefer:)` binds a provider to a consumer for a declared role. The return pair and preference are optional. Wiring still comes from explicit electrical attachments. ERC checks supply/signal connectivity, the declared return paths, conflicting labels/drivers, connected no-connects, unconnected pins and unmet wants. Overlapping pin name, label and note layout boxes have their own readability finding. Pin inspection ranks a direct wire first, then a drawn path through explicit junctions by segment count, then a shared net. Confirmation records the designer’s choice.
+- `flow(sheet:, from:, to:)` records an ordered functional stage. `fulfill(sheet:, want:, give:, role:, return_from:, return_to:, prefer:)` binds a provider to a consumer for a declared role. The return pair and preference are optional. Wiring still comes from explicit electrical attachments. ERC checks supply/signal connectivity, the declared return paths, conflicting labels/drivers, connected no-connects, unconnected pins and unmet wants. Readability checks report overlapping printed fields, pin names, labels and notes (`TextBoundsOverlap`), and text crossing wires or symbol graphics or obscuring a symbol body (`TextGeometryOverlap`). Each warning identifies both objects. Pin inspection ranks a direct wire first, then a drawn path through explicit junctions by segment count, then a shared net. Confirmation records the designer’s choice.
 - Coordinates support mm, inches and shared dimensional expressions using the existing .fg dimensional arithmetic. Sheet presentation, logical nets and functional links can be queried separately.
 
 ## Agent and CLI tools
@@ -50,3 +167,181 @@ MCP `plan_bypass` takes the file, qualified consumer and return pin, symbol and 
 The [Lean model](../research/forge-lang/lean/ForgeLang/Schematic.lean) proves nominal role admissibility, preservation of wiring by role confirmation, and invariant reachability when a wire is reversed. Grammar witnesses use the shared .fg parser model. The Rust tests compare net partitions against an independent transitive-closure oracle and exercise hierarchy, gate placement and role refusals. The MCP integration test plans, commits, rejects a bad edit, undoes, and invalidates a changed library. The [coverage ledger](../research/forge-lang/lean/COVERAGE.md) identifies the remaining Rust-to-model proof gaps.
 
 The session cache recognizes a change confined to the literal coordinates of a placement. It updates pin positions and print-bounds findings on each affected sheet occurrence, preserves confirmed links and electrical partitions, and adjusts source locations. Changes to wiring, parameters or imported symbols use a fresh compilation. The regression suite compares cached results, source locations and SVG against fresh compilation across repeated sheets and invalid edits. The [latency probe](../research/electronics/probes/README.md#native-schematic-response-time) exercises this path through MCP.
+
+## Editing in ForgeCAD
+
+Choose **File → New Schematic** or **File → New Symbol Library**. Each opens a document tab. Save both files in the project before linking the library. In the schematic, **Link Library** takes its relative filename and a local name. **Place Symbol** shows the definitions in the linked library. The left tree navigates sheet occurrences. **Parts** in the right dock searches document and linked-library symbols by name, pin description, and custom fields such as MPN. Select a result to preview and place it, or open the library from the same dock. The [sensor interface](../examples/electronics/analog/sensor-interface.fg) and its [library](../examples/electronics/analog/analog-symbols.fg) are a working pair.
+
+- Use **Wire** to pick the first pin, any bends, and the destination. Finish on an existing wire to branch it. **Junction** splits an existing segment. Moving a connected component keeps its wires attached. A plain crossing leaves the nets independent.
+- **Assign Role** records a typed provider and consumer, with optional return pins and a preferred separation. Select a pin to inspect its declared roles and candidate providers. **Inspect → Electrical Checks** shows electrical and readability findings.
+- In a library, select a symbol, place its pins and draw its outline. Select a pin to set its number, sub part, orientation, electrical kind, wants and gives. Select a graphic to edit its coordinates. The library and all its instances share the same geometry.
+- When a whole sheet is fitted, fine pin labels appear as you zoom in. Hover over an endpoint to identify it at any scale. The scroll wheel zooms around the pointer, middle drag pans, and **View → Fit All** frames the drawing. Hover over a ribbon tool to see its shortcut. Escape cancels the current tool. Source edits use the document's undo and redo history.
+
+### Pin inspection and signal directions
+
+Select or right-click a pin to open **Pin checklist** at the top of **Properties**. It shows the short library description and the verified count for **Wants** and **Provides**. Check an open role to select a compatible pin on the same sheet and net. The assignment form accepts optional return pins and preferred separation. Once verified, the row is checked. An invalid assignment shows a mixed checkbox and **Check wiring**. Activate a checked or mixed row to remove an individual assignment. These edits support Undo. In the symbol editor, the **Pin roles** table sets Wants and Provides independently for each declared role. A verified relationship names the other occurrence and pin. An electrically connected match without a confirmed assignment is a candidate. An assignment with a disconnected supply or invalid return is marked **Check wiring**. Selecting a reference opens that pin, including on another sheet. The canvas highlights the selected pin, its peers and their drawn paths, including the connected power symbol. Other pins on the same component and the bypass return stay dim. The return still participates in electrical verification. A connected power symbol is listed under a power need even if a source has yet to be assigned. The checklist stays in the right dock. Escape closes inspection.
+
+In the symbol editor, edit **Pin name** and **Direction (°)** and select **Apply pin changes**. Expand **Sub parts** to change which sub part contains the pin. For example, the two amplifiers in one dual op-amp package can be drawn as U1A and U1B. The selected pin shows an orientation arrow. Renaming keeps the pin number and records the previous name in `aliases` so existing schematic references still connect to the same terminal.
+
+Select the symbol itself to edit **Reference prefix**. For example, `Resistor = symbol(ref_prefix: "R", pins: {...})` suggests R1, R2 and so on when placed. Prefixes can contain multiple letters such as TP. Existing placements keep their references.
+
+The symbol editor saves the description with the pin, for example `pin(number: "3", kind: "input", at: (-7, 3), description: "Noninverting input. Connect the filtered sensor signal here.")`. The CLI and MCP pin and symbol queries include this field.
+
+**View → Direction Arrows** (F6) and **Moving Dots** (F7) toggle independently. Green follows a known driver or an explicit `flow` along the connected net. Red markers travel both ways on a multiple-driver net or a wire with conflicting direction evidence. An undetermined wire stays unmarked. The markers move at a fixed screen speed to show logical direction.
+
+### Drawing and grid
+
+**Draw** provides line, rectangle, circle, three-point arc and text tools. Pick two corners for a box, a center and circumference point for a circle, or start, middle and end for an arc. Set stroke width or text height and bold in Properties before placing. Select the graphic to edit its points, radius or appearance, move it, or delete it. The same geometry and text print to SVG. Graphic strokes can cross pins and wires without joining nets. A graphical frame can enclose annotations, and a stroke crossing text produces a readability warning.
+
+The grid control below the canvas accepts metric presets, 10/25/50/100 mil presets, and a custom pitch in millimetres. **Snap** and grid visibility are independent. The grid and snap share the sheet origin and pitch. Zooming out thins the displayed dots by powers of two while retaining the selected snap pitch. The placement cursor shows the point a click will use. Drawing also snaps to nearby pin anchors, shape endpoints, box corners and circle quadrants. Wires attach exactly to the chosen terminal even for an off-grid pin.
+
+```text
+frame = rect(sheet: main, from: (0, 0), to: (40, 20), width: 0.3mm)
+title = note(sheet: main, at: (2, 15), value: "Analog input", size: 2.8mm, bold: true)
+```
+
+The [two-channel filter example](../examples/electronics/analog/filter-sheets.fg) repeats one annotated filter sheet twice and defines the signal flow through its input and output wires.
+
+### Reading and placing fields and net names
+
+On a physical symbol the larger field is its reference designator, and the next field is its value. Select the component and use **Field positions** in Properties to move either field independently. The source arguments `ref_offset` and `value_offset` measure from the component origin in sheet axes. Set either to `auto` to restore its default position. A hollow circle in the schematic marks a pin with no drawn attachment. Wiring it, attaching a label or marking it no-connect clears that circle. The symbol editor shows all pin anchors.
+
+| Tool | Appearance | Electrical scope |
+| --- | --- | --- |
+| Label → Local label | Plain text above its anchor | Equal names join within one sheet occurrence. |
+| Label → Global label | Outlined tag with a point at the attachment | Equal names join across the design. |
+| Port | Outlined tag with a flat attachment edge | Exposes a terminal on a hierarchical sheet. A parent wire attaches to the instance's port, such as `channel.out`. |
+| Power | Rail arrow or ground symbol with its net name | Joins the same global net as a global label of that name. |
+
+**Power** includes +3V3, +5V, +12V, VCC, VDD, GND, AGND and DGND. The Power tab also searches custom power symbols declared by the document or its linked libraries. Click an existing terminal to attach the symbol in one edit, or place it on the grid and wire it later. Power symbols have one passive pin and are excluded from the BOM. Power sources such as regulators declare their own driver pins. The command inserts the bundled library into the document on first use. The same design can be written directly in the language.
+
+```text
+power = library(file: "forge:power")
+vcc = place(sheet: main, symbol: power.V3V3, at: (10, 12))
+feed = wire(sheet: main, from: vcc.net, to: U1.VDD)
+```
+
+### Purchasing data and datasheets
+
+Symbols accept a map of custom string fields and a datasheet reference. Placements can override individual fields and the datasheet. Field names are Forge identifiers. For example, a library can define `fields: {MPN: "TLV9001IDBVR", Manufacturer: "Texas Instruments"}`. A placement can add `fields: {Supplier: "Stockroom"}` while retaining both library fields. Value and footprint are placement properties.
+
+**Attach PDF** on a saved symbol or placement stores the PDF bytes in the document’s `datasheets/` folder under a SHA-256 filename and records the relative path. Importing identical bytes reuses the file. A datasheet URL is stored as text. Share the project directory, including its libraries and attachments.
+
+**Inspect → Bill of Materials** groups fitted physical occurrences by effective specification and copies CSV with the custom fields as columns. Multiple sub parts count once per component, and repeated sheets contribute separate occurrence paths. `populated: false` and `in_bom: false` independently exclude placements. The same data is available through the MCP schematic queries `bom` and `bom-csv`, or from the CLI.
+
+```sh
+forgecad schematic examples/electronics/analog/sensor-interface.fg bom-csv -o sensor-bom.csv
+```
+
+## Nested libraries and custom components
+
+A library can contain symbols, child libraries, or both. Each import binds one name. A controller project can import a catalog once and place a symbol four names deep.
+
+```fg
+components = library(file: "components/catalog.fg")
+Q1 = place(sheet: channel, symbol: components.discrete.switches.PowerFET, at: (8,2))
+```
+
+In the symbol editor, choose **Add child library**, enter its namespace and relative filename, then choose **Create and link child library**. **Link library** attaches an existing file. Save the parent to persist the link. Click a library in the left browser to edit its own file. The Parts dock browses folders and searches descendant symbols, pin descriptions, component types and purchasing fields. Nested changes invalidate dependent schematics. Circular imports report the offending file.
+
+Choose **Part type** in symbol properties to find an existing classification or create a custom one. A want for `fet` accepts a `mosfet` or `jfet`. A want for `mosfet` accepts that specific class. Map the path endpoints to the custom symbol's actual pin names under **Terminal paths**. A connector can keep its generic passive contacts. [Load-switch project](../examples/electronics/load-switch/switch-card.fg)
+
+![Nested component libraries in the native Parts dock](../research/electronics/shots/native-nested-library.png)
+
+## Sheet frames and project navigation
+
+New schematic documents use the bundled A4 frame. To make your own, draw a graphics-only symbol in a library with the symbol editor. The largest rectangle defines the eight-column, four-row reference grid. Put `{title}`, `{sheet}`, `{page}` and `{pages}` in its text where those fields should print. Link the library and select the frame under **Sheet settings**. For example, `main = sheet(title: "Controller", template: company.frames.Assembly)` binds one sheet definition to a shared frame.
+
+**Find across sheets** searches occurrences, reference designators, values, fields, labels, notes and pins. Results include the zone when a template provides bounds. Select a result to visit its sheet. **Export project PDF** writes one searchable page per sheet occurrence beside the saved schematic. CLI users can choose the output filename.
+
+```sh
+forgecad schematic examples/electronics/load-switch/switch-card.fg search PowerFET
+forgecad schematic examples/electronics/load-switch/switch-card.fg pdf -o switch-card.pdf
+```
+
+## Editing, annotation and review
+
+- With **Select** active, drag a bend or segment to reroute a wire. The named endpoints stay attached. **Edit Block** selects objects by clicking. Set the offset, choose move or duplicate, and review boundary connections before applying. Interior wires and declared fulfillments copy with the selected components. Shared labels and connections to external components appear in the review. Editing a repeated sheet definition changes each occurrence. **Bulk component field** sets one field across the selected placements in one undo step.
+- Changing **Reference** preserves the source ID used by wires, wants and board handoff. **Reannotate project** allocates references across repeated sheets and respects **Lock reference**. An occurrence-specific override can be written as `keep = annotation(occurrence: "overview/right/Q1", reference: "Q17", locked: true)`.
+- In **Electrical Checks**, expand **Review finding** to change a rule's severity or waive that finding with a reason. The waiver matches its rule and complete object list, including sheet occurrence. Waived findings and their reasons remain visible. For example, `policy = erc_rule(rule: "UnconnectedPin", severity: "error")` promotes open pins to errors. `fixture = waiver(rule: "UnconnectedPin", objects: ["main/J1.P3"], reason: "Reserved fixture contact")` records a scoped exception. The JSON result distinguishes unknown evidence from failed checks.
+- Use **Replace symbol** in placement properties to compile a proposed substitution and review electrical changes. Pin aliases can preserve attachments through a logical pin rename. In **Link Library**, enter an existing namespace and another file to preview a library substitution. File-watcher refreshes also expose their electrical changes in **Electrical Checks**. Compare two saved designs or symbol libraries with `forgecad diff OLD.fg NEW.fg --json`.
+- In the symbol editor a pin can define alternate functions, each with its own electrical kind, wants and gives. Select a function in the placement properties. A peripheral signal assigned to multiple enabled pins and bus members shorted to the same net generate ERC findings. In source, `functions: {TX: function(kind: "output", gives: [serial])}` belongs to the pin and `functions: {PA0: TX}` belongs to a placement. Peripheral signal names used in checks match the selected function names.
+- A pin maps to its physical pin number by default. Use **Physical pads** to designate several footprint pads, for example `pads: ["2", "EP"]`. The board handoff includes stable occurrence IDs, visible references, pad-to-net assignments, fitted status, footprints and confirmed provider relationships with placement distance preferences.
+- The BOM dock creates and selects named assembly variants. A variant can omit or fit individual occurrences, including one occurrence of a repeated sheet. For example, `prototype = variant(omit: ["overview/right/Q1"])`. CLI and MCP selectors include `variants`, `bom prototype`, `bom-csv prototype`, `erc prototype` and `board prototype`. A DNP part retains its physical footprint and pad mapping.
+
+The `schematic` tool also accepts `plan-block copy|move SCOPE DX_MM DY_MM OBJECT...`, `plan-reannotate` for the whole project, and `plan-reannotate SHEET` for a definition. The plans use the same checked edit operations as the editor.
+
+### Pull-ups and pull-downs
+
+An SDA pin can want a pull-up to a rail between 3.0 and 3.6 V through a resistor between 2.2 and 10 kΩ. In **Pin Role** choose **pull_up**, enter the rail limits and optional resistance limits, then select the role under **Wants**. The same fields are available for **pull_down**. Declare a 0 V power or reference source on the return net for a ground pull-down.
+
+```fg
+logic_high = role(kind: "pull_up", voltage_range_v: [3.0, 3.6], value_range: ["2.2 kΩ", "10 kΩ"])
+weak_pull = role(kind: "pull_up", voltage_mv: 3300, value: "8.2 kΩ")
+```
+
+A fitted resistor supplies the want when its signal-side terminal is on the selected net and the opposite terminal reaches a rated source. An active pin function can instead give a pull role declaring its internal rail and resistance. Put a switchable internal pull under the alternate function that enables it. The check uses the declared operating configuration. Resistance limits apply to an individual path and its declared nominal value or range. Parallel equivalent resistance and I²C rise time require separate checks.
+
+The pin checklist identifies the resistor, value and rail, and highlights both sides of the path. Select an assembly variant in the checklist to see which component was omitted. A direct tie to a voltage source or a path to an incompatible rated rail is a conflict. An uncharacterized rail or unknown resistance is reported as unknown. CLI and MCP accept `pin main/U1.SDA no_sda_pull`. [I²C example](../examples/electronics/i2c-bias.fg)
+
+### Differential pairs
+
+Choose **Differential Pair** (F8). Pick the positive and negative pins, wires or labels, or select a suggested label pair and click **Create**. Matching names include `USB_D+` / `USB_D-`, `RX_P` / `RX_N`, and `USB_DP` / `USB_DM`. Explicit terminal selection also works for unrelated label names. The declaration binds endpoints. Changing printed label text preserves polarity.
+
+```fg
+usb = diff_pair(sheet: main, positive: J1.DP, negative: J1.DM)
+```
+
+The `diff-pairs` query and `board` handoff report both terminal IDs and their resolved nets per occurrence. ERC flags shorted legs and incompatible mate or polarity assignments. The schematic declaration supplies pairing intent for layout. Board geometry determines impedance and length matching. [USB schematic example](../examples/electronics/usb-diff-pair.fg)
+
+### Selecting and cleaning up wiring
+
+In **Edit Block**, drag a rectangle around component origins and connection points. Shift-drag adds to the selection. **Align left** sets symbol origins to the leftmost selected origin. **Align top** uses the highest selected origin. Attached wire endpoints follow. Select **Duplicate** and a **Destination sheet** to copy the block. Review the boundary connections before applying. A destination shared by several sheet occurrences updates them all. CLI and MCP can request the same operation with `plan-block copy-to SOURCE_SCOPE DESTINATION_SCOPE DX_MM DY_MM OBJECT...`.
+
+Select a wire and choose **Straighten wire** to remove its bends in one undoable edit. Its two named endpoints remain attached. ERC reports `WireNearPin` when a wire endpoint lies within 0.5 mm of a pin on another net, and `WireOverlap` for collinear wires sharing a length on different nets. An ordinary crossing is allowed.
+
+### Reusable attribute types and rule policies
+
+A type can live in its own library. For example, `fw = library(file:"attribute-types.fg")` makes `strap_table(kind:fw.startup_source, ...)` available. The type supplies the label and legal firmware choices. Each symbol defines its own pins, rows and default. Import `forge:attribute-types` to refer to a bundled definition by alias. Existing quoted kinds remain supported. [Firmware example](../examples/electronics/attribute-types.fg)
+
+In **Electrical Checks** or the PCB **Design rules** panel, open **Rule severities** to set a project override for any check. **Use inherited severity** restores the library or engine default. These are ordinary undoable edits.
+
+Load multiple policy files with ordinary `library(file:...)` declarations. In a schematic, `address_check = erc_rule(rule:"I2cAddressConflict", severity:"warning")` sets the project severity. In a board, `width_check = drc_rule(rule:"MinTrackWidth", severity:"error")` does the same for DRC. Supported levels are `error`, `warning` and `info`. A project setting resolves different library defaults regardless of import order. [ERC example](../examples/electronics/review-erc.fg) · [DRC example](../examples/electronics/review-drc.fg)
+
+
+A voltage state such as `service:[1.7,1.9]` in a strap input map uses inclusive volts. The activated source must provide a voltage fully contained in the interval. The evaluator checks direct connections and single, valued pull resistors with an unloaded input. A missing rating, partially overlapping provider tolerance, opposing drivers, or ambiguous state leaves the input unresolved. An open pin selects Floating when defined. High and Low use the symbol's reference pins, so a device can have its own logic rails. [Four-state firmware selector](../examples/electronics/strap-address-matrix.fg)
+
+### Declaring units for an attribute
+
+The **Name** is the schematic display name. **Type** chooses the value representation. **Unit** converts the results and default together. Expand **Units** to see the base unit, conversion factors and valid limits in each unit. For an address the selector switches between hexadecimal, binary and decimal. Each address format declares a radix, prefix and padding. The table previews the same address in every format and shows its numerical limits. Text and choices are unitless.
+
+Choose **Custom…** at the end of the type dropdown. Enter the new type's name where the dropdown was, declare its base unit and add any alternate units. Choose **Scaled quantity** for physical units, **Integer encoding** for a register or address, or **Value pairs** for discrete codes listed in a datasheet. Click a local table cell to edit its name, conversion or range. In a scaled quantity the first unit has factor 1. For every other row, multiplying a value by its factor converts it to the base unit. Blank limits use the underlying value kind’s full domain. Integer encodings accept unsigned 32-bit values and bases 2 through 36. **Declare type** enables the unit picker and results. **Save** writes the local type before the symbol that uses it in one undoable edit. The unit table for a locally defined quantity remains editable. Imported definitions appear as references. Choosing **Custom…** with an imported quantity selected starts a local definition with those units.
+
+```forge
+frequency = attribute_type(label:"Frequency", kind:"quantity", units:[
+  {name:"Hz",factor:1,min:0,max:10000000},
+  {name:"kHz",factor:1000,min:0,max:10000},
+  {name:"MHz",factor:1000000,min:0,max:10}])
+```
+
+The three-pin address example has columns A2, A1, A0 and Result. Its 27 authored rows cover the Cartesian product of Low, High and Floating. [Open the complete example](../examples/electronics/ternary-address.fg)
+
+A custom unsigned register can use named representations. Width is a minimum number of digits for display. The engine checks ranges before narrowing and rejects ambiguous prefixes.
+
+```forge
+register_code = attribute_type(label:"Register code", kind:"integer", units:[
+  {name:"Count",radix:10,min:0,max:255},
+  {name:"Octal",radix:8,prefix:"o:",digits:3},
+  {name:"Hex word",radix:16,prefix:"0x",digits:2}])
+```
+
+
+### Connecting several conversion tables
+
+Open **Units** in the derived attribute editor. For a local **Value pairs** type, name each format, then choose **Add conversion table**. Give the table a name, choose its two formats and use **Add pair** to enter corresponding values. Add another table for the next pair of formats. Switching the **Unit** at the top converts every truth-table result and its default.
+
+For example, one datasheet table can pair Hex `0x48` with Numeric `72`, and a second can pair Numeric `72` with Binary `01001000`. Those two entries also define the reverse conversion and the Hex–Binary conversion. A leading zero in a lookup value is preserved. Each admitted value must have exactly one spelling in each declared format. A missing link or two routes that disagree produce a declaration error. [Open the editable register-code library](../examples/electronics/conversion-chain.fg)
+
+For a complete numeric encoding such as a 7-bit I²C address, declare the radix and optional prefix or padding once per format. A conversion table can then name its endpoints and omit the rows. ForgeCAD computes the digits for any admitted address. Numeric routes also respect the ranges of the formats they traverse. [Built-in Rust type definitions](../interface/forge-lang/src/standard_library/properties.rs)
+
+The bundled **Standard Library** and installed Rust packages use the same `library(file:...)` declaration. The **Custom fields** section of a symbol can bind a field to an imported type. Open **Electrical Checks → Rule severities** to change a loaded rule’s severity. [Library authoring and package examples](../research/electronics/rule-libraries.md)

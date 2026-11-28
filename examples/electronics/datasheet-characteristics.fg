@@ -1,0 +1,105 @@
+symbol_library
+# TI CSD18540Q5B, SLPS488B. Numbered terminals shown in the top view.
+Mosfet = symbol(ref_prefix:"Q",part_kind:"mosfet",
+  datasheet:"https://www.ti.com/lit/ds/symlink/csd18540q5b.pdf",
+  pins:{
+    G:pin(number:"4",kind:"input",at:(-5,0),specs:[{kind:"terminal_role",state:"gate"}]),
+    D:pin(number:"5",pads:["5","6","7","8"],kind:"passive",at:(0,5),specs:[{kind:"terminal_role",state:"drain"}]),
+    S:pin(number:"1",pads:["1","2","3"],kind:"passive",at:(0,-5),specs:[{kind:"terminal_role",state:"source"}])
+  },
+  paths:{channel:[D,S],body_diode:[S,D]},
+  specs:[
+    {kind:"drain_source_voltage",class:"absolute_max",pins:[D,S],max:60,unit:"V",source:"Absolute Maximum Ratings, VDS"},
+    {kind:"gate_source_voltage",class:"absolute_max",pins:[G,S],min:-20,max:20,unit:"V",source:"Absolute Maximum Ratings, VGS"},
+    {kind:"device_family",state:"n_channel_mosfet"},
+    {kind:"on_resistance",pins:[D,S],unit:"mΩ",typ:2.6,max:3.3,
+     when:[{kind:"gate_source_voltage",pins:[G,S],typ:4.5},{kind:"drain_current",typ:28},{kind:"ambient_temperature",typ:25}],
+     source:"SLPS488B §5.1, RDS(on)"},
+    {kind:"on_resistance",pins:[D,S],unit:"mΩ",typ:1.8,max:2.2,
+     when:[{kind:"gate_source_voltage",pins:[G,S],typ:10},{kind:"drain_current",typ:28},{kind:"ambient_temperature",typ:25}],
+     source:"SLPS488B §5.1, RDS(on)"},
+    {kind:"gate_charge",pins:[G,S],unit:"nC",typ:20,max:26,
+     curve:"Total gate charge at 30 V and 28 A",curve_basis:"datasheet_table",coordinate:{kind:"gate_source_voltage",pins:[G,S],typ:4.5},
+     when:[{kind:"drain_source_voltage",pins:[D,S],typ:30},{kind:"drain_current",pins:[D,S],typ:28},{kind:"ambient_temperature",typ:25}],
+     source:"SLPS488B §5.1, Qg total (4.5 V)"},
+    {kind:"gate_charge",pins:[G,S],unit:"nC",typ:41,max:53,
+     curve:"Total gate charge at 30 V and 28 A",curve_basis:"datasheet_table",coordinate:{kind:"gate_source_voltage",pins:[G,S],typ:10},
+     when:[{kind:"drain_source_voltage",pins:[D,S],typ:30},{kind:"drain_current",pins:[D,S],typ:28},{kind:"ambient_temperature",typ:25}],
+     source:"SLPS488B §5.1, Qg total (10 V)"},
+    {kind:"gate_drain_charge",pins:[G,D],unit:"nC",typ:6.7,
+     when:[{kind:"drain_source_voltage",pins:[D,S],typ:30},{kind:"drain_current",pins:[D,S],typ:28},{kind:"ambient_temperature",typ:25}],
+     source:"SLPS488B §5.1, Qgd"},
+    {kind:"output_charge",pins:[D,S],unit:"nC",typ:83,
+     when:[{kind:"drain_source_voltage",pins:[D,S],typ:30},{kind:"gate_source_voltage",pins:[G,S],typ:0},{kind:"ambient_temperature",typ:25}],
+     source:"SLPS488B §5.1, Qoss"},
+    {kind:"reverse_conduction_voltage",pins:[S,D],unit:"V",typ:0.8,max:1,
+     when:[{kind:"reverse_current",pins:[S,D],typ:28},{kind:"gate_source_voltage",pins:[G,S],typ:0},{kind:"ambient_temperature",typ:25}],
+     source:"SLPS488B §5.1, VSD"},
+    {kind:"off_state_drain_current",pins:[D,S],unit:"µA",max:1,
+     when:[{kind:"gate_source_voltage",pins:[G,S],typ:0},{kind:"drain_source_voltage",pins:[D,S],typ:48},{kind:"ambient_temperature",typ:25}],
+     source:"SLPS488B §5.1, IDSS"},
+    {kind:"input_capacitance",typ:3250,max:4230,unit:"pF",
+     when:[{kind:"gate_source_voltage",pins:[G,S],typ:0},{kind:"drain_source_voltage",pins:[D,S],typ:30},{kind:"frequency",unit:"MHz",typ:1},{kind:"ambient_temperature",typ:25}],
+     source:"SLPS488B §5.1, Ciss"},
+    {kind:"recovery_charge",typ:145,unit:"nC",
+     when:[{kind:"drain_source_voltage",pins:[D,S],typ:30},{kind:"forward_current",pins:[S,D],typ:28},{kind:"commutation_current_slew_rate",unit:"A/µs",typ:300},{kind:"ambient_temperature",typ:25}],
+     source:"SLPS488B §5.1, Qrr"}
+  ])
+# Separate illustrative device. The numbers below exercise condition and mode authoring.
+IoDevice = symbol(pins:{
+  IO:pin(number:"1",kind:"bidirectional",at:(-4,0),specs:[
+    {kind:"pull_up",state:"configurable",pins:[IO,VDD]},
+    {kind:"injection_current",class:"absolute_max",unit:"mA",min:-5,max:5}
+  ], functions:{sense:function(kind:"input",specs:[{kind:"leakage_current",unit:"nA",max:20,when:[{kind:"junction_temperature",unit:"°C",typ:25}]}])}),
+  VDD:pin(number:"2",kind:"power_in",at:(0,4)),
+  GND:pin(number:"3",kind:"passive",at:(0,-4))
+}, specs:[
+  {kind:"supply_voltage",class:"operating",pins:[VDD,GND],unit:"V",min:1.8,max:5.5},
+  {kind:"on_resistance",pins:[IO,GND],unit:"mΩ",typ:80,when:[{kind:"supply_voltage",pins:[VDD,GND],typ:3.3},{kind:"sink_current",unit:"mA",typ:4}]}
+])
+
+# onsemi J112, TO-92 style 5. Cutoff limits are written in signed numeric order.
+J112 = symbol(ref_prefix:"Q",part_kind:"jfet",
+  datasheet:"https://www.onsemi.com/download/data-sheet/pdf/j111-d.pdf",
+  pins:{
+    D:pin(number:"1",kind:"passive",at:(0,5),specs:[{kind:"terminal_role",state:"drain"}]),
+    S:pin(number:"2",kind:"passive",at:(0,-5),specs:[{kind:"terminal_role",state:"source"}]),
+    G:pin(number:"3",kind:"input",at:(-5,0),specs:[{kind:"terminal_role",state:"gate"}])
+  },paths:{channel:[D,S]},specs:[
+    {kind:"channel_mode",state:"depletion"},
+    {kind:"gate_source_cutoff_voltage",pins:[G,S],min:-5,max:-1,unit:"V",
+     when:[{kind:"drain_source_voltage",pins:[D,S],typ:5},{kind:"drain_current",pins:[D,S],typ:1,unit:"µA"},{kind:"ambient_temperature",typ:25}],
+     source:"J111/D rev. 2 p. 2, J112 VGS(off)"},
+    {kind:"zero_gate_drain_current",pins:[D,S],min:5,unit:"mA",
+     when:[{kind:"gate_source_voltage",pins:[G,S],typ:0},{kind:"drain_source_voltage",pins:[D,S],typ:15},{kind:"pulse_duration",typ:300,unit:"µs"},{kind:"duty_cycle",typ:3},{kind:"ambient_temperature",typ:25}],
+     source:"J111/D rev. 2 p. 2, J112 IDSS and note 1"}
+  ])
+
+# TI JFE2140, matched dual JFET, SOIC-8. Four pins identify a matching measurement.
+MatchedPair = symbol(ref_prefix:"Q",part_kind:"jfet",
+  datasheet:"https://www.ti.com/lit/ds/symlink/jfe2140.pdf",pins:{
+    S1:pin(number:"1",kind:"passive",at:(0,-5),specs:[{kind:"terminal_role",state:"source"}]),
+    D1:pin(number:"2",kind:"passive",at:(0,5),specs:[{kind:"terminal_role",state:"drain"}]),
+    VCH:pin(number:"3",kind:"passive",at:(5,8)),
+    G1:pin(number:"4",kind:"input",at:(-5,0),specs:[{kind:"terminal_role",state:"gate"}]),
+    S2:pin(number:"5",kind:"passive",at:(10,-5),specs:[{kind:"terminal_role",state:"source"}]),
+    D2:pin(number:"6",kind:"passive",at:(10,5),specs:[{kind:"terminal_role",state:"drain"}]),
+    VCL:pin(number:"7",kind:"passive",at:(5,-8)),
+    G2:pin(number:"8",kind:"input",at:(15,0),specs:[{kind:"terminal_role",state:"gate"}])
+  },paths:{channel1:[D1,S1],channel2:[D2,S2]},specs:[
+    {kind:"gate_source_voltage_mismatch",pins:[G1,S1,G2,S2],unit:"mV",typ:1,max:4,
+     when:[{kind:"ambient_temperature",typ:25},{kind:"drain_source_voltage",typ:10},{kind:"drain_current",typ:2,unit:"mA"}],
+     source:"SLPS730B §6.5, differential VGS mismatch"},
+    {curve:"Noise at 0.1 mA",curve_basis:"datasheet_table",curve_scale:"log_x",kind:"voltage_noise_density",unit:"nV/√Hz",typ:5.4,
+     coordinate:{kind:"frequency",unit:"Hz",typ:10},when:[{kind:"drain_current",unit:"mA",typ:0.1},{kind:"drain_source_voltage",typ:10},{kind:"ambient_temperature",typ:25}],
+     source:"SLPS730B §6.5, input-referred noise"},
+    {curve:"Noise at 0.1 mA",curve_basis:"datasheet_table",curve_scale:"log_x",kind:"voltage_noise_density",unit:"nV/√Hz",typ:2.5,
+     coordinate:{kind:"frequency",unit:"Hz",typ:1000},when:[{kind:"drain_current",unit:"mA",typ:0.1},{kind:"drain_source_voltage",typ:10},{kind:"ambient_temperature",typ:25}],
+     source:"SLPS730B §6.5, input-referred noise"},
+    {curve:"Noise at 2 mA",curve_basis:"datasheet_table",curve_scale:"log_x",kind:"voltage_noise_density",unit:"nV/√Hz",typ:2.4,
+     coordinate:{kind:"frequency",unit:"Hz",typ:10},when:[{kind:"drain_current",unit:"mA",typ:2},{kind:"drain_source_voltage",typ:10},{kind:"ambient_temperature",typ:25}],
+     source:"SLPS730B §6.5, input-referred noise"},
+    {curve:"Noise at 2 mA",curve_basis:"datasheet_table",curve_scale:"log_x",kind:"voltage_noise_density",unit:"nV/√Hz",typ:1.1,
+     coordinate:{kind:"frequency",unit:"Hz",typ:1000},when:[{kind:"drain_current",unit:"mA",typ:2},{kind:"drain_source_voltage",typ:10},{kind:"ambient_temperature",typ:25}],
+     source:"SLPS730B §6.5, input-referred noise"}
+  ])

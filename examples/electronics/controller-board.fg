@@ -1,0 +1,26 @@
+pcb
+
+source = schematic(file: "controller.fg")
+shared board_width = 40mm
+shared board_height = 25mm
+shared trace_width = 0.25mm
+perimeter = edge(points: [(0, 0), (board_width, 0), (board_width, 20), (35, board_height), (0, board_height)])
+
+# Physical order is explicit. Copper thickness is finished metal, weight is nominal foil.
+top = copper(weight_oz_ft2: 1, thickness: 0.035mm)
+upper = dielectric(material: "FR-4 prepreg", thickness: 0.18mm)
+inner1 = copper(weight_oz_ft2: 0.5, thickness: 0.018mm)
+core = dielectric(material: "FR-4 core", thickness: 1.134mm)
+inner2 = copper(weight_oz_ft2: 0.5, thickness: 0.018mm)
+lower = dielectric(material: "FR-4 prepreg", thickness: 0.18mm)
+bottom = copper(weight_oz_ft2: 1, thickness: 0.035mm)
+laminate = stackup(layers: [top, upper, inner1, core, inner2, lower, bottom])
+
+# Example project limits for this rigid stack.
+prototype = process(min_width: 0.2mm, min_spacing: 0.15mm, min_drill: 0.2mm, min_annular_ring: 0.15mm)
+supply = net(terminal: "main/u.vdd")
+ground = net(terminal: "main/u.vss")
+feed = track(net: supply, layer: top, width: trace_width, points: [(4, 8), (9, 8), (12, 11)])
+transition = through_via(net: supply, at: (12, 11), diameter: 0.6mm, drill: 0.3mm)
+on_bottom = track(net: supply, layer: bottom, width: trace_width, points: [(12, 11), (20, 11)])
+return_trace = track(net: ground, layer: inner1, width: 0.4mm, points: [(4, 6), (12, 6)])

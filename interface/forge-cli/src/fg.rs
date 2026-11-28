@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// The tools a part file takes, on the command line and over `serve`/`mcp`.
-pub const COMMANDS: [&str; 11] = [
+pub const COMMANDS: [&str; 12] = [
     "build",
     "check",
     "query",
@@ -26,6 +26,7 @@ pub const COMMANDS: [&str; 11] = [
     "cam",
     "bend",
     "schematic",
+    "pcb",
 ];
 
 /// A tool's arguments: the file, and its words (a selector, the refs to measure, the view, the
@@ -144,7 +145,44 @@ impl Session {
         }
     }
 
+    fn pcb_reply(&self, path: &Path, src: &str, words: &[String]) -> Reply {
+        use forge_lang::pcb;
+        let mut json = pcb::query(src, path.parent(), self.root.as_deref(), words)
+            .unwrap_or_else(|err| err.json_for(pcb::SCHEMA));
+        obj_push(&mut json, "version", version(src).into());
+        Reply {
+            ok: json.get("ok") == Some(&Json::Bool(true)),
+            text: json.to_string(),
+            json,
+            png: None,
+        }
+    }
+
     fn schematic_reply(&mut self, path: &Path, src: &str, words: &[String]) -> Reply {
+        if words == ["pdf"] {
+            let result = forge_lang::schematic::compile(src, path.parent(), self.root.as_deref())
+                .and_then(|(d, c)| forge_lang::schematic::sheet_pdf(&d, &c));
+            return match result {
+                Ok(bytes) => Reply {
+                    ok: true,
+                    text: format!("{} bytes", bytes.len()),
+                    json: Json::obj(vec![
+                        ("ok", true.into()),
+                        ("media_type", "application/pdf".into()),
+                        ("mime", "application/pdf".into()),
+                        ("format", "pdf".into()),
+                        ("version", version(src).into()),
+                    ]),
+                    png: Some(bytes),
+                },
+                Err(e) => Reply {
+                    ok: false,
+                    text: e.message.clone(),
+                    json: e.json(),
+                    png: None,
+                },
+            };
+        }
         let result = self.schematic.query(path, self.root.as_deref(), src, words);
         let ok = result.is_ok();
         let mut json = result.unwrap_or_else(|err| err.json());
@@ -157,7 +195,9 @@ impl Session {
         }
     }
     fn edited_report(&mut self, path: &Path, text: &str) -> Reply {
-        if forge_lang::schematic::is_document(text) {
+        if forge_lang::pcb::is_document(text) {
+            self.pcb_reply(path, text, &[])
+        } else if forge_lang::schematic::is_document(text) {
             self.schematic_reply(path, text, &[])
         } else {
             let run = self.run_src(path, text, true);
@@ -239,6 +279,13 @@ impl Session {
         }
         let r = match cmd {
             "build" | "check" => self.read(&a.file).and_then(|(path, src)| {
+                if forge_lang::pcb::is_document(&src) {
+                    return Ok(if cmd == "check" {
+                        self.pcb_reply(&path, &src, &["drc".into()])
+                    } else {
+                        self.pcb_reply(&path, &src, &a.words)
+                    });
+                }
                 if forge_lang::schematic::is_document(&src) {
                     let mut r = self.schematic_reply(&path, &src, &a.words);
                     if cmd == "check" && r.json.get("erc_ok") == Some(&Json::Bool(false)) {
@@ -266,6 +313,7 @@ impl Session {
             "diff" => self.diff(a),
             "cam" => self.cam(a),
             "bend" => self.bend(a),
+            "pcb" => self.read(&a.file).map(|(p, s)| self.pcb_reply(&p, &s, &a.words)),
             "schematic" => self
                 .read(&a.file)
                 .map(|(path, src)| self.schematic_reply(&path, &src, &a.words)),
@@ -423,7 +471,11 @@ impl Session {
                     post: p.post.clone(),
                     text: p.text.clone(),
                     error: p.error.clone(),
-                    certified: if p.text.is_none() { "no".into() } else { cert.clone() },
+                    certified: if p.text.is_none() {
+                        "no".into()
+                    } else {
+                        cert.clone()
+                    },
                     setup: None,
                 })
                 .collect()
@@ -630,6 +682,12 @@ impl Session {
         }
         if what != "file" {
             let (path, src) = self.read(&a.file)?;
+            if forge_lang::pcb::is_document(&src) {
+                if a.at.is_some() {
+                    return Err("--at is unsupported for PCB queries".into());
+                }
+                return Ok(self.pcb_reply(&path, &src, &a.words));
+            }
             if forge_lang::schematic::is_document(&src) {
                 if a.at.is_some() {
                     return Err("--at is unsupported for schematic queries".into());
@@ -850,6 +908,59 @@ impl Session {
     /// STEP of the part, `stl|3mf|obj` its mesh (`export_mesh`), or `dxf [SHEET]`: a sheet's flat
     /// pattern. The file goes in the reply's bytes.
     fn export(&mut self, a: &Args) -> Result<Reply, String> {
+        if a.words.first().is_some_and(|w| w == "pcb-fab") {
+            if a.words.len() > 2 {
+                return Err("export FILE pcb-fab [VARIANT]".into());
+            }
+            let (path, src) = self.read(&a.file)?;
+            let files = forge_lang::pcb::compile(&src, path.parent(), self.root.as_deref())
+                .and_then(|b| b.fabrication_files(a.words.get(1).map(String::as_str)));
+            let files = match files {
+                Ok(f) => f,
+                Err(e) => {
+                    let json = e.json_for(forge_lang::pcb::SCHEMA);
+                    return Ok(Reply {
+                        ok: false,
+                        text: json.to_string(),
+                        json,
+                        png: None,
+                    });
+                }
+            };
+            let zip = forge_mesh::zip::write(
+                &files
+                    .iter()
+                    .map(|(n, data)| (n.as_str(), data.as_bytes()))
+                    .collect::<Vec<_>>(),
+            )
+            .map_err(|e| e.to_string())?;
+            let review = Json::parse(&files["review.json"]).map_err(|e| e.to_string())?;
+            let count = |v: Option<&Json>| match v {
+                Some(Json::Arr(list)) => list.len(),
+                _ => 0,
+            };
+            let findings = count(review.get("drc").and_then(|r| r.get("findings")));
+            let unplaced = count(review.get("unplaced"));
+            let json = Json::obj(vec![
+                ("ok", true.into()),
+                ("mime", "application/zip".into()),
+                ("drc_findings", findings.into()),
+                ("unplaced_components", unplaced.into()),
+                (
+                    "files",
+                    Json::Arr(files.keys().cloned().map(Into::into).collect()),
+                ),
+            ]);
+            return Ok(Reply {
+                ok: true,
+                text: format!(
+                    "{} files, {findings} DRC findings, {unplaced} unplaced components",
+                    files.len()
+                ),
+                json,
+                png: Some(zip),
+            });
+        }
         if a.words
             .first()
             .is_some_and(|w| forge_lang::meshfile::Format::of(w).is_some())
@@ -1153,6 +1264,25 @@ impl Session {
         let Some(other) = a.words.first() else {
             return Err("diff takes two parts: diff A B [volume]".into());
         };
+        let (path, src) = self.read(&a.file)?;
+        if forge_lang::schematic::is_document(&src) {
+            let (other_path, other_src) = self.read(other)?;
+            let read = |p: &Path, s: &str| {
+                forge_lang::schematic::compile(s, p.parent(), self.root.as_deref())
+                    .map_err(|e| format!("{} · {}", e.kind, e.message))
+            };
+            let (old, oc) = read(&path, &src)?;
+            let (new, nc) = read(&other_path, &other_src)?;
+            let changes =
+                forge_lang::schematic::electrical_diff((&old, &oc), (&new, &nc)).map_err(|e| e.message)?;
+            let json = Json::obj(vec![("ok", true.into()), ("changes", changes)]);
+            return Ok(Reply {
+                ok: true,
+                text: json.to_string(),
+                json,
+                png: None,
+            });
+        }
         let side = |file: &str| -> Result<forge_lang::compare::Side, String> {
             let (p, text) = self.read(file)?;
             let opts = Options {
@@ -1248,7 +1378,7 @@ impl Session {
                 dir: p.parent().map(Path::to_path_buf),
                 root: self.root.clone(),
             };
-            let result = if forge_lang::schematic::is_document(&src) {
+            let result = if forge_lang::schematic::is_document(&src) || forge_lang::pcb::is_document(&src) {
                 edit::apply_at(&text, op, &at).map(|s| (s, None))
             } else {
                 edit::apply_checked_at(&text, op, &at)
@@ -1278,8 +1408,12 @@ impl Session {
                 }
             }
         }
-        if forge_lang::schematic::is_document(&src) {
-            let validated = self.schematic_reply(&p, &text, &[]);
+        if forge_lang::schematic::is_document(&src) || forge_lang::pcb::is_document(&src) {
+            let validated = if forge_lang::pcb::is_document(&src) {
+                self.pcb_reply(&p, &text, &[])
+            } else {
+                self.schematic_reply(&p, &text, &[])
+            };
             if !validated.ok {
                 let mut json = validated.json;
                 if let Json::Obj(fields) = &mut json {

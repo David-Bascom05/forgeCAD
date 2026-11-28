@@ -18,7 +18,7 @@ type Tool = (
     &'static [(&'static str, &'static str)],
 );
 
-const TOOLS: [Tool; 23] = [
+const TOOLS: &[Tool] = &[
     (
         "plan_fulfillment",
         "Confirm a typed candidate on an existing hand-drawn circuit. Returns one checked edit and the source version.",
@@ -57,14 +57,26 @@ const TOOLS: [Tool; 23] = [
         ],
     ),
     (
+        "pcb",
+        "Inspect a rigid PCB document, its stack and authored copper, or repack individual footprints with repack [fixed=J1,J2] [gap=MM] [rotate] [circuit=REF,REF] [independent] [BLOCK:VERSION@REF=X,Y,DEG ...], or compare translated placements with floorplan [variant=ID] [NAME@GROUP=DX,DY ...] in millimetres. Use handoff [VARIANT] for per-branch signal compatibility and fitted component attributes.",
+        1,
+        &[
+            ("file", "path to a PCB .fg"),
+            (
+                "sel",
+                "summary, libraries, layers, stackup, finishes, routing, placements, pads, ratsnest, artwork LAYER_ID, artwork top|bottom mask|paste|silk, artwork copper LAYER, connectivity, handoff [VARIANT], floorplan [variant=ID] [NAME@GROUP=DX,DY ...] or drc",
+            ),
+        ],
+    ),
+    (
         "schematic",
-        "Inspect a native schematic or symbol library. Typed roles, pin candidates, confirmed links, net partitions, sheet geometry, ERC and rooted wiring. Use edit for checked source changes.",
+        "Inspect a native schematic or symbol library. Typed roles, pin candidates, confirmed links, net partitions, sheet geometry, ERC, rooted wiring and the fitted BOM. The board selector returns signal_paths with active pin contracts and per-branch compatibility, plus derived_attributes for each fitted component. Resolve mismatches in the schematic and keep unknown paths unclassified. Use edit for checked source changes.",
         1,
         &[
             ("file", "path to .fg"),
             (
                 "sel",
-                "summary, symbols, symbol ID, sheet PATH, erc, nets, links, pin PATH or tree PATH",
+                "summary, libraries, symbols, symbol ID, sheet PATH, erc, nets, diff-pairs, links, pin PATH [VARIANT], tree PATH, search TERMS, variants, bom [VARIANT], bom-csv [VARIANT], board [VARIANT], erc [VARIANT], plan-reannotate [SHEET], plan-block copy|move SCOPE DX_MM DY_MM OBJECT..., plan-block copy-to SOURCE DESTINATION DX_MM DY_MM OBJECT... or pdf",
             ),
         ],
     ),
@@ -160,7 +172,7 @@ const TOOLS: [Tool; 23] = [
         2,
         &[
             ("file", "path to a .fg part"),
-            ("format", "stl|3mf|obj|step|ap214|ap242|dxf|dwg"),
+            ("format", "stl|3mf|obj|step|ap214|ap242|dxf|dwg|pcb-fab"),
             (
                 "options",
                 "e.g. \"tol 0.05 angle 10\", \"ascii\" (STL), \"normals faces\" (OBJ), \"flat\" (an assembly's 3MF)",
@@ -461,7 +473,7 @@ fn call(forge: &mut fg::Session, name: &str, p: &Json) -> Reply {
                 return Err("the session is read-only".into());
             }
             let src = match p.get("kind").and_then(Json::str) {
-                Some("schematic") => "schematic\nmain = sheet()\n",
+                Some("schematic") => forge_lang::schematic::NEW_SCHEMATIC,
                 Some("symbol_library") => "symbol_library\n",
                 _ => return Err("kind must be schematic or symbol_library".into()),
             };
@@ -772,7 +784,7 @@ fn answer(forge: &mut fg::Session, req: &Json, mcp: bool) -> Option<Json> {
             let r = call(forge, name, &arguments);
             let mut content = Vec::new();
             if let Some(png) = &r.png {
-                if name == "export" {
+                if name == "export" || r.json.get("mime").and_then(Json::str) == Some("application/pdf") {
                     // a file, not a picture: an embedded resource
                     let ext = r
                         .json
@@ -824,7 +836,15 @@ fn answer(forge: &mut fg::Session, req: &Json, mcp: bool) -> Option<Json> {
 fn served(r: Reply) -> Json {
     let Json::Obj(mut f) = r.json else { return r.json };
     if let Some(png) = r.png {
-        f.push(("png".into(), b64(&png).into()));
+        let key = if f
+            .iter()
+            .any(|(k, v)| k == "media_type" && v.str() == Some("application/pdf"))
+        {
+            "data"
+        } else {
+            "png"
+        };
+        f.push((key.into(), b64(&png).into()));
     }
     Json::Obj(f)
 }

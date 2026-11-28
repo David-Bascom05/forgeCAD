@@ -1,0 +1,25 @@
+symbol_library
+
+GND = symbol(visibility:{reference:false}, power_net: "GND", pins: {net: pin(number: "1", kind: "passive", at: (0,0))},
+    graphics: [line(from:(0,0),to:(0,-1.4)), polyline(points:[(-1.5,-1.4),(0,-2.9),(1.5,-1.4),(-1.5,-1.4)])])
+
+AGND = symbol(visibility:{reference:false}, power_net: "AGND", pins: {net: pin(number: "1", kind: "passive", at: (0,0))},
+    graphics: [line(from:(0,0),to:(0,-1.4)), polyline(points:[(-1.5,-1.4),(0,-2.9),(1.5,-1.4),(-1.5,-1.4)])])
+
+DGND = symbol(visibility:{reference:false}, power_net: "DGND", pins: {net: pin(number: "1", kind: "passive", at: (0,0))},
+    graphics: [line(from:(0,0),to:(0,-1.4)), polyline(points:[(-1.5,-1.4),(0,-2.9),(1.5,-1.4),(-1.5,-1.4)])])
+
+VCC = symbol(visibility:{reference:false}, power_net: "VCC", pins: {net: pin(number: "1", kind: "passive", at: (0,0))},
+    graphics: [line(from:(0,0),to:(0,2.6)), polyline(points:[(-1,1.5),(0,2.6),(1,1.5)])])
+
+VDD = symbol(visibility:{reference:false}, power_net: "VDD", pins: {net: pin(number: "1", kind: "passive", at: (0,0))},
+    graphics: [line(from:(0,0),to:(0,2.6)), polyline(points:[(-1,1.5),(0,2.6),(1,1.5)])])
+
+V3V3 = symbol(visibility:{reference:false}, power_net: "+3V3", pins: {net: pin(number: "1", kind: "passive", at: (0,0))},
+    graphics: [line(from:(0,0),to:(0,2.6)), polyline(points:[(-1,1.5),(0,2.6),(1,1.5)])])
+
+V5 = symbol(visibility:{reference:false}, power_net: "+5V", pins: {net: pin(number: "1", kind: "passive", at: (0,0))},
+    graphics: [line(from:(0,0),to:(0,2.6)), polyline(points:[(-1,1.5),(0,2.6),(1,1.5)])])
+
+V12 = symbol(visibility:{reference:false}, power_net: "+12V", pins: {net: pin(number: "1", kind: "passive", at: (0,0))},
+    graphics: [line(from:(0,0),to:(0,2.6)), polyline(points:[(-1,1.5),(0,2.6),(1,1.5)])])

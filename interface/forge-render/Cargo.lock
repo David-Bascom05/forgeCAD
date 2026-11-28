@@ -1264,8 +1264,10 @@ dependencies = [
  "forge-asm",
  "forge-bool",
  "forge-brake",
+ "forge-cam-geom",
  "forge-dirs",
  "forge-draw",
+ "forge-dwg",
  "forge-font",
  "forge-geom",
  "forge-git",
@@ -1348,7 +1350,7 @@ name = "forge-math"
 version = "0.1.0"
 dependencies = [
  "forge-alloc",
- "forge-num",
+ "forge-num-core",
  "forge-par",
 ]
 
@@ -1382,6 +1384,13 @@ dependencies = [
 
 [[package]]
 name = "forge-num"
+version = "0.1.0"
+dependencies = [
+ "forge-num-core",
+]
+
+[[package]]
+name = "forge-num-core"
 version = "0.1.0"
 
 [[package]]

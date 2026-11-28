@@ -64,6 +64,8 @@ per_doc!(
         inspect: super::inspect::Inspect,
         drawing: Option<super::drawing::DrawingEnv>,
         new_drawing: Option<super::drawing::NewDrawing>,
+        pcb: Option<super::pcb::Editor>,
+        electronics: Option<super::electronics::Editor>,
         dwgdoc: Option<super::dwgdoc::DwgDoc>,
         robot: Option<super::robot::RobotPanel>,
         camsim: Option<Box<crate::gui_camsim_panel::CamSimUi>>,
@@ -121,6 +123,8 @@ impl ShellDoc {
             inspect: Default::default(),
             drawing: None,
             new_drawing: None,
+            pcb: None,
+            electronics: None,
             dwgdoc: None,
             robot: None,
             camsim: None,
@@ -137,6 +141,9 @@ pub enum DocKind {
     Part,
     Assembly,
     Drawing,
+    Schematic,
+    Pcb,
+    SymbolLibrary,
     /// A DWG file.
     Dwg,
 }
@@ -270,6 +277,9 @@ impl Shell {
                 DocKind::Part => "part",
                 DocKind::Assembly => "subasm",
                 DocKind::Drawing => "dwgbase",
+                DocKind::Pcb => "schchip",
+                DocKind::Schematic => "schwire",
+                DocKind::SymbolLibrary => "schchip",
                 DocKind::Dwg => "polyline",
             };
             let ink = if active { t.ink } else { t.ink2 };

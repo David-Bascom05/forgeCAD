@@ -13,7 +13,6 @@ const PART = `sketch plan(on: xy) {
 }
 base = extrude(plan, 5)
 `;
-const at = { file: [33, 55], open: [40, 139] };
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
 (async () => {
@@ -27,9 +26,7 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
     await t.until(p, (s) => s.built?.checked, "the first build");
     await t.loaded(p);
     const pick = async (file) => {
-      await p.mouse.click(...at.file);
-      await pause(800);
-      await p.mouse.click(...at.open);
+      await t.fileMenuItem(p, "Open…");
       await p.waitForSelector("#forge-open-file", { timeout: 30000 });
       await p.setInputFiles("#forge-open-file", file);
     };

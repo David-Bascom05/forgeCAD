@@ -1,0 +1,851 @@
+{
+  "placement_parent": "compact-six-amp.fg",
+  "baseline_unrouted_connections": 466,
+  "strict_width_trial": {
+    "board": "compact-six-amp-routed.fg",
+    "sha256": "a787fbbdf26e3de28334be393f1b84924a39ceb83ef0bd0181caa1b5c89cbdcd",
+    "placement_parent": "compact-six-amp.fg",
+    "placements": 192,
+    "pads": 624,
+    "nets": 149,
+    "track_features": 649,
+    "through_vias": 539,
+    "conductor_length_mm": 3606.663,
+    "baseline_unrouted_connections": 466,
+    "native_drc": {
+      "checked_rules": [
+        "CopperOutsideEdge",
+        "ShortCircuit",
+        "MinCopperSpacing",
+        "MinMaskWeb",
+        "SilkToMask",
+        "MinEdgeClearance",
+        "CourtyardOverlap",
+        "UnroutedNet",
+        "CopperAtHole",
+        "HoleOutsideBoard",
+        "ArtworkOutsideBoard",
+        "MinTrackWidth",
+        "MinViaDrill",
+        "MinAnnularRing",
+        "MinHoleDrill",
+        "DrillOverlap"
+      ],
+      "findings": [
+        {
+          "rule": "UnroutedNet",
+          "severity": "error",
+          "object": "U1.2",
+          "span": {
+            "lo": 8746,
+            "hi": 8849
+          },
+          "other": "C1.1",
+          "net": "RECT"
+        },
+        {
+          "rule": "UnroutedNet",
+          "severity": "error",
+          "object": "U1.9",
+          "span": {
+            "lo": 8746,
+            "hi": 8849
+          },
+          "other": "C3.1",
+          "net": "VPROT"
+        }
+      ]
+    },
+    "independent_gerber_excellon": {
+      "pads": 624,
+      "pad_sampling_failures": [],
+      "nets": 149,
+      "plated_bores": 577,
+      "mounting_bores": 4,
+      "opens": {
+        "RECT": [
+          [
+            "C1.1",
+            "D2.3",
+            "R1.1",
+            "R2.1",
+            "R4.1"
+          ],
+          [
+            "U1.2"
+          ]
+        ],
+        "VPROT": [
+          [
+            "C3.1",
+            "C31.1",
+            "C32.1",
+            "C33.1",
+            "C34.1",
+            "C35.1",
+            "C36.1",
+            "C47.2",
+            "C48.2",
+            "D4.3",
+            "Q1.3",
+            "Q2.2",
+            "R28.1",
+            "R7.1"
+          ],
+          [
+            "U1.9"
+          ]
+        ]
+      },
+      "shorts": [],
+      "copper_islands_without_pads": 5,
+      "floating_copper": [
+        {
+          "layer": 2,
+          "area_mm2": 0.0966,
+          "bounds_mm": [
+            2.0,
+            2.0,
+            2.468,
+            2.466
+          ]
+        },
+        {
+          "layer": 2,
+          "area_mm2": 0.0966,
+          "bounds_mm": [
+            2.0,
+            73.534,
+            2.468,
+            74.0
+          ]
+        },
+        {
+          "layer": 2,
+          "area_mm2": 0.0092,
+          "bounds_mm": [
+            67.427,
+            65.519,
+            67.609,
+            65.65
+          ]
+        },
+        {
+          "layer": 2,
+          "area_mm2": 0.0966,
+          "bounds_mm": [
+            113.532,
+            2.0,
+            114.0,
+            2.466
+          ]
+        },
+        {
+          "layer": 2,
+          "area_mm2": 0.0966,
+          "bounds_mm": [
+            113.532,
+            73.534,
+            114.0,
+            74.0
+          ]
+        }
+      ]
+    },
+    "track_centerlines_by_net_mm": {
+      "ADC1": {
+        "top": 16.919,
+        "bottom": 53.969,
+        "signal": 13.769
+      },
+      "ADC2": {
+        "top": 41.162,
+        "bottom": 16.078,
+        "signal": 14.252
+      },
+      "ADC3": {
+        "top": 24.213,
+        "signal": 60.205,
+        "bottom": 6.95
+      },
+      "ADC4": {
+        "top": 26.639,
+        "signal": 11.192
+      },
+      "ADC5": {
+        "top": 4.371,
+        "signal": 29.68,
+        "bottom": 7.423
+      },
+      "ADC6": {
+        "top": 10.763,
+        "bottom": 12.839,
+        "signal": 14.5
+      },
+      "BIAS": {
+        "top": 1.302,
+        "signal": 3.03,
+        "bottom": 17.243
+      },
+      "BSRC": {
+        "top": 9.846,
+        "bottom": 15.234,
+        "signal": 22.926
+      },
+      "BST": {
+        "top": 0.56,
+        "bottom": 11.286
+      },
+      "BST1": {
+        "top": 10.733
+      },
+      "CANH": {
+        "top": 8.716
+      },
+      "CANL": {
+        "top": 14.88
+      },
+      "CANRX": {
+        "top": 0.81,
+        "signal": 47.914
+      },
+      "CANTX": {
+        "top": 53.341,
+        "bottom": 12.137
+      },
+      "COMP": {
+        "top": 17.911,
+        "signal": 15.354,
+        "bottom": 2.509
+      },
+      "CTRLVIN": {
+        "top": 18.814,
+        "bottom": 4.612,
+        "signal": 8.384
+      },
+      "CZERO": {
+        "top": 16.087
+      },
+      "DRV1": {
+        "top": 14.371,
+        "bottom": 44.629,
+        "signal": 39.242
+      },
+      "DRV2": {
+        "top": 13.923,
+        "signal": 42.551,
+        "bottom": 39.2
+      },
+      "DRV3": {
+        "top": 31.154,
+        "bottom": 19.596,
+        "signal": 8.612
+      },
+      "DRV4": {
+        "top": 10.336,
+        "signal": 14.989,
+        "bottom": 18.162
+      },
+      "DRV5": {
+        "top": 16.818,
+        "signal": 7.436,
+        "bottom": 3.57
+      },
+      "DRV6": {
+        "top": 23.869,
+        "signal": 11.109,
+        "bottom": 2.737
+      },
+      "EN1": {
+        "top": 8.941,
+        "bottom": 40.248,
+        "signal": 7.268
+      },
+      "EN2": {
+        "top": 15.883,
+        "bottom": 29.221,
+        "signal": 16.085
+      },
+      "EN3": {
+        "top": 10.618,
+        "signal": 8.216
+      },
+      "EN4": {
+        "top": 5.059,
+        "signal": 9.343
+      },
+      "EN5": {
+        "top": 28.576,
+        "signal": 1.311
+      },
+      "EN6": {
+        "top": 3.632,
+        "bottom": 38.181,
+        "signal": 13.805
+      },
+      "ENABLE": {
+        "top": 22.17,
+        "signal": 29.854
+      },
+      "FB": {
+        "top": 14.963,
+        "signal": 30.156,
+        "bottom": 15.917
+      },
+      "FB1": {
+        "top": 8.699,
+        "bottom": 8.582,
+        "signal": 10.346
+      },
+      "FLT1": {
+        "top": 2.84,
+        "signal": 24.669,
+        "bottom": 32.594
+      },
+      "FLT2": {
+        "top": 32.411,
+        "bottom": 13.307,
+        "signal": 13.848
+      },
+      "FLT3": {
+        "top": 10.381,
+        "signal": 22.08,
+        "bottom": 1.945
+      },
+      "FLT4": {
+        "top": 3.999,
+        "signal": 7.73,
+        "bottom": 4.332
+      },
+      "FLT5": {
+        "top": 17.756
+      },
+      "FLT6": {
+        "top": 12.162,
+        "bottom": 22.875
+      },
+      "FREQ": {
+        "top": 12.032,
+        "bottom": 4.091
+      },
+      "FUSED": {
+        "top": 4.0,
+        "bottom": 3.746
+      },
+      "FZERO": {
+        "top": 20.07,
+        "signal": 6.009
+      },
+      "GATE": {
+        "top": 0.29,
+        "signal": 4.061
+      },
+      "GND": {
+        "top": 54.72,
+        "bottom": 8.456
+      },
+      "HO": {
+        "top": 2.645
+      },
+      "HSE8": {
+        "top": 2.064
+      },
+      "ILIM": {
+        "top": 9.583,
+        "signal": 5.061,
+        "bottom": 17.21
+      },
+      "IMON1": {
+        "bottom": 8.996
+      },
+      "IMON2": {
+        "bottom": 8.893
+      },
+      "IMON3": {
+        "top": 2.707,
+        "signal": 15.93
+      },
+      "IMON4": {
+        "top": 5.445,
+        "bottom": 5.846
+      },
+      "IMON5": {
+        "top": 0.5,
+        "bottom": 9.307
+      },
+      "IMON6": {
+        "bottom": 8.996
+      },
+      "ISRET": {
+        "top": 2.841
+      },
+      "LIMIT1": {
+        "top": 9.246,
+        "signal": 8.405
+      },
+      "LIMIT2": {
+        "top": 19.04
+      },
+      "LIMIT3": {
+        "top": 0.987,
+        "signal": 17.078
+      },
+      "LIMIT4": {
+        "top": 17.755
+      },
+      "LIMIT5": {
+        "top": 1.164,
+        "signal": 17.523
+      },
+      "LIMIT6": {
+        "top": 10.746,
+        "signal": 6.905
+      },
+      "LO": {
+        "top": 6.897
+      },
+      "NTC1": {
+        "top": 44.781,
+        "signal": 8.255,
+        "bottom": 21.484
+      },
+      "NTC2": {
+        "top": 5.715
+      },
+      "NTC3": {
+        "top": 29.857,
+        "signal": 8.471
+      },
+      "OUT1": {
+        "top": 10.527
+      },
+      "OUT2": {
+        "top": 10.402
+      },
+      "OUT3": {
+        "top": 10.527
+      },
+      "OUT4": {
+        "top": 10.539,
+        "signal": 3.414
+      },
+      "OUT5": {
+        "top": 10.402
+      },
+      "OUT6": {
+        "top": 10.527
+      },
+      "OV": {
+        "top": 21.243,
+        "signal": 16.171
+      },
+      "OVP1": {
+        "top": 7.539
+      },
+      "OVP2": {
+        "top": 4.311,
+        "bottom": 3.996
+      },
+      "OVP3": {
+        "top": 4.134,
+        "bottom": 2.914
+      },
+      "OVP4": {
+        "top": 4.301,
+        "bottom": 4.878
+      },
+      "OVP5": {
+        "top": 4.134,
+        "bottom": 2.862
+      },
+      "OVP6": {
+        "top": 6.134,
+        "bottom": 2.332
+      },
+      "PWM1": {
+        "top": 5.834,
+        "bottom": 5.945
+      },
+      "PWM2": {
+        "top": 6.782,
+        "bottom": 5.479
+      },
+      "PWM3": {
+        "top": 6.337,
+        "bottom": 6.341
+      },
+      "PWM4": {
+        "top": 6.407,
+        "bottom": 3.505,
+        "signal": 6.575
+      },
+      "PWM5": {
+        "top": 5.959,
+        "bottom": 6.018
+      },
+      "PWM6": {
+        "top": 5.834,
+        "bottom": 5.945
+      },
+      "PWR": {
+        "top": 1.547,
+        "bottom": 15.355
+      },
+      "RAMP1": {
+        "top": 1.207,
+        "bottom": 1.25,
+        "signal": 9.899
+      },
+      "RECT": {
+        "top": 10.1,
+        "bottom": 2.53,
+        "signal": 6.375
+      },
+      "RESET": {
+        "top": 0.952,
+        "bottom": 25.027
+      },
+      "RT1": {
+        "top": 2.654,
+        "signal": 1.186
+      },
+      "SENSE": {
+        "top": 2.922,
+        "bottom": 10.6
+      },
+      "SLEW1": {
+        "top": 3.779,
+        "signal": 16.348
+      },
+      "SLEW2": {
+        "top": 3.779,
+        "signal": 16.348
+      },
+      "SLEW3": {
+        "top": 12.059,
+        "signal": 12.912,
+        "bottom": 2.737
+      },
+      "SLEW4": {
+        "top": 4.643,
+        "signal": 14.612,
+        "bottom": 5.009
+      },
+      "SLEW5": {
+        "top": 3.779,
+        "signal": 16.399
+      },
+      "SLEW6": {
+        "top": 3.779,
+        "signal": 16.348
+      },
+      "SOFT": {
+        "top": 1.397,
+        "bottom": 15.755,
+        "signal": 21.442
+      },
+      "SW": {
+        "top": 9.419,
+        "signal": 19.709
+      },
+      "SW1": {
+        "top": 14.797
+      },
+      "SWCLK": {
+        "top": 15.303,
+        "signal": 10.661,
+        "bottom": 17.059
+      },
+      "SWDIO": {
+        "top": 4.194,
+        "signal": 9.976,
+        "bottom": 10.321
+      },
+      "TACH1": {
+        "top": 2.831,
+        "bottom": 36.976,
+        "signal": 32.006
+      },
+      "TACH2": {
+        "top": 7.394,
+        "bottom": 12.851,
+        "signal": 52.933
+      },
+      "TACH3": {
+        "top": 15.22,
+        "bottom": 8.445,
+        "signal": 12.691
+      },
+      "TACH4": {
+        "top": 1.215,
+        "bottom": 8.98,
+        "signal": 16.114
+      },
+      "TACH5": {
+        "top": 20.463,
+        "bottom": 2.25,
+        "signal": 16.309
+      },
+      "TACH6": {
+        "top": 50.645,
+        "bottom": 21.039,
+        "signal": 6.734
+      },
+      "TERM": {
+        "top": 1.625
+      },
+      "TIMER": {
+        "top": 1.895,
+        "signal": 9.173
+      },
+      "UV": {
+        "top": 2.246,
+        "signal": 27.989
+      },
+      "V12": {
+        "bottom": 155.832,
+        "top": 27.778,
+        "signal": 17.678
+      },
+      "V33": {
+        "top": 128.538,
+        "signal": 67.304,
+        "bottom": 26.218
+      },
+      "V5": {
+        "top": 25.886,
+        "signal": 1.5
+      },
+      "VIN": {
+        "top": 4.039
+      },
+      "VPROT": {
+        "top": 51.269,
+        "signal": 14.375
+      },
+      "VREF3": {
+        "top": 17.147
+      }
+    },
+    "via_count_by_net": {
+      "ADC1": 4,
+      "ADC2": 8,
+      "ADC3": 6,
+      "ADC4": 3,
+      "ADC5": 6,
+      "ADC6": 4,
+      "BIAS": 3,
+      "BSRC": 3,
+      "BST": 2,
+      "BST1": 1,
+      "CANRX": 2,
+      "CANTX": 3,
+      "COMP": 3,
+      "CTRLVIN": 3,
+      "DRV1": 7,
+      "DRV2": 6,
+      "DRV3": 5,
+      "DRV4": 4,
+      "DRV5": 4,
+      "DRV6": 4,
+      "EN1": 5,
+      "EN2": 8,
+      "EN3": 4,
+      "EN4": 4,
+      "EN5": 3,
+      "EN6": 5,
+      "ENABLE": 4,
+      "FB": 6,
+      "FB1": 3,
+      "FLT1": 8,
+      "FLT2": 3,
+      "FLT3": 4,
+      "FLT4": 3,
+      "FLT5": 1,
+      "FLT6": 4,
+      "FREQ": 2,
+      "FUSED": 3,
+      "FZERO": 2,
+      "GATE": 2,
+      "GND": 165,
+      "HO": 1,
+      "ILIM": 4,
+      "IMON1": 2,
+      "IMON2": 2,
+      "IMON3": 4,
+      "IMON4": 2,
+      "IMON5": 2,
+      "IMON6": 2,
+      "ISRET": 1,
+      "LIMIT1": 2,
+      "LIMIT2": 1,
+      "LIMIT3": 2,
+      "LIMIT4": 1,
+      "LIMIT5": 2,
+      "LIMIT6": 2,
+      "LO": 1,
+      "NTC1": 3,
+      "NTC2": 1,
+      "NTC3": 2,
+      "OUT4": 3,
+      "OV": 2,
+      "OVP1": 1,
+      "OVP2": 2,
+      "OVP3": 2,
+      "OVP4": 2,
+      "OVP5": 2,
+      "OVP6": 2,
+      "PWM1": 1,
+      "PWM2": 1,
+      "PWM3": 2,
+      "PWM4": 2,
+      "PWM5": 1,
+      "PWM6": 1,
+      "PWR": 2,
+      "RAMP1": 3,
+      "RECT": 5,
+      "RESET": 3,
+      "RT1": 2,
+      "SENSE": 3,
+      "SLEW1": 3,
+      "SLEW2": 3,
+      "SLEW3": 3,
+      "SLEW4": 3,
+      "SLEW5": 3,
+      "SLEW6": 3,
+      "SOFT": 5,
+      "SW": 7,
+      "SW1": 1,
+      "SWCLK": 6,
+      "SWDIO": 3,
+      "TACH1": 5,
+      "TACH2": 5,
+      "TACH3": 4,
+      "TACH4": 5,
+      "TACH5": 5,
+      "TACH6": 5,
+      "TIMER": 2,
+      "UV": 3,
+      "V12": 42,
+      "V33": 17,
+      "V5": 2,
+      "VPROT": 4,
+      "VREF3": 1
+    }
+  },
+  "pin_escape_trial": {
+    "board": "compact-six-amp-pin-escape.fg",
+    "sha256": "8e8f6967650689f782ccf8b3d578c34bb9d1f8927b4ca216ed204e2dd75798e0",
+    "placements": 192,
+    "pads": 624,
+    "nets": 149,
+    "track_features": 652,
+    "through_vias": 541,
+    "native_drc": {
+      "checked_rules": [
+        "CopperOutsideEdge",
+        "ShortCircuit",
+        "MinCopperSpacing",
+        "MinMaskWeb",
+        "SilkToMask",
+        "MinEdgeClearance",
+        "CourtyardOverlap",
+        "UnroutedNet",
+        "CopperAtHole",
+        "HoleOutsideBoard",
+        "ArtworkOutsideBoard",
+        "MinTrackWidth",
+        "MinViaDrill",
+        "MinAnnularRing",
+        "MinHoleDrill",
+        "DrillOverlap"
+      ],
+      "findings": [
+        {
+          "rule": "MinTrackWidth",
+          "severity": "error",
+          "object": "wire_649",
+          "span": {
+            "lo": 165123,
+            "hi": 165228
+          },
+          "measured_mm": 0.2,
+          "minimum_mm": 0.8
+        },
+        {
+          "rule": "MinTrackWidth",
+          "severity": "error",
+          "object": "wire_650",
+          "span": {
+            "lo": 165229,
+            "hi": 165335
+          },
+          "measured_mm": 0.2,
+          "minimum_mm": 0.8
+        }
+      ]
+    },
+    "independent_gerber_excellon": {
+      "pads": 624,
+      "pad_sampling_failures": [],
+      "nets": 149,
+      "plated_bores": 579,
+      "mounting_bores": 4,
+      "opens": {},
+      "shorts": [],
+      "copper_islands_without_pads": 5,
+      "floating_copper": [
+        {
+          "layer": 2,
+          "area_mm2": 0.0966,
+          "bounds_mm": [
+            2.0,
+            2.0,
+            2.468,
+            2.466
+          ]
+        },
+        {
+          "layer": 2,
+          "area_mm2": 0.0966,
+          "bounds_mm": [
+            2.0,
+            73.534,
+            2.468,
+            74.0
+          ]
+        },
+        {
+          "layer": 2,
+          "area_mm2": 0.0092,
+          "bounds_mm": [
+            67.427,
+            65.519,
+            67.609,
+            65.65
+          ]
+        },
+        {
+          "layer": 2,
+          "area_mm2": 0.0966,
+          "bounds_mm": [
+            113.532,
+            2.0,
+            114.0,
+            2.466
+          ]
+        },
+        {
+          "layer": 2,
+          "area_mm2": 0.0966,
+          "bounds_mm": [
+            113.532,
+            73.534,
+            114.0,
+            74.0
+          ]
+        }
+      ]
+    }
+  }
+}

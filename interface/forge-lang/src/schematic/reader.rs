@@ -1,165 +1,24 @@
 use super::*;
-use crate::syntax::{self, Arg, BinOp, Expr, ExprKind as E, StmtKind as S, Unit};
-use crate::values::{self, Dim, Num};
+use crate::electronics::*;
+use crate::syntax::{self, Expr, ExprKind as E, StmtKind as S};
+use crate::values::Dim;
 use std::path::PathBuf;
 
-struct Call<'a> {
-    name: &'a str,
-    args: Map<&'a str, &'a Expr>,
-    span: Span,
+fn add_package_paths(doc: &mut Document, prefix: &str, library: &crate::electronics_library::Library) {
+    for child in library.children {
+        let path = if prefix.is_empty() {
+            child.name.to_string()
+        } else {
+            format!("{prefix}.{}", child.name)
+        };
+        doc.libraries.insert(path.clone(), None);
+        add_package_paths(doc, &path, child);
+    }
 }
 impl<'a> Call<'a> {
     fn new(expr: &'a Expr) -> Result<Self> {
-        if let E::Call(head, args) = &expr.kind
-            && let E::Name(name) = &head.kind
-        {
-            let signature = ARGS
-                .iter()
-                .find(|(word, _)| *word == name)
-                .ok_or_else(|| fault(head, "UnknownBuiltin", name))?
-                .1;
-            let mut fields = Map::new();
-            for Arg { name: key, value } in args {
-                let Some((key, span)) = key else {
-                    return Err(fault(value, "ExpectedNamedArgument", "use a named argument"));
-                };
-                if !signature.contains(&key.as_str()) {
-                    return Err(Fault::new(
-                        "UnknownArgument",
-                        *span,
-                        format!("{name} has no argument {key}"),
-                    ));
-                }
-                if fields.insert(key.as_str(), value).is_some() {
-                    return Err(Fault::new("DuplicateArgument", *span, key));
-                }
-            }
-            Ok(Self {
-                name,
-                args: fields,
-                span: expr.span,
-            })
-        } else {
-            Err(fault(expr, "ExpectedCall", "expected a schematic declaration"))
-        }
+        Self::with_signature(expr, ARGS)
     }
-    fn take(&mut self, key: &str) -> Option<&'a Expr> {
-        self.args.remove(key)
-    }
-    fn req(&mut self, key: &str) -> Result<&'a Expr> {
-        self.take(key).ok_or_else(|| {
-            Fault::new(
-                "MissingArgument",
-                self.span,
-                format!("{} requires {key}", self.name),
-            )
-        })
-    }
-    fn end(self) -> Result<()> {
-        if let Some((k, e)) = self.args.first_key_value() {
-            Err(fault(
-                e,
-                "UnknownArgument",
-                format!("{} has no argument {k}", self.name),
-            ))
-        } else {
-            Ok(())
-        }
-    }
-}
-fn fault(e: &Expr, k: &'static str, msg: impl Into<String>) -> Fault {
-    Fault::new(k, e.span, msg)
-}
-fn string(e: &Expr) -> Result<String> {
-    match &e.kind {
-        E::Str(s) => Ok(s.clone()),
-        _ => Err(fault(e, "ExpectedString", "expected quoted text")),
-    }
-}
-fn boolean(e: &Expr) -> Result<bool> {
-    match e.kind {
-        E::Bool(x) => Ok(x),
-        _ => Err(fault(e, "ExpectedBool", "expected true or false")),
-    }
-}
-fn reference(e: &Expr) -> Result<String> {
-    match &e.kind {
-        E::Name(s) => Ok(s.clone()),
-        E::Attr(base, k) => Ok(format!("{}.{k}", reference(base)?)),
-        _ => Err(fault(
-            e,
-            "ExpectedReference",
-            "expected a declared name or pin reference",
-        )),
-    }
-}
-fn list(e: &Expr) -> Result<&[Expr]> {
-    if let E::List(xs) = &e.kind {
-        Ok(xs)
-    } else {
-        Err(fault(e, "ExpectedList", "expected a list"))
-    }
-}
-type Params = Map<String, Num>;
-fn number(e: &Expr, params: &Params) -> Result<Num> {
-    let n = match &e.kind {
-        E::Num(x, u) => match u {
-            Unit::In => Num::konst(x * 25.4, Dim::Length),
-            Unit::Mm => Num::konst(*x, Dim::Length),
-            Unit::Deg => Num::konst(*x, Dim::Angle),
-            Unit::None => Num::konst(*x, Dim::Any),
-        },
-        E::Neg(v) => values::neg(&number(v, params)?),
-        E::Name(k) => params
-            .get(k)
-            .cloned()
-            .ok_or_else(|| fault(e, "UnknownParameter", k))?,
-        E::Bin(op, l, r) => {
-            let (l, r) = (number(l, params)?, number(r, params)?);
-            match op {
-                BinOp::Add | BinOp::Sub => values::add(&l, &r, *op == BinOp::Sub, e.span),
-                BinOp::Mul => values::mul(&l, &r, e.span),
-                BinOp::Div => values::div(&l, &r, e.span),
-                _ => return Err(fault(e, "ExpectedQuantity", "expected arithmetic")),
-            }
-            .map_err(|err| fault(e, err.kind(), err.text()))?
-        }
-        _ => return Err(fault(e, "ExpectedQuantity", "expected a numeric expression")),
-    };
-    if !n.v.is_finite() || n.v.abs() > 1e12 {
-        return Err(fault(
-            e,
-            "QuantityOutOfRange",
-            "quantity exceeds schematic bounds",
-        ));
-    }
-    Ok(n)
-}
-fn measure(e: &Expr, p: &Params, d: Dim) -> Result<f64> {
-    let n = number(e, p)?;
-    if n.dim != Dim::Any && n.dim != d {
-        return Err(fault(
-            e,
-            "WrongDim",
-            format!("expected {}, got {}", d.name(), n.dim.name()),
-        ));
-    }
-    Ok(n.v)
-}
-fn positive(e: &Expr, p: &Params) -> Result<f64> {
-    let v = measure(e, p, Dim::Length)?;
-    if v <= 0.0 {
-        return Err(fault(e, "ExpectedPositiveLength", "expected a positive length"));
-    }
-    Ok(v)
-}
-fn point(e: &Expr, p: &Params) -> Result<Point> {
-    if let E::Tuple(xs) = &e.kind
-        && let [x, y] = xs.as_slice()
-    {
-        return Ok([measure(x, p, Dim::Length)?, measure(y, p, Dim::Length)?]);
-    }
-    Err(fault(e, "ExpectedPoint", "expected (x, y) in sheet units"))
 }
 fn rotation(e: Option<&Expr>, p: &Params) -> Result<f64> {
     let angle = e.map(|v| measure(v, p, Dim::Angle)).transpose()?.unwrap_or(0.0);
@@ -171,6 +30,121 @@ fn rotation(e: Option<&Expr>, p: &Params) -> Result<f64> {
         ));
     }
     Ok(angle.rem_euclid(360.0))
+}
+fn reference_name(e: &Expr) -> Result<String> {
+    if let E::Name(name) = &e.kind {
+        Ok(name.clone())
+    } else {
+        Err(fault(e, "ExpectedReference", "choose a component on this sheet"))
+    }
+}
+fn class_name(e: &Expr) -> Result<String> {
+    let s = string(e)?;
+    if s.is_empty()
+        || !s
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || b"._-".contains(&c))
+    {
+        return Err(fault(
+            e,
+            "InvalidPartKind",
+            "use a part type such as mosfet or relay",
+        ));
+    }
+    Ok(PART_KINDS
+        .iter()
+        .find(|name| name.eq_ignore_ascii_case(&s))
+        .map_or(s.clone(), |name| name.to_string()))
+}
+fn nominal_unit(kind: &str) -> Option<&'static str> {
+    match kind {
+        "resistor" => Some("Ω"),
+        "capacitor" => Some("F"),
+        "inductor" => Some("H"),
+        _ => None,
+    }
+}
+fn value_bounds(c: &mut Call<'_>) -> Result<Option<[PartValue; 2]>> {
+    let quantity = |e: &Expr| {
+        PartValue::parse(&string(e)?).ok_or_else(|| {
+            fault(
+                e,
+                "InvalidPartValue",
+                "expected an electrical value such as 4.7 kΩ, 100 nF, or 1 uH",
+            )
+        })
+    };
+    let values = match (c.take("value"), c.take("value_range")) {
+        (None, None) => None,
+        (Some(v), None) => Some([quantity(v)?; 2]),
+        (None, Some(e)) => {
+            let [lo, hi] = list(e)? else {
+                return Err(fault(e, "InvalidPartRange", "expected two limits"));
+            };
+            let (lo, hi) = (quantity(lo)?, quantity(hi)?);
+            if lo.unit != hi.unit || lo.magnitude > hi.magnitude {
+                return Err(fault(
+                    e,
+                    "InvalidPartRange",
+                    "use ordered limits of the same dimension",
+                ));
+            }
+            Some([lo, hi])
+        }
+        (Some(e), Some(_)) => {
+            return Err(fault(
+                e,
+                "InvalidPartRange",
+                "choose an exact value or an interval",
+            ));
+        }
+    };
+    Ok(values)
+}
+fn connection_want(c: &mut Call<'_>) -> Result<Option<ConnectionWant>> {
+    let Some(to) = c.take("connect_to") else {
+        return Ok(None);
+    };
+    let target = reference(to)?;
+    if target.matches('.').count() > 1 {
+        return Err(fault(
+            to,
+            "ExpectedPin",
+            "use a sibling pin or component.pin on this sheet",
+        ));
+    }
+    let through = c
+        .take("through")
+        .map(|e| match &e.kind {
+            E::Str(_) => class_name(e).map(PartType::Kind),
+            _ => reference(e).map(PartType::Symbol),
+        })
+        .transpose()?;
+    let values = value_bounds(c)?;
+    let path = c.take("part_path").map(class_name).transpose()?;
+    if (values.is_some() || path.is_some()) && through.is_none() {
+        return Err(fault(
+            to,
+            "MissingThroughPart",
+            "a path or component value requires a through part",
+        ));
+    }
+    if let (Some(PartType::Kind(kind)), Some([lo, _])) = (&through, values)
+        && let Some(unit) = nominal_unit(kind)
+        && lo.unit != unit
+    {
+        return Err(fault(
+            to,
+            "WrongPartValueDimension",
+            format!("a {kind} value requires {unit}"),
+        ));
+    }
+    Ok(Some(ConnectionWant {
+        path,
+        to: target,
+        through,
+        values,
+    }))
 }
 fn resolve_role(e: &Expr, doc: &Document) -> Result<RoleId> {
     let name = reference(e)?;
@@ -187,17 +161,74 @@ fn register_role(doc: &mut Document, name: String, id: RoleId, role: Role, e: &E
     doc.roles.insert(id, role);
     Ok(())
 }
-fn roles(e: Option<&Expr>, doc: &Document) -> Result<Set<RoleId>> {
+fn roles(e: Option<&Expr>, doc: &Document, gives: bool) -> Result<Set<RoleId>> {
     let mut result = Set::new();
     if let Some(e) = e {
         for x in list(e)? {
             let id = resolve_role(x, doc)?;
+            if gives && doc.roles[&id].connection.is_some() {
+                return Err(fault(
+                    x,
+                    "ExpectedConnectionWant",
+                    "a target-pin rule belongs in the Wants list",
+                ));
+            }
             if !result.insert(id) {
                 return Err(fault(x, "DuplicateRole", "role listed twice"));
             }
         }
     }
     Ok(result)
+}
+fn graphic_shape(c: &mut Call<'_>, p: &Params, span: Span) -> Result<Shape> {
+    Ok(match c.name {
+        "line" => Shape::Line(point(c.req("from")?, p)?, point(c.req("to")?, p)?),
+        "rect" => Shape::Rect(point(c.req("from")?, p)?, point(c.req("to")?, p)?),
+        "circle" => Shape::Circle(point(c.req("at")?, p)?, positive(c.req("radius")?, p)?),
+        "text" => Shape::Text(point(c.req("at")?, p)?, string(c.req("value")?)?),
+        "arc" => Shape::Arc(
+            point(c.req("from")?, p)?,
+            point(c.req("mid")?, p)?,
+            point(c.req("to")?, p)?,
+        ),
+        "polyline" => {
+            let e = c.req("points")?;
+            let points = list(e)?.iter().map(|e| point(e, p)).collect::<Result<Vec<_>>>()?;
+            if points.len() < 2 {
+                return Err(fault(e, "TooFewPoints", "a polyline needs at least two points"));
+            }
+            Shape::Polyline(points)
+        }
+        _ => return Err(Fault::new("UnknownGraphic", span, c.name)),
+    })
+}
+fn pin_aliases(pins: &Map<String, Pin>) -> Map<String, String> {
+    pins.iter()
+        .flat_map(|(id, pin)| {
+            std::iter::once(id)
+                .chain(&pin.aliases)
+                .map(move |key| (key.clone(), id.clone()))
+        })
+        .collect()
+}
+fn resolve_spec(
+    spec: &mut characteristics::Specification,
+    aliases: &Map<String, String>,
+    e: &Expr,
+) -> Result<()> {
+    for reading in std::iter::once(&mut spec.value).chain(&mut spec.conditions) {
+        let mut seen = Set::new();
+        for pin in &mut reading.pins {
+            *pin = aliases
+                .get(pin)
+                .ok_or_else(|| fault(e, "UnknownSpecificationPin", &*pin))?
+                .clone();
+            if !seen.insert(pin.clone()) {
+                return Err(fault(e, "DuplicateSpecificationPin", &*pin));
+            }
+        }
+    }
+    Ok(())
 }
 fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
     let e = call.req("pins")?;
@@ -206,6 +237,7 @@ fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
     };
     let mut pins = Map::new();
     let mut numbers = Set::new();
+    let mut pin_names = Set::new();
     for (name, expr) in entries {
         let mut c = Call::new(expr)?;
         if c.name != "pin" {
@@ -218,7 +250,71 @@ fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
         let k = c.req("kind")?;
         let word = string(k)?;
         let electrical = Electrical::parse(&word).ok_or_else(|| fault(k, "UnknownElectricalKind", word))?;
+        if !pin_names.insert(name.clone()) {
+            return Err(fault(expr, "DuplicatePin", name));
+        }
+        let mut aliases = Set::new();
+        if let Some(previous) = c.take("aliases") {
+            for alias in list(previous)? {
+                let E::Name(id) = &alias.kind else {
+                    return Err(fault(alias, "InvalidPinAlias", "use a pin identifier"));
+                };
+                if !pin_names.insert(id.clone()) {
+                    return Err(fault(alias, "DuplicatePin", id));
+                }
+                aliases.insert(id.clone());
+            }
+        }
+        let functions = c
+            .take("functions")
+            .map(|e| {
+                map(e, |fun| {
+                    let mut alt = Call::new(fun)?;
+                    if alt.name != "function" {
+                        return Err(fault(fun, "ExpectedFunction", "expected function(kind: ...)"));
+                    }
+                    let kind = alt.req("kind")?;
+                    let electrical = Electrical::parse(&string(kind)?).ok_or_else(|| {
+                        fault(kind, "UnknownElectricalKind", "unknown function electrical kind")
+                    })?;
+                    let mode = PinFunction {
+                        specs: characteristics::parse(alt.take("specs"), p)?,
+                        electrical,
+                        wants: roles(alt.take("wants"), doc, false)?,
+                        gives: roles(alt.take("gives"), doc, true)?,
+                    };
+                    alt.end()?;
+                    Ok(mode)
+                })
+            })
+            .transpose()?
+            .unwrap_or_default();
+        let pads = if let Some(e) = c.take("pads") {
+            let mut pads = Vec::new();
+            for entry in list(e)? {
+                let pad = string(entry)?;
+                if pad.trim().is_empty() || pads.contains(&pad) {
+                    return Err(fault(
+                        entry,
+                        "InvalidPad",
+                        "pad numbers must be nonempty and unique",
+                    ));
+                }
+                pads.push(pad);
+            }
+            if pads.is_empty() {
+                return Err(fault(e, "InvalidPad", "a physical pin needs a pad"));
+            }
+            pads
+        } else {
+            vec![n.clone()]
+        };
         let pin = Pin {
+            specs: characteristics::parse(c.take("specs"), p)?,
+            functions,
+            pads,
+            aliases,
+            description: c.take("description").map(string).transpose()?.unwrap_or_default(),
             number: n,
             unit: c
                 .take("unit")
@@ -227,13 +323,22 @@ fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
                 .unwrap_or_else(|| "A".into()),
             electrical,
             at: point(c.req("at")?, p)?,
-            angle: rotation(c.take("angle"), p)?,
-            wants: roles(c.take("wants"), doc)?,
-            gives: roles(c.take("gives"), doc)?,
+            angle: c
+                .take("angle")
+                .map(|e| measure(e, p, Dim::Angle))
+                .transpose()?
+                .unwrap_or(0.)
+                .rem_euclid(360.),
+            wants: roles(c.take("wants"), doc, false)?,
+            gives: roles(c.take("gives"), doc, true)?,
         };
         c.end()?;
-        if pins.insert(name.clone(), pin).is_some() {
-            return Err(fault(expr, "DuplicatePin", name));
+        pins.insert(name.clone(), pin);
+    }
+    let mut mapped = Set::new();
+    for pad in pins.values().flat_map(|pin| &pin.pads) {
+        if !mapped.insert(pad) {
+            return Err(fault(e, "DuplicatePad", pad));
         }
     }
     let mut graphics = Vec::new();
@@ -241,33 +346,156 @@ fn symbol(call: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Symbol> {
         for expr in list(g)? {
             let mut c = Call::new(expr)?;
             let unit = c.take("unit").map(string).transpose()?;
-            let shape = match c.name {
-                "line" => Shape::Line(point(c.req("from")?, p)?, point(c.req("to")?, p)?),
-                "rect" => Shape::Rect(point(c.req("from")?, p)?, point(c.req("to")?, p)?),
-                "circle" => Shape::Circle(point(c.req("at")?, p)?, positive(c.req("radius")?, p)?),
-                "text" => Shape::Text(point(c.req("at")?, p)?, string(c.req("value")?)?),
-                "arc" => Shape::Arc(
-                    point(c.req("from")?, p)?,
-                    point(c.req("mid")?, p)?,
-                    point(c.req("to")?, p)?,
-                ),
-                "polyline" => {
-                    let e = c.req("points")?;
-                    let points = list(e)?.iter().map(|e| point(e, p)).collect::<Result<Vec<_>>>()?;
-                    if points.len() < 2 {
-                        return Err(fault(e, "TooFewPoints", "a polyline needs at least two points"));
-                    }
-                    Shape::Polyline(points)
-                }
-                _ => return Err(fault(expr, "UnknownGraphic", c.name)),
-            };
+            let shape = graphic_shape(&mut c, p, expr.span)?;
             graphics.push(Graphic { unit, shape });
             c.end()?;
         }
     }
-    Ok(Symbol { pins, graphics })
+    let power_net = if let Some(e) = call.take("power_net") {
+        let name = string(e)?;
+        if name.trim().is_empty()
+            || pins.len() != 1
+            || pins.values().any(|p| p.electrical != Electrical::Passive)
+        {
+            return Err(fault(
+                e,
+                "InvalidPowerSymbol",
+                "A power symbol needs one passive pin and a nonempty net name",
+            ));
+        }
+        Some(name)
+    } else {
+        None
+    };
+    let ref_prefix = if let Some(e) = call.take("ref_prefix") {
+        let prefix = string(e)?;
+        if prefix.is_empty() || !prefix.bytes().all(|b| b.is_ascii_alphabetic()) {
+            return Err(fault(
+                e,
+                "InvalidReferencePrefix",
+                "use one or more letters, such as R or TP",
+            ));
+        }
+        prefix
+    } else if power_net.is_some() {
+        "PWR".into()
+    } else {
+        "U".into()
+    };
+    // Each peripheral maps a signal to the physical pins that can carry it.
+    // Resolve historical names here too so a pin rename preserves membership.
+    let peripherals = call
+        .take("peripherals")
+        .map(|groups| {
+            map(groups, |signals| {
+                map(signals, |members| {
+                    let mut names = Set::new();
+                    for e in list(members)? {
+                        let id = reference(e)?;
+                        let name = pins
+                            .get_key_value(&id)
+                            .or_else(|| pins.iter().find(|(_, p)| p.aliases.contains(&id)))
+                            .ok_or_else(|| fault(e, "UnknownPeripheralPin", &id))?
+                            .0;
+                        if !names.insert(name.clone()) {
+                            return Err(fault(e, "DuplicatePeripheralPin", &id));
+                        }
+                    }
+                    if names.is_empty() {
+                        return Err(fault(
+                            members,
+                            "EmptyPeripheralSignal",
+                            "expected at least one pin",
+                        ));
+                    }
+                    Ok(names)
+                })
+            })
+        })
+        .transpose()?
+        .unwrap_or_default();
+    let part_kind = call
+        .take("part_kind")
+        .map(class_name)
+        .transpose()?
+        .filter(|k| k != "generic");
+    let paths = call
+        .take("paths")
+        .map(|e| {
+            map(e, |pair| {
+                let [a, b] = list(pair)? else {
+                    return Err(fault(
+                        pair,
+                        "InvalidPartPath",
+                        "a path takes an entry pin and an exit pin",
+                    ));
+                };
+                let resolve = |e: &Expr| {
+                    let name = reference(e)?;
+                    pins.get_key_value(&name)
+                        .or_else(|| pins.iter().find(|(_, p)| p.aliases.contains(&name)))
+                        .map(|(name, _)| name.clone())
+                        .ok_or_else(|| fault(e, "UnknownPathPin", name))
+                };
+                let pair_names = [resolve(a)?, resolve(b)?];
+                if pair_names[0] == pair_names[1] {
+                    return Err(fault(pair, "InvalidPartPath", "select two distinct pins"));
+                }
+                Ok(pair_names)
+            })
+        })
+        .transpose()?
+        .unwrap_or_default();
+    let strap_tables = strap::read_tables(call.take("strap_tables"), &pins, p, doc)?;
+    let field_types = call
+        .take("field_types")
+        .map(|e| {
+            map(e, |ty| {
+                let id = reference(ty)?;
+                doc.attribute_types
+                    .contains_key(&id)
+                    .then_some(id.clone())
+                    .ok_or_else(|| fault(ty, "UnknownPropertyType", id))
+            })
+        })
+        .transpose()?
+        .unwrap_or_default();
+    let fields = property_fields(call, &field_types, doc)?;
+    let mut specs = characteristics::parse(call.take("specs"), p)?;
+    let aliases = pin_aliases(&pins);
+    for spec in &mut specs {
+        resolve_spec(spec, &aliases, e)?;
+    }
+    for pin in pins.values_mut() {
+        for spec in pin
+            .specs
+            .iter_mut()
+            .chain(pin.functions.values_mut().flat_map(|f| &mut f.specs))
+        {
+            resolve_spec(spec, &aliases, e)?;
+        }
+    }
+    Ok(Symbol {
+        specs,
+        field_types,
+        strap_tables,
+        paths,
+        part_kind,
+        peripherals,
+        ref_prefix,
+        power_net,
+        pins,
+        graphics,
+        visibility: visibility(call)?,
+        fields,
+        datasheet: call
+            .take("datasheet")
+            .map(string)
+            .transpose()?
+            .filter(|s| !s.is_empty()),
+    })
 }
-fn map<T>(e: &Expr, mut f: impl FnMut(&Expr) -> Result<T>) -> Result<Map<String, T>> {
+pub(super) fn map<T>(e: &Expr, mut f: impl FnMut(&Expr) -> Result<T>) -> Result<Map<String, T>> {
     let E::Map(entries) = &e.kind else {
         return Err(fault(e, "ExpectedMap", "expected named members"));
     };
@@ -279,23 +507,166 @@ fn map<T>(e: &Expr, mut f: impl FnMut(&Expr) -> Result<T>) -> Result<Map<String,
     }
     Ok(out)
 }
+fn visibility(c: &mut Call<'_>) -> Result<Map<String, bool>> {
+    let mut out = Map::new();
+    if let Some(e) = c.take("visibility") {
+        let E::Map(entries) = &e.kind else {
+            return Err(fault(e, "ExpectedMap", "expected field visibility flags"));
+        };
+        let mut seen = Set::new();
+        for (key, v) in entries {
+            if !seen.insert(key) {
+                return Err(fault(v, "DuplicateMember", key));
+            }
+            if matches!(key.as_str(), "custom" | "derived") {
+                for (name, on) in map(v, boolean)? {
+                    if out.insert(format!("{key}.{name}"), on).is_some() {
+                        return Err(fault(v, "DuplicateMember", name));
+                    }
+                }
+            } else if DISPLAY_FIELDS.contains(&key.as_str()) {
+                out.insert(key.clone(), boolean(v)?);
+            } else {
+                return Err(fault(v, "UnknownDisplayField", key));
+            }
+        }
+    }
+    Ok(out)
+}
+fn property_fields(
+    c: &mut Call<'_>,
+    types: &Map<String, String>,
+    doc: &Document,
+) -> Result<Map<String, String>> {
+    let Some(e) = c.take("fields") else {
+        return Ok(Map::new());
+    };
+    let fields = map(e, string)?;
+    if let E::Map(entries) = &e.kind {
+        for (key, arg) in entries {
+            if let Some(ty) = types.get(key)
+                && doc.attribute_types[ty].value(&fields[key]).is_none()
+            {
+                return Err(fault(
+                    arg,
+                    "InvalidPropertyValue",
+                    format!("{key} expects {ty}, received {}", fields[key]),
+                ));
+            }
+        }
+    }
+    Ok(fields)
+}
+fn field_offset(expr: Option<&Expr>, p: &Params) -> Result<Option<Point>> {
+    expr.filter(|e| !matches!(&e.kind,E::Name(n) if n=="auto"))
+        .map(|e| point(e, p))
+        .transpose()
+}
+fn placement_roles(
+    input: Option<&Expr>,
+    symbol: &Symbol,
+    doc: &Document,
+    gives: bool,
+) -> Result<Map<String, Set<RoleId>>> {
+    let Some(input) = input else {
+        return Ok(Map::new());
+    };
+    let bindings = map(input, |e| roles(Some(e), doc, gives))?;
+    let mut result = Map::new();
+    for (key, set) in bindings {
+        let pin = symbol
+            .pins
+            .get_key_value(&key)
+            .or_else(|| symbol.pins.iter().find(|(_, p)| p.aliases.contains(&key)))
+            .ok_or_else(|| fault(input, "UnknownPin", &key))?
+            .0;
+        if result.insert(pin.clone(), set).is_some() {
+            return Err(fault(input, "DuplicatePin", &key));
+        }
+    }
+    Ok(result)
+}
 fn item(c: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Item> {
     Ok(match c.name {
         "place" => {
             let e = c.req("symbol")?;
             let sym = reference(e)?;
-            if !doc.symbols.contains_key(&sym) {
-                return Err(fault(e, "UnknownSymbol", sym));
+            let def = doc
+                .symbols
+                .get(&sym)
+                .ok_or_else(|| fault(e, "UnknownSymbol", &sym))?;
+            let mut functions = Map::new();
+            if let Some(e) = c.take("functions") {
+                for (name, function) in map(e, reference)? {
+                    let Some((pin, def)) = def
+                        .pins
+                        .get_key_value(&name)
+                        .or_else(|| def.pins.iter().find(|(_, p)| p.aliases.contains(&name)))
+                    else {
+                        return Err(fault(e, "UnknownPin", name));
+                    };
+                    if !def.functions.contains_key(&function) {
+                        return Err(fault(e, "UnknownPinFunction", format!("{pin}.{function}")));
+                    }
+                    if functions.insert(pin.clone(), function).is_some() {
+                        return Err(fault(e, "DuplicatePin", pin));
+                    }
+                }
+            }
+            let reference = c.take("reference").map(string).transpose()?;
+            if reference
+                .as_ref()
+                .is_some_and(|r| r.is_empty() || !r.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_'))
+            {
+                return Err(fault(e, "InvalidReference", "use a reference such as U2"));
+            }
+            let mut spec_limits = characteristics::parse(c.take("spec_limits"), p)?;
+            if !spec_limits.is_empty() {
+                let aliases = pin_aliases(&def.pins);
+                for spec in &mut spec_limits {
+                    resolve_spec(spec, &aliases, e)?;
+                }
             }
             Item::Place {
+                spec_limits,
+                reference,
+                pins: Box::new(PinOverrides {
+                    bindings: c
+                        .take("bindings")
+                        .map(|e| map(e, reference_name))
+                        .transpose()?
+                        .unwrap_or_default(),
+                    functions,
+                    wants: placement_roles(c.take("wants"), def, doc, false)?,
+                    gives: placement_roles(c.take("gives"), def, doc, true)?,
+                }),
                 symbol: sym,
                 unit: c
                     .take("unit")
                     .map(string)
                     .transpose()?
                     .unwrap_or_else(|| "A".into()),
-                value: c.take("value").map(string).transpose()?.unwrap_or_default(),
-                footprint: c.take("footprint").map(string).transpose()?,
+                value: c
+                    .take("value")
+                    .map(string)
+                    .transpose()?
+                    .unwrap_or_else(|| def.nominal_value().unwrap_or_default()),
+                footprint: c
+                    .take("footprint")
+                    .map(string)
+                    .transpose()?
+                    .filter(|s| !s.is_empty()),
+                ref_offset: field_offset(c.take("ref_offset"), p)?,
+                value_offset: field_offset(c.take("value_offset"), p)?,
+                visibility: visibility(c)?,
+                fields: property_fields(c, &def.field_types, doc)?,
+                datasheet: c
+                    .take("datasheet")
+                    .map(string)
+                    .transpose()?
+                    .filter(|s| !s.is_empty()),
+                populated: c.take("populated").map(boolean).transpose()?.unwrap_or(true),
+                in_bom: c.take("in_bom").map(boolean).transpose()?.unwrap_or(true),
                 at: point(c.req("at")?, p)?,
                 angle: rotation(c.take("angle"), p)?,
                 mirror: c.take("mirror").map(boolean).transpose()?.unwrap_or(false),
@@ -311,6 +682,10 @@ fn item(c: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Item> {
         "flow" => Item::Flow {
             from: reference(c.req("from")?)?,
             to: reference(c.req("to")?)?,
+        },
+        "diff_pair" => Item::DiffPair {
+            positive: reference(c.req("positive")?)?,
+            negative: reference(c.req("negative")?)?,
         },
         "bus" => Item::Bus(map(c.req("members")?, reference)?),
         "subsheet" => Item::SheetInstance {
@@ -347,7 +722,24 @@ fn item(c: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Item> {
             }
         }
         "no_connect" => Item::NoConnect(reference(c.req("on")?)?),
-        "note" => Item::Note(point(c.req("at")?, p)?, string(c.req("value")?)?),
+        "note" => Item::Note {
+            at: point(c.req("at")?, p)?,
+            text: string(c.req("value")?)?,
+            size: c
+                .take("size")
+                .map(|e| positive(e, p))
+                .transpose()?
+                .unwrap_or(1.55),
+            bold: c.take("bold").map(boolean).transpose()?.unwrap_or(false),
+        },
+        "line" | "rect" | "circle" | "arc" => Item::Drawing {
+            shape: graphic_shape(c, p, Span::default())?,
+            width: c
+                .take("width")
+                .map(|e| positive(e, p))
+                .transpose()?
+                .unwrap_or(0.25),
+        },
         "fulfill" => {
             let e = c.req("role")?;
             let role = resolve_role(e, doc)?;
@@ -378,12 +770,32 @@ fn item(c: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Item> {
     })
 }
 
-pub(super) fn header(src: &str) -> Option<&str> {
-    src.lines()
-        .map(|l| l.split('#').next().unwrap_or("").trim())
-        .find(|l| !l.is_empty())
-}
 pub fn read(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Document> {
+    read_nested(src, dir, root, &mut ImportState::default())
+}
+
+#[derive(Default)]
+struct ImportState {
+    active: Vec<PathBuf>,
+    bytes: usize,
+    count: usize,
+}
+
+fn read_nested(
+    src: &str,
+    dir: Option<&Path>,
+    root: Option<&Path>,
+    state: &mut ImportState,
+) -> Result<Document> {
+    state.bytes += src.len();
+    state.count += 1;
+    if state.active.len() > 64 || state.bytes > 64 * 1024 * 1024 || state.count > 8192 {
+        return Err(Fault::new(
+            "LibraryLimit",
+            Span::default(),
+            "library expansion exceeds the project limit",
+        ));
+    }
     let prog =
         syntax::parse(src).map_err(|e| Fault::new(e.kind(), e.span().unwrap_or_default(), e.text()))?;
     let Some((head, body)) = prog.split_first() else {
@@ -411,11 +823,32 @@ pub fn read(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Docume
             ));
         }
     };
+    // An existing document may already use "std" as a local name or an explicit import.
+    let implicit_std = !body
+        .iter()
+        .any(|s| matches!(&s.kind,S::Assign{name,..}|S::Shared{name,..} if name=="std"));
     let mut doc = Document {
+        packages: crate::electronics_library::Loaded::standard(),
         library,
+        implicit_std,
         ..Default::default()
     };
+    if implicit_std {
+        static TYPES: std::sync::OnceLock<Map<String, AttributeType>> = std::sync::OnceLock::new();
+        doc.attribute_types = TYPES
+            .get_or_init(|| {
+                crate::standard_library::STANDARD
+                    .exported_types()
+                    .into_iter()
+                    .map(|(k, v)| (format!("std.{k}"), v))
+                    .collect()
+            })
+            .clone();
+        doc.libraries.insert("std".into(), None);
+        add_package_paths(&mut doc, "std", &crate::standard_library::STANDARD);
+    }
     let mut names = Set::new();
+    let mut defaults = RuleDefaults::default();
     let mut params = Map::new();
     for stmt in body {
         let (name, e) = match &stmt.kind {
@@ -451,7 +884,10 @@ pub fn read(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Docume
                         let v = measure(arg, &params, Dim::Ratio)?;
                         rating = Some(match (field, kind) {
                             ("capacitance_nf", RoleKind::Bypass) if v > 0.0 => Rating::CapacitanceNf(v),
-                            ("voltage_mv", RoleKind::Power | RoleKind::Reference) => Rating::VoltageMv(v),
+                            (
+                                "voltage_mv",
+                                RoleKind::Power | RoleKind::Reference | RoleKind::PullUp | RoleKind::PullDown,
+                            ) => Rating::VoltageMv(v),
                             _ => {
                                 return Err(fault(
                                     arg,
@@ -461,6 +897,62 @@ pub fn read(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Docume
                             }
                         });
                     }
+                }
+                if let Some(arg) = c.take("voltage_range_v") {
+                    if !(kind == RoleKind::Power || kind.is_pull()) || rating.is_some() {
+                        return Err(fault(
+                            arg,
+                            "InvalidRoleRating",
+                            "use a single voltage rating on a power role",
+                        ));
+                    }
+                    let [min, max] = list(arg)? else {
+                        return Err(fault(
+                            arg,
+                            "InvalidVoltageRange",
+                            "expected [minimum, maximum] in volts",
+                        ));
+                    };
+                    let range = VoltageRange {
+                        min: measure(min, &params, Dim::Ratio)?,
+                        max: measure(max, &params, Dim::Ratio)?,
+                    };
+                    if range.min > range.max {
+                        return Err(fault(
+                            arg,
+                            "InvalidVoltageRange",
+                            "minimum voltage exceeds maximum",
+                        ));
+                    }
+                    rating = Some(Rating::VoltageRange(range));
+                }
+                let resistance = if kind.is_pull() {
+                    if rating.is_none() {
+                        return Err(fault(
+                            e,
+                            "InvalidRoleRating",
+                            "declare the pull rail voltage or voltage range",
+                        ));
+                    }
+                    let bounds = value_bounds(&mut c)?;
+                    if bounds.is_some_and(|[lo, _]| lo.unit != "Ω" || lo.magnitude <= 0.) {
+                        return Err(fault(
+                            e,
+                            "WrongPartValueDimension",
+                            "pull resistance must be positive ohms",
+                        ));
+                    }
+                    bounds
+                } else {
+                    None
+                };
+                let connection = connection_want(&mut c)?;
+                if connection.is_some() && rating.is_some() {
+                    return Err(fault(
+                        e,
+                        "InvalidRoleRating",
+                        "use separate wants for pin connectivity and electrical ratings",
+                    ));
                 }
                 let id = if let Some(key) = c.take("key") {
                     let text = string(key)?;
@@ -480,6 +972,8 @@ pub fn read(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Docume
                     name.clone(),
                     id,
                     Role {
+                        resistance,
+                        connection,
                         kind,
                         rating,
                         prefer: c.take("prefer").map(|e| positive(e, &params)).transpose()?,
@@ -487,14 +981,78 @@ pub fn read(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Docume
                     e,
                 )?;
             }
+            "attribute_type" => {
+                let t = strap::read_type(&mut c)?;
+                doc.attribute_types.insert(name.clone(), t);
+            }
             "symbol" => {
                 let s = symbol(&mut c, &params, &doc)?;
                 doc.symbols.insert(name.clone(), s);
             }
-            "library" if !library => {
+            "library" => {
                 let e = c.req("file")?;
                 let file = string(e)?;
-                let library = load_library(&file, dir, root, e, &mut doc.imports)?;
+                let bundled = match file.as_str() {
+                    "forge:power" => Some(POWER_LIBRARY),
+                    "forge:frames" => Some(include_str!("frames.fg")),
+                    _ => None,
+                };
+                let package = if file == "forge:attribute-types" {
+                    Some(&crate::standard_library::PROPERTIES)
+                } else {
+                    crate::electronics_library::resolve_import(&file)
+                        .map_err(|m| fault(e, "RustLibraryUnavailable", m))?
+                };
+                let library = if let Some(lib) = package {
+                    let mut d = Document {
+                        library: true,
+                        attribute_types: lib.exported_types(),
+                        ..Default::default()
+                    };
+                    add_package_paths(&mut d, "", lib);
+                    d.packages.add(lib).map_err(|m| fault(e, "InvalidLibrary", m))?;
+                    d
+                } else if let Some(text) = bundled {
+                    read_nested(text, None, None, state)?
+                } else {
+                    load_library(&file, dir, root, e, &mut doc.imports, state)?
+                };
+                let owner = if bundled.is_some() || package.is_some() {
+                    None
+                } else {
+                    doc.imports.last().map(|(_, p)| p.clone())
+                };
+                let asset_dir = owner.as_ref().and_then(|path| {
+                    let dir = forge_dirs::fs::canonicalize(dir.unwrap_or_else(|| Path::new("."))).ok()?;
+                    let parent = path.parent()?;
+                    for (up, ancestor) in dir.ancestors().enumerate() {
+                        if let Ok(rest) = parent.strip_prefix(ancestor) {
+                            let mut relative = PathBuf::new();
+                            for _ in 0..up {
+                                relative.push("..");
+                            }
+                            return Some(relative.join(rest));
+                        }
+                    }
+                    None
+                });
+                let shared_std = doc.implicit_std && library.implicit_std;
+                let qualified = |id: &str| {
+                    if shared_std && id.starts_with("std.") {
+                        id.to_string()
+                    } else {
+                        format!("{name}.{id}")
+                    }
+                };
+                doc.libraries.insert(name.clone(), owner);
+                doc.libraries.extend(
+                    library
+                        .libraries
+                        .into_iter()
+                        .filter(|(child, _)| !shared_std || (child != "std" && !child.starts_with("std.")))
+                        .map(|(child, path)| (format!("{name}.{child}"), path)),
+                );
+                doc.imports.extend(library.imports);
                 let qualify = |id: RoleId| {
                     if id.0.starts_with('@') {
                         id
@@ -503,12 +1061,47 @@ pub fn read(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Docume
                     }
                 };
                 for (alias, id) in library.role_names {
-                    let ty = library.roles[&id].clone();
+                    let mut ty = library.roles[&id].clone();
+                    if let Some(PartType::Symbol(through)) =
+                        ty.connection.as_mut().and_then(|w| w.through.as_mut())
+                    {
+                        *through = format!("{name}.{through}");
+                    }
                     register_role(&mut doc, format!("{name}.{alias}"), qualify(id), ty, e)?;
                 }
+                doc.packages
+                    .merge(&library.packages)
+                    .map_err(|m| fault(e, "InvalidLibrary", m))?;
+                defaults.import(name, library.severities);
+                for (id, t) in library.attribute_types {
+                    if !(shared_std && id.starts_with("std.")) {
+                        doc.attribute_types.insert(qualified(&id), t);
+                    }
+                }
                 for (id, mut sym) in library.symbols {
+                    for ty in sym.field_types.values_mut() {
+                        *ty = qualified(ty);
+                    }
+                    for table in sym.strap_tables.values_mut() {
+                        if let Some(id) = &mut table.source_type {
+                            *id = qualified(id);
+                        }
+                    }
+
+                    if let Some(link) = &mut sym.datasheet
+                        && !link.contains("://")
+                        && !Path::new(link).is_absolute()
+                        && let Some(parent) = &asset_dir
+                    {
+                        *link = parent.join(&*link).to_string_lossy().replace('\\', "/");
+                    }
+
                     for pin in sym.pins.values_mut() {
-                        for roles in [&mut pin.wants, &mut pin.gives] {
+                        for roles in [&mut pin.wants, &mut pin.gives].into_iter().chain(
+                            pin.functions
+                                .values_mut()
+                                .flat_map(|f| [&mut f.wants, &mut f.gives]),
+                        ) {
                             *roles = std::mem::take(roles).into_iter().map(&qualify).collect();
                         }
                     }
@@ -521,13 +1114,90 @@ pub fn read(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Docume
                     .map(string)
                     .transpose()?
                     .unwrap_or_else(|| name.clone());
+                if let Some(e) = c.take("template") {
+                    let id = reference(e)?;
+                    if !doc.symbols.get(&id).is_some_and(|s| s.pins.is_empty()) {
+                        return Err(fault(
+                            e,
+                            "InvalidSheetTemplate",
+                            "choose a graphics-only library symbol",
+                        ));
+                    }
+                    doc.templates.insert(name.clone(), id);
+                }
                 doc.sheets.insert(name.clone(), title);
+            }
+            "erc_rule" | "waiver" if !library || c.name == "erc_rule" => {
+                let rule = string(c.req("rule")?)?;
+
+                if c.name == "waiver" {
+                    let mut objects = list(c.req("objects")?)?
+                        .iter()
+                        .map(string)
+                        .collect::<Result<Vec<_>>>()?;
+                    objects.sort();
+                    objects.dedup();
+                    let reason = string(c.req("reason")?)?;
+                    if reason.trim().is_empty() || objects.is_empty() {
+                        return Err(fault(
+                            e,
+                            "InvalidWaiver",
+                            "specify the affected objects and a reason",
+                        ));
+                    }
+                    if doc.waivers.insert((rule, objects), reason).is_some() {
+                        return Err(fault(e, "DuplicateWaiver", name));
+                    }
+                } else {
+                    let severity = rule_severity(c.req("severity")?)?;
+                    if doc.severities.insert(rule, severity).is_some() {
+                        return Err(fault(e, "DuplicateErcRule", name));
+                    }
+                }
+            }
+            "annotation" if !library => {
+                let path = string(c.req("occurrence")?)?;
+                let reference = string(c.req("reference")?)?;
+                if reference.trim().is_empty()
+                    || !reference.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+                {
+                    return Err(fault(e, "InvalidReference", "use a reference such as U2"));
+                }
+                let locked = c.take("locked").map(boolean).transpose()?.unwrap_or(false);
+                if doc
+                    .annotations
+                    .insert(
+                        path.clone(),
+                        Annotation {
+                            id: name.clone(),
+                            reference,
+                            locked,
+                        },
+                    )
+                    .is_some()
+                {
+                    return Err(fault(e, "DuplicateAnnotation", path));
+                }
+            }
+            "variant" if !library => {
+                let mut overrides = Map::new();
+                for (arg, fitted) in [("omit", false), ("fit", true)] {
+                    if let Some(entries) = c.take(arg) {
+                        for entry in list(entries)? {
+                            let path = string(entry)?;
+                            if overrides.insert(path.clone(), fitted).is_some() {
+                                return Err(fault(entry, "DuplicateVariantPart", path));
+                            }
+                        }
+                    }
+                }
+                doc.variants.insert(name.clone(), overrides);
             }
             _ if library => {
                 return Err(fault(
                     e,
                     "InvalidLibraryItem",
-                    "a symbol library declares roles, shared dimensions and symbols",
+                    "a symbol library declares libraries, roles, shared dimensions and symbols",
                 ));
             }
             _ => {
@@ -549,7 +1219,125 @@ pub fn read(src: &str, dir: Option<&Path>, root: Option<&Path>) -> Result<Docume
         }
         c.end()?;
     }
+    for (name, id) in &doc.role_names {
+        if let Some(PartType::Symbol(through)) =
+            doc.roles[id].connection.as_ref().and_then(|w| w.through.as_ref())
+        {
+            let span = body
+                .iter()
+                .find(|s| matches!(&s.kind, S::Assign { name: n, .. } if n == name))
+                .map(|s| s.span)
+                .unwrap_or_default();
+            let symbol = doc
+                .symbols
+                .get(through)
+                .ok_or_else(|| Fault::new("UnknownSymbol", span, through))?;
+            if let (Some(kind), Some([lo, _])) = (
+                symbol.part_kind.as_deref(),
+                doc.roles[id].connection.as_ref().and_then(|w| w.values),
+            ) && let Some(unit) = nominal_unit(kind)
+                && lo.unit != unit
+            {
+                return Err(Fault::new(
+                    "WrongPartValueDimension",
+                    span,
+                    format!("{through} requires {unit}"),
+                ));
+            }
+            let wanted = doc.roles[id].connection.as_ref().unwrap();
+            if let Some(path) = &wanted.path {
+                if !symbol.paths.contains_key(path) {
+                    return Err(Fault::new(
+                        "UnknownPartPath",
+                        span,
+                        format!("{through} has no path {path}"),
+                    ));
+                }
+            } else if !(symbol.paths.len() == 1 || symbol.paths.is_empty() && symbol.pins.len() == 2) {
+                return Err(Fault::new(
+                    "ExpectedPartPath",
+                    span,
+                    format!("{through} needs an explicit terminal path"),
+                ));
+            }
+        }
+    }
+    resolve_pin_aliases(&mut doc);
+    defaults.resolve(&mut doc.severities, head.span)?;
+    for id in doc.severities.keys().chain(doc.waivers.keys().map(|(id, _)| id)) {
+        if state.active.is_empty()
+            && !doc.packages.erc.contains_key(id.as_str())
+            && !crate::standard_library::known_erc(id)
+        {
+            return Err(Fault::new("UnknownErcRule", head.span, id));
+        }
+    }
     Ok(doc)
+}
+
+// Resolve historical pin names before graph construction so every consumer sees the
+// same canonical terminal. Project files can keep their original spelling on disk.
+fn resolve_pin_aliases(doc: &mut Document) {
+    let mut symbols = Map::<&str, Vec<(&str, &str)>>::new();
+    for (id, symbol) in &doc.symbols {
+        for (name, pin) in &symbol.pins {
+            for alias in &pin.aliases {
+                symbols.entry(id).or_default().push((alias, name));
+            }
+        }
+    }
+    if symbols.is_empty() {
+        return;
+    }
+    let mut aliases = Map::<String, Map<String, String>>::new();
+    for row in &doc.rows {
+        if let Item::Place { symbol, .. } = &row.item
+            && let Some(pins) = symbols.get(symbol.as_str())
+        {
+            for (alias, name) in pins {
+                aliases
+                    .entry(row.sheet.clone())
+                    .or_default()
+                    .insert(format!("{}.{alias}", row.id), format!("{}.{name}", row.id));
+            }
+        }
+    }
+    if aliases.is_empty() {
+        return;
+    }
+    for row in &mut doc.rows {
+        let Some(sheet) = aliases.get(&row.sheet) else {
+            continue;
+        };
+        let resolve = |p: &mut String| {
+            if let Some(name) = sheet.get(p) {
+                p.clone_from(name);
+            }
+        };
+        match &mut row.item {
+            Item::Wire { from, to, .. } | Item::Flow { from, to } => {
+                resolve(from);
+                resolve(to);
+            }
+            Item::NoConnect(p) | Item::Label { target: p, .. } => resolve(p),
+            Item::DiffPair { positive, negative } => {
+                resolve(positive);
+                resolve(negative);
+            }
+            Item::Bus(members) => members.values_mut().for_each(resolve),
+            Item::Fulfill {
+                want, give, returns, ..
+            } => {
+                resolve(want);
+                resolve(give);
+                if let Some((a, b)) = returns {
+                    resolve(a);
+                    resolve(b);
+                }
+            }
+            _ => {}
+        }
+    }
 }
 fn load_library(
     file: &str,
@@ -557,6 +1345,7 @@ fn load_library(
     root: Option<&Path>,
     e: &Expr,
     imports: &mut Vec<(PathBuf, PathBuf)>,
+    state: &mut ImportState,
 ) -> Result<Document> {
     let bad = || {
         fault(
@@ -571,6 +1360,13 @@ fn load_library(
     if !candidate.starts_with(&fence) || candidate.extension().and_then(|x| x.to_str()) != Some("fg") {
         return Err(bad());
     }
+    if state.active.contains(&candidate) {
+        return Err(fault(
+            e,
+            "LibraryCycle",
+            format!("cyclic library import of {file}"),
+        ));
+    }
     let bytes = crate::deps::read_plain(&candidate, 8 * 1024 * 1024).map_err(|_| bad())?;
     crate::deps::read(&candidate, Some(&bytes));
     imports.push((base.join(file), candidate.clone()));
@@ -578,27 +1374,19 @@ fn load_library(
     if header(src) != Some("symbol_library") {
         return Err(fault(e, "ExpectedSymbolLibrary", file));
     }
-    read(src, candidate.parent(), Some(&fence)).map_err(|mut f| {
-        f.file = Some(file.into());
+    state.active.push(candidate.clone());
+    let result = read_nested(src, candidate.parent(), Some(&fence), state);
+    state.active.pop();
+    result.map_err(|mut f| {
+        f.file.get_or_insert_with(|| {
+            candidate
+                .strip_prefix(&fence)
+                .unwrap_or(&candidate)
+                .to_string_lossy()
+                .into_owned()
+        });
         f
     })
-}
-
-pub fn parameter_dimension(src: &str, key: &crate::error::ParamKey) -> Option<Dim> {
-    let mut params = Map::new();
-    for stmt in syntax::parse(src).ok()? {
-        if let S::Shared { name, value } = stmt.kind {
-            let mut n = number(&value, &params).ok()?;
-            if n.dim == Dim::Any {
-                n.dim = Dim::Length;
-            }
-            if crate::error::ParamKey::shared(&name) == *key {
-                return Some(n.dim);
-            }
-            params.insert(name, n);
-        }
-    }
-    None
 }
 
 /// Read one complete, self-contained coordinate tuple with the normal grammar and unit checks.

@@ -103,3 +103,11 @@ rendered with them. No licence record is needed for these. Keep raw vendor archi
 Haas Tooling workholding models likewise (David, of the `haas-tooling-step` upload: "They are totally ok to
 include in the repo I checked."): the STEP files used and their per-body meshes under
 `kernel/forge-workholding/data/models/haas-tooling/` (Git LFS, excluded from normal clones).
+
+
+For PCB work, query `schematic F erc [VARIANT]` and `pcb B handoff [VARIANT]` together.
+Each `signal_paths` entry describes one source-to-receiver branch. Join its terminals to
+the component pads. Use a compatible role as evidence of function. Mismatch and unknown
+point back to the named pins. Get physical constraints from declared rules and stackup.
+Component `derived_attributes` give fitted strap results and their input evidence. The
+`matched` and `default` statuses carry typed values. See [the routing design](research/electronics/routing-strategy.md).

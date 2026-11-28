@@ -231,6 +231,12 @@ fn groups(s: &Shell) -> Vec<Group> {
         small,
         icons: vec![],
     };
+    if let Some(editor) = &s.pcb {
+        return editor.groups(s.tab);
+    }
+    if let Some(editor) = &s.electronics {
+        return editor.groups(s.tab);
+    }
     if let Some(d) = &s.dwgdoc {
         // AutoCAD's: every command through the one entry point, those not here yet saying so
         let tool = |(name, icon, cmd): (&'static str, &'static str, &'static str)| {
@@ -593,7 +599,12 @@ fn why_off(name: &str) -> Option<&'static str> {
 
 /// The Sketch tab of a part (not a drawing's, an assembly's or another environment's).
 fn s_is_sketch_tab(s: &Shell) -> bool {
-    s.tab == 1 && s.drawing.is_none() && s.dwgdoc.is_none() && !s.is_asm()
+    s.tab == 1
+        && s.pcb.is_none()
+        && s.electronics.is_none()
+        && s.drawing.is_none()
+        && s.dwgdoc.is_none()
+        && !s.is_asm()
 }
 
 const BIG_W: f32 = 54.0;
@@ -793,7 +804,12 @@ impl Shell {
     /// Nothing open: no part, drawing, DWG or machining document (one opened alone, its part
     /// not in a tab of its own, is a document all the same).
     pub(super) fn no_document(&self) -> bool {
-        self.fg.is_none() && self.drawing.is_none() && self.dwgdoc.is_none() && self.cam.is_none()
+        self.fg.is_none()
+            && self.drawing.is_none()
+            && self.dwgdoc.is_none()
+            && self.pcb.is_none()
+            && self.electronics.is_none()
+            && self.cam.is_none()
     }
 
     /// A tool that does nothing without a document is drawn off then, its tooltip saying why;

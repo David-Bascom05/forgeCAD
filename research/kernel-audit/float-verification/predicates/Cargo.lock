@@ -11,12 +11,12 @@ name = "forge-math"
 version = "0.1.0"
 dependencies = [
  "forge-alloc",
- "forge-num",
+ "forge-num-core",
  "forge-par",
 ]
 
 [[package]]
-name = "forge-num"
+name = "forge-num-core"
 version = "0.1.0"
 
 [[package]]

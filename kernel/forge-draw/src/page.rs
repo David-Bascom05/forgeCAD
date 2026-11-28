@@ -20,6 +20,9 @@ pub enum Pen {
     Border,
     /// A sick annotation: its model reference is gone (Inventor's magenta).
     Sick,
+    /// A user-specified annotation line width in micrometres.
+    Annotation(u32),
+    BoldText,
 }
 
 impl Pen {
@@ -27,7 +30,8 @@ impl Pen {
     pub fn width(self) -> f64 {
         match self {
             Pen::Visible | Pen::Cut | Pen::Border => 0.5,
-            Pen::Hidden | Pen::Sick => 0.35,
+            Pen::Annotation(um) => f64::from(um) / 1000.,
+            Pen::BoldText | Pen::Hidden | Pen::Sick => 0.35,
             Pen::Tangent | Pen::Center | Pen::Phantom | Pen::Thin | Pen::Hatch => 0.25,
         }
     }
@@ -56,7 +60,7 @@ impl Pen {
             Pen::Tangent => "TANGENT",
             Pen::Center => "CENTER",
             Pen::Phantom => "PHANTOM",
-            Pen::Thin => "DIM",
+            Pen::Thin | Pen::Annotation(_) | Pen::BoldText => "DIM",
             Pen::Hatch => "HATCH",
             Pen::Cut => "SECTION",
             Pen::Border => "BORDER",

@@ -36,6 +36,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-bb"
+version = "0.1.0"
+
+[[package]]
 name = "forge-bool"
 version = "0.1.0"
 dependencies = [
@@ -48,11 +52,20 @@ dependencies = [
 name = "forge-brake"
 version = "0.1.0"
 dependencies = [
+ "forge-bb",
  "forge-math",
  "forge-mesh",
  "forge-ops",
  "forge-sheet",
  "forge-vendor",
+]
+
+[[package]]
+name = "forge-cam-geom"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+ "forge-num",
 ]
 
 [[package]]
@@ -141,8 +154,10 @@ dependencies = [
  "forge-asm",
  "forge-bool",
  "forge-brake",
+ "forge-cam-geom",
  "forge-dirs",
  "forge-draw",
+ "forge-dwg",
  "forge-font",
  "forge-geom",
  "forge-git",
@@ -169,6 +184,7 @@ name = "forge-material"
 version = "0.1.0"
 dependencies = [
  "forge-dirs",
+ "forge-math",
 ]
 
 [[package]]
@@ -176,7 +192,7 @@ name = "forge-math"
 version = "0.1.0"
 dependencies = [
  "forge-alloc",
- "forge-num",
+ "forge-num-core",
  "forge-par",
 ]
 
@@ -206,6 +222,13 @@ dependencies = [
 
 [[package]]
 name = "forge-num"
+version = "0.1.0"
+dependencies = [
+ "forge-num-core",
+]
+
+[[package]]
+name = "forge-num-core"
 version = "0.1.0"
 
 [[package]]

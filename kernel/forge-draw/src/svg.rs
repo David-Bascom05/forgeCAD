@@ -59,10 +59,18 @@ pub fn svg(p: &Page) -> String {
             Align::Centre => "middle",
             Align::Right => "end",
         };
+        let style = if t.pen == crate::Pen::BoldText {
+            format!(
+                " font-weight=\"bold\" textLength=\"{:.4}\" lengthAdjust=\"spacingAndGlyphs\"",
+                crate::page::text_width(&t.text, t.h)
+            )
+        } else {
+            String::new()
+        };
         let c = t.pen.colour().map(|x| (x * 255.0) as u8);
         let _ = writeln!(
             o,
-            "<text x=\"{:.4}\" y=\"{:.4}\" font-family=\"Helvetica, Arial, sans-serif\" font-size=\"{:.4}\" text-anchor=\"{anchor}\" fill=\"rgb({},{},{})\" transform=\"rotate({:.4} {:.4} {:.4})\">{}</text>",
+            "<text x=\"{:.4}\" y=\"{:.4}\" font-family=\"Helvetica, Arial, sans-serif\" font-size=\"{:.4}\" text-anchor=\"{anchor}\"{style} fill=\"rgb({},{},{})\" transform=\"rotate({:.4} {:.4} {:.4})\">{}</text>",
             t.at.x,
             p.h - t.at.y,
             t.h / 0.718,

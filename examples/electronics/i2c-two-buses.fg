@@ -1,0 +1,15 @@
+schematic
+std = library(file:"forge:standard")
+Controller = symbol(pins:{SDA:pin(number:"1",kind:"bidirectional",at:(4,2)),SCL:pin(number:"2",kind:"bidirectional",at:(4,-2))})
+Sensor = symbol(pins:{SDA:pin(number:"1",kind:"bidirectional",at:(-4,2)),SCL:pin(number:"2",kind:"bidirectional",at:(-4,-2))},
+  strap_tables:{address:strap_table(kind:std.properties.address,bus:[SDA,SCL],default:"0x48")})
+main = sheet()
+left = place(sheet:main,symbol:Controller,at:(0,0),ref_offset:(-4,10))
+right = place(sheet:main,symbol:Controller,at:(0,30),ref_offset:(-4,10))
+sensor_a = place(sheet:main,symbol:Sensor,at:(40,0),ref_offset:(-4,10))
+sensor_b = place(sheet:main,symbol:Sensor,at:(40,30),ref_offset:(-4,10))
+a_data = wire(sheet:main,from:left.SDA,to:sensor_a.SDA)
+a_clock = wire(sheet:main,from:left.SCL,to:sensor_a.SCL)
+b_data = wire(sheet:main,from:right.SDA,to:sensor_b.SDA)
+b_clock = wire(sheet:main,from:right.SCL,to:sensor_b.SCL)
+omit_b = variant(omit:["main/sensor_b"])

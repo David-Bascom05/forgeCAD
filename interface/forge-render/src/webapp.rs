@@ -39,6 +39,8 @@ extern "C" {
     /// The page's: File > Save As, a name asked for.
     #[wasm_bindgen(js_namespace = window, js_name = forge_save_as)]
     fn page_save_as(name: &str);
+    #[wasm_bindgen(js_namespace=window,js_name=forge_pick_datasheet)]
+    fn pick_datasheet(path: &str, id: &str);
     /// The page's: save files the app exports (NC programs): its save picker, else a download;
     /// several in one zip. `json`: {name, files: [{path, text}]}.
     #[wasm_bindgen(js_namespace = window, js_name = forge_export)]
@@ -57,6 +59,7 @@ enum Ask {
     Exported(String),
     Open(String),
     SaveAs(String),
+    Pdf(String, String, Vec<u8>),
     Save,
     /// Files arrived behind the first frame: the open part built again (what it read may be new).
     Rebuild,
@@ -495,6 +498,17 @@ impl Host {
         for a in out.host {
             match a {
                 Action::Open | Action::Sheet(crate::shell::sheet::SheetCmd::NewPart) => page_pick(),
+                Action::AttachDatasheet => {
+                    if let Some((p, id)) = self
+                        .gui
+                        .shell
+                        .electronics
+                        .as_ref()
+                        .and_then(|e| e.attachment_target())
+                    {
+                        pick_datasheet(&p, &id);
+                    }
+                }
                 Action::SaveAs => page_save_as(&self.gui.shell.name),
                 // File > Export STL / 3MF / OBJ: built here and handed to the browser's downloads
                 // (it did nothing: the desktop's file dialog has no page counterpart)
@@ -566,6 +580,11 @@ impl Host {
                     }
                 }
                 Ask::SaveAs(p) => self.gui.save_as(&p),
+                Ask::Pdf(p, id, data) => {
+                    if let Err(e) = self.gui.attach_pdf(&p, &id, &data) {
+                        self.gui.shell.status = e;
+                    }
+                }
                 Ask::Save => self.gui.fg_save(),
                 Ask::Env(e) => self.gui.env_asked = Some(e),
                 Ask::BendAt(k, t) => {
@@ -1077,6 +1096,7 @@ fn state_json(g: &Gui, canvas: Json) -> String {
                             || n.starts_with("tab:")
                             || n.starts_with("tool:")
                             || n.starts_with("robot:")
+                            || n.starts_with("electronics:")
                             || n.starts_with("measure:")
                             || n.starts_with("side:")
                             || n.starts_with("agent:")
@@ -1637,4 +1657,9 @@ pub fn bench_load(dir: &str) -> js_sys::Array {
 /// A file the browser offers the person to save (a photo, a recording), named `name`.
 pub(crate) fn download(name: &str, bytes: &[u8]) {
     page_download(name, Uint8Array::from(bytes));
+}
+
+#[wasm_bindgen]
+pub fn app_attach_pdf(path: String, id: String, bytes: Vec<u8>) {
+    ask(Ask::Pdf(path, id, bytes));
 }

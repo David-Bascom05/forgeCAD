@@ -827,3 +827,175 @@ fn schematic_pin_workflow_uses_one_checked_undoable_transaction() {
     drop(server);
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn a_pcb_edit_is_atomic_and_drc_uses_the_updated_geometry() {
+    let dir = scratch("pcb");
+    let path = dir.join("board.fg");
+    let src = include_str!("../../../examples/electronics/controller-board.fg");
+    for (name, text) in [
+        ("board.fg", src),
+        (
+            "controller.fg",
+            include_str!("../../../examples/electronics/controller.fg"),
+        ),
+        (
+            "power-symbols.fg",
+            include_str!("../../../examples/electronics/power-symbols.fg"),
+        ),
+    ] {
+        std::fs::write(dir.join(name), text).unwrap();
+    }
+    let file = path.to_str().unwrap();
+    let mut server = Server::start("mcp", &dir);
+    let (err, original, _) = server.tool("pcb", vec![("file", file.into()), ("sel", "drc".into())]);
+    assert!(!err, "{original}");
+    assert_eq!(s(&original, "schema"), "forgecad.pcb/1");
+    let change = |text: &str| {
+        Json::obj(vec![
+            ("op", "SetArg".into()),
+            ("id", "feed".into()),
+            ("arg", "width".into()),
+            ("text", text.into()),
+        ])
+    };
+    let (err, bad, _) = server.tool("edit", vec![("file", file.into()), ("op", change("2deg"))]);
+    assert!(err, "{bad}");
+    assert_eq!(s(bad.get("error").unwrap(), "kind"), "WrongDim");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), src);
+    let (err, edit, _) = server.tool(
+        "edit",
+        vec![
+            ("file", file.into()),
+            ("base", s(&original, "version").into()),
+            ("op", change("0.15mm")),
+        ],
+    );
+    assert!(!err, "{edit}");
+    let (err, check, _) = server.tool("check", vec![("file", file.into())]);
+    assert!(err, "{check}");
+    let findings = arr(check.get("result").unwrap(), "findings");
+    assert_eq!(findings.len(), 1);
+    assert_eq!(s(&findings[0], "object"), "feed");
+    let (err, r, _) = server.tool(
+        "edit",
+        vec![
+            ("file", file.into()),
+            ("op", Json::obj(vec![("op", "Undo".into())])),
+        ],
+    );
+    assert!(!err, "{r}");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), src);
+}
+
+#[test]
+fn board_fabrication_uses_the_current_nested_package_revision() {
+    let dir = scratch("board-fab");
+    let src = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/electronics"));
+    for file in [
+        "fabrication-controller.fg",
+        "controller.fg",
+        "power-symbols.fg",
+        "footprints/controller.fg",
+        "footprints/passives/chips.fg",
+    ] {
+        let dest = dir.join(file);
+        std::fs::create_dir_all(dest.parent().unwrap()).unwrap();
+        std::fs::copy(src.join(file), dest).unwrap();
+    }
+    let mut server = Server::start("mcp", &dir);
+    let file = dir
+        .join("fabrication-controller.fg")
+        .to_string_lossy()
+        .into_owned();
+    let args = || vec![("file", file.clone().into()), ("sel", "artwork top paste".into())];
+    let (err, initial, _) = server.tool("pcb", args());
+    assert!(!err, "{initial}");
+    let lib = dir
+        .join("footprints/passives/chips.fg")
+        .to_string_lossy()
+        .into_owned();
+    let (err,reply,_)=server.tool("edit",vec![("file",lib.clone().into()),("op",Json::obj(vec![("op","SetArg".into()),("id","chip".into()),("arg","pads".into()),("text","[smd(number: \"1\", at: (0,-2), size: (1.4,1), paste: false), smd(number: \"2\", at: (0,2), size: (1.4,1), paste: false)]".into())]))]);
+    assert!(!err, "{reply}");
+    let (err, after, _) = server.tool("pcb", args());
+    assert!(!err, "{after}");
+    assert!(arr(&after, "result").is_empty());
+    assert_eq!(arr(&initial, "result").len(), 2);
+    let (err, reply, _) = server.tool(
+        "edit",
+        vec![
+            ("file", lib.into()),
+            ("op", Json::obj(vec![("op", "Undo".into())])),
+        ],
+    );
+    assert!(!err, "{reply}");
+    let (_, again, _) = server.tool("pcb", args());
+    assert_eq!(again.get("result"), initial.get("result"));
+    let output = dir.join("fabrication.zip");
+    let result = Command::new(env!("CARGO_BIN_EXE_forgecad"))
+        .args([
+            "export",
+            &file,
+            "pcb-fab",
+            "-o",
+            output.to_str().unwrap(),
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stdout)
+    );
+    let bytes = std::fs::read(output).unwrap();
+    let contents = forge_mesh::zip::read(&bytes, 2 * 1024 * 1024).unwrap();
+    assert!(contents.iter().any(|(name, _)| name == "top-mask.gbr"));
+}
+
+#[test]
+fn pcb_and_schematic_handoff_share_fitted_attributes_and_active_signal_contracts() {
+    let dir = scratch("fitted-handoff");
+    let board = include_str!("../../../examples/electronics/controller-board.fg")
+        .split("# Example project limits")
+        .next()
+        .unwrap();
+    std::fs::write(dir.join("layout.fg"), board).unwrap();
+    let fixture = dir.join("controller.fg");
+    std::fs::write(
+        &fixture,
+        include_str!("../../../examples/electronics/strap-attributes.fg"),
+    )
+    .unwrap();
+    let mut server = Server::start("mcp", &dir);
+    let (err, reply, _) = server.tool(
+        "pcb",
+        vec![
+            ("file", dir.join("layout.fg").to_str().unwrap().into()),
+            ("sel", "handoff prototype".into()),
+        ],
+    );
+    assert!(!err, "{reply}");
+    let parts = arr(reply.get("result").unwrap(), "components");
+    let u = parts.iter().find(|p| s(p, "id") == "main/U1").unwrap();
+    let attr = u.get("derived_attributes").unwrap().get("i2c_address").unwrap();
+    assert_eq!(s(attr, "status"), "default");
+    assert_eq!(attr.get("value").unwrap().num(), Some(72.));
+    std::fs::write(
+        &fixture,
+        include_str!("../../../examples/electronics/adc-fanout.fg").replace("P0:ADC", "P0:GPIO"),
+    )
+    .unwrap();
+    let (err, reply, _) = server.tool(
+        "schematic",
+        vec![
+            ("file", fixture.to_str().unwrap().into()),
+            ("sel", "board no_monitor".into()),
+        ],
+    );
+    assert!(!err, "{reply}");
+    let paths = arr(reply.get("result").unwrap(), "signal_paths");
+    assert_eq!(paths.len(), 1);
+    assert_eq!(s(&paths[0], "status"), "mismatch");
+    assert_eq!(arr(&paths[0], "compatible_receiver_functions"), &["ADC".into()]);
+}

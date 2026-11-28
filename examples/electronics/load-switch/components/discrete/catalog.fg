@@ -1,0 +1,2 @@
+symbol_library
+switches = library(file: "switches.fg")

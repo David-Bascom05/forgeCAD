@@ -3,8 +3,8 @@
 //! precondition on the inputs' range. The numbers are forge-num's ([`Dy`], a big integer times a
 //! power of two); slow next to the floating filters of `predicates`, so callers filter first.
 
-pub use forge_num::dy::{det2, ratio_f64};
-pub use forge_num::{Big, Dy};
+pub use forge_num_core::dy::{det2, ratio_f64};
+pub use forge_num_core::{Big, Dy};
 
 /// An exact 3-vector.
 #[derive(Clone, Debug, Default)]

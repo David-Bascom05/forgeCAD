@@ -1,0 +1,6 @@
+symbol_library
+discrete = library(file: "discrete/catalog.fg")
+Connector = symbol(ref_prefix: "J", part_kind: "connector", pins: {
+  IN: pin(number: "1", kind: "passive", at: (4,2)),
+  OUT: pin(number: "2", kind: "passive", at: (4,-2))
+}, graphics: [rect(from: (-3,-4), to: (0,4)), line(from: (0,2), to: (4,2)), line(from: (0,-2), to: (4,-2))])

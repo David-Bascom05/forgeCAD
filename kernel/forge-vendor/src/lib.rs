@@ -60,7 +60,9 @@
 //! `min_slot`, `min_web`, `bend_from` ("tangent" | "centre"), `bend_angles`, `max_bend_length`,
 //! `relief = { shape, width, depth, corner_gap }`.
 
+mod pcb;
 pub mod toml;
+pub use pcb::PcbService;
 
 use forge_sheet as fs;
 use std::path::{Path, PathBuf};
@@ -71,8 +73,11 @@ use toml::{Item, Table};
 pub const FORMAT: f64 = 1.0;
 
 /// The built-in profiles, by file.
-pub const BUILTIN: [(&str, &str); 5] = [
+pub const BUILTIN: [(&str, &str); 8] = [
     ("sendcutsend.toml", include_str!("../data/sendcutsend.toml")),
+    ("jlcpcb.toml", include_str!("../data/jlcpcb.toml")),
+    ("oshpark.toml", include_str!("../data/oshpark.toml")),
+    ("pcbway.toml", include_str!("../data/pcbway.toml")),
     ("fabworks.toml", include_str!("../data/fabworks.toml")),
     ("oshcut.toml", include_str!("../data/oshcut.toml")),
     ("xometry.toml", include_str!("../data/xometry.toml")),
@@ -379,6 +384,7 @@ pub enum Tooling {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Vendor {
+    pub pcb: Vec<PcbService>,
     pub id: String,
     pub name: String,
     pub source: Option<String>,
@@ -669,7 +675,16 @@ impl Vendor {
         if let Some(ops) = &operations {
             ops_checked(ops, "operations")?;
         }
+        let mut pcb = Vec::new();
+        for table in r.tables("pcb")? {
+            let service = PcbService::read(table)?;
+            if pcb.iter().any(|s: &PcbService| s.id == service.id) {
+                return Err(bad(format!("duplicate pcb service {}", service.id)));
+            }
+            pcb.push(service);
+        }
         let mut v = Vendor {
+            pcb,
             name: r.str("name")?.unwrap_or_else(|| id.clone()),
             id,
             source: r.str("source")?,
@@ -865,6 +880,12 @@ impl Vendor {
         }
         if let Some(k) = self.kerf {
             t.set("kerf", Item::Num(k));
+        }
+        if !self.pcb.is_empty() {
+            t.set(
+                "pcb",
+                Item::Tables(self.pcb.iter().map(PcbService::table).collect()),
+            );
         }
         let l = &self.limits;
         let mut lt = Table::default();

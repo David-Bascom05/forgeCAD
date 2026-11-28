@@ -7,10 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [features]
-# CAM's outward intervals and exact reals (ival, real): only their clients enable it, so a build
-# without CAM (the kernel's binaries) compiles forge-num as numbers alone. With them in, the crate's
-# std Vec growth serves several element types and loses its u32 specialisation, which every crate's
-# `Vec<u32>::push` shares (shared generics): kernel regen lines paid ~10 Ir a push for nothing.
+# Exact reals and outward intervals for CAM and copper-pour polygon operations.
 real = []
 # CAM's interval rules without the exact-zero rule (an exact zero operand rounded outward like any
 # other): the rules as they were, kept one train for comparison. A build feature, never a runtime
@@ -18,6 +15,7 @@ real = []
 ival-strict = ["real"]
 
 [dependencies]
+forge-num-core = { path = "../forge-num-core" }
 
 [lints]
 workspace = true

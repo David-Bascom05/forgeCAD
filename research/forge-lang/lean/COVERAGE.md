@@ -40,7 +40,7 @@ no family extension changes where a document goes.
 
 | Kind | Item | Names | Rust site | Lean |
 |---|---|---|---|---|
-| builtins | `schematic` | `role`, `symbol`, `pin`, `line`, `rect`, `arc`, `polyline`, `circle`, `text`, `library`, `sheet`, `place`, `gate`, `subsheet`, `junction`, `port`, `wire`, `label`, `no_connect`, `note`, `flow`, `bus`, `fulfill` | closed call signatures in schematic::ARGS | `LL1.Documents.schematic_doc_accepted`, `Families.families_not_keywords`, `Schematic.binding_sound_complete`, `Schematic.resolved_binding_typed`; GAP full elaboration and ERC refinement |
+| builtins | `schematic` | `role`, `symbol`, `pin`, `line`, `rect`, `arc`, `polyline`, `circle`, `text`, `library`, `sheet`, `place`, `gate`, `subsheet`, `junction`, `port`, `wire`, `label`, `no_connect`, `note`, `flow`, `diff_pair`, `bus`, `fulfill`, `waiver`, `erc_rule`, `variant`, `function`, `strap_table`, `attribute_type`, `annotation` | closed call signatures in schematic::ARGS | `LL1.Documents.schematic_doc_accepted`, `Families.families_not_keywords`, `Schematic.binding_sound_complete`, `Schematic.resolved_binding_typed`; GAP full elaboration and ERC refinement |
 | builtins | `core` | `use`, `sqrt`, `div`, `mod`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `abs`, `min`, `max`, `count`, `ratio`, `len`, `polar`, `pt`, `near`, `line`, `arc`, `circle`, `ellipse`, `earc`, `rect`, `slot`, `hull`, `disc`, `poly`, `spline`, `tarc`, `close`, `tangent`, `coincident`, `horizontal`, `vertical`, `parallel`, `perpendicular`, `equal`, `midpoint`, `distance`, `radius`, `angle`, `fix`, `concentric`, `collinear`, `symmetric`, `hdistance`, `vdistance`, `extrude`, `cut`, `revolve`, `fillet`, `chamfer`, `shell`, `loft`, `offset`, `rotate`, `edges`, `faces`, `shift`, `hline`, `vline`, `meet`, `mid`, `plane`, `properties` | `interface/forge-lang/src/builtins.rs` `BUILTINS`; part namespace (`builtins::NAMES`, ShadowsBuiltin) | `Builtins.extend_conservative` (with `N` the family; its hypothesis, no refusal-subject binding of the names, checked by lang_coverage::shadow_families_bound_nowhere), `Builtins.resolve_append_off`, `Builtins.shadows_new`; the base list `B` |
 | builtins | `shapes` | `sweep`, `coil`, `draft`, `offset_faces`, `delete_faces`, `replace_face`, `move_faces`, `thicken`, `rib`, `facefillet`, `fullround`, `ball`, `sphere`, `dome` | `shapes.rs` `NAMES`; part namespace (`builtins::NAMES`, ShadowsBuiltin) | `Builtins.extend_conservative` (with `N` the family; its hypothesis, no refusal-subject binding of the names, checked by lang_coverage::shadow_families_bound_nowhere), `Builtins.resolve_append_off`, `Builtins.shadows_new` |
 | builtins | `constants` | `pi`, `X`, `Y`, `Z`, `xy`, `xz`, `yz`, `thru`, `thru_all`, `next`, `axis`, `sym`, `two`, `upto`, `intersect` | `builtins.rs` `CONSTANTS`, `MORE`; part namespace (`builtins::NAMES`, ShadowsBuiltin) | `Builtins.extend_conservative` (with `N` the family; its hypothesis, no refusal-subject binding of the names, checked by lang_coverage::shadow_families_bound_nowhere), `Builtins.resolve_append_off`, `Builtins.shadows_new` |
@@ -109,18 +109,25 @@ extension so far:
 
 | Kind | Item | Names | Rust site | Lean |
 |---|---|---|---|---|
-| args | `schematic::role` | `kind`, `key`, `capacitance_nf`, `voltage_mv`, `prefer` | schematic::ARGS and checked reader | GAP record decoding in Rust |
-| args | `schematic::symbol` | `pins`, `graphics` | schematic::ARGS and checked reader | GAP record decoding in Rust |
-| args | `schematic::pin` | `number`, `kind`, `at`, `angle`, `wants`, `gives`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
-| args | `schematic::line` | `from`, `to`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
-| args | `schematic::rect` | `from`, `to`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
-| args | `schematic::arc` | `from`, `mid`, `to`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::attribute_type` | `label`, `kind`, `modes`, `range`, `units`, `conversions` | named derived value type and defaults | `Schematic.base_unit_identity`, `Schematic.unit_reading_roundtrip` for rational factors and `Schematic.encoding_digit_roundtrip` for positional digits. `Schematic.conversion_chain_roundtrip` covers composition of two reversible partial lookups on admitted values. GAP graph validation and path search, prefix recognition, finite floating-point conversion and catalog elaboration in Rust |
+| args | `schematic::strap_table` | `kind`, `inputs`, `rows`, `default`, `bus`, `range`, `modes`, `label`, `unit` | schematic::ARGS and checked reader | `Schematic.pinless_strap_default`, `Schematic.strap_row_wins`, `Schematic.unresolved_strap`, `Schematic.window_accepts_boundary`, `Schematic.window_rejects_partial_overlap` (integer voltage coordinates). GAP strap decoding and topology refinement |
+| args | `schematic::function` | `kind`, `wants`, `gives`, `specs` | schematic::ARGS and checked reader | `Schematic.selected_function_wants`, `Schematic.selected_function_gives`. GAP record decoding in Rust |
+| args | `schematic::annotation` | `occurrence`, `reference`, `locked` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::variant` | `omit`, `fit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::erc_rule` | `rule`, `severity` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::waiver` | `rule`, `objects`, `reason` | schematic::ARGS and checked reader | `Schematic.adding_waiver_preserves_other_finding`. GAP record decoding in Rust |
+| args | `schematic::role` | `kind`, `key`, `capacitance_nf`, `voltage_mv`, `voltage_range_v`, `prefer`, `connect_to`, `through`, `part_path`, `value`, `value_range` | schematic::ARGS and checked reader | `Schematic.acceptsVoltage_iff` for inclusive voltage ranges. `Schematic.direct_connection_iff` for direct wants. `Schematic.one_bridge_witness` and `Schematic.short_bypasses_bridge` cover one-hop matching on partitioned nets. GAP record decoding in Rust |
+| args | `schematic::symbol` | `pins`, `graphics`, `fields`, `field_types`, `visibility`, `datasheet`, `power_net`, `ref_prefix`, `peripherals`, `strap_tables`, `part_kind`, `paths`, `specs` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::pin` | `number`, `kind`, `at`, `angle`, `wants`, `gives`, `unit`, `description`, `aliases`, `functions`, `pads`, `specs` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::line` | `from`, `to`, `unit`, `sheet`, `width` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::rect` | `from`, `to`, `unit`, `sheet`, `width` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::arc` | `from`, `mid`, `to`, `unit`, `sheet`, `width` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::polyline` | `points`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
-| args | `schematic::circle` | `at`, `radius`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::circle` | `at`, `radius`, `unit`, `sheet`, `width` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::text` | `at`, `value`, `unit` | schematic::ARGS and checked reader | GAP record decoding in Rust |
-| args | `schematic::library` | `file` | schematic::ARGS and checked reader | GAP record decoding in Rust |
-| args | `schematic::sheet` | `title` | schematic::ARGS and checked reader | GAP record decoding in Rust |
-| args | `schematic::place` | `sheet`, `symbol`, `unit`, `value`, `footprint`, `at`, `angle`, `mirror` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::library` | `file` | schematic::ARGS and checked reader | `Schematic.nested_qualification`, `Schematic.nested_shared_role`. GAP record decoding in Rust |
+| args | `schematic::sheet` | `title`, `template` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::place` | `sheet`, `symbol`, `unit`, `value`, `footprint`, `fields`, `visibility`, `datasheet`, `populated`, `in_bom`, `ref_offset`, `value_offset`, `wants`, `gives`, `at`, `angle`, `mirror`, `functions`, `reference`, `bindings`, `spec_limits` | schematic::ARGS and checked reader | `Schematic.effective_wants` and `Schematic.effective_gives` for role inheritance. GAP record decoding in Rust |
 | args | `schematic::gate` | `sheet`, `of`, `unit`, `at`, `angle`, `mirror` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::subsheet` | `sheet`, `of`, `at`, `ports` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::junction` | `sheet`, `at` | schematic::ARGS and checked reader | GAP record decoding in Rust |
@@ -128,8 +135,9 @@ extension so far:
 | args | `schematic::wire` | `sheet`, `from`, `to`, `via` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::label` | `sheet`, `on`, `value`, `global`, `at` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::no_connect` | `sheet`, `on` | schematic::ARGS and checked reader | GAP record decoding in Rust |
-| args | `schematic::note` | `sheet`, `at`, `value` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::note` | `sheet`, `at`, `value`, `size`, `bold` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::flow` | `sheet`, `from`, `to` | schematic::ARGS and checked reader | GAP record decoding in Rust |
+| args | `schematic::diff_pair` | `sheet`, `positive`, `negative` | schematic::ARGS and checked reader | `Schematic.pair_keeps_polarity` under unchanged endpoint partition. GAP record decoding in Rust |
 | args | `schematic::bus` | `sheet`, `members` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `schematic::fulfill` | `sheet`, `want`, `give`, `role`, `return_from`, `return_to`, `prefer` | schematic::ARGS and checked reader | GAP record decoding in Rust |
 | args | `cam::part` | `#0`, `group`, `material` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
@@ -234,6 +242,14 @@ scope).
 | Kind | Item | Names | Why | Lean |
 |---|---|---|---|---|
 | not-names | `interface/forge-cam-lang/src/lib.rs::GEN3D` | | the 3D generator op kinds `Cam::prefetch` makes ahead (a subset of the `cam` family's op names, which name them), not names in scope | not a namespace |
+| not-names | `interface/forge-lang/src/pcb/layers.rs::DOT` | | keyword arguments of `layer_dot` | argument labels |
+| not-names | `interface/forge-lang/src/pcb/layers.rs::LINE` | | keyword arguments of `layer_line` | argument labels |
+| not-names | `interface/forge-lang/src/pcb/layers.rs::REGION` | | keyword arguments of `layer_region` | argument labels |
+| not-names | `interface/forge-lang/src/pcb/layers.rs::TEXT` | | keyword arguments of `layer_text` | argument labels |
+| not-names | `interface/forge-lang/src/pcb/reader_layout.rs::FOOTPRINT_ARGS` | | keyword arguments of `footprint` | argument labels |
+| not-names | `interface/forge-lang/src/schematic/characteristics.rs::CURVE_BASES` | | source categories on measured datasheet traces | string values |
+| not-names | `interface/forge-lang/src/schematic/characteristics.rs::CURVE_SCALES` | | display scales for the axes of a datasheet trace | string values |
+| not-names | `interface/forge-lang/src/schematic/characteristics.rs::CLASSES` | | Datasheet rating-class metadata inside records | `Schematic.no_declared_bounds_no_violation`, `Schematic.upper_bound_inclusive`, `Schematic.missing_field_blocks_comparison`, `Schematic.complete_inputs_eligible`. GAP record decoding, SI scaling and conditional measurement semantics in Rust |
 | not-names | `interface/forge-cam-lang/src/toollog.rs::FLAGS` | | the `toollog` command's switches (`--json`, ..), command-line words, not .fg | not a namespace |
 | not-names | `interface/forge-cam-lang/src/toollog.rs::VALUED` | | the `toollog` command's options that take a value (`--tool`, ..), command-line words, not .fg | not a namespace |
 | not-names | `interface/forge-lang/src/anchors.rs::FACE_ROLES` | | members a feature's faces are found by (read after `.`), not names in scope | not a namespace |
@@ -249,7 +265,10 @@ scope).
 | not-names | `interface/forge-lang/src/explode.rs::SCREWS` | | standard screw file names | not a namespace |
 | not-names | `interface/forge-lang/src/fuzz.rs::UNREAD` | | error kinds (the fuzzer's) | not a namespace |
 | not-names | `interface/forge-lang/src/harness.rs::CSV_COLUMNS` | | wire-list CSV columns | not a namespace |
+| not-names | `interface/forge-lang/src/schematic/mod.rs::PART_KINDS` | | component type suggestions for string-valued fields | open classification vocabulary |
 | not-names | `interface/forge-lang/src/harness.rs::PLAIN` | | harness library CSV columns | not a namespace |
+| not-names | `interface/forge-lang/src/schematic/mod.rs::DISPLAY_FIELDS` | | text field visibility keys | not a namespace |
+| not-names | `interface/forge-lang/src/pcb/reader_layout.rs::PAD_ARGS` | | keyword arguments of a footprint pad | not a namespace |
 | not-names | `interface/forge-lang/src/holes.rs::HOLE_ARGS` | | keyword arguments of `hole` | not a namespace |
 | not-names | `interface/forge-lang/src/holes.rs::HOLE_CLASSES` | | the ISO 286 hole classes `hole(.., fit:)` takes on a plain hole (string values, recorded for CAM's ream; no geometry) | not a namespace |
 | not-names | `interface/forge-lang/src/holes.rs::THREAD_FORMS` | | keyword arguments of `thread` | not a namespace |

@@ -4,6 +4,27 @@ Design proposal · 25 November 2026
 
 A designer draws a circuit, places it on a board, installs the board in an assembly and connects a harness. Throughout that work ForgeCAD can answer three questions about a selected object: what it is connected to, why it is placed there, and what the last edit changed. The native document is `.fg`. The graphical editor, text editor, CLI and MCP share the same typed model and edit operations. This record describes the proposed electronics tools and the evidence needed to ship them.
 
+The [PCB layout backend and manufacturer-rule study](pcb-layout-rules.md) records verified schematic handoff gaps, fabrication-service comparisons, real-board measurements and the first physical-layout acceptance fixture.
+
+The routing study covers interface-specific quality, rule precedence, negotiated routing and an executable evaluation for AI-generated routes. [Routing quality, priority and AI control](routing-strategy.md)
+
+## Named derived attributes
+
+A symbol can publish several named attributes. Each strap table defines one attribute. The symbol editor lets the librarian choose the participating pins, name their possible states, enter datasheet rows, and give an optional default. A default needs no pin. A symbol with zero pins can publish several constant attributes. Text, seven-bit I²C addresses and current in amperes have typed results. A fitted instance shows its own computed value in Properties.
+
+A state can mean tied to another physical pin of the same instance (for example VSS, VDD, SDA or SCL) or explicitly open. The schematic resolves the net membership and a single fitted resistor with a known resistance. A complete pattern picks its row. An observed combination with no row uses the default if available. An ambiguous input keeps the value unresolved. The handoff includes the matched state and evidence terminals, so an agent can explain which optional resistor selects an address. Address ERC compares both fitted bus nets and the decoded integer. Current and boot-mode checks use the limits or choices declared on the attribute. Each writable truth table opens from the symbol’s attribute list. The schematic displays the resolved values according to inherited field visibility. The example uses illustrative register addresses and current settings. [Runnable strap example](../../examples/electronics/strap-attributes.fg)
+
+## Physical layout opportunities
+
+- **Review the electrical effect of an edit.** Keep each bypass capacitor associated with the intended supply and return pins through placement, routing and reannotation. Compare the old and new pad distance, copper connection and reference-plane coverage. A designer can inspect the affected pins and geometry even when several capacitors share a rail.
+- **Explain a BGA escape bottleneck.** Count legal tracks through a selected passage under a specific stack and fab process. Preview the change from rotating the package, changing the via construction or selecting a permitted pin swap. Surface any resulting firmware or FPGA remap.
+- **Check the installed connector and test access.** Sweep the mating plug through its insertion stroke and test the cable bend against the enclosure. Distinguish production-probe access on the assembled PCB from service-probe access after installation.
+- **Leave room for high-speed analysis.** Preserve package and layer delay, differential path identity, return-reference transitions and the mounted power loop. Timing budgets, impedance versus frequency and current-return simulation each require their own model and evidence. [Competitive references and proposed experiments](pcb-layout-rules.md#opportunities-worth-testing-with-designers)
+
+The native rigid-board backend now runs a schematic-linked design through footprint placement, poured copper and physical connectivity to a fabrication ZIP. Mask, paste and silkscreen each have inspectable geometry on both faces. A four-layer test assembly exercises those layers and independently recovers the intended nets from plotted copper and drill data. [Implemented scope and readback](pcb-layout-rules.md#implemented-board-foundation) · [Fabrication fixture](../../examples/electronics/fabrication-controller.fg)
+
+The native PCB Layout document uses the same plotted geometry and vendor service model as CLI and MCP. The layer audit covers paired technical and mechanical drawings, keepouts, drill guides, stack materials and user documentation. The first workspace exercises a routed 8-channel filter bank through the shared shell, properties and file lifecycle. [Layer audit and service coverage](pcb-layout-rules.md#layer-audit-and-editor-contract) · [Editor fixture](../../examples/electronics/filter-bank.fg)
+
 ## First milestone
 
 Determine how ForgeCAD can infer **which components serve which pins or functional groups**, and what that implies for placement, from an ordinary hand-drawn schematic. Start with bypass capacitors. Evaluate the inferred assignments against documented reference designs before looking at their layouts. The cross-view contract supports carrying those findings into the PCB. [Worked RP2040 example, inference design and benchmark](design-intent.md#inferring-which-pins-a-capacitor-serves)
@@ -19,9 +40,15 @@ Determine how ForgeCAD can infer **which components serve which pins or function
 
 ## Starting from a pin
 
+Reusable connector symbols default to passive contacts. The schematic placement owns the board-specific pinout and the external circuit's wants and provides. For example, J1 pin 1 can bring 3.3 V into a board while pin 1 on another copy carries a signal. A library may declare a stable interface for a purpose-built connector. Electrical ratings of the hardware describe the contact's limits and are separate from the external supply available on a placement.
+
+A pin can require a direct connection to a specific pin or one hop through a fitted component of any declared part type or a particular library symbol. Library symbols can define ordered terminal paths, for example drain to source on a MOSFET or one contact pair on a relay. Optional nominal bounds constrain the component’s value. The schematic checks these wants against the partitioned nets on each occurrence and retains the witnessing terminals for inspection. [Connection wants](../../docs/schematic.md#pin-to-pin-connection-wants)
+
 Selecting a pin exposes what its library definition wants and gives. Both may apply to one pin. A regulator output gives power and can want a local output capacitor. A passive terminal acquires a job when it fulfills a particular want. **Add bypass capacitor** should create the occurrence, connect supply and return, and record which pin or pin group it serves in one undoable source edit. The designer can make the same connection freehand and inspect suggested associations.
 
-A want or give names a **declared role type**. For example, a regulator pin can give a 3.3 V rail and want a 100 nF bypass at the same time. Roles carry a stable identity, a checked kind and optional typed ratings. A fulfillment must match the same role identity at both endpoints. Libraries share an identity explicitly. CLI, canvas and MCP consumers read the same structured role objects, including units. The [native schematic reference](../../docs/schematic.md) gives the declarations and wire format.
+In the current backend, a want or give names a **declared role type**. For example, a regulator pin can give a 3.3 V rail and want a 100 nF bypass at the same time. Roles carry a stable identity, a checked kind and optional typed ratings. A fulfillment must match the same role identity at both endpoints. Libraries share an identity explicitly. CLI, canvas and MCP consumers read the same structured role objects, including units. The [native schematic reference](../../docs/schematic.md) gives the declarations and wire format.
+
+Supply pins now declare accepted voltage ranges. The next design adds function-specific resistance through a fitted device, internal bias and applicable operating state. Each checklist result identifies the quantities and physical pins that justify it. [Datasheet requirements and alternate pin functions](design-intent.md#datasheet-requirements-and-alternate-pin-functions)
 
 Show a rooted view from any selected pin. Keep electrical attachments undirected, distinguish ordered functional stages from parallel peers, and represent shared nodes or feedback edges by reference. Reversing a wire gesture preserves connectivity and functional intent. PCB placement reads the confirmed endpoints and their preferred metric, including after reannotation.
 
@@ -45,3 +72,47 @@ The first professional pilot should use a previously shipped board with its appr
 - Which electronics query should be the first to carry a Lean proof and a Rust differential oracle? The via clearance probe provides a small worked candidate.
 
 The [implementation sequence, fixtures and public operation contracts](backend.md#11-verification-scale-and-sequencing) describe how to grow beyond this first board.
+
+## Editor boundaries and backend readiness
+
+Schematics and symbol libraries are separate editable Forge documents. Opening one selects its own canvas, ribbon, browser and properties in the existing window. This follows the drawing document and tab lifecycle described in the [UI standard](../../docs/ux/STANDARD.md). A schematic places references to library symbols. We call the separately drawn sections of one physical package **sub parts**. U1A and U1B are two sub parts of U1 and count once in the BOM. A library save can refresh the schematic across open tabs. The file on disk is the same source used by the CLI and MCP.
+
+The board should be a third, linked layout document. A package on the board should resolve a physical component occurrence and its logical pin to a footprint and pad. The board should own the stackup, footprints, routing and physical constraints. Its generated mechanical representation can then be placed in an assembly and expose connector interfaces to a harness. Keep preferred component proximity and return paths attached to typed schematic relationships so they survive movement on a sheet. Implement persistent physical identity and pin-to-pad resolution before offering a board workspace.
+
+| Area | Available in this implementation | Work still needed |
+| --- | --- | --- |
+| Symbols and parts | Nested project libraries with searchable namespaces, bundled power symbols, sub parts, alternate pin functions, typed component classes and terminal paths, physical pad assignments, fields and datasheets | Searchable managed catalogs, lifecycle and approved alternates, footprint library and validation against actual copper pad geometry |
+| Schematics | Sheet hierarchy and templates, searchable PDF export, electrical and readability rules with scoped waivers, project search, locked occurrence-specific references, block editing, wire dragging and checked symbol replacement | Cross-probing between the schematic and physical layout |
+| Purchasing | Inherited fields, bulk placement-field edits, content-addressed local PDFs, named assembly variants, grouped BOM and CSV | Supplier data pipelines and release snapshots including referenced assets |
+| Layout and performance | Board handoff with stable occurrence IDs, footprint assignments, pad nets and typed placement preferences | Copper and clearance geometry, routing, placement checking, stable ECO interchange and measured interactive budgets on large designs |
+
+Child libraries carry their own namespace, pin roles and source file. Designs subscribe to transitive library changes. A display reference can change while a wire, variant or board pad continues to address the same occurrence. The [load-switch example](../../examples/electronics/load-switch/switch-card.fg) exercises a custom MOSFET in a nested discrete library and two instances of the same sheet.
+
+The [editing guide](../../docs/schematic.md#editing-in-forgecad) includes the sensor interface example. Backend and GUI tests exercise saving and reopening the source, building the connectivity graph, and resolving the effective BOM. The editor compiles committed changes. The release criteria for frame-rate checking on a populated board still require measurement with actual board geometry.
+
+
+The review set uses the same analog interface in both renderers. It selects schematic components on the canvas and library pins in the symbol editor at three window sizes.
+
+| Window | Desktop | Browser |
+| --- | --- | --- |
+| Schematic, U1 selected, 1600 × 1000 | [Desktop schematic](shots/native-schematic.png) | [Browser schematic](shots/web-schematic.png) |
+| Symbol, VDD selected, 1400 × 860 | [Desktop symbol](shots/native-symbol.png) | [Browser symbol](shots/web-symbol.png) |
+| Schematic, C2 selected, 1024 × 700 | [Compact desktop](shots/native-compact.png) | [Compact browser](shots/web-compact.png) |
+
+The [readability example](shots/native-readability.png) places the note `scope_probe` across the output wire `w7`. Electrical Checks links to each object. Moving the note clear of that wire removes the overlap warning and preserves the electrical net.
+
+The left tree follows sheet occurrences, including repeated instances. The right dock provides part and power search and the selected object's properties. Selecting a pin opens its checklist and highlights the supply or signal side of its typed relationships, including a connected rail marker. Return connectivity contributes to verification independently of the highlight. The signal overlay reuses resolved wire directions as the display clock advances. Arrows and dots can be enabled independently. Decorative sheet geometry shares the print-space readability checks and remains outside the net graph.
+
+[MOSFET and capacitor connection checks](shots/native-pin-connection.png) · [Pin inspection](shots/native-pin-inspection.png) · [Parts browser](shots/native-parts.png) · [Signal animation](shots/signal-directions.gif) · [Drawing tools and grid](shots/native-drawing-grid.png)
+
+[Editing a pin name and direction](shots/native-pin-edit.png) · [Reference prefix in symbol properties](shots/native-reference-prefix.png)
+
+The TLV9001 VDD checklist uses the same library symbol and wiring in both captures. Changing J1.P1 from 3.3 V to 12 V fails only the 1.8–5.5 V supply check. [3.3 V source](shots/web-supply-3300.png) · [12 V source](shots/web-supply-12000.png)
+
+J1 uses a generic two-contact connector. The external supply is declared on its first contact in the schematic. [J1 placement roles](shots/native-connector-roles.png)
+
+### Library-defined attributes and electrical rules
+
+Attribute types and severity policies use the existing nested library mechanism. Several named conversion tables can connect the formats of one attribute type. A library can define Hex to Numeric and Numeric to Binary once, and the editor can translate a truth-table result in either direction through Numeric. Each finite lookup value must have one consistent translation in every declared format. [Register-code library](../../examples/electronics/conversion-chain.fg)
+
+Rust is the electronics library authoring language. The Standard Library composes property, ERC, and DRC packages. A project can also load a version-pinned, locally installed Rust worker. I²C addresses are unique per ordered SDA/SCL net pair and fitted variant. Independent buses may reuse an address. [Libraries and rule authoring](rule-libraries.md)

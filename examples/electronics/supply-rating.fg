@@ -1,0 +1,11 @@
+schematic
+ratings = library(file:"forge:standard/properties/ratings")
+power_review = library(file:"forge:standard/erc/supply_rating")
+rail = role(kind:"power",voltage_range_v:[3.0,3.6])
+Source = symbol(pins:{OUT:pin(number:"1",kind:"power_out",at:(4,0),gives:[rail])})
+Chip = symbol(pins:{VDD:pin(number:"1",kind:"power_in",at:(-4,0))},
+  field_types:{MaxSupply:ratings.maximum_supply_voltage},fields:{MaxSupply:"3600 mV"})
+main = sheet()
+reg = place(sheet:main,symbol:Source,at:(0,0))
+mcu = place(sheet:main,symbol:Chip,at:(30,0),ref_offset:(-4,10))
+feed = wire(sheet:main,from:reg.OUT,to:mcu.VDD)

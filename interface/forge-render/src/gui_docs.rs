@@ -222,6 +222,9 @@ impl Gui {
     /// File > New: an untitled Forge part in a tab of its own, saved where asked on its first
     /// Save.
     pub fn new_document(&mut self) -> usize {
+        self.new_typed_document(DocKind::Part)
+    }
+    pub(super) fn new_typed_document(&mut self, kind: DocKind) -> usize {
         if !self.docs.is_empty() {
             self.sync_tab();
             let mut st = Box::<DocState>::default();
@@ -230,11 +233,40 @@ impl Gui {
             self.after_switch();
         }
         let n = 1 + self.docs.iter().filter(|d| d.path.is_none()).count();
-        let name = format!("Part{n}.fg");
+        let prefix = match kind {
+            DocKind::Pcb => "Board",
+            DocKind::SymbolLibrary => "Symbols",
+            DocKind::Schematic => "Schematic",
+            _ => "Part",
+        };
+        let name = format!("{prefix}{n}.fg");
         let mut d = OpenDoc::new(None, None);
         d.title = name.clone();
         self.docs.push(d);
         self.active = self.docs.len() - 1;
+        if kind == DocKind::Pcb {
+            self.shell.pcb = Some(
+                crate::shell::pcb::Editor::open(None, crate::shell::pcb::NEW_BOARD.into()).expect("new PCB"),
+            );
+            self.shell.name = name;
+            self.shell.tab = 0;
+            self.sync_tab();
+            return self.active;
+        }
+        if matches!(kind, DocKind::SymbolLibrary | DocKind::Schematic) {
+            let src = if kind == DocKind::SymbolLibrary {
+                "symbol_library\n"
+            } else {
+                forge_lang::schematic::NEW_SCHEMATIC
+            };
+            self.shell.electronics = Some(
+                crate::shell::electronics::Editor::open(None, src.into()).expect("new electronics document"),
+            );
+            self.shell.name = name;
+            self.shell.tab = 0;
+            self.sync_tab();
+            return self.active;
+        }
         let gpu = crate::fg::gpu_of(&self.device, &self.queue, &self.adapter);
         let waker = self.waker.clone();
         let waker: Arc<dyn Fn() + Send + Sync> = Arc::new(move || waker());
@@ -251,6 +283,24 @@ impl Gui {
 
     /// Where the host's dialog said an untitled document goes: written there, its tab named so.
     pub fn save_as(&mut self, path: &str) {
+        let saved = if let Some(e) = &mut self.shell.pcb {
+            Some(e.save(path))
+        } else {
+            self.shell.electronics.as_mut().map(|e| e.save(path))
+        };
+        if let Some(saved) = saved {
+            match saved {
+                Ok(()) => {
+                    self.shell.name = name_of(path);
+                    self.docs[self.active].path = Some(path.into());
+                    self.shell.status = format!("Saved {path}");
+                    self.sync_tab();
+                    self.versions_saved(path, None);
+                }
+                Err(why) => self.shell.status = why,
+            }
+            return;
+        }
         if let Some(d) = &mut self.shell.dwgdoc {
             d.save_as(path);
             self.shell.name = d.name.clone();
@@ -381,7 +431,10 @@ impl Gui {
         }
         if save {
             self.fg_save();
-            if self.fg.as_ref().is_some_and(|s| s.dirty()) {
+            if self.fg.as_ref().is_some_and(|s| s.dirty())
+                || self.shell.pcb.as_ref().is_some_and(|e| e.dirty())
+                || self.shell.electronics.as_ref().is_some_and(|e| e.dirty())
+            {
                 return;
             }
         }
@@ -436,8 +489,18 @@ impl Gui {
             } else if !self.shell.name.is_empty() {
                 d.title = self.shell.name.clone();
             }
-            d.dirty = self.fg.as_ref().is_some_and(|s| s.dirty());
-            d.kind = if self.shell.dwgdoc.is_some() {
+            d.dirty = self.fg.as_ref().is_some_and(|s| s.dirty())
+                || self.shell.pcb.as_ref().is_some_and(|e| e.dirty())
+                || self.shell.electronics.as_ref().is_some_and(|e| e.dirty());
+            d.kind = if self.shell.pcb.is_some() {
+                DocKind::Pcb
+            } else if let Some(e) = &self.shell.electronics {
+                if e.library() {
+                    DocKind::SymbolLibrary
+                } else {
+                    DocKind::Schematic
+                }
+            } else if self.shell.dwgdoc.is_some() {
                 DocKind::Dwg
             } else if self.shell.drawing.is_some() {
                 DocKind::Drawing
@@ -562,7 +625,7 @@ fn look(p: &Path) -> Seen {
 
 /// The folder a document's reads are watched inside: the repository it's in (the nearest
 /// folder up with a `.git`), else its own folder.
-fn root_of(path: &str) -> Option<PathBuf> {
+pub(crate) fn root_of(path: &str) -> Option<PathBuf> {
     let dir = folder_of(path)?;
     let repo = dir
         .ancestors()
@@ -672,6 +735,25 @@ impl Gui {
 
     /// A document's own file and what its last build read.
     fn reads_of(&self, i: usize) -> Vec<PathBuf> {
+        let pcb = if i == self.active {
+            self.shell.pcb.as_ref()
+        } else {
+            self.docs[i].state.as_ref().and_then(|s| s.shell.pcb.as_ref())
+        };
+        if let Some(p) = pcb {
+            return p.dependencies();
+        }
+        let elec = if i == self.active {
+            self.shell.electronics.as_ref()
+        } else {
+            self.docs[i]
+                .state
+                .as_ref()
+                .and_then(|s| s.shell.electronics.as_ref())
+        };
+        if let Some(e) = elec {
+            return e.dependencies();
+        }
         let (fg, dwg) = if i == self.active {
             (self.fg.as_ref(), self.shell.drawing.as_ref())
         } else {
@@ -807,6 +889,29 @@ impl Gui {
             }
             let inside = root_of(&path).is_some_and(|r| file.starts_with(r));
             let reads = !own && inside && self.reads_of(i).iter().any(|r| r == file);
+            if own || reads {
+                let pcb = if i == self.active {
+                    self.shell.pcb.as_mut()
+                } else {
+                    self.docs[i].state.as_mut().and_then(|s| s.shell.pcb.as_mut())
+                };
+                if let Some(p) = pcb {
+                    p.reload(own, text.as_deref());
+                    continue;
+                }
+                let e = if i == self.active {
+                    self.shell.electronics.as_mut()
+                } else {
+                    self.docs[i]
+                        .state
+                        .as_mut()
+                        .and_then(|s| s.shell.electronics.as_mut())
+                };
+                if let Some(e) = e {
+                    e.reload(own, text.as_deref());
+                    continue;
+                }
+            }
             let name = self.docs[i].title.clone();
             let (session, drawing, status) = self.doc_parts(i);
             if own {

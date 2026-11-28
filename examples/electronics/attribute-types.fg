@@ -1,0 +1,4 @@
+symbol_library
+# A shared firmware convention, independent of the device's specific boot pins.
+startup_source = attribute_type(label:"Startup source",kind:"choice",
+  modes:["Application flash","Factory ROM","Recovery image","External flash"])

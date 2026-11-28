@@ -1,0 +1,9 @@
+symbol_library
+text = attribute_type(label:"Text", kind:"text", units:[{name:"Unitless",factor:1}])
+address = attribute_type(label:"I²C address", kind:"i2c_address", units:[
+  {name:"Hex",radix:16,prefix:"0x",digits:2,min:0,max:127},{name:"Decimal",radix:10,min:0,max:127},{name:"Binary",radix:2,prefix:"0b",digits:7,min:0,max:127}],
+  conversions:[{name:"Hex to decimal",from:"Hex",to:"Decimal"},{name:"Decimal to binary",from:"Decimal",to:"Binary"}])
+current_limit = attribute_type(label:"Current limit", kind:"current", units:[
+  {name:"A",factor:1,min:0},{name:"mA",factor:0.001,min:0},{name:"µA",factor:0.000001,min:0}])
+boot_mode = attribute_type(label:"Boot mode", kind:"boot_mode", modes:["Flash","ROM bootloader","SRAM"],units:[{name:"Unitless",factor:1}])
+choice = attribute_type(label:"Choice", kind:"choice",units:[{name:"Unitless",factor:1}])

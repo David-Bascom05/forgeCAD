@@ -18,6 +18,12 @@ use winit::window::{ResizeDirection, Window, WindowId};
 /// `--times` says what a frame longer than this spent (ms).
 const SLOW_MS: f64 = 16.0;
 
+struct PendingDatasheet {
+    path: String,
+    id: String,
+    result: std::sync::mpsc::Receiver<Option<Result<Vec<u8>, String>>>,
+}
+
 struct Live {
     window: Arc<Window>,
     surface: wgpu::Surface<'static>,
@@ -192,6 +198,7 @@ pub struct App {
     save_as: Option<std::sync::mpsc::Receiver<Option<String>>>,
     /// File > Export's outcome, said in the status bar.
     exported: Option<std::sync::mpsc::Receiver<String>>,
+    attachment: Option<PendingDatasheet>,
     /// `--present`: how frames go out.
     present: Option<String>,
     /// `--run-for`: leaves by itself then, the orderly way.
@@ -287,6 +294,33 @@ impl App {
                 }
                 Action::ResizeWindow(e) => {
                     let _ = l.window.drag_resize_window(resize_direction(e));
+                }
+                Action::AttachDatasheet => {
+                    let Some((path, id)) = l
+                        .gui
+                        .shell
+                        .electronics
+                        .as_ref()
+                        .and_then(|e| e.attachment_target())
+                    else {
+                        continue;
+                    };
+                    let (tx, rx) = std::sync::mpsc::channel();
+                    self.attachment = Some(PendingDatasheet { path, id, result: rx });
+                    let proxy = self.proxy.clone();
+                    std::thread::spawn(move || {
+                        let picked = rfd::FileDialog::new()
+                            .add_filter("PDF datasheet", &["pdf"])
+                            .pick_file();
+                        let _ = tx.send(picked.map(|p| {
+                            forge_lang::deps::read_plain(
+                                &p,
+                                forge_lang::schematic::datasheet::MAX_PDF_BYTES as u64,
+                            )
+                            .map_err(|_| "Cannot read PDF (32 MiB limit)".to_string())
+                        }));
+                        let _ = proxy.send_event(());
+                    });
                 }
                 Action::SaveAs => {
                     let (send, recv) = std::sync::mpsc::channel();
@@ -465,6 +499,17 @@ impl ApplicationHandler for App {
     }
 
     fn user_event(&mut self, _: &ActiveEventLoop, _: ()) {
+        if let Some(attachment) = &self.attachment
+            && let Ok(got) = attachment.result.try_recv()
+        {
+            let PendingDatasheet { path, id, .. } = self.attachment.take().unwrap();
+            if let (Some(bytes), Some(l)) = (got, &mut self.live) {
+                if let Err(why) = bytes.and_then(|b| l.gui.attach_pdf(&path, &id, &b)) {
+                    l.gui.shell.status = why;
+                }
+                l.window.request_redraw();
+            }
+        }
         if let Some(d) = &self.save_as
             && let Ok(got) = d.try_recv()
         {
@@ -693,6 +738,7 @@ pub fn run(
         dialog: None,
         save_as: None,
         exported: None,
+        attachment: None,
         present,
         run_until: run_for.map(|s| Instant::now() + std::time::Duration::from_secs_f64(s)),
         spin,

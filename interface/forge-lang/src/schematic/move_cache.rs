@@ -5,6 +5,9 @@ use super::*;
 /// Expressions are bracketed by their original parentheses, with identical bytes on both sides.
 /// This keeps the surrounding tokens unchanged. All other edits go through the complete reader.
 pub(super) fn update(last: &mut Compiled, src: &str) -> bool {
+    if last.doc.packages.custom_erc() {
+        return false;
+    }
     let start = last
         .src
         .bytes()
@@ -49,32 +52,50 @@ pub(super) fn update(last: &mut Compiled, src: &str) -> bool {
     *at = pos;
     let def = &last.doc.symbols[symbol.as_str()];
     let c = &mut last.circuit;
-    let scopes: Set<&str> = c
+    let scopes: Set<String> = c
         .occurrences
         .iter()
         .filter(|(_, sheet)| **sheet == row.sheet)
-        .map(|(k, _)| k.as_str())
+        .map(|(k, _)| k.clone())
         .collect();
+    let mut changed = Set::new();
     c.issues.retain(|i| {
-        i.kind != "TextBoundsOverlap"
+        !matches!(i.kind, "TextBoundsOverlap" | "TextGeometryOverlap")
             || !i.objects[0]
                 .rsplit_once('/')
                 .is_some_and(|(path, _)| scopes.contains(path))
     });
-    for scope in scopes {
-        let boxes = c.text_bounds.get_mut(scope).expect("sheet bounds");
+    for scope in &scopes {
         for (name, pin) in def.pins.iter().filter(|(_, p)| p.unit == *unit) {
             let key = format!("{scope}/{}.{name}", row.id);
             let location = graph::transform(pin.at, pos, *angle, *mirror);
             c.terminals.get_mut(&key).expect("placed pin").at = location;
             c.locations.insert(key.clone(), location);
-            let (tip, label) = drawing::pin_label(pin, name);
-            boxes.insert(
-                key,
-                drawing::bounds(graph::transform(tip, pos, *angle, *mirror), &label, 0.8),
-            );
+            changed.insert(key);
         }
-        drawing::check_text(boxes, &mut c.issues);
+    }
+    let moved_wires: Vec<_> = c
+        .wires
+        .iter()
+        .filter(|(_, (a, b, _))| changed.contains(a) || changed.contains(b))
+        .map(|(id, _)| id.clone())
+        .collect();
+    changed.extend(moved_wires);
+    c.issues.retain(|i| {
+        !matches!(i.kind, "WireNearPin" | "WireOverlap") || !i.objects.iter().any(|id| changed.contains(id))
+    });
+    let sheet = row.sheet.clone();
+    let rows = last
+        .doc
+        .rows
+        .iter()
+        .filter(|r| r.sheet == sheet)
+        .collect::<Vec<_>>();
+    for scope in &scopes {
+        let findings = drawing::readability(&last.doc, c, scope, &rows);
+        c.issues.extend(findings);
+        c.issues
+            .extend(super::wire_readability::findings(c, scope, Some(&changed)));
     }
     c.sort_findings();
     if delta != 0 {

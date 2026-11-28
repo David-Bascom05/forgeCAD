@@ -1,0 +1,28 @@
+footprint_library
+# 0805 two-terminal land pattern. Physical bodies and assembly artwork follow placement.
+chip0805 = footprint(
+    pads: [smd(number: "1", at: (-0.95,0), size: (1.05,1.2), mask: 0.04mm, paste: -0.04mm),
+           smd(number: "2", at: (0.95,0), size: (1.05,1.2), mask: 0.04mm, paste: -0.04mm)],
+    courtyard: [(-1.65,-0.82),(1.65,-0.82),(1.65,0.82),(-1.65,0.82)],
+    artwork: [layer_line(layer: "fab", points: [(-1,-0.625),(1,-0.625),(1,0.625),(-1,0.625),(-1,-0.625)], width: 0.1mm),
+              layer_text(layer: "designator", at: (2,0), value: "{ref}", height: 0.7mm, width: 0.1mm)])
+
+chip0603 = footprint(
+    pads: [smd(number: "1", at: (-0.67,0), size: (0.75,0.88), mask: 0.04mm, paste: -0.04mm),
+           smd(number: "2", at: (0.67,0), size: (0.75,0.88), mask: 0.04mm, paste: -0.04mm)],
+    courtyard: [(-1.22,-0.61),(1.22,-0.61),(1.22,0.61),(-1.22,0.61)],
+    artwork: [layer_line(layer: "fab", points: [(-0.8,-0.4),(0.8,-0.4),(0.8,0.4),(-0.8,0.4),(-0.8,-0.4)], width: 0.1mm),
+              layer_text(layer: "designator", at: (2,0), value: "{ref}", height: 0.7mm, width: 0.1mm)])
+
+header9 = footprint(pads: [
+    pth(number: "1", at: (0,0.00), size: (1.7,1.7), shape: "rect", drill: 1mm, mask: 0.04mm),
+    pth(number: "2", at: (0,2.54), size: (1.7,1.7), shape: "round", drill: 1mm, mask: 0.04mm),
+    pth(number: "3", at: (0,5.08), size: (1.7,1.7), shape: "round", drill: 1mm, mask: 0.04mm),
+    pth(number: "4", at: (0,7.62), size: (1.7,1.7), shape: "round", drill: 1mm, mask: 0.04mm),
+    pth(number: "5", at: (0,10.16), size: (1.7,1.7), shape: "round", drill: 1mm, mask: 0.04mm),
+    pth(number: "6", at: (0,12.70), size: (1.7,1.7), shape: "round", drill: 1mm, mask: 0.04mm),
+    pth(number: "7", at: (0,15.24), size: (1.7,1.7), shape: "round", drill: 1mm, mask: 0.04mm),
+    pth(number: "8", at: (0,17.78), size: (1.7,1.7), shape: "round", drill: 1mm, mask: 0.04mm),
+    pth(number: "9", at: (0,20.32), size: (1.7,1.7), shape: "round", drill: 1mm, mask: 0.04mm)],
+    courtyard: [(-1.5,-1.5),(1.5,-1.5),(1.5,21.82),(-1.5,21.82)],
+    legend: [silk_line(points: [(-1.22,-1.22),(1.22,-1.22),(1.22,21.54),(-1.22,21.54),(-1.22,-1.22)],width: 0.14mm)])

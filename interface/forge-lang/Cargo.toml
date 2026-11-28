@@ -47,8 +47,10 @@ forge-units = { path = "../forge-units" }
 forge-asm = { path = "../../kernel/forge-asm" }
 forge-draw = { path = "../../kernel/forge-draw" }
 
-[dev-dependencies]
+forge-cam-geom = { path = "../../kernel/forge-cam-geom" }
 forge-dwg = { path = "../../kernel/forge-dwg" }
+
+[dev-dependencies]
 forge-refold = { path = "../../verify/forge-refold" }
 
 [lints]

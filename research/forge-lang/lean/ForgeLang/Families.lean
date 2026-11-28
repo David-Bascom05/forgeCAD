@@ -479,7 +479,7 @@ def robotValue : List Name := ["pose", "box", "cylinder", "capsule", "sphere", "
 def schematicFns : List Name :=
   ["role", "symbol", "pin", "line", "rect", "arc", "polyline", "circle", "text", "library",
    "sheet", "place", "gate", "subsheet", "junction", "port", "wire", "label", "no_connect",
-   "note", "flow", "bus", "fulfill"]
+   "note", "flow", "diff_pair", "bus", "fulfill", "waiver", "erc_rule", "variant", "function", "strap_table", "attribute_type", "annotation"]
 
 /-- The document headers that are names, not keywords (`drawing` and `harness` are keywords). -/
 def headers : List Name := ["machining", "assembly", "robot", "bending", "schematic", "symbol_library"]

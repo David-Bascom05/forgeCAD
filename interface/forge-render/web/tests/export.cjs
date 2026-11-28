@@ -13,8 +13,6 @@ const path = require("node:path");
 const t = require("./lib.cjs");
 
 const at = {
-  file: [33, 55],
-  exportStl: [60, 217],
   weldmentsTab: [363, 55],
   cutList: [343, 110],
   exportCsv: [603, 710],
@@ -33,11 +31,10 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
     await t.loaded(p);
 
     // File > Export STL: a binary STL in the downloads
-    await p.mouse.click(...at.file);
-    await pause(800);
-    const got = p.waitForEvent("download", { timeout: 120000 });
-    await p.mouse.click(...at.exportStl);
-    const d = await got;
+    const [d] = await Promise.all([
+      p.waitForEvent("download", { timeout: 120000 }),
+      t.fileMenuItem(p, "Export STL"),
+    ]);
     assert.equal(d.suggestedFilename(), "gate_frame.stl");
     const stl = fs.readFileSync(await d.path());
     const tris = stl.readUInt32LE(80);
