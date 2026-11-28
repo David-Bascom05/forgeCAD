@@ -1297,8 +1297,8 @@ impl Body {
         })
     }
 
-    fn chunk(&self, c: usize) -> &Chunk {
-        self.hulls().chunks[c].get_or_init(|| {
+    fn chunk<'a>(&self, h: &'a FaceHulls, c: usize) -> &'a Chunk {
+        h.chunks[c].get_or_init(|| {
             let mut ch = Chunk {
                 hull: Box3::EMPTY,
                 live: 0,
@@ -1316,22 +1316,22 @@ impl Body {
         })
     }
 
-    fn block_box(&self, k: usize) -> Box3 {
-        let h = self.hulls();
-        *h.blocks[k].get_or_init(|| {
+    fn block_box<'a>(&self, h: &'a FaceHulls, k: usize) -> &'a Box3 {
+        h.blocks[k].get_or_init(|| {
             (k * RUN..(k * RUN + RUN).min(h.chunks.len()))
-                .fold(Box3::EMPTY, |b, c| b.hull(&self.chunk(c).hull))
+                .fold(Box3::EMPTY, |b, c| b.hull(&self.chunk(h, c).hull))
         })
     }
 
     /// A box holding every live face.
     pub fn faces_box(&self) -> Box3 {
-        (0..self.hulls().blocks.len()).fold(Box3::EMPTY, |b, k| b.hull(&self.block_box(k)))
+        let h = self.hulls();
+        (0..h.blocks.len()).fold(Box3::EMPTY, |b, k| b.hull(self.block_box(h, k)))
     }
 
     /// `face_box` of a live face, empty for a removed one, as kept with the hulls.
     pub fn live_face_box(&self, f: FaceId) -> Box3 {
-        self.chunk(f.index() / RUN).boxes[f.index() % RUN]
+        self.chunk(self.hulls(), f.index() / RUN).boxes[f.index() % RUN]
     }
 
     /// The live faces whose boxes `hit` accepts, in id order. A run of faces is passed over when
@@ -1342,9 +1342,9 @@ impl Body {
     ) -> impl Iterator<Item = FaceId> + 'a {
         let h = self.hulls();
         (0..h.blocks.len())
-            .filter(move |&k| hit(&self.block_box(k)))
+            .filter(move |&k| hit(self.block_box(h, k)))
             .flat_map(move |k| k * RUN..(k * RUN + RUN).min(h.chunks.len()))
-            .map(move |c| (c, self.chunk(c)))
+            .map(move |c| (c, self.chunk(h, c)))
             .filter(move |(_, ch)| hit(&ch.hull))
             .flat_map(move |(c, ch)| {
                 (0..RUN)

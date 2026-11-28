@@ -3,7 +3,7 @@
 //! (`table_choose`), so what is left is the hand-written part: the stack driver in syntax.rs, its
 //! actions and the lexer. Here, on every generated input, after the lexer:
 //!
-//! - `reference`, a line-by-line port of Lean's `parse` (LL1/Proof.lean) on TABLE, gives the
+//! - `reference`, an explicit-stack port of Lean's `parse` (LL1/Proof.lean) on TABLE, gives the
 //!   tree or none. Its answers are the Lean oracle's (`lake exe fgparse`, Oracle/Parse.lean), by
 //!   a digest of every answer kept in tests/parse_diff.digest. `FG_LEAN=1` runs the oracle,
 //!   compares answer by answer and rewrites the digest.
@@ -67,10 +67,11 @@ fn render(w: &[u8], mut v: impl FnMut() -> usize) -> String {
     out
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 enum T {
     Leaf(usize),
-    Node(usize, Vec<T>),
+    // Rule and index of its first child in the arena.
+    Node(usize, usize),
 }
 
 /// Lean's `choose` on `la`: TABLE for a token (`table_choose`); at the end of the input, the empty
@@ -90,130 +91,157 @@ fn choose(a: usize, la: Option<u8>) -> Option<usize> {
     }
 }
 
-/// Lean's `parse G T n X w`, with `w` as `w[k..]`.
-fn parse_sym(n: usize, x: u8, w: &[u8], k: usize) -> Option<(T, usize)> {
-    let n = n.checked_sub(1)?;
-    if x < table::NT_BASE {
-        return (w.get(k) == Some(&x)).then_some((T::Leaf(k), k + 1));
-    }
-    let r = choose((x - table::NT_BASE) as usize, w.get(k).copied())?;
-    let (f, k) = parse_seq(n, table::RHS[r], w, k)?;
-    Some((T::Node(r, f), k))
-}
-
-/// Lean's `parseF`.
-fn parse_seq(n: usize, alpha: &[u8], w: &[u8], k: usize) -> Option<(Vec<T>, usize)> {
-    let n = n.checked_sub(1)?;
-    let Some((&x, rest)) = alpha.split_first() else {
-        return Some((Vec::new(), k));
-    };
-    let (t, k) = parse_sym(n, x, w, k)?;
-    let (mut f, k) = parse_seq(n, rest, w, k)?;
-    f.insert(0, t);
-    Some((f, k))
-}
-
-/// Oracle/Parse.lean's `answer`, as the tree.
-fn reference(w: &[u8]) -> Option<T> {
-    let n = (w.len() + 2) * (table::NN + 2);
-    let go = |n| match parse_sym(n, table::NT_BASE, w, 0) {
-        Some((t, k)) if k == w.len() => Some(t),
-        _ => None,
-    };
-    go(n).or_else(|| go(4 * n))
-}
-
-fn preorder(t: &T, out: &mut Vec<usize>) {
-    if let T::Node(r, f) = t {
-        out.push(*r);
-        for c in f {
-            preorder(c, out);
+/// Expand Lean's `parse` and `parseF` on a heap stack. For an RHS of length m,
+/// the i-th symbol receives fuel n-2-i, and the final empty sequence still needs one unit.
+fn parse_with_fuel(w: &[u8], fuel: usize) -> Option<Vec<T>> {
+    let mut tree = vec![T::Leaf(0)];
+    let mut pending = vec![(0, table::NT_BASE, fuel)];
+    let mut k = 0;
+    while let Some((slot, symbol, fuel)) = pending.pop() {
+        if fuel == 0 {
+            return None;
         }
-    }
-}
-
-/// Oracle/Parse.lean's answer line.
-fn answer(t: &Option<T>) -> String {
-    match t {
-        None => "0".into(),
-        Some(t) => {
-            let mut p = Vec::new();
-            preorder(t, &mut p);
-            let mut s = "1".to_string();
-            for r in p {
-                write!(s, " {r}").unwrap();
+        if symbol < table::NT_BASE {
+            if w.get(k) != Some(&symbol) {
+                return None;
             }
-            s
+            tree[slot] = T::Leaf(k);
+            k += 1;
+        } else {
+            let rule = choose((symbol - table::NT_BASE) as usize, w.get(k).copied())?;
+            let rhs = table::RHS[rule];
+            fuel.checked_sub(rhs.len() + 2)?;
+            let first = tree.len();
+            tree[slot] = T::Node(rule, first);
+            tree.resize(first + rhs.len(), T::Leaf(0));
+            for (i, &child) in rhs.iter().enumerate().rev() {
+                pending.push((first + i, child, fuel - 2 - i));
+            }
         }
     }
+    (k == w.len()).then_some(tree)
 }
 
-fn nt(t: &T) -> &'static str {
-    match t {
-        T::Node(r, _) => table::NONTERMS[table::LHS[*r] as usize],
-        T::Leaf(_) => "",
-    }
+fn reference(w: &[u8]) -> Option<Vec<T>> {
+    let fuel = (w.len() + 2) * (table::NN + 2);
+    parse_with_fuel(w, fuel).or_else(|| parse_with_fuel(w, 4 * fuel))
 }
 
-fn kids(t: &T) -> &[T] {
-    match t {
-        T::Node(_, f) => f,
+fn kids(tree: &[T], node: T) -> &[T] {
+    match node {
+        T::Node(rule, first) => &tree[first..first + table::RHS[rule].len()],
         T::Leaf(_) => &[],
     }
 }
 
-/// The reference tree printed with every operation in brackets.
-fn bracketed(t: &T, toks: &[syntax::Tok], src: &str) -> String {
-    let p = |t: &T| bracketed(t, toks, src);
-    let f = kids(t);
-    match (t, nt(t)) {
-        (T::Leaf(k), _) => {
-            let s = toks[*k].span;
-            src[s.lo as usize..s.hi as usize].to_string()
+/// Oracle/Parse.lean's answer line, in preorder.
+fn answer(tree: &Option<Vec<T>>) -> String {
+    let Some(tree) = tree else { return "0".into() };
+    let mut out = String::from("1");
+    let mut pending = vec![tree[0]];
+    while let Some(node) = pending.pop() {
+        if let T::Node(rule, _) = node {
+            write!(out, " {rule}").unwrap();
+            pending.extend(kids(tree, node).iter().rev());
         }
-        (_, "expr") => match kids(&f[1]) {
-            [_, c, _, e] => format!("(({}) if ({}) else ({}))", p(&f[0]), p(c), p(e)),
-            _ => p(&f[0]),
-        },
-        (_, "or" | "and" | "cmp" | "add" | "mul") => {
-            let mut acc = p(&f[0]);
-            let mut rest = &f[1];
-            while let [op, x, more] = kids(rest) {
-                acc = format!("(({acc}) {} ({}))", p(op), p(x));
-                rest = more;
+    }
+    out
+}
+
+/// Print the tree with every operation bracketed. Grammar lists can be as deep as the
+/// document is long, so pending text and nodes live on the heap here too.
+fn bracketed(tree: &[T], toks: &[syntax::Tok], src: &str) -> String {
+    #[derive(Clone, Copy)]
+    enum Piece {
+        Visit(T),
+        Text(&'static str),
+    }
+    use Piece::{Text, Visit};
+
+    let mut out = String::new();
+    let mut pending = vec![Visit(tree[0])];
+    let mut suffix = Vec::new();
+    while let Some(piece) = pending.pop() {
+        let node = match piece {
+            Text(s) => {
+                out.push_str(s);
+                continue;
             }
-            acc
-        }
-        (_, "not" | "unary") if f.len() == 2 => format!("({} ({}))", p(&f[0]), p(&f[1])),
-        (_, "range" | "power") => match kids(&f[1]) {
-            [op, x] => format!("(({}) {} ({}))", p(&f[0]), p(op), p(x)),
-            _ => p(&f[0]),
-        },
-        (_, "postfix") => {
-            let mut acc = p(&f[0]);
-            let mut rest = &f[1];
-            loop {
-                match kids(rest) {
-                    [open, mid, close, more] => {
-                        acc = format!("({acc}){}{}{}", p(open), p(mid), p(close));
-                        rest = more;
-                    }
-                    [dot, name, more] => {
-                        acc = format!("({acc}){}{}", p(dot), p(name));
-                        rest = more;
-                    }
-                    _ => break,
+            Visit(T::Leaf(k)) => {
+                let span = toks[k].span;
+                out.push_str(&src[span.lo as usize..span.hi as usize]);
+                continue;
+            }
+            Visit(node) => node,
+        };
+        let T::Node(rule, _) = node else { unreachable!() };
+        let f = kids(tree, node);
+        suffix.clear();
+        match table::NONTERMS[table::LHS[rule] as usize] {
+            "expr" => {
+                if let &[_, c, _, e] = kids(tree, f[1]) {
+                    suffix.extend([
+                        Text("(("),
+                        Visit(f[0]),
+                        Text(") if ("),
+                        Visit(c),
+                        Text(") else ("),
+                        Visit(e),
+                        Text("))"),
+                    ]);
+                } else {
+                    suffix.push(Visit(f[0]));
                 }
             }
-            acc
+            "and" | "or" | "cmp" | "add" | "mul" => {
+                suffix.push(Visit(f[0]));
+                let mut rest = f[1];
+                while let &[op, x, more] = kids(tree, rest) {
+                    out.push_str("((");
+                    suffix.extend([Text(") "), Visit(op), Text(" ("), Visit(x), Text("))")]);
+                    rest = more;
+                }
+            }
+            "not" | "unary" if f.len() == 2 => {
+                suffix.extend([Text("("), Visit(f[0]), Text(" ("), Visit(f[1]), Text("))")]);
+            }
+            "range" | "power" => {
+                if let &[op, x] = kids(tree, f[1]) {
+                    suffix.extend([
+                        Text("(("),
+                        Visit(f[0]),
+                        Text(") "),
+                        Visit(op),
+                        Text(" ("),
+                        Visit(x),
+                        Text("))"),
+                    ]);
+                } else {
+                    suffix.push(Visit(f[0]));
+                }
+            }
+            "postfix" => {
+                suffix.push(Visit(f[0]));
+                let mut rest = f[1];
+                while let Some((more, tokens)) = kids(tree, rest).split_last() {
+                    out.push('(');
+                    suffix.push(Text(")"));
+                    suffix.extend(tokens.iter().copied().map(Visit));
+                    rest = *more;
+                }
+            }
+            _ => {
+                for &child in f {
+                    if !suffix.is_empty() {
+                        suffix.push(Text(" "));
+                    }
+                    suffix.push(Visit(child));
+                }
+            }
         }
-        _ => f
-            .iter()
-            .map(p)
-            .filter(|s| !s.is_empty())
-            .collect::<Vec<_>>()
-            .join(" "),
+        pending.extend(suffix.iter().rev());
     }
+    out
 }
 
 /// A tree's Debug text without its spans.
@@ -506,22 +534,6 @@ fn random_sentences_and_edits() {
 /// files change; `FG_LEAN=1` still asks Lean).
 #[test]
 fn every_fg_file() {
-    // WASI (wasip1) starts no threads: the body runs on the test's own (wasm) stack there
-    if cfg!(target_os = "wasi") {
-        return every_fg_file_body();
-    }
-    // `reference` is a direct, recursive port of the Lean parser (one frame per rule and symbol),
-    // so a long file nests deeply; debug frames on Windows overflow the default 2 MB test stack.
-    // The shipped parser is iterative and is not what needs the room.
-    std::thread::Builder::new()
-        .stack_size(256 << 20)
-        .spawn(every_fg_file_body)
-        .expect("spawn")
-        .join()
-        .unwrap();
-}
-
-fn every_fg_file_body() {
     let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
     let mut files = Vec::new();
     let mut dirs = vec![std::path::PathBuf::from(root)];
@@ -542,17 +554,18 @@ fn every_fg_file_body() {
     }
     files.sort();
     let mut t = Tally::default();
+    let compare_with_lean = std::env::var_os("FG_LEAN").is_some();
     for f in &files {
         let src = std::fs::read_to_string(f).expect("read");
         if forge_lang::drawing::is_drawing(&src) {
             continue;
         }
-        t.check(&src, true);
+        t.check(&src, compare_with_lean);
         let Ok(toks) = syntax::lex(&src) else { continue };
         for k in (0..toks.len().saturating_sub(1)).step_by(toks.len() / 7 + 1) {
             let s = toks[k].span;
             let cut = format!("{}{}", &src[..s.lo as usize], &src[s.hi as usize..]);
-            t.check(&cut, true);
+            t.check(&cut, compare_with_lean);
         }
     }
     t.report("the .fg files");
@@ -562,7 +575,7 @@ fn every_fg_file_body() {
         files.len(),
         t.sentences
     );
-    if std::env::var_os("FG_LEAN").is_some() {
+    if compare_with_lean {
         t.oracle("files", false);
     }
 }
