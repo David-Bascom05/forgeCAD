@@ -14,7 +14,6 @@ const t = require("./lib.cjs");
 
 const at = {
   file: [33, 55],
-  exportStl: [60, 217],
   weldmentsTab: [363, 55],
   cutList: [343, 110],
   exportCsv: [603, 710],
@@ -33,11 +32,16 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
     await t.loaded(p);
 
     // File > Export STL: a binary STL in the downloads
+    await p.evaluate(() => window.forgecad.fc.app_audit(true));
     await p.mouse.click(...at.file);
-    await pause(800);
-    const got = p.waitForEvent("download", { timeout: 120000 });
-    await p.mouse.click(...at.exportStl);
-    const d = await got;
+    const stlItem = (s) => s.audit?.places.find(([name]) => name === "file-menu:Export STL");
+    const menu = await t.until(p, stlItem, "the STL export menu item", 60000);
+    const [x, y, w, h] = stlItem(menu)[1];
+    const [d] = await Promise.all([
+      p.waitForEvent("download", { timeout: 120000 }),
+      p.mouse.click(x + w / 2, y + h / 2),
+    ]);
+    await p.evaluate(() => window.forgecad.fc.app_audit(false));
     assert.equal(d.suggestedFilename(), "gate_frame.stl");
     const stl = fs.readFileSync(await d.path());
     const tris = stl.readUInt32LE(80);

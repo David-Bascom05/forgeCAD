@@ -176,13 +176,9 @@ impl Matrix {
                     if col < n {
                         let response = ui.interact(r, ui.scope_id().with(("col", col)), Sense::click());
                         if response.hovered() {
-                            ui.painter().text(
-                                r.right_center() - vec2(12., 0.),
-                                Align2::RIGHT_CENTER,
-                                "⌄",
-                                theme::body(),
-                                t.ink2,
-                            );
+                            let center = r.right_center() - vec2(14., 0.);
+                            line(ui, center + vec2(-3., -1.5), center + vec2(0., 1.5), t.ink2);
+                            line(ui, center + vec2(0., 1.5), center + vec2(3., -1.5), t.ink2);
                         }
                         egui::Popup::menu(&response).show(|ui| {
                             for pin in pins {

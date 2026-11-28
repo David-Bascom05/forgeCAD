@@ -208,19 +208,21 @@ pub fn fonts() -> FontDefinitions {
         f.font_data
             .insert(name.into(), FontData::from_static(bytes).into());
     }
-    f.families
-        .insert(FontFamily::Proportional, vec!["sans".into(), "symbols".into()]);
+    f.families.insert(
+        FontFamily::Proportional,
+        vec!["sans".into(), "symbols".into(), "mono".into()],
+    );
     f.families.insert(
         FontFamily::Monospace,
         vec!["mono".into(), "sans".into(), "symbols".into()],
     );
     f.families.insert(
         FontFamily::Name("medium".into()),
-        vec!["medium".into(), "sans".into(), "symbols".into()],
+        vec!["medium".into(), "sans".into(), "symbols".into(), "mono".into()],
     );
     f.families.insert(
         FontFamily::Name("semi".into()),
-        vec!["semi".into(), "sans".into(), "symbols".into()],
+        vec!["semi".into(), "sans".into(), "symbols".into(), "mono".into()],
     );
     f
 }
