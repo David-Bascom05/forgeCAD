@@ -53,6 +53,8 @@ pub struct Stats {
     /// What an assembly asks that is not done (`Body::unplaced`): parts moved from where they stand,
     /// and parts used more than once.
     pub assembly: usize,
+    /// The occurrence walk skipped a declared use or reached its traversal bound.
+    pub incomplete_placements: bool,
 }
 
 pub struct Imported {
@@ -1889,7 +1891,7 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
     if let Some(u) = any_ctx.and_then(|c| units_of(&f, c)) {
         stats.assembly = assembly_asks(&f, &Reader { f: &f, u, depth: 0 });
         if !only_measure {
-            uses = occurrences(&f, &Reader { f: &f, u, depth: 0 });
+            (uses, stats.incomplete_placements) = occurrences(&f, &Reader { f: &f, u, depth: 0 });
         }
     }
     for (id, r) in roots {
@@ -2023,6 +2025,9 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
 pub struct Occurrence {
     pub solid: u32,
     pub path: Vec<String>,
+    /// Product path with named uses (for example PCB reference designators) in place of
+    /// product names where provided by the exporter.
+    pub instance_path: Vec<String>,
     pub frame: Frame,
 }
 
@@ -2030,7 +2035,8 @@ pub struct Occurrence {
 /// its next_assembly_usage_occurrences, each placed by its context dependent shape
 /// representation's item defined transformation, to the solids each product's shape holds. Empty
 /// where the file has no product structure; a use whose placement cannot be read is left out.
-fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> Vec<Occurrence> {
+fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> (Vec<Occurrence>, bool) {
+    let mut incomplete = false;
     let refs = |r: &Record| -> Vec<u32> {
         f.args(r)
             .iter()
@@ -2045,7 +2051,7 @@ fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> Vec<Occurrence> {
     let mut linked: BTreeMap<u32, Vec<u32>> = BTreeMap::new(); // representations related untransformed
     let mut shape_of: BTreeMap<u32, u32> = BTreeMap::new(); // product definition shape -> definition
     let mut sdr: Vec<(u32, u32)> = Vec::new(); // (product definition shape, representation)
-    let mut nauo: Vec<(u32, u32, u32)> = Vec::new(); // (id, parent definition, child definition)
+    let mut nauo = Vec::new(); // (id, parent definition, child definition, instance name)
     let mut cdsr: Vec<(u32, u32)> = Vec::new(); // (relationship, product definition shape)
     let mut rep_name: BTreeMap<u32, String> = BTreeMap::new();
     let mut pd_formation: BTreeMap<u32, u32> = BTreeMap::new();
@@ -2070,7 +2076,9 @@ fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> Vec<Occurrence> {
                 }
                 "NEXT_ASSEMBLY_USAGE_OCCURRENCE" => {
                     if let (Some(Value::Ref(p)), Some(Value::Ref(c))) = (a.get(3), a.get(4)) {
-                        nauo.push((id, *p, *c));
+                        nauo.push((id, *p, *c, text(a.get(1))));
+                    } else {
+                        incomplete = true;
                     }
                 }
                 "CONTEXT_DEPENDENT_SHAPE_REPRESENTATION" => {
@@ -2119,7 +2127,7 @@ fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> Vec<Occurrence> {
         }
     }
     if nauo.is_empty() && sdr.is_empty() {
-        return Vec::new();
+        return (Vec::new(), incomplete);
     }
     // each definition's representations; a representation's solids through untransformed links
     let mut reps_of: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
@@ -2191,10 +2199,12 @@ fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> Vec<Occurrence> {
             a1.compose(&a2.inverse())
         })
     };
-    let children: BTreeMap<u32, Vec<(u32, u32)>> = nauo.iter().fold(BTreeMap::new(), |mut m, &(id, p, c)| {
-        m.entry(p).or_default().push((id, c));
-        m
-    });
+    let mut children: BTreeMap<u32, Vec<_>> = BTreeMap::new();
+    let mut unvisited = std::collections::BTreeSet::new();
+    for (id, p, c, label) in &nauo {
+        unvisited.insert(*id);
+        children.entry(*p).or_default().push((*id, *c, label.as_str()));
+    }
     let used: std::collections::BTreeSet<u32> = nauo.iter().map(|x| x.2).collect();
     let mut tops: Vec<u32> = reps_of
         .keys()
@@ -2205,13 +2215,17 @@ fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> Vec<Occurrence> {
     tops.sort_unstable();
     tops.dedup();
     let mut out = Vec::new();
-    // (definition, path, frame), depth bounded: a file can make its uses circular
-    let mut todo: Vec<(u32, Vec<String>, Frame)> = tops
+    // Depth bounded: a file can make its uses circular.
+    let mut todo: Vec<_> = tops
         .into_iter()
-        .map(|d| (d, vec![name_of(d)], Frame::WORLD))
+        .map(|d| {
+            let path = vec![name_of(d)];
+            (d, path.clone(), path, Frame::WORLD)
+        })
         .collect();
-    while let Some((d, path, frame)) = todo.pop() {
+    while let Some((d, path, instance_path, frame)) = todo.pop() {
         if out.len() > 1_000_000 || path.len() > 64 {
+            incomplete = true;
             break;
         }
         for &r in reps_of.get(&d).into_iter().flatten() {
@@ -2219,18 +2233,31 @@ fn occurrences(f: &File<'_>, reader: &Reader<'_>) -> Vec<Occurrence> {
                 out.push(Occurrence {
                     solid: s,
                     path: path.clone(),
+                    instance_path: instance_path.clone(),
                     frame,
                 });
             }
         }
-        for &(id, c) in children.get(&d).into_iter().flatten() {
-            let Some(p) = placement(id, c) else { continue };
-            let mut q = path.clone();
-            q.push(name_of(c));
-            todo.push((c, q, frame.compose(&p)));
+        for &(id, c, label) in children.get(&d).into_iter().flatten() {
+            unvisited.remove(&id);
+            let Some(p) = placement(id, c) else {
+                incomplete = true;
+                continue;
+            };
+            let name = name_of(c);
+            let mut products = path.clone();
+            products.push(name.clone());
+            let mut instances = instance_path.clone();
+            // Open CASCADE writes an internal reference of this form for unnamed uses.
+            instances.push(if label.is_empty() || label.starts_with("=>[") {
+                name
+            } else {
+                label.to_owned()
+            });
+            todo.push((c, products, instances, frame.compose(&p)));
         }
     }
-    out
+    (out, incomplete || !unvisited.is_empty())
 }
 
 #[cfg(test)]

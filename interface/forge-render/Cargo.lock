@@ -1280,6 +1280,7 @@ dependencies = [
  "forge-model",
  "forge-ops",
  "forge-sheet",
+ "forge-simplify",
  "forge-sketch",
  "forge-step",
  "forge-thermo",
@@ -1407,6 +1408,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-remote"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-lang",
+ "forge-sync",
+ "forge-ws",
+]
+
+[[package]]
 name = "forge-render"
 version = "0.1.0"
 dependencies = [
@@ -1444,9 +1455,12 @@ dependencies = [
  "forge-ops",
  "forge-par",
  "forge-post",
+ "forge-remote",
+ "forge-server",
  "forge-sheet",
  "forge-sketch",
  "forge-step",
+ "forge-sync",
  "forge-thermo",
  "forge-tooling",
  "forge-tooling-builder",
@@ -1478,6 +1492,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-server"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-git",
+ "forge-history",
+ "forge-lang",
+ "forge-sync",
+ "forge-ws",
+]
+
+[[package]]
 name = "forge-sheet"
 version = "0.1.0"
 dependencies = [
@@ -1492,6 +1518,15 @@ dependencies = [
 [[package]]
 name = "forge-sheet-core"
 version = "0.1.0"
+
+[[package]]
+name = "forge-simplify"
+version = "0.1.0"
+dependencies = [
+ "forge-geom",
+ "forge-math",
+ "forge-topo",
+]
 
 [[package]]
 name = "forge-sketch"
@@ -1509,6 +1544,17 @@ dependencies = [
  "forge-geom",
  "forge-math",
  "forge-mesh",
+ "forge-topo",
+]
+
+[[package]]
+name = "forge-sync"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-keep",
+ "forge-lang",
+ "forge-math",
  "forge-topo",
 ]
 
@@ -1644,6 +1690,13 @@ dependencies = [
  "forge-step",
  "forge-topo",
  "forge-workholding",
+]
+
+[[package]]
+name = "forge-ws"
+version = "0.1.0"
+dependencies = [
+ "forge-git",
 ]
 
 [[package]]

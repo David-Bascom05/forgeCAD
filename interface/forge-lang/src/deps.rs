@@ -353,17 +353,22 @@ fn contents(path: &Path, limit: u64) -> Seen {
 }
 
 /// What a path holds now, looked at as it was when recorded.
-fn now(path: &Path, was: Seen) -> Seen {
+fn now(path: &Path, was: Seen, limit: u64) -> Seen {
     match was {
         Seen::Absent | Seen::There => presence(path),
-        Seen::Bytes(_) | Seen::Big(..) => contents(path, LIMIT),
+        Seen::Bytes(_) | Seen::Big(..) => contents(path, limit),
     }
 }
 
 impl Deps {
     /// Whether every file still holds what it held (and every missing one is still missing).
     pub fn current(&self) -> bool {
-        self.0.iter().all(|(p, h)| now(p, *h) == *h)
+        self.current_with_limits(|_| LIMIT)
+    }
+
+    /// Check each dependency with the same byte limit its loader used.
+    pub(crate) fn current_with_limits(&self, limit: impl Fn(&Path) -> u64) -> bool {
+        self.0.iter().all(|(p, h)| now(p, *h, limit(p)) == *h)
     }
 
     /// One hash of all of it.

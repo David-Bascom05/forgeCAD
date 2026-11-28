@@ -1949,10 +1949,40 @@ pub struct Session {
     /// In the single-threaded browser build, the worker itself and its queue: stepped by `poll`.
     #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
     worker: Box<(Worker, Receiver<Work>)>,
+    /// A SERVED part's link to the server (None: LOCAL, today's path exactly).
+    pub sync: Option<Box<dyn crate::sync_link::Link>>,
+    /// Builds of the server's own text: (this session's build seq, the server's seq), for the
+    /// body hash each reports.
+    sync_builds: Vec<(u64, u64)>,
+    /// Something the link has to say (a refused op, a divergence): the app shows it.
+    pub sync_note: Option<String>,
+    /// The text changed from the server since the app last looked.
+    pub sync_changed: bool,
+    /// The link's first snapshot has been taken in.
+    sync_seen: bool,
+    /// Revision paired with the text most recently received by the editor.
+    sync_base: u64,
+    /// The link's last note, kept (the GUI takes `sync_note` for its status line; a test or the
+    /// page's state reads this).
+    pub sync_said: Option<String>,
+    /// A SERVED part's file on disk: kept at the server's text, watched for hand edits.
+    #[cfg(not(target_arch = "wasm32"))]
+    sync_file: Option<crate::sync_link::SyncFile>,
+    /// A link waiting for the server's text to be seen to match the file's and the editor's (the
+    /// first open since the project was served): it attaches then, or syncing pauses.
+    sync_wait: Option<Box<dyn crate::sync_link::Link>>,
+    /// Why this served part is not syncing (a hand edit, a refused Hello): shown for as long as
+    /// it holds, whatever else the status line says.
+    pub sync_paused: Option<String>,
 }
 
 impl Drop for Session {
     fn drop(&mut self) {
+        // A queued edit may be newer than the last frame's sync poll.
+        #[cfg(not(target_arch = "wasm32"))]
+        if let (Some(file), Some(link)) = (&mut self.sync_file, &self.sync) {
+            file.keep_pending(link.saved());
+        }
         // its thread finishes the build it's in, does no GPU work after, and ends
         self.stop.store(true, Ordering::SeqCst);
     }
@@ -2045,6 +2075,17 @@ impl Session {
             until,
             #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
             worker,
+            sync: None,
+            sync_builds: vec![],
+            sync_note: None,
+            sync_changed: false,
+            sync_seen: false,
+            sync_base: 0,
+            sync_said: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            sync_file: None,
+            sync_wait: None,
+            sync_paused: None,
         };
         s.rebuild();
         s
@@ -2052,7 +2093,221 @@ impl Session {
 
     pub fn open(path: &str, gpu: Option<Gpu>, waker: Arc<dyn Fn() + Send + Sync>) -> Result<Session, String> {
         let src = forge_dirs::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
-        Ok(Session::new(Some(path.to_string()), src, gpu, waker))
+        // a hand edit since the app last wrote the file (an editor, a git checkout): this
+        // document is not synced (nothing is sent from a text the server does not have, and the
+        // edit is never written over); DESIGN.md §15.4, merge in phase 4. Looked at before the
+        // link starts, so a paused part never sends its kept ops.
+        #[cfg(not(target_arch = "wasm32"))]
+        let file = crate::sync_link::SyncFile::open(std::path::Path::new(path), &src);
+        #[cfg(not(target_arch = "wasm32"))]
+        let paused = file.as_ref().and_then(|f| f.paused.clone());
+        #[cfg(target_arch = "wasm32")]
+        let paused: Option<String> = None;
+        // the client kept when the app last closed (its unacked ops), when the file is the one
+        // it was kept with
+        #[cfg(not(target_arch = "wasm32"))]
+        let kept = file.as_ref().and_then(|f| f.kept_client());
+        #[cfg(target_arch = "wasm32")]
+        let kept: Option<String> = None;
+        // LOCAL or SERVED: looked at once, here (a broken remote.toml is said, never ignored)
+        let link = match paused {
+            Some(_) => None,
+            None => crate::sync_link::open(path, waker.clone(), kept).transpose()?,
+        };
+        let mut s = Session::new(Some(path.to_string()), src, gpu, waker);
+        if let Some(why) = paused {
+            s.sync_note = Some(why.clone());
+            s.sync_paused = Some(why);
+        } else if link.is_some() {
+            #[cfg(not(target_arch = "wasm32"))]
+            let verified = file.as_ref().is_none_or(|f| f.verified());
+            #[cfg(target_arch = "wasm32")]
+            let verified = true;
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                s.sync_file = file;
+            }
+            if verified {
+                s.attach(link);
+            } else {
+                // the first open since the project was served: attached once the texts match
+                s.sync_wait = link;
+            }
+        }
+        Ok(s)
+    }
+
+    /// A SERVED part: linked, or waiting to attach (its first open, until the texts are seen
+    /// to match).
+    pub fn served(&self) -> bool {
+        self.sync.is_some() || self.sync_wait.is_some()
+    }
+
+    /// The link takes the document over: the server's history is the undo from now on (the
+    /// file's own log is not used).
+    fn attach(&mut self, link: Option<Box<dyn crate::sync_link::Link>>) {
+        self.sync = link;
+        self.undo.clear();
+        self.redo.clear();
+    }
+
+    /// The link let go: the document stays open, LOCAL, with `why` said (and kept on screen).
+    fn pause_sync(&mut self, why: String) {
+        self.sync = None;
+        self.sync_wait = None;
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.sync_file = None;
+        }
+        self.sync_note = Some(why.clone());
+        self.sync_paused = Some(why);
+    }
+
+    /// Paused for a hand edit: the file's text, the one kept, is what the editor shows from now
+    /// on (a Save then writes it, never the server's text over it).
+    #[cfg(not(target_arch = "wasm32"))]
+    fn pause_for_hand_edit(&mut self, why: String) {
+        self.pause_sync(why);
+        if let Some(path) = &self.path
+            && let Ok(disk) = forge_dirs::fs::read_to_string(path)
+            && disk != self.src
+        {
+            self.src = disk.clone();
+            self.saved = disk;
+            self.previewing = false;
+            self.sync_changed = true;
+            self.rebuild();
+        }
+    }
+
+    /// A link waiting to attach (see `sync_wait`): its news, and the check once it is ready.
+    fn sync_wait_poll(&mut self) {
+        let Some(l) = &self.sync_wait else { return };
+        for e in l.poll() {
+            match e {
+                forge_sync::Event::Stopped(why) => {
+                    return self.pause_sync(format!("Not synced: the server refused this part: {why}"));
+                }
+                forge_sync::Event::Closed(why) => {
+                    self.sync_note = Some(format!("Server: {why} (reconnecting)"))
+                }
+                forge_sync::Event::Said(why) => self.sync_note = Some(format!("Server: {why}")),
+                _ => {}
+            }
+        }
+        if !l.ready() {
+            return;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let checked = match &mut self.sync_file {
+            Some(f) => f.verify(&l.text(), &self.src),
+            None => Ok(()),
+        };
+        #[cfg(target_arch = "wasm32")]
+        let checked: Result<(), String> = Ok(());
+        match checked {
+            Ok(()) => {
+                let l = self.sync_wait.take();
+                self.attach(l);
+                self.sync_note = Some("Syncing with the server".into());
+            }
+            Err(why) => self.pause_sync(why),
+        }
+    }
+
+    /// A SERVED part: the link's news since the last poll (text from collaborators, refusals,
+    /// divergences), and the body hashes of builds of the server's text.
+    fn sync_poll(&mut self, got: &[Msg]) {
+        if self.sync_wait.is_some() {
+            return self.sync_wait_poll();
+        }
+        let Some(l) = &self.sync else { return };
+        for e in l.poll() {
+            match e {
+                forge_sync::Event::Changed => {}
+                forge_sync::Event::Refused { refusal, .. } => {
+                    self.sync_note = Some(format!("Not shared: {}", refusal.text()));
+                }
+                forge_sync::Event::TextDiverged { .. } => {
+                    self.sync_note = Some("Your copy differed from the server's: reloaded it".to_string());
+                }
+                forge_sync::Event::BuildDiverged { by, .. } => {
+                    self.sync_note = Some(format!(
+                        "{by}'s build of this part came out different from yours: reported to the server"
+                    ));
+                }
+                forge_sync::Event::Versioned { name, .. } => {
+                    self.sync_note = Some(format!("Version {name} written"));
+                }
+                forge_sync::Event::Closed(why) => {
+                    self.sync_note = Some(format!("Server: {why} (reconnecting)"));
+                }
+                forge_sync::Event::Said(why) => self.sync_note = Some(format!("Server: {why}")),
+                // refused for good (a bad token, another kernel, a quarantined document): edits
+                // would only queue; syncing pauses and says why
+                forge_sync::Event::Stopped(why) => {
+                    return self.pause_sync(format!("Not synced: the server refused this part: {why}"));
+                }
+                forge_sync::Event::Rtt(_) => {}
+            }
+        }
+        if self.sync_note.is_some() {
+            self.sync_said = self.sync_note.clone();
+        }
+        // the file on disk: written with the server's text, and watched for hand edits; the
+        // unacked ops kept beside it, for the next open
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(f) = &mut self.sync_file {
+            f.keep_pending(l.saved());
+            if let Err(why) = f.tick(l.ready() && l.pending() == 0, || l.text()) {
+                return self.pause_for_hand_edit(why);
+            }
+        }
+        let Some(l) = &self.sync else { return };
+        let (base, text) = l.snapshot();
+        self.sync_base = base;
+        if l.ready() && text == self.src && !self.sync_seen {
+            // the server's first word, the same text as the file's: build it as the server's (its
+            // hash is then reported; the build before the link was ready had no seq)
+            self.sync_seen = true;
+            self.rebuild();
+            return;
+        }
+        if l.ready() && text != self.src {
+            self.sync_seen = true;
+            // a collaborator's op (or one of ours refused): the server's text, not an undo step
+            self.src = text;
+            self.saved = self.src.clone();
+            self.previewing = false;
+            self.sync_changed = true;
+            self.rebuild();
+        }
+        for m in got {
+            if let Msg::Built(b) = m
+                && b.ok
+                && let Some(k) = self.sync_builds.iter().position(|x| x.0 == b.seq)
+            {
+                let server_seq = self.sync_builds[k].1;
+                self.sync_builds.drain(..=k);
+                // a part's body, or an assembly's placed parts (forge_sync::run_hash's rule)
+                let hash = b.inspect.as_ref().and_then(|i| {
+                    if i.asm.is_some() {
+                        let placed = i
+                            .placed
+                            .iter()
+                            .filter_map(|(k, f)| Some((&**i.bodies.get(*k)?, f)));
+                        Some(forge_sync::hash_placed(placed))
+                    } else {
+                        i.bodies.first().map(|b| forge_sync::hash_body(b))
+                    }
+                });
+                if let Some(h) = hash
+                    && let Some(l) = &self.sync
+                {
+                    l.built(server_seq, h);
+                }
+            }
+        }
     }
 
     /// Its view made again from scratch, on this GPU: after it was let go while the tab was idle.
@@ -2071,6 +2326,22 @@ impl Session {
     pub fn rebuild(&mut self) -> u64 {
         self.seq += 1;
         self.sent_at.push((self.seq, Instant::now()));
+        if let Some(l) = &self.sync
+            && l.pending() == 0
+            && l.ready()
+            && !self.previewing
+            && self.until().is_none()
+            && let (server_seq, server_text) = l.snapshot()
+            && server_text == self.src
+        {
+            // a build of exactly the server's text at its seq, whole (not rolled back by an end
+            // of part, not a preview): its hash is reported (clients review M3; an assembly's
+            // sibling parts are read from this disk and can still lag the server's)
+            self.sync_builds.push((self.seq, server_seq));
+            if self.sync_builds.len() > 64 {
+                self.sync_builds.remove(0);
+            }
+        }
         let _ = self
             .jobs
             .send(Work::Text((self.seq, self.src.clone(), self.overlap)));
@@ -2098,6 +2369,9 @@ impl Session {
             }
         }
         let got: Vec<Msg> = self.built.try_iter().collect();
+        if self.sync.is_some() || self.sync_wait.is_some() {
+            self.sync_poll(&got);
+        }
         for m in &got {
             match m {
                 Msg::Built(b) => {
@@ -2161,7 +2435,10 @@ impl Session {
             .and_then(|f| forge_dirs::fs::canonicalize(f).ok())
             .and_then(|f| f.parent().map(|d| d.to_path_buf()));
         let (text, reach) = edit::apply_checked_in(&self.src, &op, dir)?;
-        self.set_text(text);
+        if let Some(l) = &self.sync {
+            l.local_on(self.sync_base, &self.src, op.clone().into(), text.clone())?;
+        }
+        self.take_text(text);
         self.ops.push(op);
         Ok(reach)
     }
@@ -2169,7 +2446,19 @@ impl Session {
     /// Several ops as one edit, one undo step: refused whole if the result wouldn't check.
     pub fn apply_all(&mut self, ops: Vec<Op>) -> Result<(), Error> {
         let text = edit::apply_all_checked(&self.src, &ops)?;
-        self.set_text(text);
+        if let Some(l) = &self.sync {
+            match ops.as_slice() {
+                [] => return Ok(()),
+                [op] => l.local_on(self.sync_base, &self.src, op.clone().into(), text.clone())?,
+                _ => l.local_on(
+                    self.sync_base,
+                    &self.src,
+                    forge_sync::Edit::Batch(ops.clone()),
+                    text.clone(),
+                )?,
+            }
+        }
+        self.take_text(text);
         self.ops.extend(ops);
         Ok(())
     }
@@ -2189,7 +2478,21 @@ impl Session {
         self.seq
     }
 
+    /// A text that is not a typed op's (a refactor, units, a reload, a merge): in a SERVED part
+    /// only typed ops are shared in phase 1 (DESIGN.md §15.4: hand edits become ops or SetText
+    /// in phase 4), so it is refused there and said.
     fn set_text(&mut self, text: String) {
+        if self.sync.is_some() {
+            if text != self.src {
+                self.sync_note =
+                    Some("Not made: in a served project only typed edits are shared for now".into());
+            }
+            return;
+        }
+        self.take_text(text);
+    }
+
+    fn take_text(&mut self, text: String) {
         self.previewing = false;
         let old = std::mem::replace(&mut self.src, text);
         self.undo.push(old);
@@ -2228,6 +2531,21 @@ impl Session {
     }
 
     pub fn undo(&mut self) -> bool {
+        if let Some(l) = &self.sync {
+            // hosted undo: the inverse of this user's last op, others' edits kept
+            return match l.undo() {
+                None => false,
+                Some(Ok(())) => {
+                    (self.sync_base, self.src) = l.snapshot();
+                    self.rebuild();
+                    true
+                }
+                Some(Err(why)) => {
+                    self.sync_note = Some(format!("Undo: {why}"));
+                    false
+                }
+            };
+        }
         let Some(prev) = self.undo.pop() else { return false };
         self.redo.push(std::mem::replace(&mut self.src, prev));
         self.rebuild();
@@ -2235,6 +2553,9 @@ impl Session {
     }
 
     pub fn redo(&mut self) -> bool {
+        if self.sync.is_some() {
+            return false;
+        }
         let Some(next) = self.redo.pop() else { return false };
         self.undo.push(std::mem::replace(&mut self.src, next));
         self.rebuild();
@@ -2262,9 +2583,27 @@ impl Session {
     }
 
     pub fn save(&mut self) -> Result<(), String> {
+        // The browser storage backend can PUT directly into the hosted project directory.
+        // Only the sync server may persist the acknowledged document there.
+        #[cfg(target_arch = "wasm32")]
+        if self.served() {
+            if !self.sync.as_ref().is_some_and(|link| {
+                link.ready() && link.pending() == 0 && link.snapshot().1 == self.src
+            }) {
+                return Err("Waiting for the server to confirm these edits.".into());
+            }
+            self.saved = self.src.clone();
+            return Ok(());
+        }
         let path = self.path.as_ref().ok_or("no file to save to")?;
         forge_dirs::fs::write(path, &self.src).map_err(|e| format!("{path}: {e}"))?;
         self.saved = self.src.clone();
+        // a served part: the app's own write, not a hand edit (the server's text replaces it once
+        // nothing is pending)
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(f) = &mut self.sync_file {
+            f.wrote(&self.src);
+        }
         // the undo depth kept with it (`F.fg.log`): for the next
         // time it opens, and `fg edit F Undo`
         forge_lang::undo::keep(std::path::Path::new(path), &self.undo, &self.src, &self.redo)
@@ -2297,6 +2636,36 @@ impl Session {
     pub fn until(&self) -> Option<String> {
         crate::plat::lock(&self.until).clone()
     }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[test]
+fn closing_before_the_next_poll_keeps_the_offline_edit() {
+    use crate::sync_link::SyncFile;
+    let dir = std::env::temp_dir().join(format!("forge-close-pending-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join(".forgecad")).unwrap();
+    std::fs::write(dir.join(".forgecad/remote.toml"), "remote = \"lab\"\n").unwrap();
+    let path = dir.join("part.fg");
+    let src = "shared w = 40\n";
+    std::fs::write(&path, src).unwrap();
+    let mut file = SyncFile::open(&path, src).unwrap();
+    file.verify(src, src).unwrap();
+    let remote = forge_remote::Remote {
+        name: "offline".into(),
+        url: "ws://127.0.0.1:1/sync".into(),
+        token: "test-token".into(),
+    };
+    let link = forge_remote::Session::start(&remote, "part.fg", None).unwrap();
+    link.local(Op::Rename { from: "w".into(), to: "width".into() }, "shared width = 40\n".into()).unwrap();
+    let pending = link.saved();
+    let mut editor = Session::new(Some(path.to_string_lossy().into_owned()), src.into(), None, Arc::new(|| {}));
+    editor.sync_file = Some(file);
+    editor.sync = Some(Box::new(link));
+    drop(editor);
+    let reopened = SyncFile::open(&path, src).unwrap();
+    assert_eq!(reopened.kept_client().as_deref(), Some(pending.as_str()));
+    drop(reopened);
+    std::fs::remove_dir_all(dir).unwrap();
 }
 
 #[cfg(test)]

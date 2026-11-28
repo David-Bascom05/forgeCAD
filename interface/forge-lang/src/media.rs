@@ -23,9 +23,10 @@ static FONTS: Cache<forge_font::Font> = Mutex::new(None);
 static SOLIDS: Cache<Body> = Mutex::new(None);
 
 const FONT_KINDS: &[&str] = &["ttf", "otf"];
-const SOLID_KINDS: &[&str] = &["step", "stp", "brep", "igs", "iges", "x_t", "x_b", "xmt_txt", "xmt_bin"];
+pub(crate) const SOLID_KINDS: &[&str] = &["step", "stp", "brep", "igs", "iges", "x_t", "x_b", "xmt_txt", "xmt_bin"];
 /// The most a file may be: larger ones are refused unread.
-const LIMIT: u64 = 64 << 20;
+/// Largest media asset that a Forge document can reopen.
+pub const MAX_ASSET_BYTES: u64 = 64 << 20;
 
 /// A file beside the part file. Under a session root (`root`, canonical), nothing outside it is
 /// found: every such refusal is the same `Missing`.
@@ -77,10 +78,10 @@ fn find_in(dir: &Path, root: Option<&Path>, file: &str, span: Span) -> R<PathBuf
     if !meta.is_file() {
         return Err(err(FileProblem::WrongKind));
     }
-    if meta.len() > LIMIT {
+    if meta.len() > MAX_ASSET_BYTES {
         return Err(err(FileProblem::Unreadable(format!(
             "larger than {} MB",
-            LIMIT >> 20
+            MAX_ASSET_BYTES >> 20
         ))));
     }
     Ok(p)
@@ -92,9 +93,9 @@ fn cached<T>(
     parse: impl FnOnce(&[u8]) -> Result<T, FileProblem>,
 ) -> Result<Arc<T>, FileProblem> {
     // a refusal says nothing of what the file holds
-    let data = crate::deps::read_plain(&path, LIMIT).map_err(|r| match r {
+    let data = crate::deps::read_plain(&path, MAX_ASSET_BYTES).map_err(|r| match r {
         crate::deps::Refused::NotPlain => FileProblem::WrongKind,
-        crate::deps::Refused::TooBig(_) => FileProblem::Unreadable(format!("larger than {} MB", LIMIT >> 20)),
+        crate::deps::Refused::TooBig(_) => FileProblem::Unreadable(format!("larger than {} MB", MAX_ASSET_BYTES >> 20)),
         crate::deps::Refused::Io(_) => FileProblem::Unreadable("could not be read".into()),
     })?;
     if let Ok(c) = cache.lock()

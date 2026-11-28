@@ -1,6 +1,7 @@
 mod agent_bridge;
 mod fg;
 mod model;
+mod simplify;
 mod serve;
 mod web;
 
@@ -43,6 +44,8 @@ fn usage() -> ExitCode {
          forgecad record F [--env E] [--out F.mp4|DIR] [--fps N] [--size WxH] [--seconds S] [--frames]\n       \
            (the environment's timeline, or a turntable, to MP4 by ffmpeg or PNG frames; no window)\n       \
          forgecad build|check|query|measure|render|export FILE.fg [ARGS] [--json] [--labels SEL] [--px N] [--at FEAT] [-o OUT]\n       \
+         forgecad simplify preview|create SOURCE [--holes MM] [--pockets MM] [--bosses MM] [--components MM] [-o DERIVED.fg] [--json]\n       \
+         forgecad simplify refresh|pause|resume|detach DERIVED.fg\n       \
          forgecad edit FILE.fg 'OP'.. [--base VERSION]   (typed ops, as a part's fixes give them; export F.fg stl|3mf|obj|urdf|dxf [SHEET])\n       \
          forgecad cam FILE.fg [sheet] [--json] [-o OUT]   (a machining document: certified toolpaths, the program or setup sheet)\n       \
          forgecad export FILE.fg pcb-fab [VARIANT] -o OUTPUT.zip\n       \
@@ -307,6 +310,7 @@ fn main() -> ExitCode {
         Some("web") => web::main(&args[2..]),
         Some("import") if args.len() >= 3 => import(&args[2..]),
         Some("convert") if args.len() >= 3 => convert(&args[2..]),
+        Some("simplify") => simplify::run(&args[2..]),
         Some("machine") if args.len() >= 3 => machine(&args[2..]),
         Some("tool") if args.len() >= 4 && args[2] == "import" => tool_import(&args[3..]),
         Some("mesh") if args.len() >= 3 => mesh(&args[2..]),
