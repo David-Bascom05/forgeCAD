@@ -1108,7 +1108,7 @@ fn copying_an_internal_want_rebinds_the_specific_target_component() {
 #[test]
 fn linked_catalogs_resolve_pdf_assets_from_the_owning_file() {
     use std::os::unix::fs::symlink;
-    let dir = std::env::temp_dir().join(format!("fg-library-assets-{}", std::process::id()));
+    let dir = forge_dirs::temp_dir().join(format!("fg-library-assets-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(dir.join("physical/devices")).unwrap();
     std::fs::create_dir_all(dir.join("aliases")).unwrap();
     std::fs::write(
@@ -1519,7 +1519,7 @@ part=place(sheet:main,symbol:Chip,at:(0,0))
 
 #[test]
 fn nested_attribute_types_keep_identity_and_erc_defaults_compose() {
-    let dir = std::env::temp_dir().join(format!("fg-attribute-packs-{}", std::process::id()));
+    let dir = forge_dirs::temp_dir().join(format!("fg-attribute-packs-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&dir).unwrap();
     let write = |name: &str, src: &str| std::fs::write(dir.join(name), src).unwrap();
     write(

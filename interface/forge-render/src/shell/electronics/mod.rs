@@ -77,6 +77,14 @@ pub fn tab_name(library: bool, tab: usize) -> &'static str {
     }
 }
 
+type PinFunctionInput = (
+    String,
+    String,
+    Vec<String>,
+    Vec<String>,
+    Vec<sch::characteristics::Specification>,
+);
+
 #[derive(Default)]
 struct Inputs {
     straps: Vec<strap_editor::Attribute>,
@@ -92,13 +100,7 @@ struct Inputs {
     symbol_specs: Vec<sch::characteristics::Specification>,
     inherited_specs: Vec<sch::characteristics::Specification>,
     pin_specs: Vec<sch::characteristics::Specification>,
-    pin_functions: Vec<(
-        String,
-        String,
-        Vec<String>,
-        Vec<String>,
-        Vec<sch::characteristics::Specification>,
-    )>,
+    pin_functions: Vec<PinFunctionInput>,
     pads: String,
     waiver_reason: String,
     kind_search: String,
@@ -1065,7 +1067,7 @@ chip = place(sheet: main, symbol: S, at: (0,0))
         let file = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../examples/electronics/analog/pin-connections.fg");
         let mut e = Editor::open(
-            Some(file.to_str().unwrap().into()),
+            Some(file.to_str().unwrap()),
             std::fs::read_to_string(&file).unwrap(),
         )
         .unwrap();

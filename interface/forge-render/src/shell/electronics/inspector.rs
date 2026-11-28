@@ -359,12 +359,13 @@ impl Editor {
                 } => {
                     if let Item::Place {
                         reference,
-                        functions,
+                        pins,
                         spec_limits,
                         symbol,
                         ..
                     } = &row.item
                     {
+                        let functions = &pins.functions;
                         self.form.name = self
                             .doc
                             .reference(
@@ -856,10 +857,8 @@ impl Editor {
             ops.push(arg(id, "value", quote(&f.text)));
         }
         let placement = self.doc.rows.iter().find(|r| &r.id == id).and_then(|r| {
-            if let Item::Place {
-                reference, functions, ..
-            } = &r.item
-            {
+            if let Item::Place { reference, pins, .. } = &r.item {
+                let functions = &pins.functions;
                 Some((reference, functions))
             } else {
                 None

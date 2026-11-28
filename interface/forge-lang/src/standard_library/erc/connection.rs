@@ -179,7 +179,8 @@ impl Circuit {
             .rows
             .iter()
             .filter_map(|r| {
-                if let Item::Place { bindings, .. } = &r.item {
+                if let Item::Place { pins, .. } = &r.item {
+                    let bindings = &pins.bindings;
                     Some((r.id.as_str(), bindings))
                 } else {
                     None

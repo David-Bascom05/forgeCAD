@@ -70,7 +70,11 @@ impl Variant {
             if id.starts_with('J') {
                 return pose(port, q, true);
             }
-            let hand = if (n as u8 + self.hand) % 2 == 0 { 1. } else { -1. };
+            let hand = if (n as u8 + self.hand).is_multiple_of(2) {
+                1.
+            } else {
+                -1.
+            };
             return relative([22. + 27. * n as f64, 99.], port, [0.57 * hand, 0.77], q);
         }
         let input = [12.5, 6.];

@@ -55,8 +55,3 @@ forge-refold = { path = "../../verify/forge-refold" }
 
 [lints]
 workspace = true
-
-[[test]]
-name = "electronics_worker"
-path = "tests/electronics_worker.rs"
-harness = false

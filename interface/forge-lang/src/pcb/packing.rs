@@ -488,7 +488,7 @@ pub(super) fn query(
 ) -> crate::electronics::Result<forge_agent::json::Json> {
     use crate::electronics::Fault;
     let err = |s: String| Fault::new("Packing", crate::syntax::Span::default(), s);
-    let model = Model::new(board).map_err(&err)?;
+    let model = Model::new(board).map_err(err)?;
     let mut fixed = std::collections::BTreeSet::new();
     let mut gap = 0.5;
     let mut rotate_free = false;
@@ -519,7 +519,7 @@ pub(super) fn query(
         } else if let Some(value) = word.strip_prefix("gap=") {
             gap = value.parse().map_err(|_| err("gap needs millimetres".into()))?
         } else {
-            let (block, v) = version(word, &model.ids).map_err(&err)?;
+            let (block, v) = version(word, &model.ids).map_err(err)?;
             for &(i, _, _) in &v.poses {
                 if owners.insert(i, block).is_some_and(|previous| previous != block) {
                     return Err(err(format!("{} belongs to multiple blocks", model.ids[i])));
@@ -561,7 +561,7 @@ pub(super) fn query(
         .try_fold(1usize, |n, vs| n.checked_mul(vs.len()))
         .filter(|c| *c <= 256)
         .ok_or_else(|| err("split queries exceeding 256 combinations".into()))?;
-    let circuits = model.circuit_groups(preserve_local, &explicit).map_err(&err)?;
+    let circuits = model.circuit_groups(preserve_local, &explicit).map_err(err)?;
     let mut specs = Vec::new();
     let mut failures = Vec::new();
     for ordinal in 0..count {

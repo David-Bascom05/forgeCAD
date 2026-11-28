@@ -95,7 +95,7 @@ fn duplicate_groups_and_unknown_groups_fail_without_rewriting_the_board() {
 
 #[test]
 fn changing_the_active_pin_function_removes_only_the_incompatible_branch() {
-    let dir = std::env::temp_dir().join(format!("forge-floorplan-function-{}", std::process::id()));
+    let dir = forge_dirs::temp_dir().join(format!("forge-floorplan-function-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&dir).unwrap();
     let schematic = include_str!("../../../examples/electronics/adc-fanout.fg");
     std::fs::write(
@@ -206,7 +206,7 @@ fn refinement_orients_an_off_center_pad_and_rejects_an_overlapping_seed() {
 
 #[test]
 fn two_terminal_clock_reserves_local_space_and_reports_obstructions_by_reference() {
-    let root = std::env::temp_dir().join(format!("forge-local-clock-{}", std::process::id()));
+    let root = forge_dirs::temp_dir().join(format!("forge-local-clock-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&root).unwrap();
     let sch = include_str!("../../../examples/electronics/adc-fanout.fg").replacen(
         "kind:\"signal\"",

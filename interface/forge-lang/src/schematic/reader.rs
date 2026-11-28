@@ -629,15 +629,17 @@ fn item(c: &mut Call<'_>, p: &Params, doc: &Document) -> Result<Item> {
             }
             Item::Place {
                 spec_limits,
-                bindings: c
-                    .take("bindings")
-                    .map(|e| map(e, reference_name))
-                    .transpose()?
-                    .unwrap_or_default(),
-                functions,
                 reference,
-                wants: placement_roles(c.take("wants"), def, doc, false)?,
-                gives: placement_roles(c.take("gives"), def, doc, true)?,
+                pins: Box::new(PinOverrides {
+                    bindings: c
+                        .take("bindings")
+                        .map(|e| map(e, reference_name))
+                        .transpose()?
+                        .unwrap_or_default(),
+                    functions,
+                    wants: placement_roles(c.take("wants"), def, doc, false)?,
+                    gives: placement_roles(c.take("gives"), def, doc, true)?,
+                }),
                 symbol: sym,
                 unit: c
                     .take("unit")

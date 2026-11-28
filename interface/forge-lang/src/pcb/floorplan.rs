@@ -87,7 +87,7 @@ fn reference_gap(board: &Board, a: &Pad, b: &Pad) -> Option<(String, f64)> {
         covered += (hi - lo.max(end)).max(0.);
         end = end.max(hi);
     }
-    let length = mm(a.at[0] - b.at[0]).hypot(mm(a.at[1] - b.at[1]));
+    let length = forge_math::Vec2::new(mm(a.at[0] - b.at[0]), mm(a.at[1] - b.at[1])).length();
     Some((
         format!("{}/{}", plane.id, reference),
         length * (1. - covered).clamp(0., 1.),
@@ -127,8 +127,7 @@ impl Evidence<'_> {
     fn branch(
         &mut self,
         id: String,
-        source: &str,
-        target: &str,
+        (source, target): (&str, &str),
         weight: f64,
         prefer: Option<f64>,
         reason: &str,
@@ -272,8 +271,7 @@ pub(super) fn measure(b: &Board, doc: &Document, c: &Circuit) -> Score {
         }
         e.branch(
             format!("link/{}", l.id),
-            &l.give,
-            &l.want,
+            (&l.give, &l.want),
             4.,
             preference,
             &l.role.0,
@@ -282,8 +280,7 @@ pub(super) fn measure(b: &Board, doc: &Document, c: &Circuit) -> Score {
         if let Some((from, to)) = &l.returns {
             e.branch(
                 format!("return/{}", l.id),
-                from,
-                to,
+                (from, to),
                 4.,
                 None,
                 "declared return",
@@ -301,11 +298,10 @@ pub(super) fn measure(b: &Board, doc: &Document, c: &Circuit) -> Score {
             let prefer = doc.roles[role].prefer;
             match check.bridge_pins.as_slice() {
                 [near, far] => {
-                    e.branch(format!("{id}/in"), pin, near, 3., prefer, &check.detail, false);
+                    e.branch(format!("{id}/in"), (pin, near), 3., prefer, &check.detail, false);
                     e.branch(
                         format!("{id}/out"),
-                        far,
-                        &check.target,
+                        (far, &check.target),
                         3.,
                         prefer,
                         &check.detail,
@@ -324,8 +320,7 @@ pub(super) fn measure(b: &Board, doc: &Document, c: &Circuit) -> Score {
                             {
                                 e.branch(
                                     format!("{id}/load/{load}"),
-                                    &check.target,
-                                    load,
+                                    (&check.target, load),
                                     2.,
                                     None,
                                     "input on the verified output network",
@@ -336,7 +331,7 @@ pub(super) fn measure(b: &Board, doc: &Document, c: &Circuit) -> Score {
                     }
                 }
                 [] if pin != &check.target => {
-                    e.branch(id, pin, &check.target, 3., prefer, &check.detail, false)
+                    e.branch(id, (pin, &check.target), 3., prefer, &check.detail, false)
                 }
                 _ => {}
             }
@@ -368,8 +363,7 @@ pub(super) fn measure(b: &Board, doc: &Document, c: &Circuit) -> Score {
         );
         e.branch(
             id,
-            from,
-            to,
+            (from, to),
             if clock { 4. } else { 2. },
             prefer,
             &reason,

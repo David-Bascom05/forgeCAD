@@ -3,6 +3,13 @@
 version = 4
 
 [[package]]
+name = "electronics-worker"
+version = "0.1.0"
+dependencies = [
+ "forge-lang",
+]
+
+[[package]]
 name = "feeds-vs-makers"
 version = "0.1.0"
 dependencies = [

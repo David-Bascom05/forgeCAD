@@ -72,12 +72,13 @@ pub(super) fn check(doc: &Document, c: &Circuit, out: &mut Vec<Issue>) {
                 symbol,
                 spec_limits,
                 populated,
-                functions,
+                pins,
                 ..
             } = &row.item
             else {
                 continue;
             };
+            let functions = &pins.functions;
             if spec_limits.is_empty() {
                 continue;
             }

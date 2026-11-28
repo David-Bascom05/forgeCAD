@@ -588,7 +588,7 @@ impl Reading {
     /// Compare like quantities in the catalog's first unit. RF power uses watts.
     pub fn canonical_value(&self, value: f64) -> f64 {
         if self.unit == "dBm" && units(&self.kind).is_some_and(|us| us.contains(&"dBm")) {
-            10.0_f64.powf(value / 10. - 3.)
+            forge_math::dmath::powf(10., value / 10. - 3.)
         } else {
             value * self.unit_scale()
         }
@@ -608,7 +608,7 @@ impl Reading {
         {
             let n = self.canonical_value(*bound);
             *bound = if unit == "dBm" {
-                10. * (n.log10() + 3.)
+                10. * ((forge_math::dmath::ln(n) / std::f64::consts::LN_10) + 3.)
             } else {
                 n / scale
             };

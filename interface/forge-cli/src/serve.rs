@@ -18,7 +18,7 @@ type Tool = (
     &'static [(&'static str, &'static str)],
 );
 
-const TOOLS: [Tool; 23] = [
+const TOOLS: &[Tool] = &[
     (
         "plan_fulfillment",
         "Confirm a typed candidate on an existing hand-drawn circuit. Returns one checked edit and the source version.",

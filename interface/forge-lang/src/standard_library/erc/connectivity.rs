@@ -61,10 +61,8 @@ pub(crate) fn placement(doc: &Document, c: &Circuit, findings: &mut Vec<Issue>) 
     for sheet in &c.occurrences {
         let (scope, id) = sheet;
         for row in doc.rows.iter().filter(|r| &r.sheet == id) {
-            if let Item::Place {
-                symbol, functions, ..
-            } = &row.item
-            {
+            if let Item::Place { symbol, pins, .. } = &row.item {
+                let functions = &pins.functions;
                 for (group, signals) in &doc.symbols[symbol].peripherals {
                     for (signal, pins) in signals {
                         let active: Vec<_> = pins

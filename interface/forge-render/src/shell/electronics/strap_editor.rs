@@ -612,7 +612,7 @@ mod tests {
         assert_eq!(reopened[0].inputs[0].pin, "A1");
         assert_eq!(reopened[0].rows[1].0, ["low", "high"]);
         assert_eq!(reopened[0].rows[1].1, "0b1001001");
-        assert_eq!(editor.doc.symbols["Device"].visibility["derived.address"], false);
+        assert!(!editor.doc.symbols["Device"].visibility["derived.address"]);
         editor.step(false);
         assert_eq!(editor.src, src);
     }

@@ -194,7 +194,7 @@ fn spacing_is_layer_and_net_specific_and_accounts_for_via_lands() {
 
 #[test]
 fn nested_rule_libraries_apply_severity_to_actual_drc_findings() {
-    let dir = std::env::temp_dir().join(format!("fg-board-rule-packs-{}", std::process::id()));
+    let dir = forge_dirs::temp_dir().join(format!("fg-board-rule-packs-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&dir).unwrap();
     let write = |name: &str, src: &str| std::fs::write(dir.join(name), src).unwrap();
     write(

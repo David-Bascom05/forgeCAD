@@ -210,10 +210,17 @@ impl Matrix {
                         continue;
                     }
                     line(ui, left.left_top(), egui::pos2(grid.right(), left.top()), t.line);
-                    for col in 0..=n {
+                    for (col, input) in a
+                        .inputs
+                        .iter()
+                        .zip(values.iter())
+                        .map(Some)
+                        .chain(std::iter::once(None))
+                        .enumerate()
+                    {
                         let r = cell(col, Some(row)).shrink(1.);
                         let id = ui.scope_id().with(("cell", row, col));
-                        if col == n && self.editing.as_ref().is_some_and(|(i, _, _)| *i == row) {
+                        if input.is_none() && self.editing.as_ref().is_some_and(|(i, _, _)| *i == row) {
                             let (_, buffer, first) = self.editing.as_mut().unwrap();
                             let edit = ui.put(
                                 r.shrink2(vec2(8., 4.)),
@@ -245,15 +252,14 @@ impl Matrix {
                         if response.hovered() || response.has_focus() {
                             ui.painter().rect_filled(r, 0., t.hover);
                         }
-                        let value = if col == n { result.as_str() } else { &values[col] };
-                        let value = if value.is_empty() { "—" } else { value };
+
                         let paint = ui.painter().with_clip_rect(r.intersect(ui.clip_rect()));
                         let at = r.left_center() + vec2(12., 0.);
-                        if col < n {
+                        if let Some((pin, state)) = input {
                             paint.text(
                                 at,
                                 Align2::LEFT_CENTER,
-                                a.inputs[col].display(&values[col]),
+                                pin.display(state),
                                 theme::medium(14.),
                                 t.ink2,
                             );
@@ -264,7 +270,7 @@ impl Matrix {
                             paint.text(
                                 at,
                                 Align2::LEFT_CENTER,
-                                value,
+                                if result.is_empty() { "—" } else { result.as_str() },
                                 if format.is_empty() {
                                     theme::medium(14.)
                                 } else {
@@ -273,22 +279,20 @@ impl Matrix {
                                 t.ink,
                             );
                         }
-                        if col < n || !a.modes.is_empty() {
+                        if input.is_some() || !a.modes.is_empty() {
                             egui::Popup::menu(&response)
                                 .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
                                 .show(|ui| {
-                                    if col < n {
+                                    if let Some((pin, state)) = input {
                                         if response.clicked() || self.state_menu.is_none() {
                                             self.state_menu = Some(states::StateMenu::new(row, col));
                                         }
-                                        if let Some(change) = self.state_menu.as_mut().unwrap().show(
-                                            ui,
-                                            row,
-                                            col,
-                                            &a.inputs[col],
-                                            &values[col],
-                                            pins,
-                                        ) {
+                                        if let Some(change) = self
+                                            .state_menu
+                                            .as_mut()
+                                            .unwrap()
+                                            .show(ui, row, col, pin, state, pins)
+                                        {
                                             state_change = Some(change);
                                         }
                                     } else {

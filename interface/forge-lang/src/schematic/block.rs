@@ -46,6 +46,10 @@ pub fn block_plan(
 }
 
 /// Copy into another sheet definition with the same ownership checks and reference remapping.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "public counterpart to block_plan with an explicit destination sheet"
+)]
 pub fn block_plan_to(
     src: &str,
     d: &Document,
@@ -189,7 +193,8 @@ pub fn block_plan_to(
             }
         }
         if copy {
-            if let Item::Place { symbol, bindings, .. } = &row.item {
+            if let Item::Place { symbol, pins, .. } = &row.item {
+                let bindings = &pins.bindings;
                 let mut targets = bindings.clone();
                 for (source, checks) in c.connections.range(format!("{scope}/{name}.")..) {
                     if !source.starts_with(&format!("{scope}/{name}.")) {

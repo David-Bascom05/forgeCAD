@@ -166,7 +166,13 @@ fn plot(ui: &mut Ui, points: &[Specification], indices: &[usize]) {
         if lo == hi {
             return 0.5;
         }
-        let map = |x: f64| if log { x.log10() } else { x };
+        let map = |x: f64| {
+            if log {
+                forge_math::dmath::ln(x) / std::f64::consts::LN_10
+            } else {
+                x
+            }
+        };
         ((map(v) - map(lo)) / (map(hi) - map(lo))) as f32
     };
     let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 84.), egui::Sense::hover());

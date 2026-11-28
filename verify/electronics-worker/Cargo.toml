@@ -1,0 +1,13 @@
+[package]
+name = "electronics-worker"
+description = "Verification fixture for installed ForgeCAD electronics libraries"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+forge-lang = { path = "../../interface/forge-lang" }
+
+[lints]
+workspace = true

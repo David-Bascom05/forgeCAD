@@ -251,12 +251,13 @@ impl Circuit {
                 if let Item::Place {
                     symbol,
                     populated,
-                    functions,
-                    wants,
-                    gives,
+                    pins,
                     ..
                 } = &r.item
                 {
+                    let wants = &pins.wants;
+                    let gives = &pins.gives;
+                    let functions = &pins.functions;
                     Some((r.id.as_str(), (symbol, *populated, wants, gives, functions)))
                 } else {
                     None

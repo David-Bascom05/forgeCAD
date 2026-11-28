@@ -264,8 +264,7 @@ fn scene(d: &Document, c: &Circuit, scope: &str, row: &Row) -> Json {
     let (kind, mut fields) = match &row.item {
         Item::Place {
             symbol,
-            wants,
-            gives,
+            pins,
             unit,
             value,
             footprint,
@@ -279,8 +278,6 @@ fn scene(d: &Document, c: &Circuit, scope: &str, row: &Row) -> Json {
             ref_offset,
             value_offset,
             reference,
-            functions,
-            bindings,
             spec_limits,
             visibility,
         } => (
@@ -300,10 +297,10 @@ fn scene(d: &Document, c: &Circuit, scope: &str, row: &Row) -> Json {
                     .into(),
                 ),
                 ("spec_limits", specs(spec_limits)),
-                ("functions", super::bom::field_json(functions)),
-                ("bindings", super::bom::field_json(bindings)),
-                ("wants", placement_roles(wants)),
-                ("gives", placement_roles(gives)),
+                ("functions", super::bom::field_json(&pins.functions)),
+                ("bindings", super::bom::field_json(&pins.bindings)),
+                ("wants", placement_roles(&pins.wants)),
+                ("gives", placement_roles(&pins.gives)),
                 ("ref_offset", ref_offset.map_or(Json::Null, point)),
                 ("value_offset", value_offset.map_or(Json::Null, point)),
                 ("fields", super::bom::field_json(fields)),

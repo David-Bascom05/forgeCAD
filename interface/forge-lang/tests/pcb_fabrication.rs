@@ -319,7 +319,7 @@ fn filter_bank_service_and_connectivity() {
 
 #[test]
 fn fenced_project_vendor_override_drives_real_drc() {
-    let dir = std::env::temp_dir().join(format!("forge-pcb-project-profile-{}", std::process::id()));
+    let dir = forge_dirs::temp_dir().join(format!("forge-pcb-project-profile-{}", forge_dirs::process_id()));
     let vendors = dir.join("vendors");
     std::fs::create_dir_all(&vendors).unwrap();
     let custom = include_str!("../../../kernel/forge-vendor/data/pcbway.toml")

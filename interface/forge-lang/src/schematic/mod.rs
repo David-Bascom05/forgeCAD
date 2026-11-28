@@ -419,15 +419,20 @@ impl Symbol {
     }
 }
 #[derive(Clone, Debug)]
+pub struct PinOverrides {
+    pub bindings: Map<String, String>,
+    pub functions: Map<String, String>,
+    pub wants: Map<String, Set<RoleId>>,
+    pub gives: Map<String, Set<RoleId>>,
+}
+
+#[derive(Clone, Debug)]
 pub enum Item {
     Place {
+        pins: Box<PinOverrides>,
         spec_limits: Vec<characteristics::Specification>,
         reference: Option<String>,
-        bindings: Map<String, String>,
-        functions: Map<String, String>,
         symbol: String,
-        wants: Map<String, Set<RoleId>>,
-        gives: Map<String, Set<RoleId>>,
         unit: String,
         value: String,
         footprint: Option<String>,

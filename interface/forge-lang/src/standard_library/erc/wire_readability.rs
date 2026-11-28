@@ -40,7 +40,7 @@ impl Segment<'_> {
     fn overlaps(&self, other: &Self) -> bool {
         let dx = self.b[0] - self.a[0];
         let dy = self.b[1] - self.a[1];
-        let length = dx.hypot(dy);
+        let length = forge_math::Vec2::new(dx, dy).length();
         if length <= EPS_MM {
             return false;
         }
@@ -122,7 +122,7 @@ pub(super) fn findings(c: &Circuit, scope: &str, changed: Option<&Set<String>>) 
                 .take_while(|(_, t)| t.at[0] <= p[0] + NEAR_MM)
             {
                 if (p[1] - t.at[1]).abs() <= NEAR_MM
-                    && (p[0] - t.at[0]).hypot(p[1] - t.at[1]) <= NEAR_MM
+                    && forge_math::Vec2::new(p[0] - t.at[0], p[1] - t.at[1]).length() <= NEAR_MM
                     && c.net_of[id] != net
                 {
                     pairs.insert(("WireNearPin", wire.as_str(), id.as_str()));

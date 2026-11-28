@@ -324,7 +324,7 @@ fn local_search(input: &Path, out: &Path) -> Result<(), Error> {
         [116., 82.],
     ] {
         let [w, h] = size;
-        for fan in 0..4 {
+        for (fan, fan_name) in FANS.iter().enumerate() {
             for fold in 0..2 {
                 for orient in 0..4 {
                     for layout in 0..4 {
@@ -339,7 +339,7 @@ fn local_search(input: &Path, out: &Path) -> Result<(), Error> {
                             };
                             let id = format!(
                                 "{}-{}-{w}x{h}-r{orient}-m{layout}-a{arrangement}",
-                                FANS[fan],
+                                fan_name,
                                 ["inline", "folded"][fold]
                             );
                             let mut seeds: Vec<_> = m.ids.iter().map(|s| v.seed(&b, s)).collect();

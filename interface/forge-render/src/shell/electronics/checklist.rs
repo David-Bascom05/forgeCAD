@@ -28,12 +28,13 @@ impl Editor {
             .rsplit_once('/')
             .and_then(|(_, name)| name.split_once('.'))
             .ok_or("Select a placed pin.")?;
-        let Some(Item::Place {
-            symbol, wants, gives, ..
-        }) = self.doc.rows.iter().find(|r| r.id == owner).map(|r| &r.item)
+        let Some(Item::Place { symbol, pins, .. }) =
+            self.doc.rows.iter().find(|r| r.id == owner).map(|r| &r.item)
         else {
             return Err("Select a component placement.".into());
         };
+        let wants = &pins.wants;
+        let gives = &pins.gives;
         let field = if want { "wants" } else { "gives" };
         let mut roles = (if want { wants } else { gives })
             .get(pin)
