@@ -367,7 +367,7 @@ fn solve3(mut a: [[f64; 3]; 3], mut b: [f64; 3]) -> Option<[f64; 3]> {
         for i in k + 1..3 {
             let f = a[i][k] / a[k][k];
             let pivot = a[k];
-            for (x, p) in a[i].iter_mut().zip(pivot).skip(k) {
+            for (x, p) in a[i][k..].iter_mut().zip(&pivot[k..]) {
                 *x -= f * p;
             }
             b[i] -= f * b[k];
