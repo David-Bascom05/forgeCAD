@@ -601,10 +601,12 @@ impl Editor {
         self.doc.library_paths().map(Path::to_owned).collect()
     }
     pub fn reload(&mut self, own: bool, text: Option<&str>) {
+        // The file watcher can report our own save after the user has started another tool.
+        if own && text == Some(self.saved.as_str()) {
+            return;
+        }
         if own && self.dirty() {
-            if text != Some(&self.saved) {
-                self.message = "File changed on disk. Save As to preserve your edits.".into();
-            }
+            self.message = "File changed on disk. Save As to preserve your edits.".into();
             return;
         }
         let next = if own {

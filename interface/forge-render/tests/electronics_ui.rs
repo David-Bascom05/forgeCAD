@@ -224,6 +224,8 @@ fn checklist_edits_the_assignment_from_either_pin() {
             "{}",
             h.gui.shell.status
         );
+        // Deliver the earlier save's file notification while Assign Role is active.
+        h.gui.shell.electronics.as_mut().unwrap().reload(true, Some(&src));
         if pin == "U1.VDD" {
             assert!(h.click(&format!("electronics:assign:main/{peer}")));
         } else {
@@ -232,7 +234,7 @@ fn checklist_edits_the_assignment_from_either_pin() {
         h.step();
         assert!(
             h.placed(&format!("electronics:inspection:main/{pin}")).is_some(),
-            "{}",
+            "assigning {pin} and {peer}: {}",
             h.gui.shell.status
         );
         h.gui.fg_save();
