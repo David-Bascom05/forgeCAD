@@ -66,6 +66,20 @@ async function until(p, f, what, ms = 600000) {
   throw new Error(`timed out waiting for ${what}; last state ${JSON.stringify(st)}`);
 }
 
+// The File button stays in the title strip. The menu's rows depend on the document and installed tools.
+async function fileMenuItem(p, label) {
+  await p.evaluate(() => window.forgecad.fc.app_audit(true));
+  try {
+    await p.mouse.click(33, 55);
+    const item = (s) => s.audit?.places.find(([name]) => name === `file-menu:${label}`);
+    const menu = await until(p, item, `File > ${label}`, 60000);
+    const [x, y, w, h] = item(menu)[1];
+    await p.mouse.click(x + w / 2, y + h / 2);
+  } finally {
+    await p.evaluate(() => window.forgecad.fc.app_audit(false));
+  }
+}
+
 /// Every project file in the page (they follow the app's first frame) and the rebuild that comes
 /// after them done: the state then.
 async function loaded(p) {
@@ -172,4 +186,4 @@ function tmpdir(tag) {
   return fs.mkdtempSync(path.join(require("node:os").tmpdir(), `forgecad-${tag}-`));
 }
 
-module.exports = { repo, bins, browser, page, check, until, loaded, frames, readyUrl, serve, native, differs, tmpdir, pixels, shot, SAME };
+module.exports = { repo, bins, browser, page, check, until, fileMenuItem, loaded, frames, readyUrl, serve, native, differs, tmpdir, pixels, shot, SAME };
