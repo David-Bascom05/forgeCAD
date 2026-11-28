@@ -183,21 +183,22 @@ impl Editor {
     fn browser(&mut self, ui: &mut Ui, t: &Theme, places: &mut Vec<(String, Rect)>) {
         let section = |ui: &mut Ui, s: &str| ux::Sheet::new(t, ux::System::of_doc("mm"), "").section(ui, s);
         if self.library() {
-            section(ui, "Libraries");
-            for (alias, path) in &self.doc.libraries {
-                let depth = alias.matches('.').count();
-                ui.horizontal(|ui| {
-                    ui.add_space(12. * depth as f32);
-                    let label = alias.rsplit('.').next().unwrap_or(alias);
-                    if let Some(path) = path {
-                        if ui.link(label).on_hover_text(path.display().to_string()).clicked() {
-                            self.open_file = Some(path.to_string_lossy().into_owned());
+            ui.collapsing("Libraries", |ui| {
+                for (alias, path) in &self.doc.libraries {
+                    let depth = alias.matches('.').count();
+                    ui.horizontal(|ui| {
+                        ui.add_space(12. * depth as f32);
+                        let label = alias.rsplit('.').next().unwrap_or(alias);
+                        if let Some(path) = path {
+                            if ui.link(label).on_hover_text(path.display().to_string()).clicked() {
+                                self.open_file = Some(path.to_string_lossy().into_owned());
+                            }
+                        } else {
+                            ui.weak(label).on_hover_text("Bundled library");
                         }
-                    } else {
-                        ui.weak(label).on_hover_text("Bundled library");
-                    }
-                });
-            }
+                    });
+                }
+            });
             if ui.button("Add child library…").clicked() {
                 self.start(Tool::Library);
             }

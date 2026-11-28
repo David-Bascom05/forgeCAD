@@ -242,6 +242,11 @@ scope).
 | Kind | Item | Names | Why | Lean |
 |---|---|---|---|---|
 | not-names | `interface/forge-cam-lang/src/lib.rs::GEN3D` | | the 3D generator op kinds `Cam::prefetch` makes ahead (a subset of the `cam` family's op names, which name them), not names in scope | not a namespace |
+| not-names | `interface/forge-lang/src/pcb/layers.rs::DOT` | | keyword arguments of `layer_dot` | argument labels |
+| not-names | `interface/forge-lang/src/pcb/layers.rs::LINE` | | keyword arguments of `layer_line` | argument labels |
+| not-names | `interface/forge-lang/src/pcb/layers.rs::REGION` | | keyword arguments of `layer_region` | argument labels |
+| not-names | `interface/forge-lang/src/pcb/layers.rs::TEXT` | | keyword arguments of `layer_text` | argument labels |
+| not-names | `interface/forge-lang/src/pcb/reader_layout.rs::FOOTPRINT_ARGS` | | keyword arguments of `footprint` | argument labels |
 | not-names | `interface/forge-lang/src/schematic/characteristics.rs::CURVE_BASES` | | source categories on measured datasheet traces | string values |
 | not-names | `interface/forge-lang/src/schematic/characteristics.rs::CURVE_SCALES` | | display scales for the axes of a datasheet trace | string values |
 | not-names | `interface/forge-lang/src/schematic/characteristics.rs::CLASSES` | | Datasheet rating-class metadata inside records | `Schematic.no_declared_bounds_no_violation`, `Schematic.upper_bound_inclusive`, `Schematic.missing_field_blocks_comparison`, `Schematic.complete_inputs_eligible`. GAP record decoding, SI scaling and conditional measurement semantics in Rust |
