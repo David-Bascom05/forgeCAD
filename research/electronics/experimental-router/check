@@ -1,0 +1,2 @@
+#!/bin/sh
+exec "${FORGECAD:-forgecad}" pcb "$1" "$2" --json
